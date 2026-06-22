@@ -4,6 +4,7 @@ __pycache__/
 .ruff_cache/
 *.pyc
 .env
+.superpowers/
 localagent-output/
 dist/
 build/
