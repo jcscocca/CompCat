@@ -55,7 +55,7 @@ def route_corridor_exposure_square_km_days(
     analysis_start_date: date,
     analysis_end_date: date,
 ) -> float:
-    points = parse_route_geometry(geometry)
+    points = _require_route_corridor_points(geometry)
     length_km = route_length_km(points)
     radius_km = radius_m / 1000
     area_square_km = (length_km * 2 * radius_km) + math.pi * radius_km * radius_km
@@ -118,7 +118,7 @@ def count_incidents_in_route_corridor(
     offense_subcategory: str | None,
     nibrs_group: str | None,
 ) -> list[CrimeIncidentData]:
-    route_points = parse_route_geometry(geometry)
+    route_points = _require_route_corridor_points(geometry)
     return [
         incident
         for incident in incidents
@@ -191,3 +191,10 @@ def _incident_matches_filters(
 
 def _matches_optional_filter(value: str | None, selected: str | None) -> bool:
     return selected is None or value == selected
+
+
+def _require_route_corridor_points(geometry: str | None) -> list[tuple[float, float]]:
+    points = parse_route_geometry(geometry)
+    if len(points) < 2:
+        raise ValueError("route geometry requires at least two lat,lon points")
+    return points
