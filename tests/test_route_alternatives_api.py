@@ -115,6 +115,34 @@ def test_route_comparison_is_scoped_to_request_user(tmp_path):
     assert comparison.status_code == 404
 
 
+def test_route_alternatives_api_includes_sample_crime_context_summaries(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    headers = {"X-Demo-User-Id": "route-user@example.com"}
+
+    ingest = client.post("/crime/ingest/sample")
+    assert ingest.status_code == 200
+
+    response = client.post(
+        "/routes/alternatives",
+        json={
+            "origin_label": "Capitol Hill",
+            "destination_label": "Downtown Seattle",
+            "mode": "transit",
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [500],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "context_summaries" in payload
+    assert len(payload["context_summaries"]) >= 1
+    assert all("user_id_hash" not in summary for summary in payload["context_summaries"])
+
+
 def test_route_comparison_context_summaries_are_public_and_ordered(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)

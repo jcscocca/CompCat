@@ -6,10 +6,18 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import RouteAlternative, RouteContextSummary, RouteRequest, RouteSegment
+from app.models import (
+    CrimeIncident,
+    RouteAlternative,
+    RouteContextSummary,
+    RouteRequest,
+    RouteSegment,
+)
+from app.routing.context import summarize_route_context
 from app.routing.mock_provider import MockRoutingProvider
 from app.routing.place_resolver import resolve_route_place
-from app.routing.schemas import RouteRequestCreate, RouteRequestData
+from app.routing.schemas import RouteContextSummaryData, RouteRequestCreate, RouteRequestData
+from app.schemas import CrimeIncidentData
 
 
 class UnsupportedRoutingProviderError(ValueError):
@@ -74,7 +82,8 @@ def create_route_alternatives(
         created_at=route_request.created_at,
     )
 
-    for route_data in MockRoutingProvider().get_routes(provider_request):
+    route_alternatives = MockRoutingProvider().get_routes(provider_request)
+    for route_data in route_alternatives:
         route_data.route_request_id = route_request.id
         alternative = RouteAlternative(
             id=route_data.id,
@@ -116,6 +125,19 @@ def create_route_alternatives(
                     geometry=segment_data.geometry,
                 )
             )
+
+    if route_request.analysis_start_date and route_request.analysis_end_date:
+        session.flush()
+        incidents = [_incident_data(row) for row in session.scalars(select(CrimeIncident)).all()]
+        summaries = summarize_route_context(
+            user_id_hash=user_id_hash,
+            alternatives=route_alternatives,
+            incidents=incidents,
+            radii_m=request_payload.radii_m,
+            analysis_start_date=route_request.analysis_start_date,
+            analysis_end_date=route_request.analysis_end_date,
+        )
+        session.add_all([_context_summary_model(summary) for summary in summaries])
 
     session.commit()
     return get_route_comparison(session, route_request.id, user_id_hash) or {}
@@ -289,6 +311,54 @@ def _context_summary_to_dict(summary: RouteContextSummary) -> dict[str, Any]:
         "nearest_incident_m": summary.nearest_incident_m,
         "incidents_per_route": summary.incidents_per_route,
     }
+
+
+def _context_summary_model(summary: RouteContextSummaryData) -> RouteContextSummary:
+    return RouteContextSummary(
+        id=summary.id,
+        user_id_hash=summary.user_id_hash,
+        route_alternative_id=summary.route_alternative_id,
+        route_segment_id=summary.route_segment_id,
+        context_label=summary.context_label,
+        context_type=summary.context_type,
+        radius_m=summary.radius_m,
+        analysis_start_date=summary.analysis_start_date,
+        analysis_end_date=summary.analysis_end_date,
+        offense_category=summary.offense_category,
+        offense_subcategory=summary.offense_subcategory,
+        nibrs_group=summary.nibrs_group,
+        incident_count=summary.incident_count,
+        nearest_incident_m=float(summary.nearest_incident_m)
+        if summary.nearest_incident_m is not None
+        else None,
+        incidents_per_route=float(summary.incidents_per_route)
+        if summary.incidents_per_route is not None
+        else None,
+    )
+
+
+def _incident_data(row: CrimeIncident) -> CrimeIncidentData:
+    return CrimeIncidentData(
+        id=row.id,
+        external_incident_id=row.external_incident_id,
+        report_number=row.report_number,
+        offense_id=row.offense_id,
+        offense_start_utc=row.offense_start_utc,
+        offense_end_utc=row.offense_end_utc,
+        report_utc=row.report_utc,
+        offense_category=row.offense_category,
+        offense_subcategory=row.offense_subcategory,
+        nibrs_group=row.nibrs_group,
+        precinct=row.precinct,
+        sector=row.sector,
+        beat=row.beat,
+        mcpp=row.mcpp,
+        block_address=row.block_address,
+        latitude=row.latitude,
+        longitude=row.longitude,
+        source_dataset=row.source_dataset,
+        snapshot_at=row.snapshot_at,
+    )
 
 
 def _json_list(value: str | None) -> list[Any]:
