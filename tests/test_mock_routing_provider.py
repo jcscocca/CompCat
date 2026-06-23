@@ -22,3 +22,22 @@ def test_mock_provider_returns_ranked_route_alternatives_with_segments():
     assert alternatives[0].segments
     assert alternatives[0].segments[0].sequence == 1
     assert alternatives[0].segments[0].start_label == "Capitol Hill"
+    assert alternatives[0].segments[-1].end_label == request.destination.label
+    assert str(request.destination.latitude) in alternatives[0].summary_geometry
+    assert str(request.destination.longitude) in alternatives[0].summary_geometry
+
+
+def test_mock_provider_returns_generic_fallback_for_other_places():
+    request = RouteRequestData(
+        user_id_hash="user-hash",
+        origin=resolve_route_place("Ballard"),
+        destination=resolve_route_place("University District"),
+        mode="bike",
+    )
+
+    alternatives = MockRoutingProvider().get_routes(request)
+
+    assert len(alternatives) == 1
+    assert alternatives[0].provider_route_id == "mock-generic-direct"
+    assert alternatives[0].mode_mix == "bike"
+    assert alternatives[0].segments[-1].end_label == "University District"

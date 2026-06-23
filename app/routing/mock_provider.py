@@ -29,7 +29,7 @@ def _capitol_hill_to_downtown_routes(request: RouteRequestData) -> list[RouteAlt
         transfer_count=0,
         walking_distance_m=350,
         mode_mix="walk,transit",
-        summary_geometry=_geometry(request.origin, westlake),
+        summary_geometry=_path_geometry(request.origin, westlake, request.destination),
         provider="mock",
         provider_metadata_json='{"fixture": "capitol_hill_to_downtown"}',
     )
@@ -53,6 +53,16 @@ def _capitol_hill_to_downtown_routes(request: RouteRequestData) -> list[RouteAlt
             end=westlake,
             distance_m=1650,
             duration_minutes=7,
+        ),
+        _segment(
+            route_alternative_id=light_rail.id,
+            sequence=3,
+            segment_type="egress",
+            mode="walk",
+            start=westlake,
+            end=request.destination,
+            distance_m=200,
+            duration_minutes=3,
         ),
     ]
 
@@ -160,3 +170,7 @@ def _is_capitol_hill_to_downtown(origin: RouteLocation, destination: RouteLocati
 
 def _geometry(start: RouteLocation, end: RouteLocation) -> str:
     return f"{start.latitude},{start.longitude};{end.latitude},{end.longitude}"
+
+
+def _path_geometry(*locations: RouteLocation) -> str:
+    return ";".join(f"{location.latitude},{location.longitude}" for location in locations)
