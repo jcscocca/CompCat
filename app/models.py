@@ -262,3 +262,88 @@ class RouteContextSummary(Base):
     nearest_incident_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     incidents_per_route: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class StatisticalComparison(Base):
+    __tablename__ = "statistical_comparisons"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
+    comparison_type: Mapped[str] = mapped_column(Text)
+    source_route_request_id: Mapped[str | None] = mapped_column(
+        ForeignKey("route_requests.id"),
+        nullable=True,
+        index=True,
+    )
+    geometry_type: Mapped[str] = mapped_column(Text)
+    radius_m: Mapped[int] = mapped_column(Integer)
+    analysis_start_date: Mapped[date] = mapped_column(Date)
+    analysis_end_date: Mapped[date] = mapped_column(Date)
+    offense_category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offense_subcategory: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nibrs_group: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_dataset: Mapped[str] = mapped_column(Text, default="seattle_spd_crime")
+    exposure_unit: Mapped[str] = mapped_column(Text, default="square_km_days")
+    decision_class: Mapped[str] = mapped_column(Text)
+    recommendation_option_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommendation_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overview_summary_text: Mapped[str] = mapped_column(Text)
+    overview_caveat_text: Mapped[str] = mapped_column(Text)
+    full_caveat_text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class StatisticalComparisonOption(Base):
+    __tablename__ = "statistical_comparison_options"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    comparison_id: Mapped[str] = mapped_column(
+        ForeignKey("statistical_comparisons.id"),
+        index=True,
+    )
+    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
+    option_id: Mapped[str] = mapped_column(Text)
+    option_label: Mapped[str] = mapped_column(Text)
+    geometry_type: Mapped[str] = mapped_column(Text)
+    radius_m: Mapped[int] = mapped_column(Integer)
+    incident_count: Mapped[int] = mapped_column(Integer)
+    exposure: Mapped[float] = mapped_column(Float)
+    exposure_unit: Mapped[str] = mapped_column(Text)
+    incident_rate: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class StatisticalPairwiseResult(Base):
+    __tablename__ = "statistical_pairwise_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    comparison_id: Mapped[str] = mapped_column(
+        ForeignKey("statistical_comparisons.id"),
+        index=True,
+    )
+    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
+    option_a_id: Mapped[str] = mapped_column(Text)
+    option_a_label: Mapped[str] = mapped_column(Text)
+    option_b_id: Mapped[str] = mapped_column(Text)
+    option_b_label: Mapped[str] = mapped_column(Text)
+    winner_option_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    winner_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_class: Mapped[str] = mapped_column(Text)
+    method: Mapped[str] = mapped_column(Text)
+    incident_count_a: Mapped[int] = mapped_column(Integer)
+    incident_count_b: Mapped[int] = mapped_column(Integer)
+    exposure_a: Mapped[float] = mapped_column(Float)
+    exposure_b: Mapped[float] = mapped_column(Float)
+    exposure_unit: Mapped[str] = mapped_column(Text)
+    rate_a: Mapped[float] = mapped_column(Float)
+    rate_b: Mapped[float] = mapped_column(Float)
+    rate_ratio: Mapped[float] = mapped_column(Float)
+    ci_lower: Mapped[float] = mapped_column(Float)
+    ci_upper: Mapped[float] = mapped_column(Float)
+    p_value: Mapped[float] = mapped_column(Float)
+    adjusted_p_value: Mapped[float] = mapped_column(Float)
+    overdispersion_phi: Mapped[float | None] = mapped_column(Float, nullable=True)
+    overdispersion_status: Mapped[str] = mapped_column(Text)
+    minimum_data_status: Mapped[str] = mapped_column(Text)
+    caveat_text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
