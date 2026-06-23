@@ -265,6 +265,71 @@ Preferred wording when the threshold does not pass:
 > The routes differ in reported incident counts, but this analysis does not find a
 > statistically clear lower-incident alternative under the selected filters.
 
+## UI Integration And Audience Modes
+
+The statistical comparison should be computed entirely by the backend analysis service.
+The frontend should not recompute rates, p-values, exposure, confidence intervals, or
+decision classes. Its job is to render the backend result clearly, preserve caveats, and
+let different audiences choose the level of detail they need.
+
+Use two user-facing modes:
+
+- `Overview`: public-facing comparison summary.
+- `Analytical`: detailed method and audit view.
+
+Do not use "research review" or "research view" as product labels.
+
+### Overview Mode
+
+Overview is the default public experience. It should answer:
+
+- Which options were compared?
+- Is there a statistically clear lower-incident alternative?
+- What is the plain-language reason?
+- What filters and date range does the statement depend on?
+
+Overview should show:
+
+- map overlays for compared place buffers or route corridors,
+- compact cards for each option,
+- incident count and adjusted rate for each option,
+- decision class,
+- plain-language result text,
+- one short caveat sentence,
+- route alternatives even when no statistical recommendation is available.
+
+Overview must avoid method-heavy language unless the user opens details. For example, it
+can say "no statistically clear lower-incident alternative" without showing the full
+p-value calculation inline.
+
+### Analytical Mode
+
+Analytical is for researchers, agencies, and users who want to inspect the basis for the
+claim. It should expose the same backend result without changing it.
+
+Analytical should show:
+
+- source dataset and snapshot/query timestamp,
+- date range and offense filters,
+- geometry type and corridor or buffer radius,
+- incident counts,
+- exposure values and exposure unit,
+- adjusted rates,
+- rate ratio,
+- confidence interval,
+- raw p-value and adjusted p-value,
+- test method name,
+- overdispersion statistic and status,
+- minimum-data status,
+- multiple-comparison adjustment status,
+- all caveat text,
+- export/share metadata.
+
+Analytical can include expanded method notes pulled from the dedicated analysis
+documentation, but the numbers themselves should come from the persisted comparison
+result. This keeps the public dashboard, Analytical panel, share link, and Tableau export
+aligned.
+
 ## API And Data Model Design
 
 ### New Service Boundary
@@ -326,7 +391,9 @@ Every result should include:
 - minimum-data status,
 - decision class,
 - recommendation target, if any,
-- caveat text,
+- overview summary text,
+- overview caveat text,
+- full caveat text,
 - created timestamp.
 
 ### Persistence
@@ -344,7 +411,11 @@ the app. When anonymous public workspaces are added, use workspace scope rather 
 
 ## Map And Dashboard Behavior
 
-The map should show:
+The dashboard should default to `Overview` and provide an `Analytical` tab or panel for
+users who want the full method details. Both modes should read from the same persisted
+comparison result.
+
+The Overview map should show:
 
 - place buffers,
 - route corridors,
@@ -352,14 +423,24 @@ The map should show:
 - comparison badges,
 - model-warning badges.
 
-The dashboard should show:
+The Overview dashboard should show:
 
 - incidents and adjusted rates for each option,
 - practical difference in rate ratio,
 - statistical decision class,
-- confidence interval,
-- method and caveat popover,
+- short caveat text,
 - "lower-incident alternative" only when the result passes.
+
+The Analytical panel should show:
+
+- confidence interval,
+- raw and adjusted p-values,
+- method details,
+- exposure calculation fields,
+- overdispersion status,
+- minimum-data checks,
+- source data and filter details,
+- full caveat text.
 
 Route recommendation cards should sort by:
 
