@@ -112,7 +112,7 @@ def compare_route_request(
     if route_request is None or route_request.user_id_hash != user_id_hash:
         return None
     if route_request.analysis_start_date is None or route_request.analysis_end_date is None:
-        raise ValueError("Route request requires analysis_start_date and analysis_end_date.")
+        return None
 
     alternatives = list(
         session.scalars(

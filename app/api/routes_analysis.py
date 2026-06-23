@@ -50,7 +50,7 @@ def compare_routes(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if payload is None:
-        raise HTTPException(status_code=404, detail="Route request not found")
+        raise HTTPException(status_code=404, detail="Route request not found or not analyzable")
     return payload
 
 

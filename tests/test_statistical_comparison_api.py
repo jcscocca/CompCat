@@ -4,7 +4,8 @@ from fastapi.testclient import TestClient
 
 from app.db import get_sessionmaker
 from app.main import create_app
-from app.models import CrimeIncident
+from app.models import CrimeIncident, RouteRequest
+from app.services.users import hash_demo_user
 
 
 def test_site_comparison_api_returns_overview_and_analytical_payload(tmp_path):
@@ -114,3 +115,37 @@ def test_statistical_comparison_lookup_is_scoped_to_user(tmp_path):
     )
 
     assert lookup.status_code == 404
+
+
+def test_route_comparison_api_returns_404_without_analysis_dates(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    user_id = "analysis-user@example.com"
+    session = get_sessionmaker()()
+    route_request = RouteRequest(
+        id="route-without-analysis-dates",
+        user_id_hash=hash_demo_user(user_id),
+        origin_label="Origin",
+        origin_latitude=47.6116,
+        origin_longitude=-122.3372,
+        destination_label="Destination",
+        destination_latitude=47.6205,
+        destination_longitude=-122.3493,
+        mode="transit",
+    )
+    session.add(route_request)
+    session.commit()
+    route_request_id = route_request.id
+    session.close()
+
+    response = client.post(
+        "/analysis/routes/compare",
+        json={
+            "route_request_id": route_request_id,
+            "radius_m": 250,
+        },
+        headers={"X-Demo-User-Id": user_id},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Route request not found or not analyzable"

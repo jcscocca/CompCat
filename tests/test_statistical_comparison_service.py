@@ -1,11 +1,16 @@
 from datetime import UTC, date, datetime
 
 from app.analysis.comparison import build_statistical_comparison
-from app.analysis.schemas import AnalysisOptionResult, DecisionClass, GeometryType
+from app.analysis.schemas import (
+    AnalysisOptionResult,
+    DecisionClass,
+    GeometryType,
+    RouteComparisonRequest,
+)
 from app.db import get_sessionmaker
 from app.main import create_app
-from app.models import CrimeIncident
-from app.services.analysis_service import compare_site_options
+from app.models import CrimeIncident, RouteRequest
+from app.services.analysis_service import compare_route_request, compare_site_options
 
 
 def test_build_statistical_comparison_recommends_candidate_only_when_all_pairs_pass():
@@ -337,4 +342,34 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
         "quasi_poisson_log_rate_ratio",
     }
     assert result["id"]
+    session.close()
+
+
+def test_compare_route_request_returns_none_without_analysis_dates(tmp_path):
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    route_request = RouteRequest(
+        id="route-without-analysis-dates",
+        user_id_hash="route-user",
+        origin_label="Origin",
+        origin_latitude=47.6116,
+        origin_longitude=-122.3372,
+        destination_label="Destination",
+        destination_latitude=47.6205,
+        destination_longitude=-122.3493,
+        mode="transit",
+    )
+    session.add(route_request)
+    session.commit()
+
+    result = compare_route_request(
+        session=session,
+        user_id_hash="route-user",
+        request=RouteComparisonRequest(
+            route_request_id=route_request.id,
+            radius_m=250,
+        ),
+    )
+
+    assert result is None
     session.close()
