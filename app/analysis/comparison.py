@@ -54,6 +54,18 @@ def build_statistical_comparison(
             period_counts_by_option_id.get(candidate.option_id, []),
             period_counts_by_option_id.get(other.option_id, []),
         )
+        if minimum_data_status == "non_positive_exposure":
+            pairwise = _not_tested_pairwise(
+                candidate=candidate,
+                other=other,
+                dispersion_status_text=dispersion.status,
+                dispersion_phi=dispersion.phi,
+                minimum_data_status=minimum_data_status,
+            )
+            raw_pairwise.append(pairwise)
+            p_values.append(pairwise.p_value)
+            continue
+
         rate_test = compare_incident_rates(
             count_a=candidate.incident_count,
             exposure_a=candidate.exposure,
@@ -146,6 +158,48 @@ def _combined_dispersion(counts_a: list[int], counts_b: list[int]):
     return dispersion_status(combined)
 
 
+def _not_tested_pairwise(
+    *,
+    candidate: AnalysisOptionResult,
+    other: AnalysisOptionResult,
+    dispersion_status_text: str,
+    dispersion_phi: float | None,
+    minimum_data_status: str,
+) -> PairwiseComparisonResult:
+    return PairwiseComparisonResult(
+        option_a_id=candidate.option_id,
+        option_a_label=candidate.option_label,
+        option_b_id=other.option_id,
+        option_b_label=other.option_label,
+        winner_option_id=None,
+        winner_label=None,
+        decision_class=DecisionClass.NOT_STATISTICALLY_CLEAR,
+        method="not_tested_minimum_data",
+        incident_count_a=candidate.incident_count,
+        incident_count_b=other.incident_count,
+        exposure_a=candidate.exposure,
+        exposure_b=other.exposure,
+        exposure_unit=candidate.exposure_unit,
+        rate_a=_rate_or_zero(candidate),
+        rate_b=_rate_or_zero(other),
+        rate_ratio=1.0,
+        ci_lower=1.0,
+        ci_upper=1.0,
+        p_value=1.0,
+        adjusted_p_value=1.0,
+        overdispersion_phi=dispersion_phi,
+        overdispersion_status=dispersion_status_text,
+        minimum_data_status=minimum_data_status,
+        caveat_text=_pairwise_caveat(minimum_data_status, dispersion_status_text, ""),
+    )
+
+
+def _rate_or_zero(option: AnalysisOptionResult) -> float:
+    if option.exposure <= 0:
+        return 0.0
+    return option.incident_count / option.exposure
+
+
 def _minimum_data_status(
     *,
     analysis_start_date: date,
@@ -190,7 +244,7 @@ def _overview_summary(decision_class: DecisionClass, recommendation_label: str |
 
 def _overview_caveat(decision_class: DecisionClass) -> str:
     if decision_class == DecisionClass.STATISTICALLY_LOWER:
-        return "This describes reported incidents, not personal safety or causation."
+        return "This describes reported incidents, not causation or personal outcomes."
     return "The app still shows alternatives, but it does not make a lower-incident recommendation."
 
 
