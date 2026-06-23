@@ -10,7 +10,12 @@ from app.analysis.schemas import (
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import CrimeIncident, RouteRequest
-from app.services.analysis_service import compare_route_request, compare_site_options
+from app.schemas import CrimeIncidentData
+from app.services.analysis_service import (
+    _monthly_counts,
+    compare_route_request,
+    compare_site_options,
+)
 
 
 def test_build_statistical_comparison_recommends_candidate_only_when_all_pairs_pass():
@@ -289,7 +294,12 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
         [
             CrimeIncident(
                 id=f"a-{index}",
-                offense_start_utc=datetime(2024, 1, 10 + index, tzinfo=UTC),
+                offense_start_utc=datetime(
+                    2024,
+                    1 + (index // 4),
+                    10 + (index % 4),
+                    tzinfo=UTC,
+                ),
                 offense_category="PROPERTY",
                 latitude=47.6116,
                 longitude=-122.3372,
@@ -299,7 +309,12 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
         + [
             CrimeIncident(
                 id=f"b-{index}",
-                offense_start_utc=datetime(2024, 1, 1 + (index % 28), tzinfo=UTC),
+                offense_start_utc=datetime(
+                    2024,
+                    1 + (index // 14),
+                    1 + (index % 14),
+                    tzinfo=UTC,
+                ),
                 offense_category="PROPERTY",
                 latitude=47.6205,
                 longitude=-122.3493,
@@ -329,7 +344,7 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
             },
         ],
         analysis_start_date=date(2024, 1, 1),
-        analysis_end_date=date(2024, 1, 31),
+        analysis_end_date=date(2024, 2, 29),
         offense_category="PROPERTY",
         offense_subcategory=None,
         nibrs_group=None,
@@ -337,6 +352,10 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
 
     assert result["overview"]["decision_class"] == "statistically_lower"
     assert result["overview"]["recommendation_label"] == "Site A"
+    assert result["overview"]["options"][0]["geometry_metadata"] == {
+        "center": {"latitude": 47.6116, "longitude": -122.3372},
+        "radius_m": 250,
+    }
     assert result["analytical"]["pairwise_results"][0]["method"] in {
         "exact_conditional_poisson",
         "quasi_poisson_log_rate_ratio",
@@ -373,3 +392,29 @@ def test_compare_route_request_returns_none_without_analysis_dates(tmp_path):
 
     assert result is None
     session.close()
+
+
+def test_monthly_counts_align_zero_count_months():
+    counts = _monthly_counts(
+        incidents=[
+            CrimeIncidentData(
+                offense_start_utc=datetime(2024, 1, 15, tzinfo=UTC),
+                latitude=47.6116,
+                longitude=-122.3372,
+            ),
+            CrimeIncidentData(
+                offense_start_utc=datetime(2024, 3, 1, tzinfo=UTC),
+                latitude=47.6116,
+                longitude=-122.3372,
+            ),
+            CrimeIncidentData(
+                offense_start_utc=datetime(2024, 3, 2, tzinfo=UTC),
+                latitude=47.6116,
+                longitude=-122.3372,
+            ),
+        ],
+        analysis_start_date=date(2024, 1, 15),
+        analysis_end_date=date(2024, 3, 2),
+    )
+
+    assert counts == [1, 0, 2]

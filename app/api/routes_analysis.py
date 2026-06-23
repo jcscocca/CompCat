@@ -23,16 +23,19 @@ def compare_sites(
     user_id_hash: Annotated[str, Depends(current_user_hash)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, object]:
-    return compare_site_options(
-        session=session,
-        user_id_hash=user_id_hash,
-        options=request.options,
-        analysis_start_date=request.analysis_start_date,
-        analysis_end_date=request.analysis_end_date,
-        offense_category=request.offense_category,
-        offense_subcategory=request.offense_subcategory,
-        nibrs_group=request.nibrs_group,
-    )
+    try:
+        return compare_site_options(
+            session=session,
+            user_id_hash=user_id_hash,
+            options=request.options,
+            analysis_start_date=request.analysis_start_date,
+            analysis_end_date=request.analysis_end_date,
+            offense_category=request.offense_category,
+            offense_subcategory=request.offense_subcategory,
+            nibrs_group=request.nibrs_group,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/analysis/routes/compare")

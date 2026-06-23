@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+import json
+from datetime import date
 from typing import Any
 
 from sqlalchemy import select
@@ -51,6 +52,7 @@ def compare_site_options(
     incidents = _incident_rows(session)
     option_results: list[AnalysisOptionResult] = []
     period_counts_by_option_id: dict[str, list[int]] = {}
+    geometry_metadata_by_option_id: dict[str, dict[str, Any]] = {}
     radius_m = site_options[0].radius_m
 
     for option in site_options:
@@ -85,6 +87,10 @@ def compare_site_options(
             analysis_start_date=analysis_start_date,
             analysis_end_date=analysis_end_date,
         )
+        geometry_metadata_by_option_id[option.id] = {
+            "center": {"latitude": option.latitude, "longitude": option.longitude},
+            "radius_m": option.radius_m,
+        }
 
     comparison = build_statistical_comparison(
         user_id_hash=user_id_hash,
@@ -99,7 +105,11 @@ def compare_site_options(
         options=option_results,
         period_counts_by_option_id=period_counts_by_option_id,
     )
-    return _persist_and_payload(session, comparison)
+    return _persist_and_payload(
+        session,
+        comparison,
+        geometry_metadata_by_option_id=geometry_metadata_by_option_id,
+    )
 
 
 def compare_route_request(
@@ -125,6 +135,7 @@ def compare_route_request(
     incidents = _incident_rows(session)
     option_results: list[AnalysisOptionResult] = []
     period_counts_by_option_id: dict[str, list[int]] = {}
+    geometry_metadata_by_option_id: dict[str, dict[str, Any]] = {}
 
     for alternative in alternatives:
         matching_incidents = count_incidents_in_route_corridor(
@@ -158,6 +169,10 @@ def compare_route_request(
             analysis_start_date=route_request.analysis_start_date,
             analysis_end_date=route_request.analysis_end_date,
         )
+        geometry_metadata_by_option_id[alternative.id] = {
+            "summary_geometry": alternative.summary_geometry,
+            "radius_m": request.radius_m,
+        }
 
     comparison = build_statistical_comparison(
         user_id_hash=user_id_hash,
@@ -172,7 +187,12 @@ def compare_route_request(
         options=option_results,
         period_counts_by_option_id=period_counts_by_option_id,
     )
-    return _persist_and_payload(session, comparison, source_route_request_id=route_request.id)
+    return _persist_and_payload(
+        session,
+        comparison,
+        source_route_request_id=route_request.id,
+        geometry_metadata_by_option_id=geometry_metadata_by_option_id,
+    )
 
 
 def get_comparison_payload(
@@ -206,6 +226,7 @@ def _persist_and_payload(
     session: Session,
     comparison: StatisticalComparisonResult,
     source_route_request_id: str | None = None,
+    geometry_metadata_by_option_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     comparison_model = StatisticalComparison(
         id=comparison.id,
@@ -242,6 +263,10 @@ def _persist_and_payload(
                 exposure=option.exposure,
                 exposure_unit=option.exposure_unit,
                 incident_rate=option.incident_rate,
+                geometry_metadata_json=_geometry_metadata_json(
+                    geometry_metadata_by_option_id,
+                    option.option_id,
+                ),
             )
             for option in comparison.options
         ]
@@ -347,6 +372,7 @@ def _option_payload(option: StatisticalComparisonOption) -> dict[str, Any]:
         "exposure": option.exposure,
         "exposure_unit": option.exposure_unit,
         "incident_rate": option.incident_rate,
+        "geometry_metadata": _json_dict(option.geometry_metadata_json),
     }
 
 
@@ -407,17 +433,31 @@ def _monthly_counts(
     analysis_start_date: date,
     analysis_end_date: date,
 ) -> list[int]:
-    incident_dates = [_observed_date(incident) for incident in incidents]
-    counts_by_date = {
-        current_date: incident_dates.count(current_date)
-        for current_date in _date_range(analysis_start_date, analysis_end_date)
+    incident_months = [_observed_month(incident) for incident in incidents]
+    counts_by_month = {
+        current_month: incident_months.count(current_month)
+        for current_month in _month_range(analysis_start_date, analysis_end_date)
     }
-    return list(counts_by_date.values())
+    return list(counts_by_month.values())
 
 
-def _date_range(start_date: date, end_date: date) -> list[date]:
-    day_count = (end_date - start_date).days + 1
-    return [start_date + timedelta(days=offset) for offset in range(day_count)]
+def _month_range(start_date: date, end_date: date) -> list[tuple[int, int]]:
+    months: list[tuple[int, int]] = []
+    year = start_date.year
+    month = start_date.month
+    while (year, month) <= (end_date.year, end_date.month):
+        months.append((year, month))
+        if month == 12:
+            year += 1
+            month = 1
+        else:
+            month += 1
+    return months
+
+
+def _observed_month(incident: CrimeIncidentData) -> tuple[int, int]:
+    observed_date = _observed_date(incident)
+    return observed_date.year, observed_date.month
 
 
 def _observed_date(incident: CrimeIncidentData) -> date:
@@ -425,6 +465,25 @@ def _observed_date(incident: CrimeIncidentData) -> date:
     if observed is None:
         raise ValueError("Incident has no observed date.")
     return observed.date()
+
+
+def _geometry_metadata_json(
+    geometry_metadata_by_option_id: dict[str, dict[str, Any]] | None,
+    option_id: str,
+) -> str | None:
+    if not geometry_metadata_by_option_id:
+        return None
+    metadata = geometry_metadata_by_option_id.get(option_id)
+    if metadata is None:
+        return None
+    return json.dumps(metadata, sort_keys=True)
+
+
+def _json_dict(value: str | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    parsed = json.loads(value)
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _incident_rows(session: Session) -> list[CrimeIncidentData]:

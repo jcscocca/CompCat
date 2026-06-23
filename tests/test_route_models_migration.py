@@ -1,8 +1,9 @@
+import json
 from datetime import date
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 
 from alembic import command
@@ -283,6 +284,12 @@ def test_statistical_comparison_models_persist_options_and_pairwise_results(tmp_
             exposure=30,
             exposure_unit="square_km_days",
             incident_rate=8 / 30,
+            geometry_metadata_json=json.dumps(
+                {
+                    "summary_geometry": "47.6116,-122.3372;47.6205,-122.3493",
+                    "radius_m": 500,
+                },
+            ),
         ),
     )
     session.add(
@@ -318,6 +325,12 @@ def test_statistical_comparison_models_persist_options_and_pairwise_results(tmp_
 
     assert comparison.id
     assert session.get(StatisticalComparison, comparison.id).decision_class == "statistically_lower"
+    option = session.scalar(
+        select(StatisticalComparisonOption).where(
+            StatisticalComparisonOption.comparison_id == comparison.id,
+        ),
+    )
+    assert json.loads(option.geometry_metadata_json)["radius_m"] == 500
     session.close()
 
 
@@ -348,6 +361,11 @@ def test_statistical_alembic_migration_creates_comparison_tables(tmp_path, monke
         "overview_caveat_text",
         "full_caveat_text",
     }.issubset(comparison_columns)
+
+    option_columns = {
+        column["name"] for column in inspector.get_columns("statistical_comparison_options")
+    }
+    assert "geometry_metadata_json" in option_columns
 
     option_fks = inspector.get_foreign_keys("statistical_comparison_options")
     pairwise_fks = inspector.get_foreign_keys("statistical_pairwise_results")

@@ -310,6 +310,7 @@ class StatisticalComparisonOption(Base):
     exposure: Mapped[float] = mapped_column(Float)
     exposure_unit: Mapped[str] = mapped_column(Text)
     incident_rate: Mapped[float] = mapped_column(Float)
+    geometry_metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
