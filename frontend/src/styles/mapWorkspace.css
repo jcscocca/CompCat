@@ -252,3 +252,5 @@ button.chk{padding:0;cursor:pointer;}
 
 input.mc-inp{display:block;color-scheme:dark;}
 input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
+
+.mc-compare-summary{font-size:13px;color:var(--text);line-height:1.5;margin:0 0 12px;}
