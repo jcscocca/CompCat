@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from io import StringIO
 
 from sqlalchemy import select
@@ -17,6 +18,7 @@ from app.places.schemas import (
 
 MANUAL_CLUSTER_VERSION = "manual-1"
 MANUAL_CLUSTER_METHOD = "manual_public_dashboard"
+REQUIRED_BULK_PLACE_COLUMNS = {"latitude", "longitude"}
 
 
 def create_manual_place(
@@ -108,6 +110,13 @@ def create_bulk_manual_places(
     created: list[ManualPlaceResponse] = []
     skipped_count = 0
 
+    if not reader.fieldnames or not REQUIRED_BULK_PLACE_COLUMNS.issubset(reader.fieldnames):
+        return BulkPlaceCreateResponse(
+            created_count=0,
+            skipped_count=_count_nonblank_csv_rows(csv_text),
+            places=[],
+        )
+
     for row in reader:
         try:
             latitude = float(row.get("latitude") or "")
@@ -117,7 +126,7 @@ def create_bulk_manual_places(
                 continue
 
             display_label = (row.get("display_label") or "").strip() or "Entered place"
-            visit_count = max(1, int(float(row.get("visit_count") or 1)))
+            visit_count = _parse_visit_count(row.get("visit_count"))
             payload = ManualPlaceCreate(
                 display_label=display_label,
                 latitude=latitude,
@@ -139,6 +148,23 @@ def create_bulk_manual_places(
         created_count=len(created),
         skipped_count=skipped_count,
         places=created,
+    )
+
+
+def _parse_visit_count(value: str | None) -> int:
+    if value is None or value.strip() == "":
+        return 1
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError("visit_count must be finite")
+    return max(1, int(parsed))
+
+
+def _count_nonblank_csv_rows(csv_text: str) -> int:
+    return sum(
+        1
+        for row in csv.reader(StringIO(csv_text))
+        if any(cell.strip() for cell in row)
     )
 
 

@@ -241,12 +241,72 @@ def test_bulk_place_entry_clamps_nonpositive_visit_counts(tmp_path):
     assert [place["visit_count"] for place in response.json()["places"]] == [1, 1]
 
 
+def test_bulk_place_entry_skips_nonfinite_visit_counts(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,latitude,longitude,visit_count\n"
+                "Infinite visits,47.609,-122.333,1e309\n"
+                "Good place,47.621,-122.321,3\n"
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created_count"] == 1
+    assert response.json()["skipped_count"] == 1
+    assert response.json()["places"][0]["display_label"] == "Good place"
+
+
+def test_bulk_place_entry_missing_required_headers_skips_nonblank_rows(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,visit_count\n"
+                "Missing coordinates,5\n"
+                "\n"
+                "Still missing coordinates,7\n"
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created_count"] == 0
+    assert response.json()["skipped_count"] == 3
+    assert response.json()["places"] == []
+
+
 def test_bulk_place_entry_requires_session_cookie(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
 
     response = client.post(
         "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,latitude,longitude,visit_count\n"
+                "Good place,47.609,-122.333,3\n"
+            )
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Public session required"
+
+
+def test_bulk_place_entry_rejects_demo_header_without_session_cookie(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post(
+        "/places/bulk",
+        headers={"X-Demo-User-ID": "demo@example.com"},
         json={
             "csv_text": (
                 "display_label,latitude,longitude,visit_count\n"
