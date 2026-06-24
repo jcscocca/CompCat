@@ -125,19 +125,24 @@ class CrimeIncident(Base):
     offense_start_utc: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+        index=True,
     )
     offense_end_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    report_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    offense_category: Mapped[str | None] = mapped_column(Text, nullable=True)
-    offense_subcategory: Mapped[str | None] = mapped_column(Text, nullable=True)
-    nibrs_group: Mapped[str | None] = mapped_column(Text, nullable=True)
+    report_utc: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    offense_category: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    offense_subcategory: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    nibrs_group: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     precinct: Mapped[str | None] = mapped_column(Text, nullable=True)
     sector: Mapped[str | None] = mapped_column(Text, nullable=True)
     beat: Mapped[str | None] = mapped_column(Text, nullable=True)
     mcpp: Mapped[str | None] = mapped_column(Text, nullable=True)
     block_address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     source_dataset: Mapped[str] = mapped_column(Text, default="seattle_spd_crime")
     snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 

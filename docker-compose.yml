@@ -20,6 +20,11 @@ services:
     environment:
       MCA_DATABASE_URL: postgresql+psycopg://mca:mca@db:5432/mca
       MCA_USER_HASH_SALT: local-docker-demo-salt
+      MCA_ENVIRONMENT: local
+      MCA_SESSION_SECRET: local-docker-session-secret
+      MCA_SESSION_COOKIE_SECURE: "false"
+      MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS: "false"
+      MCA_ADMIN_INGEST_TOKEN: local-admin-token
     ports:
       - "8000:8000"
     depends_on:

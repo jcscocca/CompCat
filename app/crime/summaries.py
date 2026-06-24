@@ -16,6 +16,10 @@ def summarize_place_crime(
 ) -> list[PlaceCrimeSummaryData]:
     summaries: list[PlaceCrimeSummaryData] = []
     for cluster in clusters:
+        cluster_coordinates = _display_coordinates(cluster)
+        if cluster_coordinates is None:
+            continue
+        cluster_latitude, cluster_longitude = cluster_coordinates
         cluster_incidents = [
             incident
             for incident in incidents
@@ -30,8 +34,8 @@ def summarize_place_crime(
             ] = defaultdict(list)
             for incident in cluster_incidents:
                 distance = haversine_m(
-                    cluster.centroid_latitude,
-                    cluster.centroid_longitude,
+                    cluster_latitude,
+                    cluster_longitude,
                     incident.latitude,
                     incident.longitude,
                 )
@@ -64,6 +68,12 @@ def summarize_place_crime(
                     )
                 )
     return summaries
+
+
+def _display_coordinates(cluster: PlaceClusterData) -> tuple[float, float] | None:
+    if cluster.display_latitude is None or cluster.display_longitude is None:
+        return None
+    return cluster.display_latitude, cluster.display_longitude
 
 
 def _incident_in_date_range(

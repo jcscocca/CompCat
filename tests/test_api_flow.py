@@ -37,7 +37,7 @@ def test_demo_api_flow_upload_normalize_crime_summarize_and_export(tmp_path):
     assert normalize.json()["stop_visit_count"] == 3
     assert normalize.json()["place_cluster_count"] == 1
 
-    places = client.get("/places", headers=headers)
+    places = client.get("/internal/places", headers=headers)
     assert places.status_code == 200
     assert places.json()["count"] == 1
     assert places.json()["places"][0]["display_label"] == "Recurring Cafe"
@@ -58,7 +58,7 @@ def test_demo_api_flow_upload_normalize_crime_summarize_and_export(tmp_path):
     assert summarize.status_code == 200
     assert summarize.json()["summary_count"] >= 1
 
-    export = client.get("/exports/tableau/place-summary.csv", headers=headers)
+    export = client.get("/internal/exports/tableau/place-summary.csv", headers=headers)
     assert export.status_code == 200
     assert "Recurring Cafe" in export.text
     assert "PROPERTY" in export.text

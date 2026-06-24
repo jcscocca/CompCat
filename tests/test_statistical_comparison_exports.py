@@ -13,7 +13,7 @@ from app.models import CrimeIncident
 def test_statistical_comparison_tableau_export_includes_site_pairwise_results(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
-    headers = {"X-Demo-User-Id": "statistical-export-user@example.com"}
+    client.post("/sessions")
 
     session = get_sessionmaker()()
     session.add_all(
@@ -67,14 +67,12 @@ def test_statistical_comparison_tableau_export_includes_site_pairwise_results(tm
                 },
             ],
         },
-        headers=headers,
     )
     assert comparison_response.status_code == 200
     comparison_id = comparison_response.json()["id"]
 
     export_response = client.get(
         "/exports/tableau/statistical-comparisons.csv",
-        headers=headers,
     )
 
     assert export_response.status_code == 200

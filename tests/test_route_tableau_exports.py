@@ -4,15 +4,17 @@ from io import StringIO
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from app.services.users import hash_demo_user
+from app.sessions import public_user_hash
 
 
 def test_route_tableau_exports_include_route_alternatives_segments_and_context(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
-    headers = {"X-Demo-User-Id": "route-export-user@example.com"}
-    other_headers = {"X-Demo-User-Id": "other-route-export-user@example.com"}
-    user_id_hash = hash_demo_user("route-export-user@example.com")
+    other_client = TestClient(app)
+    client.post("/sessions")
+    other_client.post("/sessions")
+    user_id_hash = public_user_hash(client.cookies.get("mca_session"))
+    assert user_id_hash is not None
 
     ingest = client.post("/crime/ingest/sample")
     assert ingest.status_code == 200
@@ -27,14 +29,13 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
             "analysis_end_date": "2024-01-31",
             "radii_m": [500],
         },
-        headers=headers,
     )
     assert route_response.status_code == 200
     route_payload = route_response.json()
     request_id = route_payload["request"]["id"]
     first_alternative_id = route_payload["alternatives"][0]["id"]
 
-    other_route_response = client.post(
+    other_route_response = other_client.post(
         "/routes/alternatives",
         json={
             "origin_label": "Ballard",
@@ -44,14 +45,13 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
             "analysis_end_date": "2024-01-31",
             "radii_m": [500],
         },
-        headers=other_headers,
     )
     assert other_route_response.status_code == 200
     other_route_payload = other_route_response.json()
     other_request_id = other_route_payload["request"]["id"]
     other_alternative_id = other_route_payload["alternatives"][0]["id"]
 
-    alternatives = client.get("/exports/tableau/route-alternatives.csv", headers=headers)
+    alternatives = client.get("/exports/tableau/route-alternatives.csv")
     assert alternatives.status_code == 200
     assert alternatives.headers["content-type"].startswith("text/csv")
     assert (
@@ -95,7 +95,7 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
     }
     assert "Direct transit route" not in {row["route_label"] for row in alternative_rows}
 
-    segments = client.get("/exports/tableau/route-segments.csv", headers=headers)
+    segments = client.get("/exports/tableau/route-segments.csv")
     assert segments.status_code == 200
     assert segments.headers["content-type"].startswith("text/csv")
     assert (
@@ -138,7 +138,7 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
     assert "University District" not in {row["end_label"] for row in segment_rows}
     assert other_alternative_id not in {row["route_alternative_id"] for row in segment_rows}
 
-    context = client.get("/exports/tableau/route-context.csv", headers=headers)
+    context = client.get("/exports/tableau/route-context.csv")
     assert context.status_code == 200
     assert context.headers["content-type"].startswith("text/csv")
     assert context.headers["content-disposition"] == "attachment; filename=route-context.csv"

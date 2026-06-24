@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 
@@ -18,6 +19,19 @@ from app.models import (
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
 )
+
+
+def test_alembic_revision_ids_fit_default_version_table() -> None:
+    script = Config("alembic.ini")
+    revisions = ScriptDirectory.from_config(script).walk_revisions()
+
+    too_long = {
+        revision.revision: revision.path
+        for revision in revisions
+        if len(revision.revision) > 32
+    }
+
+    assert too_long == {}
 
 
 def test_route_models_persist_with_relationship_ids(tmp_path):
@@ -371,3 +385,25 @@ def test_statistical_alembic_migration_creates_comparison_tables(tmp_path, monke
     pairwise_fks = inspector.get_foreign_keys("statistical_pairwise_results")
     assert any(fk["referred_table"] == "statistical_comparisons" for fk in option_fks)
     assert any(fk["referred_table"] == "statistical_comparisons" for fk in pairwise_fks)
+
+
+def test_crime_filter_indexes_exist_after_migration(tmp_path, monkeypatch):
+    db_path = tmp_path / "crime-filter-indexes.sqlite3"
+    database_url = f"sqlite+pysqlite:///{db_path}"
+    monkeypatch.setenv("MCA_DATABASE_URL", database_url)
+
+    command.upgrade(Config("alembic.ini"), "head")
+
+    engine = create_engine(database_url)
+    inspector = inspect(engine)
+    crime_indexes = {index["name"] for index in inspector.get_indexes("crime_incidents")}
+
+    assert {
+        "ix_crime_incidents_offense_start_utc",
+        "ix_crime_incidents_report_utc",
+        "ix_crime_incidents_offense_category",
+        "ix_crime_incidents_offense_subcategory",
+        "ix_crime_incidents_nibrs_group",
+        "ix_crime_incidents_latitude",
+        "ix_crime_incidents_longitude",
+    }.issubset(crime_indexes)

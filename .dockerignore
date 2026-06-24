@@ -1,0 +1,13 @@
+.git
+.venv
+.pytest_cache
+.ruff_cache
+.superpowers
+localagent-output
+frontend/node_modules
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+app/static/dashboard
+*.sqlite3
+*.pyc
+__pycache__

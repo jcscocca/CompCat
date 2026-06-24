@@ -41,5 +41,5 @@ def test_recurring_places_upload_creates_places_without_normalize(tmp_path):
     assert response.json()["detected_schema"] == "recurring_places_csv"
     assert response.json()["place_cluster_count"] == 2
 
-    places = client.get("/places", headers={"X-Demo-User-Id": "demo@example.com"})
+    places = client.get("/internal/places", headers={"X-Demo-User-Id": "demo@example.com"})
     assert places.json()["count"] == 2

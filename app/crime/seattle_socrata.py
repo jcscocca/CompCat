@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import date
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -18,8 +19,18 @@ class SeattleSocrataClient:
         self.dataset_id = dataset_id
         self.app_token = app_token
 
-    def fetch_page(self, limit: int = 5000, offset: int = 0) -> list[CrimeIncidentData]:
-        query = urlencode({"$limit": limit, "$offset": offset})
+    def fetch_page(
+        self,
+        limit: int = 5000,
+        offset: int = 0,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[CrimeIncidentData]:
+        query_params = {"$limit": limit, "$offset": offset}
+        if start_date or end_date:
+            query_params["$order"] = "offense_date DESC"
+            query_params["$where"] = _date_window_where(start_date, end_date)
+        query = urlencode(query_params)
         request = Request(f"{self.base_url}/{self.dataset_id}.json?{query}")
         if self.app_token:
             request.add_header("X-App-Token", self.app_token)
@@ -49,25 +60,55 @@ def crime_incident_from_mapping(row: dict[str, Any]) -> CrimeIncidentData:
         report_number=report_number,
         offense_id=offense_id,
         offense_start_utc=parse_datetime(
-            _first(row, "offense_start_datetime", "offense_start_utc", "offense_start")
+            _first(
+                row,
+                "offense_start_datetime",
+                "offense_start_utc",
+                "offense_start",
+                "offense_date",
+            )
         ),
         offense_end_utc=parse_datetime(
             _first(row, "offense_end_datetime", "offense_end_utc", "offense_end")
         ),
-        report_utc=parse_datetime(_first(row, "report_datetime", "report_utc")),
-        offense_category=_first(row, "crime_against_category", "offense_category"),
-        offense_subcategory=_first(row, "offense_parent_group", "offense_subcategory", "offense"),
+        report_utc=parse_datetime(_first(row, "report_datetime", "report_utc", "report_date_time")),
+        offense_category=_first(
+            row,
+            "crime_against_category",
+            "nibrs_crime_against_category",
+            "offense_category",
+        ),
+        offense_subcategory=_first(
+            row,
+            "offense_parent_group",
+            "offense_sub_category",
+            "offense_subcategory",
+            "offense",
+        ),
         nibrs_group=_first(row, "nibrs_group", "nibrs_group_a_b"),
         precinct=_first(row, "precinct"),
         sector=_first(row, "sector"),
         beat=_first(row, "beat"),
-        mcpp=_first(row, "mcpp"),
+        mcpp=_first(row, "mcpp", "neighborhood"),
         block_address=_first(row, "100_block_address", "block_address"),
         latitude=latitude,
         longitude=longitude,
         snapshot_at=parse_datetime(_first(row, "snapshot_at"))
         or parse_datetime("2024-01-01T00:00:00Z"),
     )
+
+
+def _date_window_where(start_date: date | None, end_date: date | None) -> str:
+    if start_date and end_date:
+        return (
+            f"offense_date between '{start_date.isoformat()}T00:00:00' "
+            f"and '{end_date.isoformat()}T23:59:59'"
+        )
+    if start_date:
+        return f"offense_date >= '{start_date.isoformat()}T00:00:00'"
+    if end_date:
+        return f"offense_date <= '{end_date.isoformat()}T23:59:59'"
+    raise ValueError("At least one date is required.")
 
 
 def _first(row: dict[str, Any], *keys: str) -> Any:
@@ -82,4 +123,7 @@ def _first(row: dict[str, Any], *keys: str) -> Any:
 def _float_or_none(value: Any) -> float | None:
     if value is None or value == "":
         return None
-    return float(value)
+    try:
+        return float(value)
+    except ValueError:
+        return None

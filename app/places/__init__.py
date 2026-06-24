@@ -1,0 +1,1 @@
+"""Public place entry domain."""

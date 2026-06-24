@@ -1,6 +1,6 @@
 """comparison option geometry metadata
 
-Revision ID: 0004_comparison_option_geometry_metadata
+Revision ID: 0004_option_geom_metadata
 Revises: 0003_statistical_comparisons
 Create Date: 2026-06-23
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0004_comparison_option_geometry_metadata"
+revision = "0004_option_geom_metadata"
 down_revision = "0003_statistical_comparisons"
 branch_labels = None
 depends_on = None
