@@ -98,6 +98,11 @@ describe("App", () => {
       screen.getByRole("region", { name: "Important data note" }),
     ).toHaveTextContent("Reported incident context, not safety advice.");
     expect(
+      screen.getByRole("region", { name: "Important data note" }),
+    ).toHaveTextContent(
+      "Reports can be incomplete, delayed, corrected, or geographically generalized.",
+    );
+    expect(
       screen.queryByRole("button", { name: "Export dashboard" }),
     ).not.toBeInTheDocument();
   });
