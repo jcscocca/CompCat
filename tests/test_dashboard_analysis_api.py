@@ -71,6 +71,26 @@ def test_dashboard_analyze_selected_places(tmp_path):
     assert dashboard["totals"]["incident_count"] == 2
 
 
+def test_dashboard_analyze_rejects_duplicate_radii(tmp_path):
+    client = _client_with_places_and_crime(tmp_path)
+    places = client.get("/places").json()["places"]
+    selected_ids = [place["id"] for place in places]
+
+    response = client.post(
+        "/dashboard/analyze",
+        json={
+            "place_ids": selected_ids,
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [250, 250],
+            "offense_category": "PROPERTY",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "radii_m values must be unique" in response.text
+
+
 def test_dashboard_compare_selected_places(tmp_path):
     client = _client_with_places_and_crime(tmp_path)
     places = client.get("/places").json()["places"]

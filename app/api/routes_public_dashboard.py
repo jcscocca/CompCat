@@ -4,7 +4,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import required_public_user_hash
@@ -27,6 +27,13 @@ class DashboardAnalyzeRequest(BaseModel):
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
+
+    @field_validator("radii_m")
+    @classmethod
+    def radii_m_values_must_be_unique(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("radii_m values must be unique")
+        return value
 
 
 class DashboardCompareRequest(BaseModel):
