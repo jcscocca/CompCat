@@ -49,4 +49,10 @@ describe("api client", () => {
 
     await expect(getDashboardSummary()).rejects.toThrow("No session");
   });
+
+  it("throws a status fallback when a failed request has no response text", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 500 }));
+
+    await expect(getDashboardSummary()).rejects.toThrow("Request failed with status 500");
+  });
 });

@@ -12,6 +12,20 @@ export type Place = {
   sensitivity_class: string;
 };
 
+export type CrimeSummary = {
+  place_cluster_id: string;
+  radius_m: number;
+  analysis_start_date: string;
+  analysis_end_date: string;
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  nibrs_group: string | null;
+  incident_count: number;
+  nearest_incident_m: number | null;
+  incidents_per_visit: number | null;
+  incidents_per_hour_dwell: number | null;
+};
+
 export type DashboardSummary = {
   totals: {
     place_count: number;
@@ -25,19 +39,7 @@ export type DashboardSummary = {
     suppressed: number;
   };
   places: Place[];
-  crime_summaries: Array<{
-    place_cluster_id: string;
-    radius_m: number;
-    analysis_start_date: string;
-    analysis_end_date: string;
-    offense_category: string | null;
-    offense_subcategory: string | null;
-    nibrs_group: string | null;
-    incident_count: number;
-    nearest_incident_m: number | null;
-    incidents_per_visit: number | null;
-    incidents_per_hour_dwell: number | null;
-  }>;
+  crime_summaries: CrimeSummary[];
   analysis: {
     available_radii_m: number[];
   };
