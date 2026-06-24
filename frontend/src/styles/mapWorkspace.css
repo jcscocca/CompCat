@@ -239,3 +239,13 @@ button.mc-handle{appearance:none;border:0;padding:0;cursor:pointer;}
 .mc-results button:hover{border-color:rgba(205,106,69,.5);}
 .mc-result-label{font-size:13px;}
 .mc-result-coord{font-family:var(--f-mono);font-size:11px;color:var(--faint);}
+
+.mc-head-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.mc-tinybtn.on{color:#fff;background:rgba(205,106,69,.18);border-color:rgba(205,106,69,.55);}
+.mc-card .chk{background:transparent;appearance:none;}
+button.chk{padding:0;cursor:pointer;}
+.mc-empty-list{font-size:13px;color:var(--dim);line-height:1.6;padding:10px 2px;}
+.mc-empty-list strong{color:var(--text);}
+.mc-places-note{margin-top:14px;}
+.mc-sheet .notice{background:rgba(116,133,142,.12);border-left-color:var(--slate);color:var(--dim);}
+.mc-sheet .notice strong{color:var(--text);}
