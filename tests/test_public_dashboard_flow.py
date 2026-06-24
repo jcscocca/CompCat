@@ -1,4 +1,6 @@
+import csv
 from datetime import UTC, datetime
+from io import StringIO
 
 from fastapi.testclient import TestClient
 
@@ -7,10 +9,15 @@ from app.main import create_app
 from app.models import CrimeIncident
 
 
-def test_public_dashboard_flow_without_uploads(tmp_path):
+def test_public_dashboard_flow_without_uploads(tmp_path, monkeypatch):
+    monkeypatch.delenv("MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS", raising=False)
+    monkeypatch.chdir(tmp_path)
+
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
-    client.post("/sessions")
+    session_response = client.post("/sessions")
+    assert session_response.status_code == 200
+    assert "mca_session" in session_response.cookies
 
     input_modes = client.get("/input-modes").json()["modes"]
     assert "personal_timeline" not in [mode["id"] for mode in input_modes]
@@ -59,4 +66,11 @@ def test_public_dashboard_flow_without_uploads(tmp_path):
 
     export_response = client.get("/exports/tableau/place-summary.csv")
     assert export_response.status_code == 200
-    assert "Downtown transfer stop" in export_response.text
+    rows = list(csv.DictReader(StringIO(export_response.text)))
+    assert len(rows) == 1
+    assert rows[0]["display_label"] == "Downtown transfer stop"
+    assert rows[0]["radius_m"] == "250"
+    assert rows[0]["analysis_start_date"] == "2024-01-01"
+    assert rows[0]["analysis_end_date"] == "2024-01-31"
+    assert rows[0]["offense_category"] == "PROPERTY"
+    assert rows[0]["incident_count"] == "1"

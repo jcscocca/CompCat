@@ -159,7 +159,7 @@ GET /dashboard/summary
 
 - Run `make test` and `make lint`.
 - Run `cd frontend && npm test && npm run build`.
-- Run `docker build .`.
+- Run `docker build .` in CI or another environment with Docker available.
 - Set `MCA_DATABASE_URL`, `MCA_USER_HASH_SALT`, `MCA_SESSION_SECRET`, and `MCA_ADMIN_INGEST_TOKEN`.
 - Run Alembic migrations before serving traffic.
 - Ingest recent Seattle SPD data through the admin Socrata endpoint.
