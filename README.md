@@ -1,21 +1,21 @@
 # Mobility Context Analyzer
 
-Backend-first MVP for a privacy-first mobility context tool. The app accepts personal
-location-history uploads, turns them into stop visits and recurring place clusters, compares
-those recurring areas with reported Seattle SPD crime incidents, and exports a Tableau-ready
-CSV that avoids raw GPS traces.
+Backend-first MVP for a privacy-first mobility context tool. The public dashboard starts
+with approximate manual place entry, place-list paste flows, selected-place analysis, and
+reported Seattle SPD incident context exports. Personal timeline uploads remain available
+for internal demos, but they are not the center of the public launch experience.
 
 ## What It Does
 
-- Imports Google Maps/Timeline JSON and CSV point files.
-- Imports privacy-light recurring-place CSV files.
+- Accepts approximate places entered manually or pasted as rows.
 - Imports public commute scenario CSV files using generalized Seattle area centroids.
-- Includes minimal GeoJSON and GPX point adapters so those formats have clean seams.
+- Supports selected-place analysis and comparison for saved public-dashboard places.
+- Exports privacy-safe Tableau CSV rows using generalized display coordinates.
+- Keeps internal/demo parsers for Google Maps/Timeline JSON, raw point CSV, GeoJSON, and GPX.
 - Normalizes uploads into stop visits and recurring place clusters.
 - Marks home-like and work-like clusters for privacy suppression.
 - Loads a local Seattle crime fixture for offline tests and demo work.
 - Computes reported SPD incident counts within selected radii and date ranges.
-- Exports privacy-safe Tableau CSV rows using generalized display coordinates.
 
 ## What It Does Not Do
 
@@ -27,8 +27,9 @@ CSV that avoids raw GPS traces.
 
 ## Privacy Posture
 
-Raw uploads are temporary input artifacts. The canonical product objects are stop visits,
-recurring place clusters, and context summaries. Demo identity comes from the
+Manual and pasted public-dashboard entries are stored as saved place clusters. Raw uploads
+are temporary input artifacts for internal/demo flows. The canonical product objects are
+stop visits, recurring place clusters, and context summaries. Demo identity comes from the
 `X-Demo-User-Id` header, or `demo_user` when omitted, and is hashed server-side.
 
 In `tableau_safe` mode, home-like, work-like, health-like, religious-like, and explicitly
@@ -71,7 +72,93 @@ Apply migrations manually:
 make migrate
 ```
 
-## Demo Flow
+## Public Dashboard Flow
+
+The public dashboard is designed for generalized manual entry. Users can enter approximate
+places, paste a place list, run selected-place analysis, compare saved places, and export
+reported-incident context. Personal timeline uploads remain an internal/demo capability and
+are not part of the public launch flow.
+
+Start the API and create a public dashboard session:
+
+```bash
+curl -c demo.cookies -X POST http://127.0.0.1:8000/sessions
+```
+
+Check the public-first input modes:
+
+```bash
+curl -b demo.cookies http://127.0.0.1:8000/input-modes
+```
+
+Enter an approximate place manually:
+
+```bash
+curl -b demo.cookies -H "Content-Type: application/json" \
+  -d '{"display_label":"Downtown transfer stop","latitude":47.609,"longitude":-122.333,"visit_count":12,"total_dwell_minutes":360}' \
+  http://127.0.0.1:8000/places
+```
+
+Or paste a place list:
+
+```bash
+curl -b demo.cookies -H "Content-Type: application/json" \
+  -d '{"csv_text":"display_label,latitude,longitude,visit_count,total_dwell_minutes\nDowntown transfer stop,47.609,-122.333,12,360\nLibrary area,47.621,-122.321,6,420\n"}' \
+  http://127.0.0.1:8000/places/bulk
+```
+
+Load sample crime data, then analyze selected saved places:
+
+```bash
+curl -X POST http://127.0.0.1:8000/crime/ingest/sample
+curl -b demo.cookies -H "Content-Type: application/json" \
+  -d '{"place_ids":["<place_id>"],"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radii_m":[250,500]}' \
+  http://127.0.0.1:8000/dashboard/analyze
+```
+
+Compare two or more saved places:
+
+```bash
+curl -b demo.cookies -H "Content-Type: application/json" \
+  -d '{"place_ids":["<first_place_id>","<second_place_id>"],"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radius_m":500}' \
+  http://127.0.0.1:8000/dashboard/compare
+```
+
+Export Tableau CSV:
+
+```bash
+curl -b demo.cookies http://127.0.0.1:8000/exports/tableau/place-summary.csv
+```
+
+## Public Input Modes
+
+The public dashboard flow exposes upload-free modes first:
+
+1. **Enter places manually** for approximate places, visit frequency, and optional dwell time.
+2. **Paste a place list** for rows with `display_label`, `latitude`, `longitude`, and optional
+   visit or dwell fields.
+3. **Public commute scenario** for neighborhood or transit-oriented scenarios that use
+   generalized Seattle area centroids instead of personal location data.
+
+Set `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` in an internal/demo environment to append
+**Personal timeline upload** after the public modes.
+
+Mode metadata is available from:
+
+```text
+GET /input-modes
+```
+
+Dashboard-ready summary data is available from:
+
+```text
+GET /dashboard/summary
+```
+
+## Internal Upload Demo Flow
+
+Personal timeline uploads are available for internal demos and parser validation. Enable the
+mode metadata with `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` when a demo needs to surface it.
 
 Start the API, then upload the recurring Google fixture:
 
@@ -105,30 +192,7 @@ curl -H "X-Demo-User-Id: demo@example.com" \
   http://127.0.0.1:8000/exports/tableau/place-summary.csv
 ```
 
-## Three Input Modes
-
-The guided dashboard flow supports three input modes:
-
-1. **Personal timeline upload** for Google Timeline JSON, raw point CSV, GeoJSON, or GPX.
-   This is the highest-detail mode and should be presented with the strongest privacy language.
-2. **Generalized recurring places CSV** for users who want dashboard value without uploading
-   raw movement history.
-3. **Public commute scenario CSV** for neighborhood or transit-oriented scenarios that use
-   generalized Seattle area centroids instead of personal location data.
-
-Mode metadata is available from:
-
-```text
-GET /input-modes
-```
-
-Dashboard-ready summary data is available from:
-
-```text
-GET /dashboard/summary
-```
-
-## Supported Upload Formats
+### Supported Upload Formats
 
 - Google Semantic Location History JSON with `timelineObjects`.
 - Google records-style JSON with `locations`, `latitudeE7`, and `longitudeE7`.

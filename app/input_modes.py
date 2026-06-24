@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 
-def supported_input_modes() -> list[dict[str, object]]:
-    return [
+def supported_input_modes(include_personal_uploads: bool = False) -> list[dict[str, object]]:
+    modes: list[dict[str, object]] = [
         {
-            "id": "personal_timeline",
-            "label": "Personal timeline upload",
-            "privacy_level": "high",
-            "description": "Google Timeline JSON, raw point CSV, GeoJSON, or GPX.",
+            "id": "manual_places",
+            "label": "Enter places manually",
+            "privacy_level": "low",
+            "description": "Type approximate places, visit frequency, and optional dwell time.",
             "required_columns": [],
             "optional_columns": [],
             "sample_csv": "",
         },
         {
-            "id": "recurring_places_csv",
-            "label": "Generalized recurring places CSV",
+            "id": "bulk_places",
+            "label": "Paste a place list",
             "privacy_level": "low",
-            "description": "Upload only recurring places or areas to analyze.",
+            "description": "Paste rows with display_label, latitude, longitude, and visit_count.",
             "required_columns": ["display_label", "latitude", "longitude"],
             "optional_columns": [
                 "visit_count",
@@ -44,3 +44,16 @@ def supported_input_modes() -> list[dict[str, object]]:
             ),
         },
     ]
+    if include_personal_uploads:
+        modes.append(
+            {
+                "id": "personal_timeline",
+                "label": "Personal timeline upload",
+                "privacy_level": "high",
+                "description": "Google Timeline JSON, raw point CSV, GeoJSON, or GPX.",
+                "required_columns": [],
+                "optional_columns": [],
+                "sample_csv": "",
+            }
+        )
+    return modes
