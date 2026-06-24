@@ -197,3 +197,12 @@
 @media (prefers-reduced-motion: reduce){
   .pin .body,.halo,.mc-sheet,.mc-panel.is-active,.mc-addpin.is-armed{animation:none !important;}
 }
+
+.mc-sheet.is-peek{height:92px;}
+.mc-sheet.is-half{height:56%;}
+.mc-sheet.is-full{height:90%;}
+button.mc-handle{appearance:none;border:0;padding:0;cursor:pointer;}
+.mc-snaps button{appearance:none;background:transparent;border:0;cursor:pointer;font:inherit;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:6px;padding:2px;}
+.mc-snaps button b{width:14px;height:3px;border-radius:2px;background:rgba(255,255,255,.18);display:inline-block;}
+.mc-snaps button.on{color:var(--clay);}
+.mc-snaps button.on b{background:var(--clay);width:20px;}
