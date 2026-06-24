@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import csv
+from io import StringIO
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import PlaceCluster
-from app.normalization.geo import snap_to_grid
-from app.places.schemas import ManualPlaceCreate, ManualPlaceResponse, ManualPlaceUpdate
+from app.normalization.geo import is_valid_coordinate, snap_to_grid
+from app.places.schemas import (
+    BulkPlaceCreateResponse,
+    ManualPlaceCreate,
+    ManualPlaceResponse,
+    ManualPlaceUpdate,
+)
 
 MANUAL_CLUSTER_VERSION = "manual-1"
 MANUAL_CLUSTER_METHOD = "manual_public_dashboard"
@@ -91,6 +99,47 @@ def delete_manual_place(session: Session, user_id_hash: str, place_id: str) -> b
     return True
 
 
+def create_bulk_manual_places(
+    session: Session,
+    user_id_hash: str,
+    csv_text: str,
+) -> BulkPlaceCreateResponse:
+    reader = csv.DictReader(StringIO(csv_text))
+    created: list[ManualPlaceResponse] = []
+    skipped_count = 0
+
+    for row in reader:
+        try:
+            latitude = float(row.get("latitude") or "")
+            longitude = float(row.get("longitude") or "")
+            if not is_valid_coordinate(latitude, longitude):
+                skipped_count += 1
+                continue
+
+            payload = ManualPlaceCreate(
+                display_label=row.get("display_label") or "",
+                latitude=latitude,
+                longitude=longitude,
+                visit_count=int(float(row.get("visit_count") or 1)),
+                total_dwell_minutes=_optional_float(row.get("total_dwell_minutes")),
+                median_dwell_minutes=_optional_float(row.get("median_dwell_minutes")),
+                typical_days=_empty_to_none(row.get("typical_days")),
+                typical_hours=_empty_to_none(row.get("typical_hours")),
+                sensitivity_class=_empty_to_none(row.get("sensitivity_class")) or "normal",
+            )
+        except (TypeError, ValueError):
+            skipped_count += 1
+            continue
+
+        created.append(create_manual_place(session, user_id_hash, payload))
+
+    return BulkPlaceCreateResponse(
+        created_count=len(created),
+        skipped_count=skipped_count,
+        places=created,
+    )
+
+
 def _get_user_place(session: Session, user_id_hash: str, place_id: str) -> PlaceCluster | None:
     return session.scalar(
         select(PlaceCluster).where(
@@ -116,3 +165,16 @@ def _place_response(place: PlaceCluster) -> ManualPlaceResponse:
         inferred_place_type=place.inferred_place_type,
         sensitivity_class=place.sensitivity_class,
     )
+
+
+def _optional_float(value: str | None) -> float | None:
+    if value is None or value.strip() == "":
+        return None
+    return float(value)
+
+
+def _empty_to_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None

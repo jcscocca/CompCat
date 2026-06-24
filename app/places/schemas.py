@@ -64,6 +64,16 @@ class ManualPlaceResponse(BaseModel):
     sensitivity_class: SensitivityClass
 
 
+class BulkPlaceCreate(BaseModel):
+    csv_text: str = Field(min_length=1, max_length=200_000)
+
+
+class BulkPlaceCreateResponse(BaseModel):
+    created_count: int
+    skipped_count: int
+    places: list[ManualPlaceResponse]
+
+
 def _strip_non_empty_label(value: str) -> str:
     stripped = value.strip()
     if not stripped:

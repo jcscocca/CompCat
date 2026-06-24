@@ -154,3 +154,63 @@ def test_public_place_create_rejects_whitespace_label(tmp_path):
     )
 
     assert response.status_code == 422
+
+
+def test_bulk_place_entry_creates_ranked_places(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,latitude,longitude,visit_count,total_dwell_minutes\n"
+                "Downtown transfer stop,47.609,-122.333,12,360\n"
+                "Library area,47.621,-122.321,6,420\n"
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created_count"] == 2
+    places = client.get("/places").json()["places"]
+    assert [place["display_label"] for place in places] == [
+        "Downtown transfer stop",
+        "Library area",
+    ]
+
+
+def test_bulk_place_entry_reports_invalid_rows(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,latitude,longitude,visit_count\n"
+                "Missing coordinate,,,-1\n"
+                "Good place,47.609,-122.333,3\n"
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created_count"] == 1
+    assert response.json()["skipped_count"] == 1
+
+
+def test_bulk_place_entry_requires_session_cookie(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post(
+        "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,latitude,longitude,visit_count\n"
+                "Good place,47.609,-122.333,3\n"
+            )
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Public session required"
