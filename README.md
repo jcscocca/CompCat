@@ -1,9 +1,9 @@
 # Mobility Context Analyzer
 
-Backend-first MVP for a privacy-first mobility context tool. The public dashboard starts
-with approximate manual place entry, place-list paste flows, selected-place analysis, and
-reported Seattle SPD incident context exports. Personal timeline uploads remain available
-for internal demos, but they are not the center of the public launch experience.
+Privacy-first mobility context tool with a public dashboard for approximate manual place
+entry, place-list paste flows, selected-place analysis, and reported Seattle SPD incident
+context exports. Personal timeline uploads remain available for internal demos, but they
+are not the center of the public launch experience.
 
 ## What It Does
 
@@ -258,7 +258,7 @@ starts and ends; it does not include raw GPS observations.
 
 OpenTripPlanner is the planned provider for live route alternatives. Until that provider is
 implemented, the mock provider supplies deterministic Stage 1 route alternatives for local
-development, tests, and Tableau dashboard prototyping.
+development, tests, and Tableau dashboard validation.
 
 Product language for route dashboards should describe these rows as reported route-point
 incident context, not as safe or unsafe route claims.

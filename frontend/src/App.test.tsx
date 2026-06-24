@@ -95,6 +95,9 @@ describe("App", () => {
       screen.getByText(/without uploading personal location history/i)
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("region", { name: "Important data note" }),
+    ).toHaveTextContent("Reported incident context, not safety advice.");
+    expect(
       screen.queryByRole("button", { name: "Export dashboard" }),
     ).not.toBeInTheDocument();
   });

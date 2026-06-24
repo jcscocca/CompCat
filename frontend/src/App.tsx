@@ -14,6 +14,7 @@ import { AnalysisControls } from "./components/AnalysisControls";
 import { BulkPlaceEntry } from "./components/BulkPlaceEntry";
 import { ComparisonPanel } from "./components/ComparisonPanel";
 import { ExportPanel } from "./components/ExportPanel";
+import { Notice } from "./components/Notice";
 import { PlaceForm } from "./components/PlaceForm";
 import { PlaceTable } from "./components/PlaceTable";
 import { ResultsSummary } from "./components/ResultsSummary";
@@ -187,6 +188,7 @@ export default function App() {
       </section>
 
       <section className="dashboard-grid" aria-label="Place dashboard">
+        <Notice />
         <PlaceForm onSubmit={handleCreatePlace} />
         <BulkPlaceEntry onSubmit={handleBulk} />
         <PlaceTable

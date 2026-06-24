@@ -138,6 +138,19 @@ button:disabled {
   align-items: stretch;
 }
 
+.notice {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 14px 16px;
+  color: #172026;
+  background: #eaf4f3;
+  border-left: 4px solid #146c72;
+  border-radius: 8px;
+}
+
 .panel {
   min-height: 148px;
   padding: 18px;
