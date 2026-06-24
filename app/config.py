@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./localagent-output/mobility.sqlite3"
     user_hash_salt: str = "local-demo-salt"
     session_secret: str = "local-dashboard-session-secret"
+    static_dashboard_dir: str = "app/static/dashboard"
     public_enable_personal_uploads: bool = False
     admin_ingest_token: str | None = None
     minimum_stop_duration_minutes: int = 10
