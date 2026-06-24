@@ -1,3 +1,5 @@
+import csv
+
 from fastapi.testclient import TestClient
 
 from app.db import get_sessionmaker
@@ -230,6 +232,28 @@ def test_bulk_place_entry_skips_oversized_field_without_partial_failure(tmp_path
     )
 
 
+def test_bulk_place_entry_keeps_csv_field_limit_at_api_payload_cap(tmp_path):
+    client = _client(tmp_path)
+    original_limit = csv.field_size_limit()
+    csv.field_size_limit(131_072)
+
+    try:
+        response = client.post(
+            "/places/bulk",
+            json={
+                "csv_text": (
+                    "display_label,latitude,longitude,visit_count\n"
+                    "Good place,47.609,-122.333,3\n"
+                )
+            },
+        )
+
+        assert response.status_code == 201
+        assert csv.field_size_limit() >= 200_000
+    finally:
+        csv.field_size_limit(max(original_limit, csv.field_size_limit()))
+
+
 def test_bulk_place_entry_defaults_blank_display_labels(tmp_path):
     client = _client(tmp_path)
 
@@ -290,6 +314,27 @@ def test_bulk_place_entry_skips_nonfinite_visit_counts(tmp_path):
     assert response.status_code == 201
     assert response.json()["created_count"] == 1
     assert response.json()["skipped_count"] == 1
+    assert response.json()["places"][0]["display_label"] == "Good place"
+
+
+def test_bulk_place_entry_skips_nonfinite_dwell_minutes(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/places/bulk",
+        json={
+            "csv_text": (
+                "display_label,latitude,longitude,visit_count,total_dwell_minutes,median_dwell_minutes\n"
+                "Infinite dwell,47.609,-122.333,3,1e309,30\n"
+                "Nan dwell,47.610,-122.334,4,120,nan\n"
+                "Good place,47.621,-122.321,5,240,45\n"
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created_count"] == 1
+    assert response.json()["skipped_count"] == 2
     assert response.json()["places"][0]["display_label"] == "Good place"
 
 

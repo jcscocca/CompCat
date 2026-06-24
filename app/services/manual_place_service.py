@@ -19,6 +19,7 @@ from app.places.schemas import (
 MANUAL_CLUSTER_VERSION = "manual-1"
 MANUAL_CLUSTER_METHOD = "manual_public_dashboard"
 REQUIRED_BULK_PLACE_COLUMNS = {"latitude", "longitude"}
+BULK_PLACE_CSV_FIELD_SIZE_LIMIT = 200_000
 
 
 def create_manual_place(
@@ -106,54 +107,55 @@ def create_bulk_manual_places(
     user_id_hash: str,
     csv_text: str,
 ) -> BulkPlaceCreateResponse:
-    previous_field_size_limit = csv.field_size_limit()
-    csv.field_size_limit(max(previous_field_size_limit, len(csv_text)))
-    try:
-        reader = csv.DictReader(StringIO(csv_text))
-        created: list[ManualPlaceResponse] = []
-        skipped_count = 0
+    _ensure_bulk_csv_field_size_limit()
+    reader = csv.DictReader(StringIO(csv_text))
+    created: list[ManualPlaceResponse] = []
+    skipped_count = 0
 
-        if not reader.fieldnames or not REQUIRED_BULK_PLACE_COLUMNS.issubset(reader.fieldnames):
-            return BulkPlaceCreateResponse(
-                created_count=0,
-                skipped_count=_count_nonblank_csv_rows(csv_text),
-                places=[],
-            )
+    if not reader.fieldnames or not REQUIRED_BULK_PLACE_COLUMNS.issubset(reader.fieldnames):
+        return BulkPlaceCreateResponse(
+            created_count=0,
+            skipped_count=_count_nonblank_csv_rows(csv_text),
+            places=[],
+        )
 
-        for row in reader:
-            try:
-                latitude = float(row.get("latitude") or "")
-                longitude = float(row.get("longitude") or "")
-                if not is_valid_coordinate(latitude, longitude):
-                    skipped_count += 1
-                    continue
-
-                display_label = (row.get("display_label") or "").strip() or "Entered place"
-                visit_count = _parse_visit_count(row.get("visit_count"))
-                payload = ManualPlaceCreate(
-                    display_label=display_label,
-                    latitude=latitude,
-                    longitude=longitude,
-                    visit_count=visit_count,
-                    total_dwell_minutes=_optional_float(row.get("total_dwell_minutes")),
-                    median_dwell_minutes=_optional_float(row.get("median_dwell_minutes")),
-                    typical_days=_empty_to_none(row.get("typical_days")),
-                    typical_hours=_empty_to_none(row.get("typical_hours")),
-                    sensitivity_class=_empty_to_none(row.get("sensitivity_class")) or "normal",
-                )
-            except (TypeError, ValueError):
+    for row in reader:
+        try:
+            latitude = float(row.get("latitude") or "")
+            longitude = float(row.get("longitude") or "")
+            if not is_valid_coordinate(latitude, longitude):
                 skipped_count += 1
                 continue
 
-            created.append(create_manual_place(session, user_id_hash, payload))
+            display_label = (row.get("display_label") or "").strip() or "Entered place"
+            visit_count = _parse_visit_count(row.get("visit_count"))
+            payload = ManualPlaceCreate(
+                display_label=display_label,
+                latitude=latitude,
+                longitude=longitude,
+                visit_count=visit_count,
+                total_dwell_minutes=_optional_float(row.get("total_dwell_minutes")),
+                median_dwell_minutes=_optional_float(row.get("median_dwell_minutes")),
+                typical_days=_empty_to_none(row.get("typical_days")),
+                typical_hours=_empty_to_none(row.get("typical_hours")),
+                sensitivity_class=_empty_to_none(row.get("sensitivity_class")) or "normal",
+            )
+        except (TypeError, ValueError):
+            skipped_count += 1
+            continue
 
-        return BulkPlaceCreateResponse(
-            created_count=len(created),
-            skipped_count=skipped_count,
-            places=created,
-        )
-    finally:
-        csv.field_size_limit(previous_field_size_limit)
+        created.append(create_manual_place(session, user_id_hash, payload))
+
+    return BulkPlaceCreateResponse(
+        created_count=len(created),
+        skipped_count=skipped_count,
+        places=created,
+    )
+
+
+def _ensure_bulk_csv_field_size_limit() -> None:
+    if csv.field_size_limit() < BULK_PLACE_CSV_FIELD_SIZE_LIMIT:
+        csv.field_size_limit(BULK_PLACE_CSV_FIELD_SIZE_LIMIT)
 
 
 def _parse_visit_count(value: str | None) -> int:
