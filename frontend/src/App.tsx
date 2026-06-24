@@ -2,20 +2,27 @@ import { ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  analyzePlaces,
+  comparePlaces,
   createBulkPlaces,
   createPlace,
   createSession,
   deletePlace,
   getDashboardSummary,
 } from "./api/client";
+import { AnalysisControls } from "./components/AnalysisControls";
 import { BulkPlaceEntry } from "./components/BulkPlaceEntry";
+import { ComparisonPanel } from "./components/ComparisonPanel";
+import { ExportPanel } from "./components/ExportPanel";
 import { PlaceForm } from "./components/PlaceForm";
 import { PlaceTable } from "./components/PlaceTable";
+import { ResultsSummary } from "./components/ResultsSummary";
 import type { DashboardSummary, Place, PlaceCreate } from "./types";
 
 export default function App() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [comparison, setComparison] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState("");
 
   const refresh = async () => {
@@ -77,6 +84,7 @@ export default function App() {
         next.delete(placeId);
         return next;
       });
+      setComparison(null);
       await refreshWithFallback("Removed place, but dashboard totals could not refresh.");
     } catch {
       setError("Unable to remove place. Try again.");
@@ -84,6 +92,7 @@ export default function App() {
   };
 
   const handleToggle = (placeId: string) => {
+    setComparison(null);
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(placeId)) {
@@ -94,6 +103,39 @@ export default function App() {
       return next;
     });
   };
+
+  async function handleAnalyze(request: {
+    analysis_start_date: string;
+    analysis_end_date: string;
+    radii_m: number[];
+    offense_category: string | null;
+  }) {
+    setError("");
+    try {
+      await analyzePlaces({ ...request, place_ids: Array.from(selectedIds) });
+      await refreshWithFallback("Analysis ran, but dashboard totals could not refresh.");
+    } catch {
+      setError("Unable to run analysis. Try again.");
+    }
+  }
+
+  async function handleCompare(request: {
+    analysis_start_date: string;
+    analysis_end_date: string;
+    radius_m: number;
+    offense_category: string | null;
+  }) {
+    setError("");
+    try {
+      const result = await comparePlaces({
+        ...request,
+        place_ids: Array.from(selectedIds),
+      });
+      setComparison(result);
+    } catch {
+      setError("Unable to compare places. Try again.");
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -143,6 +185,19 @@ export default function App() {
           selectedIds={selectedIds}
           onToggle={handleToggle}
           onDelete={handleDelete}
+        />
+        <ResultsSummary summary={summary} />
+        <AnalysisControls
+          selectedCount={selectedIds.size}
+          onAnalyze={handleAnalyze}
+          onCompare={handleCompare}
+        />
+        <ComparisonPanel comparison={comparison} />
+        <ExportPanel
+          href={
+            summary?.exports.tableau_place_summary_csv ||
+            "/exports/tableau/place-summary.csv"
+          }
         />
       </section>
     </main>

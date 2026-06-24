@@ -26,6 +26,11 @@ button {
   font: inherit;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -196,6 +201,11 @@ button {
   grid-column: 1 / -1;
 }
 
+.controls,
+.metrics {
+  grid-column: 1 / -1;
+}
+
 .panel form {
   display: grid;
   gap: 12px;
@@ -210,6 +220,10 @@ button {
 .form-grid > div {
   display: grid;
   gap: 8px;
+}
+
+.controls-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 label {
@@ -258,6 +272,89 @@ button:focus-visible {
   border-radius: 8px;
   cursor: pointer;
   font-weight: 700;
+}
+
+.panel button:not(.icon-button):disabled {
+  background: #7e8c94;
+  border-color: #7e8c94;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  min-height: 0;
+}
+
+.metrics div {
+  min-height: 92px;
+  padding: 14px;
+  background: #f6f9fa;
+  border: 1px solid #e3e9ed;
+  border-radius: 8px;
+}
+
+.metric-value,
+.metric-label {
+  display: block;
+}
+
+.metric-value {
+  color: #162026;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.metric-label,
+.muted {
+  color: #52616b;
+}
+
+.metric-label {
+  margin-top: 8px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.comparison-panel,
+.export-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.comparison-panel p,
+.export-panel p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 42px;
+  padding: 0 14px;
+  color: #f8fbfc;
+  background: #1f4b56;
+  border: 1px solid #316977;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.button-link:focus-visible {
+  outline: 3px solid rgba(43, 138, 145, 0.28);
+  outline-offset: 2px;
 }
 
 .table-panel .icon-button {
@@ -340,6 +437,10 @@ td input[type="checkbox"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .controls-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .summary-strip {
     min-width: 0;
   }
@@ -368,6 +469,8 @@ td input[type="checkbox"] {
 
   .dashboard-grid,
   .form-grid,
+  .controls-grid,
+  .metrics,
   .summary-strip {
     grid-template-columns: 1fr;
   }

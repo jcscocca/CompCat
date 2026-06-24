@@ -9,6 +9,8 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import {
+  analyzePlaces,
+  comparePlaces,
   createBulkPlaces,
   createPlace,
   createSession,
@@ -18,6 +20,8 @@ import {
 import type { DashboardSummary, Place } from "./types";
 
 vi.mock("./api/client", () => ({
+  analyzePlaces: vi.fn(),
+  comparePlaces: vi.fn(),
   createBulkPlaces: vi.fn(),
   createPlace: vi.fn(),
   createSession: vi.fn(),
@@ -55,7 +59,7 @@ function makeSummary(places: Place[] = []): DashboardSummary {
     available_radii_m: [],
   },
   exports: {
-    tableau_place_summary_csv: "",
+    tableau_place_summary_csv: "/exports/current.csv",
   },
   };
 }
@@ -210,5 +214,79 @@ describe("App", () => {
       expect(screen.queryByText("Library")).not.toBeInTheDocument();
     });
     expect(getDashboardSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs analysis for selected places and refreshes dashboard totals", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary)
+      .mockResolvedValueOnce(makeSummary([libraryPlace]))
+      .mockResolvedValueOnce({
+        ...makeSummary([libraryPlace]),
+        totals: { place_count: 1, visit_count: 6, incident_count: 4 },
+      });
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+
+    render(<App />);
+
+    await screen.findByText("Library");
+    expect(screen.getByRole("button", { name: /run analysis/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("Select Library"));
+    fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
+
+    await waitFor(() => {
+      expect(analyzePlaces).toHaveBeenCalledWith({
+        place_ids: ["p1"],
+        analysis_start_date: "2024-01-01",
+        analysis_end_date: "2024-01-31",
+        radii_m: [250],
+        offense_category: "PROPERTY",
+      });
+    });
+    expect(await screen.findByText("4")).toBeInTheDocument();
+    expect(getDashboardSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("compares selected places and exposes the summary export link", async () => {
+    const cafePlace: Place = {
+      ...libraryPlace,
+      id: "p2",
+      display_label: "Cafe",
+      visit_count: 3,
+    };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([libraryPlace, cafePlace]));
+    vi.mocked(comparePlaces).mockResolvedValue({
+      overview: {
+        summary_text: "Library has a lower reported incident rate than Cafe.",
+        caveat_text: "Reported incidents are contextual, not a personal risk prediction.",
+      },
+    });
+
+    render(<App />);
+
+    await screen.findByText("Library");
+    expect(screen.getByRole("button", { name: /compare places/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("Select Library"));
+    fireEvent.click(screen.getByLabelText("Select Cafe"));
+    fireEvent.click(screen.getByRole("button", { name: /compare places/i }));
+
+    await waitFor(() => {
+      expect(comparePlaces).toHaveBeenCalledWith({
+        place_ids: ["p1", "p2"],
+        analysis_start_date: "2024-01-01",
+        analysis_end_date: "2024-01-31",
+        radius_m: 250,
+        offense_category: "PROPERTY",
+      });
+    });
+    expect(
+      await screen.findByText("Library has a lower reported incident rate than Cafe."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /download csv/i })).toHaveAttribute(
+      "href",
+      "/exports/current.csv",
+    );
   });
 });
