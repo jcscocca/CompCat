@@ -59,3 +59,31 @@ export type PlaceCreate = {
   typical_hours?: string | null;
   sensitivity_class?: string;
 };
+
+export type TabKey = "places" | "analyze" | "compare" | "export";
+
+export type SheetState = "peek" | "half" | "full";
+
+export type LatLng = { lat: number; lng: number };
+
+export type DraftPin = {
+  latitude: number;
+  longitude: number;
+  display_label: string;
+  visit_count: number;
+  source: "map" | "search";
+};
+
+export type GeocodeResult = {
+  label: string;
+  latitude: number;
+  longitude: number;
+  source: string;
+};
+
+export type AnalysisSettings = {
+  startDate: string;
+  endDate: string;
+  radiusM: number;
+  offenseCategory: string;
+};
