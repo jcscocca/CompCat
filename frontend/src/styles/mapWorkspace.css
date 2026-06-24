@@ -254,3 +254,5 @@ input.mc-inp{display:block;color-scheme:dark;}
 input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
 
 .mc-compare-summary{font-size:13px;color:var(--text);line-height:1.5;margin:0 0 12px;}
+
+.mc-error{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:60;background:#fff;color:#a33a33;border:1px solid #f0c1c1;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;box-shadow:0 10px 26px -14px rgba(18,22,26,.4);}
