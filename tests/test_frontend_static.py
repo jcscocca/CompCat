@@ -47,6 +47,7 @@ def test_dashboard_static_mount_does_not_shadow_dashboard_api(tmp_path, monkeypa
 
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
+    client.post("/sessions")
 
     response = client.get("/dashboard/summary")
 

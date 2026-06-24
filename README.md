@@ -160,7 +160,9 @@ GET /dashboard/summary
 - Run `make test` and `make lint`.
 - Run `cd frontend && npm test && npm run build`.
 - Run `docker build .` in CI or another environment with Docker available.
-- Set `MCA_DATABASE_URL`, `MCA_USER_HASH_SALT`, `MCA_SESSION_SECRET`, and `MCA_ADMIN_INGEST_TOKEN`.
+- Set `MCA_ENVIRONMENT=production`, `MCA_DATABASE_URL`,
+  `MCA_USER_HASH_SALT`, `MCA_SESSION_SECRET`,
+  `MCA_SESSION_COOKIE_SECURE=true`, and `MCA_ADMIN_INGEST_TOKEN`.
 - Run Alembic migrations before serving traffic.
 - Ingest recent Seattle SPD data through the admin Socrata endpoint.
 - Confirm the public dashboard does not show personal timeline upload as an entry mode.
@@ -200,7 +202,7 @@ Export Tableau CSV:
 
 ```bash
 curl -H "X-Demo-User-Id: demo@example.com" \
-  http://127.0.0.1:8000/exports/tableau/place-summary.csv
+  http://127.0.0.1:8000/internal/exports/tableau/place-summary.csv
 ```
 
 ### Supported Upload Formats
@@ -229,7 +231,7 @@ Capitol Hill,Downtown Seattle,transit,08:00,4
 
 ## Tableau Export
 
-The recurring-place export is available at:
+The session-scoped recurring-place export is available at:
 
 ```text
 GET /exports/tableau/place-summary.csv

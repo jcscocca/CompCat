@@ -21,6 +21,45 @@ def test_public_session_endpoint_sets_cookie(tmp_path):
     assert "Max-Age=86400" in response.headers["set-cookie"]
 
 
+def test_public_session_cookie_can_be_marked_secure(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_SESSION_COOKIE_SECURE", "true")
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post("/sessions")
+
+    assert response.status_code == 200
+    assert "Secure" in response.headers["set-cookie"]
+
+
+def test_public_session_cookie_defaults_secure_in_production(tmp_path, monkeypatch):
+    monkeypatch.delenv("MCA_SESSION_COOKIE_SECURE", raising=False)
+    monkeypatch.setenv("MCA_ENVIRONMENT", "production")
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post("/sessions")
+
+    assert response.status_code == 200
+    assert "Secure" in response.headers["set-cookie"]
+
+
+def test_public_read_routes_reject_demo_header_without_session(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    headers = {"X-Demo-User-ID": "demo@example.com"}
+
+    for path in (
+        "/places",
+        "/dashboard/summary",
+        "/exports/tableau/place-summary.csv",
+    ):
+        response = client.get(path, headers=headers)
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Public session required"
+
+
 def test_cookie_session_scopes_dashboard_data(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     first = TestClient(app)

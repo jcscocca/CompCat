@@ -34,7 +34,7 @@ def test_dashboard_summary_returns_places_totals_privacy_and_exports(tmp_path):
         },
     )
 
-    response = client.get("/dashboard/summary", headers=headers)
+    response = client.get("/internal/dashboard/summary", headers=headers)
 
     assert response.status_code == 200
     payload = response.json()
