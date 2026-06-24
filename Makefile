@@ -1,4 +1,4 @@
-.PHONY: install test lint run migrate demo ingest-crime frontend-install frontend-test frontend-build test-all
+.PHONY: install test lint run migrate demo ingest-crime frontend-install frontend-test frontend-build test-all docker-build
 
 install:
 	python3.11 -m venv .venv
@@ -37,3 +37,6 @@ frontend-build:
 	cd frontend && npm run build
 
 test-all: test lint frontend-test frontend-build
+
+docker-build:
+	docker build .
