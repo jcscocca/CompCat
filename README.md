@@ -66,6 +66,17 @@ Run with Postgres/PostGIS:
 docker compose up --build
 ```
 
+Then open `http://127.0.0.1:8000`.
+
+Load a recent window of real Seattle SPD public incident data into the local
+Compose database:
+
+```bash
+curl --fail --show-error -X POST \
+  -H "X-Admin-Token: local-admin-token" \
+  "http://127.0.0.1:8000/admin/crime/ingest/socrata?limit=5000&offset=0&start_date=2026-04-01&end_date=2026-06-22"
+```
+
 Apply migrations manually:
 
 ```bash

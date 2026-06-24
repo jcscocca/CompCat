@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -32,12 +33,21 @@ def ingest_socrata(
     session: Annotated[Session, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_SOCRATA_LIMIT)] = MAX_SOCRATA_LIMIT,
     offset: Annotated[int, Query(ge=0, le=MAX_SOCRATA_OFFSET)] = 0,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> dict[str, int]:
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
     settings = get_settings()
     client = SeattleSocrataClient(
         base_url=settings.socrata_base_url,
         dataset_id=settings.socrata_dataset_id,
         app_token=settings.socrata_app_token,
     )
-    incidents = client.fetch_page(limit=limit, offset=offset)
+    incidents = client.fetch_page(
+        limit=limit,
+        offset=offset,
+        start_date=start_date,
+        end_date=end_date,
+    )
     return ingest_crime_incidents(session, incidents)

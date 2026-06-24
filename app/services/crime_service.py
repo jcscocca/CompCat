@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
+from importlib import resources
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from app.schemas import CrimeIncidentData, PlaceClusterData, PlaceCrimeSummaryDa
 
 
 def ingest_sample_crime(session: Session) -> dict[str, int]:
-    fixture_path = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "sample_crime.csv"
+    fixture_path = resources.files("app.data").joinpath("sample_crime.csv")
     incidents = load_crime_csv(fixture_path)
     inserted = 0
     for incident in incidents:

@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 
@@ -18,6 +19,19 @@ from app.models import (
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
 )
+
+
+def test_alembic_revision_ids_fit_default_version_table() -> None:
+    script = Config("alembic.ini")
+    revisions = ScriptDirectory.from_config(script).walk_revisions()
+
+    too_long = {
+        revision.revision: revision.path
+        for revision in revisions
+        if len(revision.revision) > 32
+    }
+
+    assert too_long == {}
 
 
 def test_route_models_persist_with_relationship_ids(tmp_path):
