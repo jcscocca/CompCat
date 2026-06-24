@@ -29,6 +29,22 @@ describe("BottomSheet", () => {
     expect(onTabChange).toHaveBeenCalledWith("analyze");
   });
 
+  it("activates tabs and snap controls from the keyboard", () => {
+    const onTabChange = vi.fn();
+    const onSheetStateChange = vi.fn();
+    render(
+      <BottomSheet activeTab="places" onTabChange={onTabChange} sheetState="half" onSheetStateChange={onSheetStateChange}>
+        <div>panel</div>
+      </BottomSheet>,
+    );
+
+    fireEvent.keyDown(screen.getByRole("tab", { name: /analyze/i }), { key: "Enter" });
+    expect(onTabChange).toHaveBeenCalledWith("analyze");
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /full/i }), { key: " " });
+    expect(onSheetStateChange).toHaveBeenCalledWith("full");
+  });
+
   it("exposes snap controls and reflects the state class", () => {
     const onSheetStateChange = vi.fn();
     const { container } = render(

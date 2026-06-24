@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import type { SheetState, TabKey } from "../types";
 
@@ -55,6 +55,13 @@ const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
 
 const SNAPS: SheetState[] = ["full", "half", "peek"];
 
+function activateWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, action: () => void) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+}
+
 export function BottomSheet({
   activeTab,
   onTabChange,
@@ -70,7 +77,13 @@ export function BottomSheet({
 
   return (
     <section className={`mc-sheet is-${sheetState}`} aria-label="Workspace panel">
-      <button type="button" className="mc-handle" aria-label="Cycle panel height" onClick={cycle} />
+      <button
+        type="button"
+        className="mc-handle"
+        aria-label="Cycle panel height"
+        onClick={cycle}
+        onKeyDown={(event) => activateWithKeyboard(event, cycle)}
+      />
       <div className="mc-snaps" role="group" aria-label="Panel height">
         {SNAPS.map((snap) => (
           <button
@@ -79,6 +92,7 @@ export function BottomSheet({
             className={snap === sheetState ? "on" : undefined}
             aria-pressed={snap === sheetState}
             onClick={() => onSheetStateChange(snap)}
+            onKeyDown={(event) => activateWithKeyboard(event, () => onSheetStateChange(snap))}
           >
             <span>{snap}</span>
             <b />
@@ -96,6 +110,7 @@ export function BottomSheet({
               aria-selected={activeTab === tab.key}
               className={`mc-tab${activeTab === tab.key ? " is-active" : ""}`}
               onClick={() => onTabChange(tab.key)}
+              onKeyDown={(event) => activateWithKeyboard(event, () => onTabChange(tab.key))}
             >
               {tab.icon}
               {tab.label}
