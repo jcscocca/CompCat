@@ -49,4 +49,4 @@ class ManualPlaceResponse(BaseModel):
     typical_days: str | None
     typical_hours: str | None
     inferred_place_type: str
-    sensitivity_class: str
+    sensitivity_class: SensitivityClass
