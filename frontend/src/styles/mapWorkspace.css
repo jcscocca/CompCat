@@ -249,3 +249,6 @@ button.chk{padding:0;cursor:pointer;}
 .mc-places-note{margin-top:14px;}
 .mc-sheet .notice{background:rgba(116,133,142,.12);border-left-color:var(--slate);color:var(--dim);}
 .mc-sheet .notice strong{color:var(--text);}
+
+input.mc-inp{display:block;color-scheme:dark;}
+input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
