@@ -1,7 +1,4 @@
-import {
-  Download,
-  ShieldAlert
-} from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -26,13 +23,23 @@ export default function App() {
     setSummary(nextSummary);
   };
 
+  const refreshWithFallback = async (fallbackMessage: string) => {
+    try {
+      await refresh();
+    } catch {
+      setError(fallbackMessage);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
+    setError("");
     createSession()
       .then(() => getDashboardSummary())
       .then((nextSummary) => {
         if (isMounted) {
+          setError("");
           setSummary(nextSummary);
         }
       })
@@ -50,16 +57,19 @@ export default function App() {
   const places: Place[] = useMemo(() => summary?.places ?? [], [summary]);
 
   const handleCreatePlace = async (place: PlaceCreate) => {
+    setError("");
     await createPlace(place);
-    await refresh();
+    await refreshWithFallback("Saved, but dashboard totals could not refresh.");
   };
 
   const handleBulk = async (csvText: string) => {
+    setError("");
     await createBulkPlaces(csvText);
-    await refresh();
+    await refreshWithFallback("Imported rows, but dashboard totals could not refresh.");
   };
 
   const handleDelete = async (placeId: string) => {
+    setError("");
     try {
       await deletePlace(placeId);
       setSelectedIds((current) => {
@@ -67,7 +77,7 @@ export default function App() {
         next.delete(placeId);
         return next;
       });
-      await refresh();
+      await refreshWithFallback("Removed place, but dashboard totals could not refresh.");
     } catch {
       setError("Unable to remove place. Try again.");
     }
@@ -92,16 +102,13 @@ export default function App() {
           <p className="eyebrow">Seattle reported incident context</p>
           <h1>Compare places you visit</h1>
         </div>
-        <button className="icon-button" type="button" aria-label="Export dashboard">
-          <Download size={18} />
-        </button>
       </header>
 
       <section className="workspace" aria-labelledby="workspace-title">
         <div className="workspace-copy">
           <div className="section-kicker">
             <ShieldAlert size={18} />
-            <span>Public dashboard scaffold</span>
+            <span>Public incident context</span>
           </div>
           <h2 id="workspace-title">Incident context workspace</h2>
           <p>

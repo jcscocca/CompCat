@@ -1,8 +1,21 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { createSession, getDashboardSummary } from "./api/client";
+import {
+  createBulkPlaces,
+  createPlace,
+  createSession,
+  deletePlace,
+  getDashboardSummary,
+} from "./api/client";
+import type { DashboardSummary, Place } from "./types";
 
 vi.mock("./api/client", () => ({
   createBulkPlaces: vi.fn(),
@@ -12,10 +25,22 @@ vi.mock("./api/client", () => ({
   getDashboardSummary: vi.fn(),
 }));
 
-const summary = {
+const libraryPlace: Place = {
+  id: "p1",
+  display_label: "Library",
+  latitude: 47.621,
+  longitude: -122.321,
+  visit_count: 6,
+  total_dwell_minutes: null,
+  inferred_place_type: "manual_place",
+  sensitivity_class: "normal",
+};
+
+function makeSummary(places: Place[] = []): DashboardSummary {
+  return {
   totals: {
-    place_count: 0,
-    visit_count: 0,
+    place_count: places.length,
+    visit_count: places.reduce((sum, place) => sum + place.visit_count, 0),
     incident_count: 0,
   },
   privacy: {
@@ -24,7 +49,7 @@ const summary = {
     work_candidate: 0,
     suppressed: 0,
   },
-  places: [],
+  places,
   crime_summaries: [],
   analysis: {
     available_radii_m: [],
@@ -32,25 +57,158 @@ const summary = {
   exports: {
     tableau_place_summary_csv: "",
   },
-};
+  };
+}
 
 afterEach(() => {
+  cleanup();
   vi.clearAllMocks();
 });
 
 describe("App", () => {
   it("renders the dashboard shell copy", () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
-    vi.mocked(getDashboardSummary).mockResolvedValue(summary);
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
 
     render(<App />);
 
     expect(screen.getByText("Seattle reported incident context")).toBeInTheDocument();
+    expect(screen.getByText("Public incident context")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Compare places you visit" })
     ).toBeInTheDocument();
     expect(
       screen.getByText(/without uploading personal location history/i)
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Export dashboard" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts a session, fetches the summary, and renders returned places", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([libraryPlace]));
+
+    render(<App />);
+
+    expect(await screen.findByText("Library")).toBeInTheDocument();
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(getDashboardSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates a manual place with typed payload and refreshes the summary", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary)
+      .mockResolvedValueOnce(makeSummary())
+      .mockResolvedValueOnce(makeSummary([libraryPlace]));
+    vi.mocked(createPlace).mockResolvedValue(libraryPlace);
+
+    render(<App />);
+
+    await screen.findByText("No places entered yet.");
+    fireEvent.change(screen.getByLabelText("Label"), {
+      target: { value: " Library " },
+    });
+    fireEvent.change(screen.getByLabelText("Latitude"), {
+      target: { value: "47.621" },
+    });
+    fireEvent.change(screen.getByLabelText("Longitude"), {
+      target: { value: "-122.321" },
+    });
+    fireEvent.change(screen.getByLabelText("Visits"), {
+      target: { value: "6" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add place/i }));
+
+    await waitFor(() => {
+      expect(createPlace).toHaveBeenCalledWith({
+        display_label: "Library",
+        latitude: 47.621,
+        longitude: -122.321,
+        visit_count: 6,
+        sensitivity_class: "normal",
+      });
+    });
+    expect(await screen.findByText("Library")).toBeInTheDocument();
+    expect(getDashboardSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps manual creation success distinct from a refresh failure", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary)
+      .mockResolvedValueOnce(makeSummary())
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    vi.mocked(createPlace).mockResolvedValue(libraryPlace);
+
+    render(<App />);
+
+    await screen.findByText("No places entered yet.");
+    fireEvent.change(screen.getByLabelText("Label"), {
+      target: { value: "Library" },
+    });
+    fireEvent.change(screen.getByLabelText("Latitude"), {
+      target: { value: "47.621" },
+    });
+    fireEvent.change(screen.getByLabelText("Longitude"), {
+      target: { value: "-122.321" },
+    });
+    fireEvent.change(screen.getByLabelText("Visits"), {
+      target: { value: "6" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add place/i }));
+
+    expect(
+      await screen.findByText("Saved, but dashboard totals could not refresh."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Unable to add place. Try again.")).not.toBeInTheDocument();
+  });
+
+  it("imports bulk rows and refreshes the summary", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary)
+      .mockResolvedValueOnce(makeSummary())
+      .mockResolvedValueOnce(makeSummary([libraryPlace]));
+    vi.mocked(createBulkPlaces).mockResolvedValue({
+      created_count: 1,
+      skipped_count: 0,
+      places: [libraryPlace],
+    });
+
+    render(<App />);
+
+    await screen.findByText("No places entered yet.");
+    const csvText =
+      "display_label,latitude,longitude,visit_count,total_dwell_minutes\nLibrary,47.621,-122.321,6,\n";
+    fireEvent.change(screen.getByLabelText("CSV rows"), {
+      target: { value: csvText },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+
+    await waitFor(() => {
+      expect(createBulkPlaces).toHaveBeenCalledWith(csvText);
+    });
+    expect(await screen.findByText("Library")).toBeInTheDocument();
+    expect(getDashboardSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("deletes a place and refreshes the summary", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary)
+      .mockResolvedValueOnce(makeSummary([libraryPlace]))
+      .mockResolvedValueOnce(makeSummary());
+    vi.mocked(deletePlace).mockResolvedValue();
+
+    render(<App />);
+
+    expect(await screen.findByText("Library")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Library" }));
+
+    await waitFor(() => {
+      expect(deletePlace).toHaveBeenCalledWith("p1");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Library")).not.toBeInTheDocument();
+    });
+    expect(getDashboardSummary).toHaveBeenCalledTimes(2);
   });
 });
