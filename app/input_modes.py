@@ -7,7 +7,9 @@ def supported_input_modes(include_personal_uploads: bool = False) -> list[dict[s
             "id": "manual_places",
             "label": "Enter places manually",
             "privacy_level": "low",
-            "description": "Type approximate places, visit frequency, and optional dwell time.",
+            "description": (
+                "Type approximate places, weekly visit frequency, and optional dwell time."
+            ),
             "required_columns": [],
             "optional_columns": [],
             "sample_csv": "",
@@ -17,7 +19,8 @@ def supported_input_modes(include_personal_uploads: bool = False) -> list[dict[s
             "label": "Paste a place list",
             "privacy_level": "low",
             "description": (
-                "Paste rows with latitude and longitude, plus optional labels and visit fields."
+                "Paste rows with latitude and longitude, plus optional labels "
+                "and weekly visit fields."
             ),
             "required_columns": ["latitude", "longitude"],
             "optional_columns": [

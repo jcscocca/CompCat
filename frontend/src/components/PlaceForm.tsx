@@ -48,7 +48,7 @@ export function PlaceForm({ onSubmit }: Props) {
     }
 
     if (!Number.isInteger(numericVisitCount) || numericVisitCount < 1) {
-      setError("Visit count must be at least 1.");
+      setError("Weekly visit count must be at least 1.");
       return;
     }
 
@@ -115,7 +115,7 @@ export function PlaceForm({ onSubmit }: Props) {
             />
           </div>
           <div>
-            <label htmlFor="visit-count">Visits</label>
+            <label htmlFor="visit-count">Visits per week</label>
             <input
               id="visit-count"
               name="visit-count"

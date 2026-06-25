@@ -95,7 +95,7 @@ export function PlacesTab({
                 <span className="gly">{pinSvg(selected)}</span>
                 <div className="meta">
                   <div className="nm">{place.display_label}</div>
-                  <div className="sub">{coords(place)} - {place.visit_count} visits</div>
+                  <div className="sub">{coords(place)} - {place.visit_count} visits/week</div>
                 </div>
                 <div className="right">
                   {count !== null ? <span className="cnt">{count} inc.</span> : null}

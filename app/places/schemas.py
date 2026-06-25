@@ -18,7 +18,7 @@ class ManualPlaceCreate(BaseModel):
     display_label: str = Field(min_length=1, max_length=120)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
-    visit_count: int = Field(default=1, ge=1, le=10000)
+    visit_count: int = Field(default=1, ge=1, le=10000, description="Expected visits per week.")
     total_dwell_minutes: float | None = Field(default=None, ge=0, le=1_000_000)
     median_dwell_minutes: float | None = Field(default=None, ge=0, le=100_000)
     typical_days: str | None = Field(default=None, max_length=120)
@@ -35,7 +35,12 @@ class ManualPlaceUpdate(BaseModel):
     display_label: str | None = Field(default=None, min_length=1, max_length=120)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
-    visit_count: int | None = Field(default=None, ge=1, le=10000)
+    visit_count: int | None = Field(
+        default=None,
+        ge=1,
+        le=10000,
+        description="Expected visits per week.",
+    )
     total_dwell_minutes: float | None = Field(default=None, ge=0, le=1_000_000)
     median_dwell_minutes: float | None = Field(default=None, ge=0, le=100_000)
     typical_days: str | None = Field(default=None, max_length=120)

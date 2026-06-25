@@ -49,6 +49,11 @@ def summarize_place_crime(
             for key, rows in grouped.items():
                 count = len(rows)
                 total_hours = (cluster.total_dwell_minutes or 0) / 60
+                expected_visits = _expected_visits_in_range(
+                    weekly_visit_count=cluster.visit_count,
+                    analysis_start_date=analysis_start_date,
+                    analysis_end_date=analysis_end_date,
+                )
                 summaries.append(
                     PlaceCrimeSummaryData(
                         user_id_hash=cluster.user_id_hash,
@@ -61,8 +66,8 @@ def summarize_place_crime(
                         nibrs_group=key[2],
                         incident_count=count,
                         nearest_incident_m=min(distance for _, distance in rows),
-                        incidents_per_visit=count / cluster.visit_count
-                        if cluster.visit_count
+                        incidents_per_visit=count / expected_visits
+                        if expected_visits
                         else None,
                         incidents_per_hour_dwell=count / total_hours if total_hours else None,
                     )
@@ -86,3 +91,15 @@ def _incident_in_date_range(
         return False
     observed_date = observed.date()
     return analysis_start_date <= observed_date <= analysis_end_date
+
+
+def _expected_visits_in_range(
+    *,
+    weekly_visit_count: int,
+    analysis_start_date: date,
+    analysis_end_date: date,
+) -> float | None:
+    days = (analysis_end_date - analysis_start_date).days + 1
+    if weekly_visit_count <= 0 or days <= 0:
+        return None
+    return weekly_visit_count * days / 7

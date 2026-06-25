@@ -87,8 +87,10 @@ make migrate
 
 The public dashboard is designed for generalized manual entry. Users can enter approximate
 places, paste a place list, run selected-place analysis, compare saved places, and export
-reported-incident context. Personal timeline uploads remain an internal/demo capability and
-are not part of the public launch flow.
+reported-incident context. The `visit_count` field means expected visits per week; analysis
+scales that weekly frequency to the selected date range for "incidents per visit" metrics.
+Personal timeline uploads remain an internal/demo capability and are not part of the public
+launch flow.
 
 Start the API and create a public dashboard session:
 
@@ -145,7 +147,7 @@ curl -b demo.cookies http://127.0.0.1:8000/exports/tableau/place-summary.csv
 
 The public dashboard flow exposes upload-free modes first:
 
-1. **Enter places manually** for approximate places, visit frequency, and optional dwell time.
+1. **Enter places manually** for approximate places, weekly visit frequency, and optional dwell time.
 2. **Paste a place list** for rows with `latitude` and `longitude`, plus optional display
    labels, visit counts, or dwell fields.
 3. **Public commute scenario** for neighborhood or transit-oriented scenarios that use
@@ -249,8 +251,9 @@ GET /exports/tableau/place-summary.csv
 ```
 
 It includes recurring-place fields, generalized coordinates, selected analysis range,
-crime grouping fields, incident counts, nearest incident distance, incidents per visit, and
-incidents per hour of dwell. Product language should describe rows as:
+crime grouping fields, incident counts, nearest incident distance, incidents per expected
+visit in the selected analysis range, and incidents per hour of dwell. Product language
+should describe rows as:
 
 > Reported SPD incidents within 500m of this recurring location during the selected date range.
 

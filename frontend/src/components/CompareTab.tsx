@@ -54,7 +54,7 @@ function rateText(entries: CrimeSummary[]) {
     .map((entry) => entry.incidents_per_visit)
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
     .reduce((total, value) => total + value, 0);
-  return perVisit > 0 ? `${perVisit.toFixed(2)} per visit` : "rate unavailable";
+  return perVisit > 0 ? `${perVisit.toFixed(2)} per expected visit` : "rate unavailable";
 }
 
 function breakdownRows(summary: DashboardSummary | null, selected: Place[], radiusM: number): BreakdownRow[] {
