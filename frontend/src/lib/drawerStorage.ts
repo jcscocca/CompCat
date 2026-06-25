@@ -1,0 +1,26 @@
+import { clampWidth, DRAWER_DEFAULT } from "./drawer";
+
+const WIDTH_KEY = "waypoint.drawer.width";
+const COLLAPSED_KEY = "waypoint.drawer.collapsed";
+
+export type StoredDrawer = { collapsed: boolean; widthPx: number };
+
+export function loadDrawerState(): StoredDrawer {
+  try {
+    const rawWidth = localStorage.getItem(WIDTH_KEY);
+    const rawCollapsed = localStorage.getItem(COLLAPSED_KEY);
+    const widthPx = rawWidth === null ? DRAWER_DEFAULT : clampWidth(Number(rawWidth));
+    return { collapsed: rawCollapsed === "true", widthPx };
+  } catch {
+    return { collapsed: false, widthPx: DRAWER_DEFAULT };
+  }
+}
+
+export function saveDrawerState(state: StoredDrawer): void {
+  try {
+    localStorage.setItem(WIDTH_KEY, String(state.widthPx));
+    localStorage.setItem(COLLAPSED_KEY, String(state.collapsed));
+  } catch {
+    // ignore: private mode or disabled storage degrades to in-memory defaults
+  }
+}
