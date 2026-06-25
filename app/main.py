@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_admin_crime import router as admin_crime_router
 from app.api.routes_analysis import router as analysis_router
+from app.api.routes_assistant import router as assistant_router
 from app.api.routes_crime import router as crime_router
 from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_exports import router as exports_router
@@ -61,6 +62,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(routes_router)
     app.include_router(dashboard_router)
     app.include_router(public_dashboard_router)
+    app.include_router(assistant_router)
     app.include_router(exports_router)
     app.include_router(analysis_router)
     mount_dashboard(app)

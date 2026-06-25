@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     socrata_dataset_id: str = "tazs-3rd5"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
+    localagent_base_url: str = "http://127.0.0.1:8000"
+    assistant_role: str = "waypoint_analyst"
+    assistant_max_tool_calls: int = 2
 
     @property
     def effective_session_cookie_secure(self) -> bool:
