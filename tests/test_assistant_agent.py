@@ -127,6 +127,63 @@ def test_agent_executes_run_place_analysis_tool_call(tmp_path):
     assert len(client.calls) == 2
 
 
+def test_agent_chains_two_tool_calls_then_narrates(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        [
+            (
+                '{"type":"tool_call","tool_name":"run_place_analysis",'
+                '"arguments":{"place_ids":["place-1"],'
+                '"analysis_start_date":"2024-01-01",'
+                '"analysis_end_date":"2024-01-31",'
+                '"radii_m":[250],"offense_category":"PROPERTY"}}'
+            ),
+            '{"type":"tool_call","tool_name":"suggest_followups","arguments":{}}',
+            '{"type":"final","message":"One reported incident, with follow-up ideas."}',
+        ]
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze then suggest follow-ups.")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "tool", "tool", "token", "done"]
+    assert events[1].data["tool_name"] == "run_place_analysis"
+    assert events[2].data["tool_name"] == "suggest_followups"
+    # planning + one follow-up call per tool result == 3 model calls
+    assert len(client.calls) == 3
+
+
+def test_agent_stops_executing_tools_at_the_configured_budget(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    # A model that never stops requesting tools must be capped at assistant_max_tool_calls (2).
+    client = FakeClient(['{"type":"tool_call","tool_name":"suggest_followups","arguments":{}}'] * 3)
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Keep going.")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    tool_events = [event for event in events if event.event == "tool"]
+    assert len(tool_events) == 2
+    assert events[-1].event == "error"
+
+
 def test_agent_redirects_safe_unsafe_language_without_model_call(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
     client = FakeClient([])

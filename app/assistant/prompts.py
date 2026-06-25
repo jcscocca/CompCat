@@ -32,23 +32,36 @@ def build_planning_messages(
     ]
 
 
-def build_narration_messages(
+def build_followup_messages(
     messages: list[AssistantChatMessage],
     context: SemanticContextPacket,
-    tool_result: dict,
+    tool_results: list[dict],
+    *,
+    force_final: bool,
 ) -> list[dict[str, str]]:
+    if force_final:
+        instruction = (
+            "You have reached the tool-call limit for this turn. Narrate the tool "
+            "results for the user using reported-incident language and concrete "
+            'counts. Return JSON only as {"type":"final","message":"..."}.'
+        )
+    else:
+        instruction = (
+            "Use the tool results below to answer. If one more tool is genuinely "
+            'needed, return {"type":"tool_call","tool_name":"...","arguments":{...}}; '
+            'otherwise narrate the results and return {"type":"final","message":"..."} '
+            "using reported-incident language and concrete counts. Return JSON only."
+        )
     return [
         {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                "Narrate this tool result for the user using reported-incident "
-                "language and concrete counts. Return JSON only as "
-                '{"type":"final","message":"..."}.\n\n'
+                f"{instruction}\n\n"
                 "Semantic context packet:\n"
                 f"{json.dumps(context.model_dump(mode='json'), indent=2)}\n\n"
-                "Tool result:\n"
-                f"{json.dumps(tool_result, indent=2, default=str)}"
+                "Tool results so far:\n"
+                f"{json.dumps(tool_results, indent=2, default=str)}"
             ),
         },
         *[message.model_dump() for message in messages[-8:]],

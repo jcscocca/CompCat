@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.assistant.localagent_client import AssistantLlmClient, LocalAgentUnavailable
-from app.assistant.prompts import build_narration_messages, build_planning_messages
+from app.assistant.prompts import build_followup_messages, build_planning_messages
 from app.assistant.schemas import (
     AssistantChatMessage,
     AssistantDashboardState,
@@ -56,7 +56,10 @@ async def run_assistant_turn(
             max_tokens=1024,
         )
         plan = _parse_model_json(raw_plan)
-        if plan.get("type") == "tool_call":
+        max_tool_calls = max(1, settings.assistant_max_tool_calls)
+        tool_results: list[dict[str, Any]] = []
+        tool_calls = 0
+        while plan.get("type") == "tool_call" and tool_calls < max_tool_calls:
             tool_result = execute_tool(
                 session,
                 user_id_hash,
@@ -64,16 +67,21 @@ async def run_assistant_turn(
                 dict(plan.get("arguments") or {}),
             )
             yield AssistantStreamEvent(event="tool", data=tool_result)
-            raw_final = await llm_client.complete(
-                build_narration_messages(messages, context, tool_result),
+            tool_results.append(tool_result)
+            tool_calls += 1
+            raw_next = await llm_client.complete(
+                build_followup_messages(
+                    messages,
+                    context,
+                    tool_results,
+                    force_final=tool_calls >= max_tool_calls,
+                ),
                 role=settings.assistant_role,
                 temperature=0.2,
                 max_tokens=1024,
             )
-            final = _parse_model_json(raw_final)
-        else:
-            final = plan
-        message = _final_message(final)
+            plan = _parse_model_json(raw_next)
+        message = _final_message(plan)
         yield AssistantStreamEvent(event="token", data={"delta": message})
         yield AssistantStreamEvent(event="done", data={})
     except (AssistantToolError, LocalAgentUnavailable, ValueError) as exc:
