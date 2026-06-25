@@ -72,6 +72,27 @@
 .mc-leg-row span{font-size:12.5px;color:#3A3F46;font-weight:500;}
 .mc-leg-row small{display:block;font-family:var(--f-mono);font-size:10.5px;color:#9aa0a6;font-weight:400;}
 
+.mc-assistant{position:absolute;left:22px;bottom:22px;z-index:42;width:340px;display:grid;gap:10px;padding:13px;
+  color:#2B3036;background:rgba(255,255,255,0.96);border:1px solid rgba(20,24,28,0.09);border-radius:14px;
+  box-shadow:0 14px 32px -18px rgba(18,22,26,.5);backdrop-filter:blur(8px);}
+.mc-assistant-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.mc-assistant-head h3{margin:0;font-size:13px;font-weight:750;color:#2B3036;}
+.mc-assistant-head span{font-family:var(--f-mono);font-size:10.5px;color:#7E848B;}
+.mc-assistant-log{display:grid;gap:7px;max-height:148px;overflow:auto;}
+.mc-assistant-msg{margin:0;padding:8px 10px;border-radius:10px;font-size:12.5px;line-height:1.45;overflow-wrap:anywhere;}
+.mc-assistant-msg.is-user{margin-left:34px;color:#fff;background:var(--clay-deep);}
+.mc-assistant-msg.is-assistant{margin-right:22px;color:#2B3036;background:#F0EEE8;border:1px solid #E1DED5;}
+.mc-assistant-empty{margin:0;color:#7E848B;font-size:12px;}
+.mc-assistant-tools{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;}
+.mc-assistant-tools li{font-family:var(--f-mono);font-size:10.5px;color:var(--clay-deep);background:var(--clay-soft);
+  border:1px solid rgba(205,106,69,.24);border-radius:999px;padding:4px 8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+.mc-assistant-error{margin:0;color:#9B3E2D;font-size:12px;font-weight:650;}
+.mc-assistant-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;}
+.mc-assistant-form textarea{min-height:42px;max-height:84px;resize:vertical;border-radius:10px;border:1px solid #D8D2C6;
+  background:#fff;color:#2B3036;font-family:var(--f-ui);font-size:12.5px;padding:9px 10px;}
+.mc-assistant-form button{height:42px;padding:0 13px;border:0;border-radius:10px;cursor:pointer;color:#fff;
+  background:var(--clay-deep);font-size:12.5px;font-weight:700;}
+
 .mc-attrib{position:absolute;right:calc(var(--panel-width) + 18px);z-index:35;bottom:18px;font-size:10.5px;color:#9c988b;
   font-family:var(--f-mono);background:rgba(236,234,227,0.7);padding:3px 8px;border-radius:6px;}
 

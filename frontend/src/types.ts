@@ -110,3 +110,25 @@ export type AnalysisSettings = {
   radiusM: number;
   offenseCategory: string;
 };
+
+export type AssistantMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type AssistantDashboardState = {
+  selected_place_ids: string[];
+  analysis_start_date: string | null;
+  analysis_end_date: string | null;
+  radii_m: number[];
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  nibrs_group: string | null;
+};
+
+export type AssistantStreamEvent =
+  | { event: "meta"; data: Record<string, unknown> }
+  | { event: "tool"; data: { tool_name?: string; result?: unknown; [key: string]: unknown } }
+  | { event: "token"; data: { delta?: string } }
+  | { event: "done"; data: Record<string, unknown> }
+  | { event: "error"; data: { message?: string } };

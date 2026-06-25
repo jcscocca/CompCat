@@ -1,4 +1,12 @@
-import type { DashboardSummary, IncidentDetailsResponse, Place, PlaceCreate } from "../types";
+import type {
+  AssistantDashboardState,
+  AssistantMessage,
+  AssistantStreamEvent,
+  DashboardSummary,
+  IncidentDetailsResponse,
+  Place,
+  PlaceCreate,
+} from "../types";
 
 type AnalyzePlacesPayload = {
   place_ids: string[];
@@ -99,4 +107,73 @@ export function comparePlaces(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+type AssistantHandlers = {
+  onEvent: (event: AssistantStreamEvent) => void;
+};
+
+export async function streamAssistantChat(
+  payload: {
+    messages: AssistantMessage[];
+    dashboard_state: AssistantDashboardState;
+  },
+  handlers: AssistantHandlers,
+): Promise<void> {
+  const response = await fetch("/assistant/chat", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed with status ${response.status}`);
+  }
+  if (!response.body) {
+    throw new Error("Assistant response did not include a stream.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    buffer = flushAssistantEvents(buffer, handlers.onEvent);
+  }
+  buffer += decoder.decode();
+  flushAssistantEvents(buffer, handlers.onEvent, true);
+}
+
+function flushAssistantEvents(
+  buffer: string,
+  onEvent: (event: AssistantStreamEvent) => void,
+  flushAll = false,
+): string {
+  let cursor = buffer.indexOf("\n\n");
+  while (cursor >= 0) {
+    emitAssistantEvent(buffer.slice(0, cursor), onEvent);
+    buffer = buffer.slice(cursor + 2);
+    cursor = buffer.indexOf("\n\n");
+  }
+  if (flushAll && buffer.trim()) {
+    emitAssistantEvent(buffer, onEvent);
+    return "";
+  }
+  return buffer;
+}
+
+function emitAssistantEvent(block: string, onEvent: (event: AssistantStreamEvent) => void) {
+  let eventName = "";
+  const dataLines: string[] = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith("event:")) eventName = line.slice(6).trim();
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+  }
+  if (!eventName) return;
+  const data = dataLines.length ? JSON.parse(dataLines.join("\n")) : {};
+  onEvent({ event: eventName, data } as AssistantStreamEvent);
 }
