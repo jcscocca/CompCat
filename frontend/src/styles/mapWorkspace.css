@@ -185,6 +185,11 @@
 .mc-incident-table tbody tr:last-child td{border-bottom:0;}
 .mc-incident-table td:nth-child(6){white-space:normal;min-width:150px;overflow-wrap:anywhere;}
 
+.mc-querybar{position:sticky;top:0;z-index:6;display:grid;gap:12px;margin:-16px -18px 16px;padding:14px 18px 12px;background:rgba(27,30,34,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);}
+.mc-querybar .mc-field{margin-bottom:0;}
+.mc-querybar-run{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.mc-querybar-run .note{font-size:12px;color:var(--dim);}
+.mc-inline-error{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:rgba(205,106,69,.12);border:1px solid rgba(205,106,69,.42);color:#E8A98F;font-size:12.5px;line-height:1.45;}
 .mc-field{margin-bottom:14px;}
 .mc-field label{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:7px;}
 .mc-inputs{display:flex;gap:10px;}

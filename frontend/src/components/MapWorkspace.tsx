@@ -308,7 +308,7 @@ export function MapWorkspace() {
 
         <MapLegend />
 
-        {error ? <p className="mc-error" role="status">{error}</p> : null}
+        {error && activeTab !== "analyze" ? <p className="mc-error" role="status">{error}</p> : null}
 
         {places.length === 0 && !draft ? (
           <div className="mc-empty">
@@ -360,6 +360,7 @@ export function MapWorkspace() {
               availableRadii={availableRadii}
               running={analyzing}
               incidentDetails={incidentDetails}
+              error={error}
               onChange={handleAnalysisChange}
               onRun={handleAnalyze}
             />

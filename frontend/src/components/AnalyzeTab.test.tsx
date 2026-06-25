@@ -160,4 +160,17 @@ describe("AnalyzeTab", () => {
 
     expect(screen.getByText("No matching reported incidents for the selected filters.")).toBeInTheDocument();
   });
+
+  it("places the run controls in a sticky query bar above the findings, with no absolute footer", () => {
+    const { container } = render(<AnalyzeTab selected={[home]} analysis={analysis} summary={analyzedSummary} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
+    expect(container.querySelector(".mc-querybar")).toBeInTheDocument();
+    expect(container.querySelector(".mc-footer")).not.toBeInTheDocument();
+    const queryBar = container.querySelector(".mc-querybar") as HTMLElement;
+    expect(queryBar.contains(screen.getByRole("button", { name: /run analysis/i }))).toBe(true);
+  });
+
+  it("renders an inline error when one is provided", () => {
+    render(<AnalyzeTab selected={[home]} analysis={analysis} summary={analyzedSummary} availableRadii={[250]} running={false} error="Unable to run analysis. Try again." onChange={vi.fn()} onRun={vi.fn()} />);
+    expect(screen.getByText("Unable to run analysis. Try again.")).toBeInTheDocument();
+  });
 });
