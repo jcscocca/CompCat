@@ -58,14 +58,18 @@ async def _collect_sse_text(response: httpx.Response) -> str:
     event_name: str | None = None
     data_lines: list[str] = []
     output: list[str] = []
+
+    def flush_event() -> None:
+        if event_name == "token":
+            payload = json.loads("\n".join(data_lines) or "{}")
+            output.append(str(payload.get("delta", "")))
+        elif event_name == "error":
+            payload = json.loads("\n".join(data_lines) or "{}")
+            raise LocalAgentUnavailable(str(payload.get("message") or "LocalAgent error"))
+
     async for line in response.aiter_lines():
         if not line:
-            if event_name == "token":
-                payload = json.loads("\n".join(data_lines) or "{}")
-                output.append(str(payload.get("delta", "")))
-            elif event_name == "error":
-                payload = json.loads("\n".join(data_lines) or "{}")
-                raise LocalAgentUnavailable(str(payload.get("message") or "LocalAgent error"))
+            flush_event()
             event_name = None
             data_lines = []
             continue
@@ -73,5 +77,7 @@ async def _collect_sse_text(response: httpx.Response) -> str:
             event_name = line.split(":", 1)[1].strip()
         elif line.startswith("data:"):
             data_lines.append(line.split(":", 1)[1].strip())
+    # Flush a trailing event when the stream closes without a final blank line.
+    flush_event()
     return "".join(output)
 

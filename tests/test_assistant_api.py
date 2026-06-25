@@ -1,9 +1,36 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, date, datetime
+
 from fastapi.testclient import TestClient
 
+from app.api.routes_assistant import _sse_event
 from app.assistant.schemas import AssistantStreamEvent
 from app.main import create_app
+
+
+def test_sse_event_serializes_date_and_datetime_tool_results():
+    # Tool results from compare_places / get_dashboard_summary carry raw date and
+    # datetime objects; the SSE encoder must coerce them instead of raising.
+    event = AssistantStreamEvent(
+        event="tool",
+        data={
+            "tool_name": "compare_places",
+            "result": {
+                "analysis_start_date": date(2024, 1, 1),
+                "analysis_end_date": date(2024, 1, 31),
+                "created_at": datetime(2024, 2, 1, tzinfo=UTC),
+            },
+        },
+    )
+
+    rendered = _sse_event(event)
+
+    assert rendered.startswith("event: tool\n")
+    payload = json.loads(rendered.split("data: ", 1)[1].strip())
+    assert payload["result"]["analysis_start_date"] == "2024-01-01"
+    assert payload["result"]["created_at"].startswith("2024-02-01")
 
 
 def test_assistant_chat_requires_public_session(tmp_path):

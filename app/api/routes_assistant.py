@@ -41,5 +41,5 @@ async def assistant_chat(
 
 
 def _sse_event(event: AssistantStreamEvent) -> str:
-    return f"event: {event.event}\ndata: {json.dumps(event.data)}\n\n"
+    return f"event: {event.event}\ndata: {json.dumps(event.data, default=str)}\n\n"
 
