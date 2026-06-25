@@ -1,97 +1,192 @@
 # Waypoint
 
-Waypoint is a privacy-first reported-incident analysis tool for selected places and route
-context. The public dashboard supports approximate manual place entry, place-list paste
-flows, selected-place analysis, comparison, and reported Seattle SPD incident context
-exports. Personal timeline uploads remain available for internal demos, but they are not
-the center of the public launch experience.
+Waypoint is a privacy-first web app for exploring **reported Seattle SPD incident context**
+around the places you care about and the routes between them. You add approximate places on a
+map, pick a radius and date range, and Waypoint shows how many reported incidents fall nearby,
+what kinds, and how places compare — plus an optional AI analyst you can ask questions in plain
+language.
 
-## What It Does
+Waypoint describes *reported incident context*. It does **not** score safety, rank places as
+safe or unsafe, or claim anyone was present when an incident happened.
 
-- Accepts approximate places entered manually or pasted as rows.
-- Imports public commute scenario CSV files using generalized Seattle area centroids.
-- Supports selected-place analysis and comparison for saved public-dashboard places.
-- Preserves a route-aware north star through commute scenarios and route comparison APIs.
-- Exports privacy-safe Tableau CSV rows using generalized display coordinates.
-- Keeps internal/demo parsers for Google Maps/Timeline JSON, raw point CSV, GeoJSON, and GPX.
-- Normalizes uploads into stop visits and recurring place clusters.
-- Marks home-like and work-like clusters for privacy suppression.
-- Loads a local Seattle crime fixture for offline tests and demo work.
-- Computes reported SPD incident counts within selected radii and date ranges.
+## What it does
 
-## What It Does Not Do
+- Map-first dashboard: search an address, drop a pin, type a place, or paste a list of places.
+- Runs incident analysis for selected places at chosen radii (e.g. 250 m / 500 m / 1000 m) and
+  a date range, filtered by offense category (all / person / property / society).
+- Shows reported-incident counts, nearest-incident distance, the category mix, the top specific
+  offenses, and the individual incident rows behind the numbers.
+- Compares two or more places side by side at a single radius.
+- Optional **Waypoint Analyst** chat that answers questions grounded in your current dashboard
+  data ("how does this stop compare to my downtown one?").
+- Compares route alternatives between generalized Seattle areas with reported-incident context
+  along each route (currently a deterministic mock routing provider).
+- Statistical, exposure-adjusted rate comparison of place buffers and route corridors.
+- Exports privacy-safe, Tableau-ready CSVs using generalized display coordinates.
+- Loads a bundled Seattle crime sample for offline development, or ingests a recent window of
+  real Seattle SPD open data.
 
-- It does not score safety or label places as safe or unsafe.
+## What it does not do
+
+- It does not score safety or label places as safe, unsafe, or dangerous.
 - It does not claim a user was present when an incident occurred.
-- It does not expose raw GPS observations in Tableau exports.
-- It does not implement real authentication, encryption at rest, or tenant isolation yet.
-- It does not run live Socrata ingestion in unit tests.
+- It does not expose raw GPS observations in exports.
+- It does not yet implement production authentication, encryption at rest, or tenant isolation.
 
-## Privacy Posture
+## The dashboard
 
-Manual and pasted public-dashboard entries are stored as saved place clusters. Raw uploads
-are temporary input artifacts for internal/demo flows. The canonical product objects are
-stop visits, recurring place clusters, and context summaries. Demo identity comes from the
-`X-Demo-User-Id` header, or `demo_user` when omitted, and is hashed server-side.
+The dashboard is the primary way to use Waypoint. It is a single-page React app built around a
+full-screen Leaflet map of Seattle, with a resizable side drawer organized into four tabs.
 
-In `tableau_safe` mode, home-like, work-like, health-like, religious-like, and explicitly
-suppressed clusters are excluded from the Tableau export by default. Exported coordinates use
-`display_latitude` and `display_longitude`; if those are missing, the exporter rounds exact
-centroids to a coarse grid.
+- **Places** — add places four ways: search by name/address (OpenStreetMap Nominatim geocoding),
+  click **Add pin** and drop a point on the map, enter latitude/longitude manually, or paste a
+  CSV of places. Select places to analyze, and remove ones you no longer want.
+- **Analyze** — choose a date range, a radius, and an offense-category filter, then run analysis.
+  Results include a findings summary, a crime-mix chart, the top offenses, and an incident-detail
+  table (date, category, distance, block address, incident id). Analyzed places show their radius
+  rings on the map.
+- **Compare** — with two or more places selected, compare reported-incident counts and the top
+  offense types side by side at one radius.
+- **Export** — download the Tableau-ready place-summary CSV for the current session.
 
-TODO: add production authentication, encryption at rest, per-user tenant isolation, upload
-retention controls, and explicit user-facing consent screens.
+The map uses CARTO Positron basemap tiles (OpenStreetMap data). Geocoding uses the public
+Nominatim service, which is rate-limited and intended for development; a production deployment
+should swap in a dedicated geocoding provider.
 
-## Local Setup
+## The Waypoint Analyst
+
+The Analyst panel is an optional chat assistant that answers questions about your dashboard data.
+It is grounded in what you currently have selected (places, date range, radii, and offense
+filters) and is policy-constrained: it reports incident context and will refuse to label a place
+as safe or unsafe.
+
+Under the hood the assistant plans with an LLM and can call a small set of read-only tools
+(`get_dashboard_summary`, `run_place_analysis`, `compare_places`, `get_incident_details`,
+`suggest_followups`), capped at `MCA_ASSISTANT_MAX_TOOL_CALLS` per turn. Responses stream back to
+the browser token by token.
+
+The assistant talks to a **separate LLM gateway** (the "LocalAgent" service) that implements a
+streaming completion API. Waypoint reaches it at `MCA_LOCALAGENT_BASE_URL`
+(default `http://127.0.0.1:8010`) using the role `MCA_ASSISTANT_ROLE`
+(default `waypoint_analyst`). If no gateway is running, the rest of the dashboard works normally —
+only the Analyst panel is unavailable. See [Running the Analyst](#running-the-analyst-optional).
+
+## Input modes
+
+`GET /input-modes` returns the entry modes available to the current build:
+
+1. **Enter places manually** — approximate places with optional weekly visit frequency and dwell.
+2. **Paste a place list** — rows with `latitude` and `longitude`, plus optional `display_label`,
+   `visit_count`, `total_dwell_minutes`, `median_dwell_minutes`, `typical_days`, `typical_hours`,
+   and `sensitivity_class`.
+3. **Public commute scenario** — model a commute between generalized Seattle areas (Capitol Hill,
+   Downtown Seattle, Rainier Valley, University District, Ballard, Westlake Station) instead of
+   personal location data.
+
+A fourth mode, **Personal timeline upload** (Google Timeline JSON, raw point CSV, GeoJSON, GPX),
+is for internal demos and parser validation only. It is hidden unless you set
+`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`. Uploaded files are temporary input artifacts; the
+canonical product objects are stop visits, recurring place clusters, and context summaries.
+
+## Routes and statistical comparison
+
+- **Route alternatives** rank alternative routes between generalized Seattle areas (mode:
+  `transit`, `walk`, `bike`, or `drive`) and, when analysis dates are supplied, attach reported-
+  incident context near route points. The current provider is a deterministic **mock** used for
+  local development, tests, and dashboard validation; OpenTripPlanner is the planned live
+  provider. Route exports (`route-alternatives.csv`, `route-segments.csv`, `route-context.csv`)
+  never include raw GPS observations.
+- **Statistical comparison** compares place buffers and route corridors using exposure-adjusted
+  reported-incident rates, with an `Overview` mode (public summary, decision class, rates, short
+  caveat) and an `Analytical` mode (counts, exposure, rate ratio, confidence interval, p-values,
+  method, overdispersion and minimum-data status, and full caveats). Product language may say
+  "lower reported-incident rate"; it must never call a route safe, unsafe, dangerous, or
+  crime-preventing.
+
+## Privacy posture
+
+- Places are stored as saved clusters with **generalized display coordinates**
+  (`display_latitude` / `display_longitude`); when those are missing the exporter rounds exact
+  centroids to a coarse grid.
+- In the default `tableau_safe` mode, home-like, work-like, health-like, religious-like, and
+  explicitly suppressed clusters are excluded from exports.
+- Demo identity comes from the `X-Demo-User-Id` header (or `demo_user` when omitted) and is
+  hashed server-side with `MCA_USER_HASH_SALT`.
+- Raw uploads (internal/demo mode) are temporary and deleted after normalization unless
+  `MCA_RAW_UPLOAD_RETENTION=true`.
+
+**Roadmap (not yet implemented):** production authentication, encryption at rest, per-user tenant
+isolation, upload-retention controls, and explicit user-facing consent screens.
+
+## Quick start
+
+Requirements: Python 3.11+, Node 20.19+ (or 22.12+), and optionally Docker.
 
 ```bash
-python3.11 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
-cp .env.example .env
+make install        # create .venv and install the app with dev extras
+make run            # start the API on http://127.0.0.1:8000 (SQLite by default)
 ```
 
-Run tests:
+With no `.env`, Waypoint uses a local SQLite database at
+`./localagent-output/mobility.sqlite3` and creates its schema on startup, so `make run` works out
+of the box. Load the bundled sample crime data so analysis returns results:
 
 ```bash
-make test
+curl -X POST http://127.0.0.1:8000/crime/ingest/sample
 ```
 
-Run the API with SQLite defaults:
+### Running the dashboard
+
+You can serve the dashboard two ways:
+
+**Single server (built assets).** Build the frontend once; the API then serves it at `/`:
 
 ```bash
+make frontend-install
+make frontend-build         # outputs to app/static/dashboard
+make run                    # open http://127.0.0.1:8000
+```
+
+**Dev server (hot reload).** Run the API and the Vite dev server side by side:
+
+```bash
+make run                    # API on :8000
+cd frontend && npm run dev  # dashboard on http://127.0.0.1:5173
+```
+
+The dev server proxies API calls to `http://127.0.0.1:8000` by default. If the API runs on a
+different port, point the proxy at it:
+
+```bash
+VITE_BACKEND_TARGET=http://127.0.0.1:8001 npm run dev
+```
+
+### Running the Analyst (optional)
+
+The Analyst panel needs a running LLM gateway that implements the LocalAgent streaming API.
+Start your gateway (on its own port so it does not collide with the API on `8000`) and point
+Waypoint at it:
+
+```bash
+export MCA_LOCALAGENT_BASE_URL=http://127.0.0.1:8010   # this is the default
 make run
 ```
 
-Run the optional LocalAgent LLM gateway on a separate local port before using
-the dashboard assistant:
+Without a gateway the dashboard still works; the Analyst panel is simply disabled.
+
+### Running with Postgres/PostGIS
+
+For a production-like database, use Docker Compose. It builds the frontend, runs Alembic
+migrations, and serves everything on port `8000` against Postgres/PostGIS:
 
 ```bash
-cd /Users/jscocca/Repos/localagent
-PYTHONPATH=. .venv/bin/python -m uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8010
+docker compose up --build   # open http://127.0.0.1:8000
 ```
 
-Waypoint reads that gateway from `MCA_LOCALAGENT_BASE_URL`, which defaults to
-`http://127.0.0.1:8010` so it does not collide with the Waypoint API on port
-`8000`.
+### Loading real Seattle crime data
 
-If port `8000` is already occupied, start Waypoint on another port and point
-Vite at it:
-
-```bash
-MCA_LOCALAGENT_BASE_URL=http://127.0.0.1:8010 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
-cd frontend && VITE_BACKEND_TARGET=http://127.0.0.1:8001 npm run dev
-```
-
-Run with Postgres/PostGIS:
-
-```bash
-docker compose up --build
-```
-
-Then open `http://127.0.0.1:8000`.
-
-Load a recent window of real Seattle SPD public incident data into the local
-Compose database:
+Ingest a recent window of real Seattle SPD open data through the admin endpoint (requires
+`MCA_ADMIN_INGEST_TOKEN`; the Compose stack sets it to `local-admin-token`):
 
 ```bash
 curl --fail --show-error -X POST \
@@ -99,255 +194,108 @@ curl --fail --show-error -X POST \
   "http://127.0.0.1:8000/admin/crime/ingest/socrata?limit=5000&offset=0&start_date=2026-04-01&end_date=2026-06-22"
 ```
 
-Apply migrations manually:
+### Tests and migrations
 
 ```bash
-make migrate
+make test        # backend tests (pytest)
+make lint        # ruff
+make test-all    # backend tests + lint + frontend tests + frontend build
+make migrate     # apply Alembic migrations (for Postgres/production)
 ```
 
-## Public Dashboard Flow
+## Configuration
 
-The Waypoint dashboard is designed for generalized manual entry. Users can enter approximate
-places, paste a place list, run selected-place analysis, compare saved places, and export
-reported-incident context. The `visit_count` field means expected visits per week; it is
-routine metadata, not a risk denominator. Analysis focuses on reported incident counts,
-nearest incident distance, category mix, and the incident rows behind the selected-place
-counts.
-Personal timeline uploads remain an internal/demo capability and are not part of the public
-launch flow.
+All backend settings are environment variables (prefix `MCA_`, except `SOCRATA_APP_TOKEN`). See
+`.env.example` for a starting point. In `production`, Waypoint refuses to boot with the default
+salt/secret and forces secure cookies.
 
-Start the API and create a public dashboard session:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MCA_ENVIRONMENT` | `local` | Deployment environment; `production` enforces secret overrides and secure cookies. |
+| `MCA_DATABASE_URL` | `sqlite+pysqlite:///./localagent-output/mobility.sqlite3` | SQLAlchemy database URL (use a Postgres URL for production). |
+| `MCA_USER_HASH_SALT` | `local-demo-salt` | Salt for hashing demo user identity. Must be overridden in production. |
+| `MCA_SESSION_SECRET` | `local-dashboard-session-secret` | Session cookie secret. Must be overridden in production. |
+| `MCA_SESSION_COOKIE_SECURE` | auto | Force secure cookies; defaults to on in production. |
+| `MCA_STATIC_DASHBOARD_DIR` | `app/static/dashboard` | Where the built dashboard is served from. |
+| `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` | `false` | Surface the personal timeline upload mode (internal/demo). |
+| `MCA_RAW_UPLOAD_RETENTION` | `false` | Keep raw uploads instead of deleting them after normalization. |
+| `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. |
+| `MCA_CRIME_RADII_M` | `[250,500,1000]` | Default analysis radii in meters. |
+| `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL. |
+| `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
+| `SOCRATA_APP_TOKEN` | _unset_ | Optional Socrata app token for higher rate limits. |
+| `MCA_LOCALAGENT_BASE_URL` | `http://127.0.0.1:8010` | LLM gateway URL for the Analyst. |
+| `MCA_ASSISTANT_ROLE` | `waypoint_analyst` | Role sent to the LLM gateway. |
+| `MCA_ASSISTANT_MAX_TOOL_CALLS` | `2` | Max tool calls the Analyst may make per turn. |
+
+Normalization thresholds for the internal upload pipeline are also configurable:
+`MCA_MINIMUM_STOP_DURATION_MINUTES`, `MCA_STOP_RADIUS_M`, `MCA_CLUSTER_RADIUS_M`,
+`MCA_MINIMUM_CLUSTER_VISITS`, and `MCA_MINIMUM_CLUSTER_TOTAL_DWELL_MINUTES`.
+
+For production, additionally set `MCA_ENVIRONMENT=production`, a real `MCA_DATABASE_URL`,
+`MCA_USER_HASH_SALT`, `MCA_SESSION_SECRET`, `MCA_SESSION_COOKIE_SECURE=true`, and
+`MCA_ADMIN_INGEST_TOKEN`; run Alembic migrations before serving traffic; and ingest recent SPD
+data through the admin endpoint.
+
+## Developer reference
+
+The dashboard drives the API for you, and FastAPI publishes interactive docs at `/docs`
+(Swagger UI) and `/openapi.json`. The public endpoints are grouped below.
+
+| Group | Endpoints |
+| --- | --- |
+| Health | `GET /health` |
+| Sessions | `POST /sessions` |
+| Input modes | `GET /input-modes` |
+| Places | `GET /places` · `POST /places` · `POST /places/bulk` · `PATCH /places/{id}` · `DELETE /places/{id}` |
+| Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` |
+| Analyst | `POST /assistant/chat` (Server-Sent Events) |
+| Routes | `POST /routes/alternatives` · `GET /routes/requests/{id}/comparison` |
+| Statistical analysis | `POST /analysis/sites/compare` · `POST /analysis/routes/compare` · `GET /analysis/comparisons/{id}` |
+| Exports | `GET /exports/tableau/place-summary.csv` · `route-alternatives.csv` · `route-segments.csv` · `route-context.csv` · `statistical-comparisons.csv` |
+| Crime data | `POST /crime/ingest/sample` · `POST /crime/summarize` · `POST /admin/crime/ingest/socrata` |
+| Internal/demo | `POST /imports` · `GET /imports/{id}` · `POST /imports/{id}/normalize` |
+
+A minimal end-to-end flow with `curl`:
 
 ```bash
+# 1. Create a session (stores the cookie)
 curl -c demo.cookies -X POST http://127.0.0.1:8000/sessions
-```
 
-Check the public-first input modes:
-
-```bash
-curl -b demo.cookies http://127.0.0.1:8000/input-modes
-```
-
-Enter an approximate place manually:
-
-```bash
+# 2. Add an approximate place
 curl -b demo.cookies -H "Content-Type: application/json" \
   -d '{"display_label":"Downtown transfer stop","latitude":47.609,"longitude":-122.333}' \
   http://127.0.0.1:8000/places
-```
 
-Or paste a place list:
-
-```bash
-curl -b demo.cookies -H "Content-Type: application/json" \
-  -d '{"csv_text":"display_label,latitude,longitude\nDowntown transfer stop,47.609,-122.333\nLibrary area,47.621,-122.321\n"}' \
-  http://127.0.0.1:8000/places/bulk
-```
-
-Load sample crime data, then analyze selected saved places:
-
-```bash
+# 3. Load sample crime data, then analyze the saved place
+#    (the bundled sample incidents are dated January 2024)
 curl -X POST http://127.0.0.1:8000/crime/ingest/sample
 curl -b demo.cookies -H "Content-Type: application/json" \
   -d '{"place_ids":["<place_id>"],"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radii_m":[250,500]}' \
   http://127.0.0.1:8000/dashboard/analyze
-```
 
-Compare two or more saved places:
-
-```bash
-curl -b demo.cookies -H "Content-Type: application/json" \
-  -d '{"place_ids":["<first_place_id>","<second_place_id>"],"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radius_m":500}' \
-  http://127.0.0.1:8000/dashboard/compare
-```
-
-Export Tableau CSV:
-
-```bash
+# 4. Export the Tableau CSV
 curl -b demo.cookies http://127.0.0.1:8000/exports/tableau/place-summary.csv
 ```
 
-## Public Input Modes
+The Tableau place-summary export includes recurring-place fields, generalized coordinates, the
+selected analysis range, offense grouping fields, incident counts, nearest-incident distance,
+incidents per expected visit, and incidents per hour of dwell. The expected-weekly-visit
+denominator behind `incidents_per_visit` is routine metadata for context, not a risk score. Frame
+each row as:
 
-The Waypoint public flow exposes upload-free modes first:
+> Reported SPD incidents within 500 m of this recurring location during the selected date range.
 
-1. **Enter places manually** for approximate places, weekly visit frequency, and optional dwell time.
-2. **Paste a place list** for rows with `latitude` and `longitude`, plus optional display
-   labels, visit counts, or dwell fields.
-3. **Public commute scenario** for neighborhood or transit-oriented scenarios that use
-   generalized Seattle area centroids instead of personal location data.
+## Data sources and caveats
 
-Set `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` in an internal/demo environment to append
-**Personal timeline upload** after the public modes.
+Crime data comes from Seattle's open-data portal — by default the SPD "Crime Data: 2008-Present"
+dataset (`tazs-3rd5`). Reported crime data can be incomplete, delayed, corrected, or
+geographically generalized, and personal location history can be incomplete, inaccurate, or
+biased by device behavior. Waypoint provides context summaries, not safety predictions.
 
-Mode metadata is available from:
+## References and licensing
 
-```text
-GET /input-modes
-```
-
-Dashboard-ready summary data is available from:
-
-```text
-GET /dashboard/summary
-```
-
-## Public Launch Checklist
-
-- Run `make test` and `make lint`.
-- Run `cd frontend && npm test && npm run build`.
-- Run `docker build .` in CI or another environment with Docker available.
-- Set `MCA_ENVIRONMENT=production`, `MCA_DATABASE_URL`,
-  `MCA_USER_HASH_SALT`, `MCA_SESSION_SECRET`,
-  `MCA_SESSION_COOKIE_SECURE=true`, and `MCA_ADMIN_INGEST_TOKEN`.
-- Run Alembic migrations before serving traffic.
-- Ingest recent Seattle SPD data through the admin Socrata endpoint.
-- Confirm the public dashboard does not show personal timeline upload as an entry mode.
-- Confirm the dashboard copy describes reported incident context, not personal safety.
-
-## Internal Upload Demo Flow
-
-Personal timeline uploads are available for internal demos and parser validation. Enable the
-mode metadata with `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` when a demo needs to surface it.
-
-Start the API, then upload the recurring Google fixture:
-
-```bash
-curl -F "file=@tests/fixtures/google_recurring.json" \
-  -H "X-Demo-User-Id: demo@example.com" \
-  http://127.0.0.1:8000/imports
-```
-
-Normalize the returned import id:
-
-```bash
-curl -X POST -H "X-Demo-User-Id: demo@example.com" \
-  http://127.0.0.1:8000/imports/<import_id>/normalize
-```
-
-Load sample crime data and summarize:
-
-```bash
-curl -X POST http://127.0.0.1:8000/crime/ingest/sample
-curl -X POST -H "Content-Type: application/json" \
-  -H "X-Demo-User-Id: demo@example.com" \
-  -d '{"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radii_m":[250]}' \
-  http://127.0.0.1:8000/crime/summarize
-```
-
-Export Tableau CSV:
-
-```bash
-curl -H "X-Demo-User-Id: demo@example.com" \
-  http://127.0.0.1:8000/internal/exports/tableau/place-summary.csv
-```
-
-### Supported Upload Formats
-
-- Google Semantic Location History JSON with `timelineObjects`.
-- Google records-style JSON with `locations`, `latitudeE7`, and `longitudeE7`.
-- CSV with `timestamp`, `latitude`, `longitude`, and optional `accuracy_m`,
-  `activity_type`, and `source`.
-- Recurring places CSV:
-
-```csv
-display_label,latitude,longitude,visit_count,total_dwell_minutes,median_dwell_minutes,typical_days,typical_hours,sensitivity_class
-Downtown transfer stop,47.609,-122.333,12,360,30,weekday,8-9,normal
-Library area,47.621,-122.321,6,420,70,weekend,afternoon,normal
-```
-
-- Public commute scenario CSV:
-
-```csv
-origin_area,destination_area,mode,usual_departure_time,frequency_per_week
-Capitol Hill,Downtown Seattle,transit,08:00,4
-```
-
-- Minimal GeoJSON Point/LineString support.
-- Minimal GPX track point support.
-
-## Tableau Export
-
-The session-scoped recurring-place export is available at:
-
-```text
-GET /exports/tableau/place-summary.csv
-```
-
-It includes recurring-place fields, generalized coordinates, selected analysis range,
-crime grouping fields, incident counts, nearest incident distance, incidents per expected
-visit in the selected analysis range, and incidents per hour of dwell. Product language
-should describe rows as:
-
-> Reported SPD incidents within 500m of this recurring location during the selected date range.
-
-## Route Alternatives
-
-Route comparison is available in Stage 1 with the current mock routing provider:
-
-```text
-POST /routes/alternatives
-GET /routes/requests/{request_id}/comparison
-```
-
-`POST /routes/alternatives` accepts generalized Seattle origin and destination labels,
-route mode (`transit`, `walk`, `bike`, or `drive`), optional departure details, and optional
-`analysis_start_date`, `analysis_end_date`, and `radii_m` values. When analysis dates are
-provided, the response and persisted comparison include reported incident context summaries
-near route points including segment starts and ends.
-
-Tableau route exports are available at:
-
-```text
-GET /exports/tableau/route-alternatives.csv
-GET /exports/tableau/route-segments.csv
-GET /exports/tableau/route-context.csv
-```
-
-`route-segments.csv` includes provider/mock route point labels and coordinates for segment
-starts and ends; it does not include raw GPS observations.
-
-OpenTripPlanner is the planned provider for live route alternatives. Until that provider is
-implemented, the mock provider supplies deterministic Stage 1 route alternatives for local
-development, tests, and Tableau dashboard validation.
-
-Product language for route dashboards should describe these rows as reported route-point
-incident context, not as safe or unsafe route claims.
-
-## Statistical Route And Place Comparison
-
-The app compares public place buffers and route corridors using exposure-adjusted reported
-SPD incident rates. Statistical comparison dashboards have two modes: `Overview` for the
-public summary and `Analytical` for the audit view. `Overview` includes public summary
-text, the decision class, exposure-adjusted rates, and a short caveat. `Analytical`
-includes counts, exposure, rate ratio, confidence interval, p-values, method,
-overdispersion status, minimum-data status, filters, and full caveats.
-
-Endpoints:
-
-```text
-POST /analysis/sites/compare
-POST /analysis/routes/compare
-GET /analysis/comparisons/{comparison_id}
-GET /exports/tableau/statistical-comparisons.csv
-```
-
-Language constraint: the app may say "lower reported-incident rate" and must not say a
-route is safe, unsafe, dangerous, risk-free, or crime-preventing.
-
-## Data Caveats
-
-Seattle SPD open data contains reported incidents. Reported crime data can be incomplete,
-delayed, corrected, or geographically generalized. Personal location history can also be
-incomplete, inaccurate, or biased by device behavior. This tool provides context summaries,
-not safety predictions.
-
-The default Socrata dataset id is `tazs-3rd5`, the City of Seattle's "SPD Crime Data:
-2008-Present" dataset.
-
-## References And Licensing
-
-This implementation is original. Related projects were used as architecture references only,
-including Google Timeline parsing tools, Reitti, GeoPulse, Dawarich, and Seattle crime data
-pipelines. No AGPL/GPL/BSL source code was copied. If future MIT-licensed code is reused,
-preserve attribution and license notices.
+This implementation is original. Related projects (Google Timeline parsing tools, Reitti,
+GeoPulse, Dawarich, and Seattle crime-data pipelines) were used as architecture references only;
+no AGPL/GPL/BSL source was copied. If MIT-licensed code is reused, preserve attribution and
+license notices.
