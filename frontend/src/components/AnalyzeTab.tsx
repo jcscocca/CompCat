@@ -1,5 +1,8 @@
 import type { AnalysisSettings, CrimeSummary, DashboardSummary, IncidentDetail, IncidentDetailsResponse, Place } from "../types";
 
+const INCIDENT_TABLE_MIN = 560;
+const CHARTS_TWO_UP_MIN = 460;
+
 type Props = {
   selected: Place[];
   analysis: AnalysisSettings;
@@ -7,6 +10,14 @@ type Props = {
   availableRadii: number[];
   running: boolean;
   incidentDetails?: IncidentDetailsResponse | null;
+  error?: string;
+  /**
+   * Current expanded drawer width in pixels, used to choose the incident
+   * layout (cards below {@link INCIDENT_TABLE_MIN}, table at/above) and the
+   * chart column count. When omitted it is treated as infinitely wide (table +
+   * 2-up charts); MapWorkspace always passes the live width.
+   */
+  panelWidthPx?: number;
   onChange: (patch: Partial<AnalysisSettings>) => void;
   onRun: () => void;
 };
@@ -139,13 +150,13 @@ function BarList({ rows }: { rows: ChartRow[] }) {
   );
 }
 
-function IncidentCharts({ entries }: { entries: CrimeSummary[] }) {
+function IncidentCharts({ entries, wide }: { entries: CrimeSummary[]; wide: boolean }) {
   if (entries.length === 0) return null;
 
   const offenseRows = buildOffenseRows(entries);
 
   return (
-    <section className="mc-analysis-charts" aria-label="Reported incident charts">
+    <section className={`mc-analysis-charts${wide ? " is-2up" : ""}`} aria-label="Reported incident charts">
       <div className="mc-chart-card">
         <div className="mc-breakdown-head">
           <h5>Crime mix</h5>
@@ -278,64 +289,126 @@ function IncidentDetailsTable({ details }: { details: IncidentDetailsResponse | 
   );
 }
 
-export function AnalyzeTab({ selected, analysis, summary, availableRadii, running, incidentDetails, onChange, onRun }: Props) {
+function IncidentDetailsCards({ details }: { details: IncidentDetailsResponse | null | undefined }) {
+  if (!details) return null;
+
+  const isCapped = details.total_count > details.returned_count;
+  const countText = isCapped
+    ? `Showing nearest ${details.returned_count} of ${details.total_count} matching reported incidents.`
+    : `${details.total_count} matching reported incident${details.total_count === 1 ? "" : "s"}.`;
+
+  return (
+    <section className="mc-incident-details" aria-label="Reported incident details">
+      <div className="mc-breakdown-head">
+        <h5>Reported incidents near selected places</h5>
+        <span>{details.radius_m} m</span>
+      </div>
+      {details.incidents.length === 0 ? (
+        <p className="mc-empty-list">No matching reported incidents for the selected filters.</p>
+      ) : (
+        <>
+          <p className="mc-incident-count">{countText}</p>
+          <div className="mc-incident-cards">
+            {details.incidents.map((incident) => (
+              <article className="mc-icard" key={`${incident.place_id}-${incident.incident_id}`}>
+                <div className="mc-icard-top">
+                  <strong>{incident.place_label}</strong>
+                  <em>{formatDistanceMeters(incident.distance_m)}</em>
+                </div>
+                <div className="mc-icard-tags">
+                  <span>{incidentCategoryLabel(incident)}</span>
+                  <span>{incidentSubtypeLabel(incident)}</span>
+                  <span>{formatIncidentTime(incident.occurred_at || incident.reported_at)}</span>
+                </div>
+                <p className="mc-icard-addr"><span>{incident.block_address || "Unavailable"}</span> · <span>{incidentIdentifier(incident)}</span></p>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+export function AnalyzeTab({ selected, analysis, summary, availableRadii, running, incidentDetails, error, panelWidthPx, onChange, onRun }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
   const canRun = selected.length >= 1 && !running;
   const entries = findingEntries(summary, selected, analysis.radiusM);
   const findings = buildFindings(summary, selected, analysis.radiusM);
+  const width = panelWidthPx ?? Infinity;
+  const incidentLayout = width >= INCIDENT_TABLE_MIN ? "table" : "cards";
+  const chartsWide = width >= CHARTS_TWO_UP_MIN;
 
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Analyze">
-      <section className="mc-findings" aria-label="Findings summary">
-        <div className="mc-findings-head">
-          <h4>Findings summary</h4>
-          <span>{analysis.radiusM} m</span>
+      <div className="mc-querybar">
+        <div className="mc-field">
+          <label htmlFor="analysis-start-date">Date range</label>
+          <div className="mc-inputs">
+            <input id="analysis-start-date" type="date" className="mc-inp" value={analysis.startDate} aria-label="Start date" onChange={(event) => onChange({ startDate: event.target.value })} />
+            <input id="analysis-end-date" type="date" className="mc-inp" value={analysis.endDate} aria-label="End date" onChange={(event) => onChange({ endDate: event.target.value })} />
+          </div>
         </div>
-        <ul>
-          {findings.map((finding) => <li key={finding}>{finding}</li>)}
-        </ul>
-        <p>Reported incident patterns do not predict personal risk.</p>
-      </section>
 
-      <IncidentCharts entries={entries} />
-
-      <IncidentDetailsTable details={incidentDetails} />
-
-      <div className="mc-field">
-        <label htmlFor="analysis-start-date">Date range</label>
-        <div className="mc-inputs">
-          <input id="analysis-start-date" type="date" className="mc-inp" value={analysis.startDate} aria-label="Start date" onChange={(event) => onChange({ startDate: event.target.value })} />
-          <input id="analysis-end-date" type="date" className="mc-inp" value={analysis.endDate} aria-label="End date" onChange={(event) => onChange({ endDate: event.target.value })} />
+        <div className="mc-field">
+          <label id="radius-label">Search radius</label>
+          <div className="mc-chips" role="group" aria-labelledby="radius-label">
+            {radii.map((value) => (
+              <button key={value} type="button" className={`mc-chip${analysis.radiusM === value ? " on" : ""}`} aria-pressed={analysis.radiusM === value} onClick={() => onChange({ radiusM: value })}>
+                {value} m
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="mc-field">
-        <label id="radius-label">Search radius</label>
-        <div className="mc-chips" role="group" aria-labelledby="radius-label">
-          {radii.map((value) => (
-            <button key={value} type="button" className={`mc-chip${analysis.radiusM === value ? " on" : ""}`} aria-pressed={analysis.radiusM === value} onClick={() => onChange({ radiusM: value })}>
-              {value} m
-            </button>
-          ))}
+        <div className="mc-field">
+          <label id="category-label">Incident categories</label>
+          <div className="mc-chips" role="group" aria-labelledby="category-label">
+            {CATEGORIES.map((category) => (
+              <button key={category.value || "all"} type="button" className={`mc-chip${analysis.offenseCategory === category.value ? " on" : ""}`} aria-pressed={analysis.offenseCategory === category.value} onClick={() => onChange({ offenseCategory: category.value })}>
+                {category.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="mc-field">
-        <label id="category-label">Incident categories</label>
-        <div className="mc-chips" role="group" aria-labelledby="category-label">
-          {CATEGORIES.map((category) => (
-            <button key={category.value || "all"} type="button" className={`mc-chip${analysis.offenseCategory === category.value ? " on" : ""}`} aria-pressed={analysis.offenseCategory === category.value} onClick={() => onChange({ offenseCategory: category.value })}>
-              {category.label}
-            </button>
-          ))}
+        <div className="mc-querybar-run">
+          <span className="note">{selected.length} place{selected.length === 1 ? "" : "s"} · {analysis.radiusM} m</span>
+          <button type="button" className="mc-cta" disabled={!canRun} onClick={onRun}>{running ? "Running…" : "Run analysis"}</button>
         </div>
       </div>
 
-      <div style={{ height: 60 }} />
-      <div className="mc-footer">
-        <span className="note">{selected.length} place{selected.length === 1 ? "" : "s"} - {analysis.radiusM} m</span>
-        <button type="button" className="mc-cta" disabled={!canRun} onClick={onRun}>{running ? "Running..." : "Run analysis"}</button>
-      </div>
+      {error ? <p className="mc-inline-error" role="alert">{error}</p> : null}
+
+      {running ? (
+        <div className="mc-analysis-loading" aria-live="polite" aria-busy="true">
+          <span className="mc-sr">Running analysis…</span>
+          <div className="mc-skeleton" style={{ height: 84 }} />{/* findings */}
+          <div className="mc-skeleton" style={{ height: 132 }} />{/* charts */}
+          <div className="mc-skeleton" style={{ height: 168 }} />{/* incidents */}
+        </div>
+      ) : (
+        <>
+          <section className="mc-findings" aria-label="Findings summary">
+            <div className="mc-findings-head">
+              <h4>Findings summary</h4>
+              <span>{analysis.radiusM} m</span>
+            </div>
+            <ul>
+              {findings.map((finding) => <li key={finding}>{finding}</li>)}
+            </ul>
+            <p>Reported incident patterns do not predict personal risk.</p>
+          </section>
+
+          <IncidentCharts entries={entries} wide={chartsWide} />
+
+          {incidentLayout === "table" ? (
+            <IncidentDetailsTable details={incidentDetails} />
+          ) : (
+            <IncidentDetailsCards details={incidentDetails} />
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -1,12 +1,17 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { useRef } from "react";
+import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 
-import type { SheetState, TabKey } from "../types";
+import { DRAWER_DEFAULT, DRAWER_MIN, DRAWER_PEEK, DRAWER_RESIZE_STEP, DRAWER_WIDE, drawerMax, type DrawerPreset } from "../lib/drawer";
+import type { TabKey } from "../types";
 
 type Props = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
-  sheetState: SheetState;
-  onSheetStateChange: (state: SheetState) => void;
+  collapsed: boolean;
+  widthPx: number;
+  onToggleCollapsed: () => void;
+  onResize: (px: number) => void;
+  onPreset: (preset: DrawerPreset) => void;
   tabBadges?: Partial<Record<TabKey, number>>;
   children: ReactNode;
 };
@@ -53,9 +58,10 @@ const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
   },
 ];
 
-const SNAPS: { state: SheetState; label: string }[] = [
-  { state: "half", label: "open" },
-  { state: "peek", label: "peek" },
+const PRESETS: { preset: DrawerPreset; label: string }[] = [
+  { preset: "peek", label: "Peek" },
+  { preset: "default", label: "Default" },
+  { preset: "wide", label: "Wide" },
 ];
 
 function activateWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, action: () => void) {
@@ -68,36 +74,108 @@ function activateWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, action: (
 export function BottomSheet({
   activeTab,
   onTabChange,
-  sheetState,
-  onSheetStateChange,
+  collapsed,
+  widthPx,
+  onToggleCollapsed,
+  onResize,
+  onPreset,
   tabBadges,
   children,
 }: Props) {
-  function cycle() {
-    const order: SheetState[] = ["peek", "half"];
-    onSheetStateChange(order[(order.indexOf(sheetState) + 1) % order.length]);
+  const panelRef = useRef<HTMLElement>(null);
+  const dragging = useRef(false);
+  const moved = useRef(false);
+
+  function presetPressed(preset: DrawerPreset) {
+    if (preset === "peek") return collapsed;
+    if (collapsed) return false;
+    if (preset === "default") return widthPx === DRAWER_DEFAULT;
+    return widthPx === DRAWER_WIDE;
+  }
+
+  function onHandlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    moved.current = false;
+    if (collapsed) {
+      dragging.current = false;
+      return;
+    }
+    dragging.current = true;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function onHandlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!dragging.current || !panelRef.current) return;
+    moved.current = true;
+    const right = panelRef.current.getBoundingClientRect().right;
+    onResize(right - event.clientX);
+  }
+
+  function onHandlePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const wasDragging = dragging.current;
+    dragging.current = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (collapsed) {
+      onToggleCollapsed();
+      return;
+    }
+    if (wasDragging && !moved.current) onToggleCollapsed();
+  }
+
+  function onHandleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onToggleCollapsed();
+      return;
+    }
+    if (collapsed) return;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      onResize(widthPx + DRAWER_RESIZE_STEP);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      onResize(widthPx - DRAWER_RESIZE_STEP);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      onResize(drawerMax());
+    } else if (event.key === "End") {
+      event.preventDefault();
+      onResize(DRAWER_MIN);
+    }
   }
 
   return (
-    <section className={`mc-workspace-panel is-${sheetState}`} aria-label="Workspace panel">
-      <button
-        type="button"
+    <section
+      ref={panelRef}
+      className={`mc-workspace-panel ${collapsed ? "is-collapsed" : "is-open"}`}
+      style={collapsed ? undefined : { width: widthPx }}
+      aria-label="Workspace panel"
+    >
+      <div
         className="mc-handle"
-        aria-label="Toggle panel width"
-        onClick={cycle}
-        onKeyDown={(event) => activateWithKeyboard(event, cycle)}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize workspace panel"
+        aria-valuemin={DRAWER_PEEK}
+        aria-valuemax={drawerMax()}
+        aria-valuenow={collapsed ? DRAWER_PEEK : widthPx}
+        tabIndex={0}
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={() => { dragging.current = false; }}
+        onKeyDown={onHandleKeyDown}
       />
       <div className="mc-snaps" role="group" aria-label="Panel size">
-        {SNAPS.map((snap) => (
+        {PRESETS.map(({ preset, label }) => (
           <button
-            key={snap.state}
+            key={preset}
             type="button"
-            className={snap.state === sheetState ? "on" : undefined}
-            aria-pressed={snap.state === sheetState}
-            onClick={() => onSheetStateChange(snap.state)}
-            onKeyDown={(event) => activateWithKeyboard(event, () => onSheetStateChange(snap.state))}
+            className={presetPressed(preset) ? "on" : undefined}
+            aria-pressed={presetPressed(preset)}
+            onClick={() => onPreset(preset)}
+            onKeyDown={(event) => activateWithKeyboard(event, () => onPreset(preset))}
           >
-            <span>{snap.label}</span>
+            <span>{label}</span>
             <b />
           </button>
         ))}

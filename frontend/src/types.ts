@@ -85,7 +85,7 @@ export type PlaceCreate = {
 
 export type TabKey = "places" | "analyze" | "compare" | "export";
 
-export type SheetState = "peek" | "half";
+export type DrawerState = { collapsed: boolean; widthPx: number };
 
 export type LatLng = { lat: number; lng: number };
 

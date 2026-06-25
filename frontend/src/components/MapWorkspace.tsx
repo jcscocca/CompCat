@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
+import { clampWidth, DRAWER_DEFAULT, DRAWER_PEEK, DRAWER_WIDE, type DrawerPreset } from "../lib/drawer";
+import { loadDrawerState, saveDrawerState } from "../lib/drawerStorage";
 import { geocodingProvider } from "../lib/geocoding";
 import { defaultTileConfig } from "../lib/mapTiles";
 import { labelOrDefault } from "../lib/placeDefaults";
@@ -15,7 +17,7 @@ import { MapLegend } from "./MapLegend";
 import { PinDraftPopover } from "./PinDraftPopover";
 import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
-import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, Place, PlaceCreate, SheetState, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, Place, PlaceCreate, TabKey } from "../types";
 
 const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
 
@@ -26,7 +28,7 @@ export function MapWorkspace() {
   const [incidentDetails, setIncidentDetails] = useState<IncidentDetailsResponse | null>(null);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("places");
-  const [sheetState, setSheetState] = useState<SheetState>("half");
+  const [drawer, setDrawer] = useState<DrawerState>(() => loadDrawerState());
   const [addPinMode, setAddPinMode] = useState(false);
   const [draft, setDraft] = useState<DraftPin | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
@@ -70,6 +72,33 @@ export function MapWorkspace() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    saveDrawerState(drawer);
+  }, [drawer]);
+
+  useEffect(() => {
+    function onResize() {
+      setDrawer((current) => ({ ...current, widthPx: clampWidth(current.widthPx) }));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  function handleDrawerResize(px: number) {
+    setDrawer((current) => ({ ...current, widthPx: clampWidth(px) }));
+  }
+
+  function handleToggleCollapsed() {
+    setDrawer((current) => ({ ...current, collapsed: !current.collapsed }));
+  }
+
+  function handleDrawerPreset(preset: DrawerPreset) {
+    setDrawer((current) => {
+      if (preset === "peek") return { ...current, collapsed: true };
+      return { collapsed: false, widthPx: preset === "wide" ? DRAWER_WIDE : DRAWER_DEFAULT };
+    });
+  }
+
   const places: Place[] = useMemo(() => summary?.places ?? [], [summary]);
   const selected = useMemo(() => places.filter((place) => selectedIds.has(place.id)), [places, selectedIds]);
   const availableRadii = summary?.analysis.available_radii_m ?? [];
@@ -112,7 +141,7 @@ export function MapWorkspace() {
   function handleStartAddPin() {
     setAddPinMode(true);
     setActiveTab("places");
-    setSheetState("peek");
+    setDrawer((current) => ({ ...current, collapsed: true }));
   }
 
   function handleMapClick(latlng: LatLng) {
@@ -121,7 +150,7 @@ export function MapWorkspace() {
     setDraftError("");
     setAddPinMode(false);
     setActiveTab("places");
-    setSheetState("half");
+    setDrawer((current) => ({ ...current, collapsed: false }));
   }
 
   function handleSearchSelect(result: GeocodeResult) {
@@ -243,7 +272,10 @@ export function MapWorkspace() {
 
   return (
     <div className="mc-scope">
-      <div className={`mc-frame${addPinMode ? " is-placing-pin" : ""}`}>
+      <div
+        className={`mc-frame${addPinMode ? " is-placing-pin" : ""}`}
+        style={{ "--panel-width": `${drawer.collapsed ? DRAWER_PEEK : drawer.widthPx}px` } as CSSProperties}
+      >
         <MapCanvas
           places={places}
           selectedIds={selectedIds}
@@ -288,7 +320,7 @@ export function MapWorkspace() {
 
         <AssistantPanel dashboardState={assistantState} />
 
-        {error ? <p className="mc-error" role="status">{error}</p> : null}
+        {error && activeTab !== "analyze" ? <p className="mc-error" role="alert">{error}</p> : null}
 
         {places.length === 0 && !draft ? (
           <div className="mc-empty">
@@ -300,8 +332,11 @@ export function MapWorkspace() {
         <BottomSheet
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          sheetState={sheetState}
-          onSheetStateChange={setSheetState}
+          collapsed={drawer.collapsed}
+          widthPx={drawer.widthPx}
+          onToggleCollapsed={handleToggleCollapsed}
+          onResize={handleDrawerResize}
+          onPreset={handleDrawerPreset}
           tabBadges={{ places: places.length, compare: selectedIds.size }}
         >
           {activeTab === "places" ? (
@@ -337,6 +372,8 @@ export function MapWorkspace() {
               availableRadii={availableRadii}
               running={analyzing}
               incidentDetails={incidentDetails}
+              error={error}
+              panelWidthPx={drawer.widthPx}
               onChange={handleAnalysisChange}
               onRun={handleAnalyze}
             />

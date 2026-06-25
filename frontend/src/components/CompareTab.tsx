@@ -159,10 +159,9 @@ export function CompareTab({ selected, analysis, summary, comparison, running, o
         {REVISED_CAVEAT}
       </div>
 
-      <div style={{ height: 56 }} />
-      <div className="mc-footer">
-        <span className="note">{selected.length} selected - {analysis.radiusM} m</span>
-        <button type="button" className="mc-cta" disabled={!canRun} onClick={onRun}>{running ? "Comparing..." : "Compare places"}</button>
+      <div className="mc-compare-actions">
+        <span className="note">{selected.length} selected · {analysis.radiusM} m</span>
+        <button type="button" className="mc-cta" disabled={!canRun} onClick={onRun}>{running ? "Comparing…" : "Compare places"}</button>
       </div>
     </div>
   );

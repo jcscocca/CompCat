@@ -60,4 +60,11 @@ describe("CompareTab", () => {
 
     expect(screen.getByText(/run Analyze with All reported or Person to compare assault/i)).toBeInTheDocument();
   });
+
+  it("keeps the compare action in a sticky bar, not an absolute footer or spacer", () => {
+    const { container } = render(<CompareTab selected={[home, office]} analysis={analysis} summary={summary} comparison={null} running={false} onRun={vi.fn()} />);
+    expect(container.querySelector(".mc-footer")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-compare-actions")).toBeInTheDocument();
+    expect(container.querySelector(".mc-compare-actions")?.contains(screen.getByRole("button", { name: /compare places/i }))).toBe(true);
+  });
 });

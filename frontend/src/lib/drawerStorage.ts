@@ -1,11 +1,10 @@
+import type { DrawerState } from "../types";
 import { clampWidth, DRAWER_DEFAULT } from "./drawer";
 
 const WIDTH_KEY = "waypoint.drawer.width";
 const COLLAPSED_KEY = "waypoint.drawer.collapsed";
 
-export type StoredDrawer = { collapsed: boolean; widthPx: number };
-
-export function loadDrawerState(): StoredDrawer {
+export function loadDrawerState(): DrawerState {
   try {
     const rawWidth = localStorage.getItem(WIDTH_KEY);
     const rawCollapsed = localStorage.getItem(COLLAPSED_KEY);
@@ -16,7 +15,7 @@ export function loadDrawerState(): StoredDrawer {
   }
 }
 
-export function saveDrawerState(state: StoredDrawer): void {
+export function saveDrawerState(state: DrawerState): void {
   try {
     localStorage.setItem(WIDTH_KEY, String(state.widthPx));
     localStorage.setItem(COLLAPSED_KEY, String(state.collapsed));
