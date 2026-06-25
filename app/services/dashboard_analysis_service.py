@@ -108,7 +108,13 @@ def incident_details_for_places(
 ) -> dict[str, object]:
     _validate_date_range(analysis_start_date, analysis_end_date)
     if not radii_m:
-        return {"incidents": [], "returned_count": 0, "total_count": 0, "limit": limit, "radius_m": None}
+        return {
+            "incidents": [],
+            "returned_count": 0,
+            "total_count": 0,
+            "limit": limit,
+            "radius_m": None,
+        }
 
     radius_m = radii_m[0]
     clusters = [_cluster_data(row) for row in _selected_clusters(session, user_id_hash, place_ids)]

@@ -14,7 +14,10 @@ POLICY_CAVEATS = [
     "Waypoint describes reported incident context, not personal safety.",
     "Do not label places as safe or unsafe.",
     "Expected weekly visits are routine metadata, not a risk denominator.",
-    "Reported incident data can be incomplete, delayed, or filtered by the current analysis settings.",
+    (
+        "Reported incident data can be incomplete, delayed, or filtered by the "
+        "current analysis settings."
+    ),
 ]
 
 AVAILABLE_TOOLS = [
@@ -165,4 +168,3 @@ def _missing_context(
     if not state.radii_m:
         missing.append("No analysis radius is selected.")
     return missing
-
