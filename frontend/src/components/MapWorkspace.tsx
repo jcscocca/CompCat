@@ -95,7 +95,7 @@ export function MapWorkspace() {
   function handleDrawerPreset(preset: DrawerPreset) {
     setDrawer((current) => {
       if (preset === "peek") return { ...current, collapsed: true };
-      return { collapsed: false, widthPx: preset === "wide" ? DRAWER_WIDE : DRAWER_DEFAULT };
+      return { collapsed: false, widthPx: clampWidth(preset === "wide" ? DRAWER_WIDE : DRAWER_DEFAULT) };
     });
   }
 

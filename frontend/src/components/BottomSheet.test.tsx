@@ -4,7 +4,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BottomSheet } from "./BottomSheet";
-import { DRAWER_DEFAULT } from "../lib/drawer";
+import { clampWidth, DRAWER_DEFAULT, DRAWER_WIDE } from "../lib/drawer";
+
+function setViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", { value: width, configurable: true, writable: true });
+}
 
 afterEach(cleanup);
 
@@ -44,6 +48,17 @@ describe("BottomSheet", () => {
     expect(screen.getByRole("button", { name: /peek/i })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: /wide/i }));
     expect(props.onPreset).toHaveBeenCalledWith("wide");
+  });
+
+  it("keeps the Wide preset pressed when its width is clamped on a narrow viewport", () => {
+    setViewport(800); // drawerMax() == 576, so clampWidth(DRAWER_WIDE=640) == 576
+    try {
+      renderSheet({ widthPx: clampWidth(DRAWER_WIDE) });
+      expect(screen.getByRole("button", { name: /wide/i })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: /default/i })).toHaveAttribute("aria-pressed", "false");
+    } finally {
+      setViewport(1024);
+    }
   });
 
   it("marks Peek pressed when collapsed", () => {

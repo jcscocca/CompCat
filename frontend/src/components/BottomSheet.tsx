@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 
-import { DRAWER_DEFAULT, DRAWER_MIN, DRAWER_PEEK, DRAWER_RESIZE_STEP, DRAWER_WIDE, drawerMax, type DrawerPreset } from "../lib/drawer";
+import { clampWidth, DRAWER_DEFAULT, DRAWER_MIN, DRAWER_PEEK, DRAWER_RESIZE_STEP, DRAWER_WIDE, drawerMax, type DrawerPreset } from "../lib/drawer";
 import type { TabKey } from "../types";
 
 type Props = {
@@ -89,8 +89,8 @@ export function BottomSheet({
   function presetPressed(preset: DrawerPreset) {
     if (preset === "peek") return collapsed;
     if (collapsed) return false;
-    if (preset === "default") return widthPx === DRAWER_DEFAULT;
-    return widthPx === DRAWER_WIDE;
+    if (preset === "default") return widthPx === clampWidth(DRAWER_DEFAULT);
+    return widthPx === clampWidth(DRAWER_WIDE);
   }
 
   function onHandlePointerDown(event: PointerEvent<HTMLDivElement>) {
