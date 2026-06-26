@@ -12,6 +12,14 @@ from urllib.request import Request, urlopen
 from app.parsers.base import parse_datetime
 from app.schemas import CrimeIncidentData
 
+CRIME_DATA_FLOOR = date(2018, 1, 1)
+
+
+def floor_start_date(start_date: date | None) -> date:
+    if start_date is None or start_date < CRIME_DATA_FLOOR:
+        return CRIME_DATA_FLOOR
+    return start_date
+
 
 class SeattleSocrataClient:
     def __init__(self, base_url: str, dataset_id: str, app_token: str | None = None) -> None:
@@ -26,10 +34,10 @@ class SeattleSocrataClient:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> list[CrimeIncidentData]:
+        start_date = floor_start_date(start_date)
         query_params = {"$limit": limit, "$offset": offset}
-        if start_date or end_date:
-            query_params["$order"] = "offense_date DESC"
-            query_params["$where"] = _date_window_where(start_date, end_date)
+        query_params["$order"] = "offense_date DESC"
+        query_params["$where"] = _date_window_where(start_date, end_date)
         query = urlencode(query_params)
         request = Request(f"{self.base_url}/{self.dataset_id}.json?{query}")
         if self.app_token:
