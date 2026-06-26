@@ -30,7 +30,7 @@ def test_dashboard_summary_scopes_to_latest_run_not_all_runs(tmp_path):
     headers = {"X-Demo-User-Id": "demo@example.com"}
 
     client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (
@@ -73,7 +73,7 @@ def test_dashboard_summary_returns_places_totals_privacy_and_exports(tmp_path):
     headers = {"X-Demo-User-Id": "demo@example.com"}
 
     client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (

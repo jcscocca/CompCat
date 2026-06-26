@@ -15,7 +15,7 @@ from app.services.normalization_service import normalize_import
 router = APIRouter()
 
 
-@router.post("/imports")
+@router.post("/internal/imports", include_in_schema=False)
 async def create_import(
     file: Annotated[UploadFile, File()],
     user_id_hash: Annotated[str, Depends(current_user_hash)],
@@ -28,7 +28,7 @@ async def create_import(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/imports/{import_id}")
+@router.get("/internal/imports/{import_id}", include_in_schema=False)
 def read_import(
     import_id: str,
     user_id_hash: Annotated[str, Depends(current_user_hash)],
@@ -40,7 +40,7 @@ def read_import(
     return summary
 
 
-@router.post("/imports/{import_id}/normalize")
+@router.post("/internal/imports/{import_id}/normalize", include_in_schema=False)
 def normalize(
     import_id: str,
     user_id_hash: Annotated[str, Depends(current_user_hash)],

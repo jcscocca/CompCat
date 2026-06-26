@@ -81,7 +81,7 @@ def test_tableau_export_csv_scopes_to_latest_run_not_all_runs(tmp_path):
     headers = {"X-Demo-User-Id": "demo@example.com"}
 
     client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (

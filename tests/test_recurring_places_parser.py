@@ -26,7 +26,7 @@ def test_recurring_places_upload_creates_places_without_normalize(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/imports",
+        "/internal/imports",
         headers={"X-Demo-User-Id": "demo@example.com"},
         files={
             "file": (
