@@ -113,9 +113,10 @@ def _tool_arguments(
     The agent already holds the authoritative selection (places, radius, dates),
     so we inject it and let any model-provided values override.
     """
+    raw_arguments = model_arguments if isinstance(model_arguments, dict) else {}
     arguments = {
         key: value
-        for key, value in dict(model_arguments or {}).items()
+        for key, value in raw_arguments.items()
         if value not in (None, "", [])
     }
     if tool_name not in SELECTION_TOOLS:
@@ -140,7 +141,9 @@ def _tool_arguments(
     if tool_name == "compare_places":
         defaults["radius_m"] = dashboard_state.radii_m[0] if dashboard_state.radii_m else None
     else:
-        defaults["radii_m"] = list(dashboard_state.radii_m)
+        # AssistantDashboardState allows duplicate radii; the request schema requires them
+        # unique, so dedupe (order-preserving) before backfilling.
+        defaults["radii_m"] = list(dict.fromkeys(dashboard_state.radii_m))
 
     merged = {key: value for key, value in defaults.items() if value not in (None, "", [])}
     merged.update(arguments)

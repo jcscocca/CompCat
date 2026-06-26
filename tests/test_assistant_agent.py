@@ -244,3 +244,71 @@ def test_agent_fills_selection_tool_args_from_dashboard_state(tmp_path):
     assert events[1].data["arguments"]["analysis_start_date"] == "2024-01-01"
     assert events[1].data["result"]["summary_count"] >= 1
 
+
+def test_agent_tolerates_non_dict_tool_arguments(tmp_path):
+    # Small local models sometimes emit `arguments` as a bare scalar/list instead of an
+    # object. The agent must treat that as "no arguments" and backfill from the dashboard
+    # state rather than crashing the turn with an uncaught TypeError.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        [
+            '{"type":"tool_call","tool_name":"run_place_analysis","arguments":1}',
+            '{"type":"final","message":"One reported incident in the selected context."}',
+        ]
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze January.")],
+                AssistantDashboardState(
+                    selected_place_ids=["place-1"],
+                    analysis_start_date=date(2024, 1, 1),
+                    analysis_end_date=date(2024, 1, 31),
+                    radii_m=[250],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "tool", "token", "done"]
+    assert events[1].data["tool_name"] == "run_place_analysis"
+    assert events[1].data["arguments"]["place_ids"] == ["place-1"]
+    assert events[1].data["arguments"]["radii_m"] == [250]
+
+
+def test_agent_dedupes_duplicate_radii_when_backfilling(tmp_path):
+    # AssistantDashboardState permits duplicate radii, but the tool request schema requires
+    # them unique. Backfilling raw duplicates would fail validation and error the whole turn,
+    # so the agent must dedupe the dashboard-sourced radii before running the tool.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        [
+            '{"type":"tool_call","tool_name":"run_place_analysis","arguments":{}}',
+            '{"type":"final","message":"One reported incident in the selected context."}',
+        ]
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze January.")],
+                AssistantDashboardState(
+                    selected_place_ids=["place-1"],
+                    analysis_start_date=date(2024, 1, 1),
+                    analysis_end_date=date(2024, 1, 31),
+                    radii_m=[250, 250],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "tool", "token", "done"]
+    assert events[1].data["arguments"]["radii_m"] == [250]
+
