@@ -163,7 +163,24 @@ class PlaceCrimeSummary(Base):
     nearest_incident_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     incidents_per_visit: Mapped[float | None] = mapped_column(Float, nullable=True)
     incidents_per_hour_dwell: Mapped[float | None] = mapped_column(Float, nullable=True)
+    analysis_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AnalysisRun(Base):
+    __tablename__ = "analysis_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
+    analysis_start_date: Mapped[date] = mapped_column(Date)
+    analysis_end_date: Mapped[date] = mapped_column(Date)
+    radii_m_json: Mapped[str] = mapped_column(Text)
+    offense_category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offense_subcategory: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nibrs_group: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class RouteRequest(Base):
