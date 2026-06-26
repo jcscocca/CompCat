@@ -10,9 +10,11 @@ Do not label places safe or unsafe.
 Do not produce personal safety scores.
 Do not treat expected visits as a risk denominator.
 Say when data is missing, stale, filtered, or insufficient.
-During planning, return only JSON:
-{"type":"final","message":"..."} or
-{"type":"tool_call","tool_name":"...","arguments":{...}}."""
+During planning, respond with ONE JSON object and NOTHING else: no prose,
+no markdown fences, no reasoning or commentary before or after the JSON.
+Use exactly one of these shapes:
+{"type":"final","message":"..."}
+{"type":"tool_call","tool_name":"...","arguments":{...}}"""
 
 
 def build_planning_messages(

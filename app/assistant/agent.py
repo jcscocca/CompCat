@@ -18,6 +18,7 @@ from app.assistant.tools import AssistantToolError, execute_tool
 from app.config import get_settings
 
 SAFE_UNSAFE_TERMS = ("safest", "least safe", "unsafe", "safe?")
+SELECTION_TOOLS = ("run_place_analysis", "compare_places", "get_incident_details")
 
 
 async def run_assistant_turn(
@@ -60,11 +61,12 @@ async def run_assistant_turn(
         tool_results: list[dict[str, Any]] = []
         tool_calls = 0
         while plan.get("type") == "tool_call" and tool_calls < max_tool_calls:
+            tool_name = str(plan.get("tool_name"))
             tool_result = execute_tool(
                 session,
                 user_id_hash,
-                str(plan.get("tool_name")),
-                dict(plan.get("arguments") or {}),
+                tool_name,
+                _tool_arguments(tool_name, dashboard_state, plan.get("arguments")),
             )
             yield AssistantStreamEvent(event="tool", data=tool_result)
             tool_results.append(tool_result)
@@ -98,6 +100,51 @@ def _latest_user_text(messages: list[AssistantChatMessage]) -> str:
 def _asks_for_safety_score(text: str) -> bool:
     lowered = text.lower()
     return any(term in lowered for term in SAFE_UNSAFE_TERMS)
+
+
+def _tool_arguments(
+    tool_name: str,
+    dashboard_state: AssistantDashboardState,
+    model_arguments: Any,
+) -> dict[str, Any]:
+    """Backfill selection-tool arguments from the dashboard state.
+
+    Small local models routinely emit a ``tool_call`` with empty ``arguments``.
+    The agent already holds the authoritative selection (places, radius, dates),
+    so we inject it and let any model-provided values override.
+    """
+    arguments = {
+        key: value
+        for key, value in dict(model_arguments or {}).items()
+        if value not in (None, "", [])
+    }
+    if tool_name not in SELECTION_TOOLS:
+        return arguments
+
+    defaults: dict[str, Any] = {
+        "place_ids": list(dashboard_state.selected_place_ids),
+        "analysis_start_date": (
+            dashboard_state.analysis_start_date.isoformat()
+            if dashboard_state.analysis_start_date
+            else None
+        ),
+        "analysis_end_date": (
+            dashboard_state.analysis_end_date.isoformat()
+            if dashboard_state.analysis_end_date
+            else None
+        ),
+        "offense_category": dashboard_state.offense_category,
+        "offense_subcategory": dashboard_state.offense_subcategory,
+        "nibrs_group": dashboard_state.nibrs_group,
+    }
+    if tool_name == "compare_places":
+        defaults["radius_m"] = dashboard_state.radii_m[0] if dashboard_state.radii_m else None
+    else:
+        defaults["radii_m"] = list(dashboard_state.radii_m)
+
+    merged = {key: value for key, value in defaults.items() if value not in (None, "", [])}
+    merged.update(arguments)
+    return merged
 
 
 def _parse_model_json(raw: str) -> dict[str, Any]:

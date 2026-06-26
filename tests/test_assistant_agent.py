@@ -204,3 +204,43 @@ def test_agent_redirects_safe_unsafe_language_without_model_call(tmp_path):
     assert "reported incident context" in events[1].data["delta"]
     assert client.calls == []
 
+
+def test_agent_fills_selection_tool_args_from_dashboard_state(tmp_path):
+    # Real local models often emit a tool_call with empty arguments; the agent must
+    # backfill the current selection (place/radius/dates) from the dashboard state.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        [
+            '{"type":"tool_call","tool_name":"run_place_analysis","arguments":{}}',
+            '{"type":"final","message":"I found reported incidents in the selected context."}',
+        ]
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(
+                        role="user", content="How many incidents near my place in January?"
+                    )
+                ],
+                AssistantDashboardState(
+                    selected_place_ids=["place-1"],
+                    analysis_start_date=date(2024, 1, 1),
+                    analysis_end_date=date(2024, 1, 31),
+                    radii_m=[250],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "tool", "token", "done"]
+    assert events[1].data["tool_name"] == "run_place_analysis"
+    assert events[1].data["arguments"]["place_ids"] == ["place-1"]
+    assert events[1].data["arguments"]["radii_m"] == [250]
+    assert events[1].data["arguments"]["analysis_start_date"] == "2024-01-01"
+    assert events[1].data["result"]["summary_count"] >= 1
+
