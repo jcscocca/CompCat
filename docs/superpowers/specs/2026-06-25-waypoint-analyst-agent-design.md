@@ -1,5 +1,10 @@
 # Waypoint Analyst Agent Design
 
+> Status: reconciled with the shipped v1 implementation (2026-06-25). The Agent
+> Loop, Prompt Policy, Semantic Layer, and tool sections describe the agent as
+> built — notably the configurable tool-call limit, the JSON-only planning
+> contract with no separate repair round, and dashboard-state argument backfill.
+
 ## Objective
 
 Build a Tableau-Agent-like analyst for Waypoint that can explain the current
@@ -123,7 +128,9 @@ include in prompts.
   radius and date range.
 - `active_filters`: selected place ids, analysis start/end dates, radii,
   offense category, offense subcategory, and NIBRS group.
-- `available_tools`: tool names and argument schemas.
+- `available_tools`: tool names and short descriptions (not full argument
+  schemas; selection-tool arguments are backfilled from dashboard state — see
+  Agent Loop).
 - `policy_caveats`: fixed caveats that responses must respect.
 - `missing_context`: plain-language notes when the dashboard lacks places,
   summaries, selected place ids, date range, or incident data.
@@ -214,8 +221,7 @@ Execution:
 
 ### `suggest_followups`
 
-Returns deterministic follow-up question suggestions derived from the semantic
-packet and available tools.
+Returns a fixed list of deterministic follow-up question suggestions.
 
 Arguments:
 
@@ -224,9 +230,10 @@ Arguments:
 Execution:
 
 - Does not call the LLM.
-- Suggests questions such as comparing selected places, checking another radius,
-  inspecting incident details, or narrowing by date range when the current
-  context supports those actions.
+- Returns a fixed set of suggestions (compare selected places, re-run at a
+  different radius, inspect incident details, narrow by offense category or date
+  range). The list is currently static rather than derived from the semantic
+  packet or current context.
 
 ## Agent Loop
 
@@ -234,9 +241,13 @@ The v1 agent loop is bounded and deterministic around tool authority.
 
 Maximums:
 
-- At most three model calls per user request.
-- At most two tool executions per user request.
-- At most one state-changing analysis tool per user request.
+- One planning model call, then up to `assistant_max_tool_calls` follow-up model
+  calls, so model calls are bounded at `1 + assistant_max_tool_calls`.
+- At most `assistant_max_tool_calls` tool executions per user request
+  (`MCA_ASSISTANT_MAX_TOOL_CALLS`, default 2).
+
+The loop does not separately cap the number of state-changing tools; the overall
+tool-call limit is the only bound.
 
 Allowed model outputs:
 
@@ -250,9 +261,15 @@ or:
 {"type":"tool_call","tool_name":"run_place_analysis","arguments":{...}}
 ```
 
-Waypoint parses model output as JSON. If parsing fails, Waypoint asks the model
-one repair question. If repair fails, the route returns a user-safe error event
-and does not execute a tool.
+Waypoint parses model output as JSON. The planning prompt requires a single JSON
+object with no surrounding prose or markdown fences. If parsing fails, Waypoint
+emits a user-safe error event and does not execute a tool; there is no separate
+model repair round.
+
+Because small local models routinely emit a `tool_call` with empty `arguments`,
+Waypoint backfills selection-tool arguments (place ids, radius or radii, dates,
+and offense filters) from the authoritative dashboard state before validation,
+and lets any model-provided values override the backfilled defaults.
 
 State-changing tools:
 
@@ -266,17 +283,20 @@ scope limits state changes to existing analysis/comparison records.
 
 ## Prompt Policy
 
-The system prompt tells the model:
+The planning system prompt tells the model:
 
 - You are Waypoint's reported-incident analyst.
-- Use only the semantic context and tool results.
-- Do not call places safe or unsafe.
+- Use only the semantic context and approved tool results.
+- Do not label places safe or unsafe.
 - Do not produce personal safety scores.
 - Do not treat expected visits as a risk denominator.
 - Say when data is missing, stale, filtered, or insufficient.
-- Ask for missing place selection, date range, or radius when required.
-- Prefer concise explanations with concrete counts, dates, radii, and caveats.
-- Return only the required JSON object during planning calls.
+- During planning, respond with exactly one JSON object and nothing else: no
+  prose, no markdown fences, and no commentary before or after the JSON.
+
+The follow-up prompt (sent after tool results) additionally instructs the model
+to narrate using reported-incident language and concrete counts, and to return a
+final JSON answer once no further tool is needed.
 
 ## Frontend Experience
 
