@@ -13,9 +13,16 @@ PUBLIC_PATHS = {
     "/dashboard/neighborhood",
     "/assistant/chat",
     "/exports/tableau/place-summary.csv",
+    "/exports/tableau/route-alternatives.csv",
+    "/exports/tableau/route-segments.csv",
+    "/exports/tableau/route-context.csv",
+    "/exports/tableau/statistical-comparisons.csv",
+    "/places/{place_id}",
 }
 
 # After internal-gating, none of these may appear in the public OpenAPI schema.
+# "/imports" intentionally has no trailing slash — the route is bare POST /imports.
+# Do not "fix" it to "/imports/", or the guard would stop matching that path.
 FORBIDDEN_PREFIXES = ("/internal/", "/analysis/", "/routes/", "/imports", "/crime/")
 
 
