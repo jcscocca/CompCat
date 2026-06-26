@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AnalyzeTab } from "./AnalyzeTab";
-import type { AnalysisSettings, DashboardSummary, Place } from "../types";
+import { METHODS_DEFINITIONS } from "../lib/methodsDefinitions";
+import type { AnalysisSettings, DashboardSummary, NeighborhoodAnalysis, NeighborhoodPlace, Place } from "../types";
 
 const home: Place = {
   id: "p1", display_label: "Home", latitude: 47.61, longitude: -122.33, visit_count: 5,
@@ -27,6 +28,20 @@ const analyzedSummary: DashboardSummary = {
   ],
   analysis: { available_radii_m: [250] },
   exports: { tableau_place_summary_csv: "/x.csv" },
+};
+
+const homePlace: NeighborhoodPlace = {
+  place_id: "p1", place_label: "Home", beat: "M2", radius_m: 250,
+  baseline_available: true, decision: "above_clear", place_incident_count: 12,
+  beat_incident_count: 60, place_rate: 0.67, beat_rate: 0.17, rate_ratio: 4.0,
+  ci_lower: 2.1, ci_upper: 7.6, adjusted_p_value: 0.002, method: "exact_conditional_poisson",
+  overdispersion_status: "poisson_ok", minimum_data_status: "met",
+  nearest_incident_m: 42, monthly_counts: [1, 2, 1, 3, 2, 3], type_mix: [{ label: "ASSAULT", count: 7 }],
+};
+
+const neighborhood: NeighborhoodAnalysis = {
+  radius_m: 250, analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30",
+  offense_category: null, pairwise: [], places: [homePlace],
 };
 
 afterEach(cleanup);
@@ -55,47 +70,75 @@ describe("AnalyzeTab", () => {
     expect(screen.getByRole("button", { name: /run analysis/i })).toBeDisabled();
   });
 
-  it("summarizes analyzed findings in plain language", () => {
-    render(<AnalyzeTab selected={[home, office]} analysis={{ ...analysis, offenseCategory: "" }} summary={analyzedSummary} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
-
-    expect(screen.getByText("Findings summary")).toBeInTheDocument();
-    expect(screen.getByText("Office has the highest reported incident count in the selected radius (152 reported incidents).")).toBeInTheDocument();
-    expect(screen.getByText("Property / Theft is the largest reported incident type across the selected places.")).toBeInTheDocument();
-    expect(screen.getByText("Person / Assault appears in the selected places; use Compare for side-by-side context.")).toBeInTheDocument();
-    expect(screen.getByText(/reported incident patterns do not predict personal risk/i)).toBeInTheDocument();
-    expect(screen.queryByText(/more likely to experience/i)).not.toBeInTheDocument();
+  it("renders a verdict block and exposes every measure’s definition", () => {
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        summary={analyzedSummary}
+        availableRadii={[250]}
+        running={false}
+        error={undefined}
+        panelWidthPx={640}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/above its beat/i)).toBeInTheDocument();
+    expect(screen.getByText("4.0×")).toBeInTheDocument();
+    const ids = new Set(METHODS_DEFINITIONS.map((d) => d.id));
+    for (const id of ["reportedIncidentRate", "beatBaselineRate", "rateRatio", "confidenceInterval", "adjustedPValue", "overdispersion", "minimumDataStatus", "nearestIncident", "monthlyTrend"]) {
+      expect(ids.has(id)).toBe(true);
+    }
   });
 
-  it("summarizes a single selected place without pretending to compare it", () => {
-    render(<AnalyzeTab selected={[home]} analysis={{ ...analysis, offenseCategory: "" }} summary={analyzedSummary} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
-
-    expect(screen.getByText("Home has 44 matching reported incidents within 250 m for the selected filters.")).toBeInTheDocument();
-    expect(screen.queryByText(/highest reported incident count/i)).not.toBeInTheDocument();
+  it("no longer renders the retired crime-mix chart", () => {
+    render(<AnalyzeTab selected={[home]} analysis={analysis} summary={analyzedSummary} availableRadii={[250]} running={false} neighborhood={null} onChange={vi.fn()} onRun={vi.fn()} />);
+    expect(screen.queryByText("Crime mix")).not.toBeInTheDocument();
   });
 
-  it("shows aggregate charts for crime mix and specific offenses", () => {
-    render(<AnalyzeTab selected={[home, office]} analysis={{ ...analysis, offenseCategory: "" }} summary={analyzedSummary} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
-
-    const charts = screen.getByLabelText("Reported incident charts");
-    expect(within(charts).getByText("Crime mix")).toBeInTheDocument();
-    expect(within(charts).getByText("Property")).toBeInTheDocument();
-    expect(within(charts).getByText("160")).toBeInTheDocument();
-    expect(within(charts).getByText("Person / violent")).toBeInTheDocument();
-    expect(within(charts).getAllByText("30").length).toBeGreaterThanOrEqual(2);
-    expect(within(charts).getByText("Other non-violent")).toBeInTheDocument();
-    expect(within(charts).getAllByText("6").length).toBeGreaterThanOrEqual(2);
-
-    expect(within(charts).getByText("Specific offenses")).toBeInTheDocument();
-    expect(within(charts).getByText("Theft")).toBeInTheDocument();
-    expect(within(charts).getByText("150")).toBeInTheDocument();
-    expect(within(charts).getByText("Assault")).toBeInTheDocument();
-    expect(within(charts).getByText("Burglary")).toBeInTheDocument();
+  it("shows a fallback line when a place has no beat baseline", () => {
+    const noBaseline: NeighborhoodPlace = {
+      ...homePlace, place_id: "p3", place_label: "Cabin", baseline_available: false,
+      decision: "baseline_unavailable", place_incident_count: 3,
+    };
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        summary={analyzedSummary}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={{ ...neighborhood, places: [noBaseline] }}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/neighborhood baseline unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 reported incidents in range; no beat baseline\./i)).toBeInTheDocument();
   });
 
-  it("prompts users to run analysis before showing findings", () => {
-    render(<AnalyzeTab selected={[home]} analysis={analysis} summary={{ ...analyzedSummary, crime_summaries: [] }} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
-
-    expect(screen.getByText("Run analysis to summarize reported incident patterns for the selected places.")).toBeInTheDocument();
+  it("renders one line per pairwise comparison", () => {
+    render(
+      <AnalyzeTab
+        selected={[home, office]}
+        analysis={analysis}
+        summary={analyzedSummary}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={{
+          ...neighborhood,
+          places: [homePlace],
+          pairwise: [
+            { a_place_id: "p1", a_label: "Home", b_place_id: "p2", b_label: "Office", rate_ratio: 2.5, ci_lower: 1.2, ci_upper: 5.1, adjusted_p_value: 0.01 },
+          ],
+        }}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Home vs Office: 2\.5× · 95% CI 1\.2–5\.1× · adj p 0\.010/i)).toBeInTheDocument();
   });
 
   it("renders reported incident details in a table", () => {
@@ -161,7 +204,7 @@ describe("AnalyzeTab", () => {
     expect(screen.getByText("No matching reported incidents for the selected filters.")).toBeInTheDocument();
   });
 
-  it("places the run controls in a sticky query bar above the findings, with no absolute footer", () => {
+  it("places the run controls in a sticky query bar above the results, with no absolute footer", () => {
     const { container } = render(<AnalyzeTab selected={[home]} analysis={analysis} summary={analyzedSummary} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(container.querySelector(".mc-querybar")).toBeInTheDocument();
     expect(container.querySelector(".mc-footer")).not.toBeInTheDocument();
@@ -198,24 +241,27 @@ describe("AnalyzeTab", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
   });
 
-  it("uses the mid-range layout — cards with 2-up charts — between the thresholds", () => {
-    const { container } = render(<AnalyzeTab selected={[home, office]} analysis={{ ...analysis, offenseCategory: "" }} summary={analyzedSummary} availableRadii={[250]} running={false} panelWidthPx={500} incidentDetails={oneIncident} onChange={vi.fn()} onRun={vi.fn()} />);
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(container.querySelector(".mc-incident-cards")).toBeInTheDocument();
-    expect(container.querySelector(".mc-analysis-charts")).toHaveClass("is-2up");
-  });
-
-  it("renders 2-up charts only when the panel is wide enough", () => {
-    const { container, rerender } = render(<AnalyzeTab selected={[home, office]} analysis={{ ...analysis, offenseCategory: "" }} summary={analyzedSummary} availableRadii={[250]} running={false} panelWidthPx={380} onChange={vi.fn()} onRun={vi.fn()} />);
-    expect(container.querySelector(".mc-analysis-charts")).not.toHaveClass("is-2up");
-    rerender(<AnalyzeTab selected={[home, office]} analysis={{ ...analysis, offenseCategory: "" }} summary={analyzedSummary} availableRadii={[250]} running={false} panelWidthPx={640} onChange={vi.fn()} onRun={vi.fn()} />);
-    expect(container.querySelector(".mc-analysis-charts")).toHaveClass("is-2up");
-  });
-
   it("shows loading skeletons while analysis is running", () => {
     const { container } = render(<AnalyzeTab selected={[home]} analysis={analysis} summary={analyzedSummary} availableRadii={[250]} running={true} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.getByText("Running analysis…")).toBeInTheDocument();
     expect(container.querySelector(".mc-skeleton")).toBeInTheDocument();
-    expect(screen.queryByText("Findings summary")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Verdict for/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a sparkline bar for each monthly_counts entry", () => {
+    // homePlace has monthly_counts of length 6; the VerdictBlock renders one <span> per entry
+    const { container } = render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        summary={analyzedSummary}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(container.querySelectorAll(".mc-spark span").length).toBe(6);
   });
 });

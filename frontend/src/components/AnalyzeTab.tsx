@@ -1,21 +1,37 @@
-import type { AnalysisSettings, CrimeSummary, DashboardSummary, IncidentDetail, IncidentDetailsResponse, Place } from "../types";
+import type {
+  AnalysisSettings,
+  DashboardSummary,
+  IncidentDetail,
+  IncidentDetailsResponse,
+  NeighborhoodAnalysis,
+  NeighborhoodPlace,
+  Place,
+} from "../types";
+import { MethodsAppendix } from "./MethodsAppendix";
 
 const INCIDENT_TABLE_MIN = 560;
-const CHARTS_TWO_UP_MIN = 460;
 
 type Props = {
   selected: Place[];
   analysis: AnalysisSettings;
+  // TODO(Task 9): `summary` is no longer used here — drop it and its MapWorkspace pass-site when wiring neighborhood.
   summary: DashboardSummary | null;
   availableRadii: number[];
   running: boolean;
   incidentDetails?: IncidentDetailsResponse | null;
+  /**
+   * Neighborhood baseline analysis (place-vs-beat verdicts + pairwise
+   * comparisons). Optional so callers that have not yet wired the fetch can
+   * still render the controls and incident details. When present, one verdict
+   * block renders per place and a pairwise section renders for each pair.
+   */
+  neighborhood?: NeighborhoodAnalysis | null;
   error?: string;
   /**
    * Current expanded drawer width in pixels, used to choose the incident
-   * layout (cards below {@link INCIDENT_TABLE_MIN}, table at/above) and the
-   * chart column count. When omitted it is treated as infinitely wide (table +
-   * 2-up charts); MapWorkspace always passes the live width.
+   * layout (cards below {@link INCIDENT_TABLE_MIN}, table at/above). When
+   * omitted it is treated as infinitely wide (table); MapWorkspace always
+   * passes the live width.
    */
   panelWidthPx?: number;
   onChange: (patch: Partial<AnalysisSettings>) => void;
@@ -29,6 +45,15 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: "SOCIETY", label: "Society" },
 ];
 
+const DECISION_COPY: Record<NeighborhoodPlace["decision"], { label: string; tone: string }> = {
+  above_clear: { label: "above its beat · statistically clear", tone: "hot" },
+  below_clear: { label: "below its beat · statistically clear", tone: "ok" },
+  not_clear: { label: "not statistically clear", tone: "muted" },
+  insufficient_data: { label: "insufficient data", tone: "muted" },
+  model_warning: { label: "needs analytical review", tone: "muted" },
+  baseline_unavailable: { label: "neighborhood baseline unavailable", tone: "muted" },
+};
+
 function titleCase(value: string) {
   return value
     .toLowerCase()
@@ -36,12 +61,6 @@ function titleCase(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function incidentTypeLabel(summary: Pick<CrimeSummary, "offense_category" | "offense_subcategory" | "nibrs_group">) {
-  const parts = [summary.offense_category, summary.offense_subcategory].filter((part): part is string => Boolean(part));
-  if (parts.length > 0) return parts.map(titleCase).join(" / ");
-  return summary.nibrs_group ? `NIBRS ${summary.nibrs_group}` : "All reported";
 }
 
 function incidentCategoryLabel(incident: IncidentDetail) {
@@ -77,163 +96,72 @@ function formatDistanceMeters(value: number) {
   return `${Math.round(value)} m`;
 }
 
-function findingEntries(summary: DashboardSummary | null, selected: Place[], radiusM: number) {
-  const selectedIds = new Set(selected.map((place) => place.id));
-  return (summary?.crime_summaries ?? []).filter(
-    (entry) => selectedIds.has(entry.place_cluster_id) && entry.radius_m === radiusM,
-  );
+function barHeight(value: number, all: number[]) {
+  const max = Math.max(1, ...all);
+  return Math.round((value / max) * 100);
 }
 
-type ChartRow = {
-  label: string;
-  total: number;
-  percent: number;
-  tone: "person" | "property" | "other";
-};
-
-function percentOf(total: number, value: number) {
-  return total > 0 ? Math.round((value / total) * 100) : 0;
-}
-
-function offenseLabel(entry: CrimeSummary) {
-  if (entry.offense_subcategory) return titleCase(entry.offense_subcategory);
-  if (entry.offense_category) return titleCase(entry.offense_category);
-  return entry.nibrs_group ? `NIBRS ${entry.nibrs_group}` : "Uncategorized";
-}
-
-function buildCrimeMixRows(entries: CrimeSummary[]): ChartRow[] {
-  const buckets: ChartRow[] = [
-    { label: "Person / violent", total: 0, percent: 0, tone: "person" },
-    { label: "Property", total: 0, percent: 0, tone: "property" },
-    { label: "Other non-violent", total: 0, percent: 0, tone: "other" },
-  ];
-
-  for (const entry of entries) {
-    if (entry.offense_category === "PERSON") buckets[0].total += entry.incident_count;
-    else if (entry.offense_category === "PROPERTY") buckets[1].total += entry.incident_count;
-    else buckets[2].total += entry.incident_count;
-  }
-
-  const total = buckets.reduce((sum, row) => sum + row.total, 0);
-  return buckets.map((row) => ({ ...row, percent: percentOf(total, row.total) }));
-}
-
-function buildOffenseRows(entries: CrimeSummary[]): ChartRow[] {
-  const totals = new Map<string, number>();
-  for (const entry of entries) {
-    const label = offenseLabel(entry);
-    totals.set(label, (totals.get(label) ?? 0) + entry.incident_count);
-  }
-
-  const max = Math.max(0, ...totals.values());
-  return Array.from(totals.entries())
-    .map(([label, total]) => ({ label, total, percent: percentOf(max, total), tone: "property" as const }))
-    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label))
-    .slice(0, 6);
-}
-
-function BarList({ rows }: { rows: ChartRow[] }) {
+function VerdictBlock({ place }: { place: NeighborhoodPlace }) {
+  const copy = DECISION_COPY[place.decision];
   return (
-    <div className="mc-chart-bars">
-      {rows.map((row) => (
-        <div className={`mc-chart-row tone-${row.tone}`} key={row.label}>
-          <div className="mc-chart-label">
-            <span>{row.label}</span>
-            <strong>{row.total}</strong>
-          </div>
-          <div className="mc-chart-track" aria-hidden="true">
-            <span className="mc-chart-fill" style={{ width: `${row.percent}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function IncidentCharts({ entries, wide }: { entries: CrimeSummary[]; wide: boolean }) {
-  if (entries.length === 0) return null;
-
-  const offenseRows = buildOffenseRows(entries);
-
-  return (
-    <section className={`mc-analysis-charts${wide ? " is-2up" : ""}`} aria-label="Reported incident charts">
-      <div className="mc-chart-card">
-        <div className="mc-breakdown-head">
-          <h5>Crime mix</h5>
-          <span>count</span>
-        </div>
-        <BarList rows={buildCrimeMixRows(entries)} />
+    <section className={`mc-verdict tone-${copy.tone}`} aria-label={`Verdict for ${place.place_label}`}>
+      <div className="mc-verdict-head">
+        {place.rate_ratio != null ? <span className="mc-ratio">{place.rate_ratio.toFixed(1)}×</span> : null}
+        <span className="mc-verdict-label">{copy.label}</span>
       </div>
-      <div className="mc-chart-card">
-        <div className="mc-breakdown-head">
-          <h5>Specific offenses</h5>
-          <span>top {offenseRows.length}</span>
-        </div>
-        <BarList rows={offenseRows} />
-      </div>
+      {place.baseline_available ? (
+        <>
+          <p className="mc-verdict-sub">
+            {place.place_label} vs beat {place.beat}: {place.place_rate?.toFixed(2)} vs {place.beat_rate?.toFixed(2)} /km²·day
+            {place.ci_lower != null ? ` · 95% CI ${place.ci_lower.toFixed(1)}–${place.ci_upper?.toFixed(1)}×` : null}
+          </p>
+          {place.monthly_counts?.length ? (
+            <div className="mc-spark" aria-hidden="true">
+              {place.monthly_counts.map((n, i) => (
+                <span key={i} style={{ height: `${barHeight(n, place.monthly_counts!)}%` }} />
+              ))}
+            </div>
+          ) : null}
+          <details className="mc-analytical">
+            <summary>Analytical detail</summary>
+            <dl>
+              <div><dt>Adjusted p-value</dt><dd>{place.adjusted_p_value?.toFixed(3)}</dd></div>
+              <div><dt>Dispersion</dt><dd>{place.overdispersion_status}</dd></div>
+              <div><dt>Method</dt><dd>{place.method}</dd></div>
+              <div><dt>Adequacy</dt><dd>{place.minimum_data_status}</dd></div>
+              <div><dt>Nearest</dt><dd>{place.nearest_incident_m != null ? `${Math.round(place.nearest_incident_m)} m` : "—"}</dd></div>
+            </dl>
+            {place.type_mix?.length ? (
+              <ul className="mc-typemix">
+                {place.type_mix.map((t) => <li key={t.label}>{t.label} · {t.count}</li>)}
+              </ul>
+            ) : null}
+          </details>
+        </>
+      ) : (
+        <p className="mc-verdict-sub">{place.place_incident_count} reported incidents in range; no beat baseline.</p>
+      )}
     </section>
   );
 }
 
-function buildFindings(summary: DashboardSummary | null, selected: Place[], radiusM: number) {
-  if (selected.length === 0) {
-    return ["Select one or more places to summarize reported incident patterns."];
-  }
-
-  const entries = findingEntries(summary, selected, radiusM);
-  if (entries.length === 0) {
-    return ["Run analysis to summarize reported incident patterns for the selected places."];
-  }
-
-  const selectedById = new Map(selected.map((place) => [place.id, place]));
-  const placeTotals = new Map<string, number>();
-  const typeTotals = new Map<string, { label: string; total: number }>();
-  let hasAssault = false;
-
-  for (const entry of entries) {
-    placeTotals.set(entry.place_cluster_id, (placeTotals.get(entry.place_cluster_id) ?? 0) + entry.incident_count);
-
-    const label = incidentTypeLabel(entry);
-    const type = typeTotals.get(label) ?? { label, total: 0 };
-    type.total += entry.incident_count;
-    typeTotals.set(label, type);
-
-    if (entry.offense_category === "PERSON" && entry.offense_subcategory === "ASSAULT") {
-      hasAssault = true;
-    }
-  }
-
-  const findings: string[] = [];
-
-  if (selected.length === 1) {
-    const [place] = selected;
-    const total = placeTotals.get(place.id) ?? 0;
-    findings.push(
-      `${place.display_label} has ${total} matching reported incident${total === 1 ? "" : "s"} within ${radiusM} m for the selected filters.`,
-    );
-  } else {
-    const highestPlace = Array.from(placeTotals.entries())
-      .map(([placeId, total]) => ({ place: selectedById.get(placeId), total }))
-      .filter((entry): entry is { place: Place; total: number } => Boolean(entry.place))
-      .sort((a, b) => b.total - a.total)[0];
-
-    if (highestPlace) {
-      findings.push(
-        `${highestPlace.place.display_label} has the highest reported incident count in the selected radius (${highestPlace.total} reported incidents).`,
-      );
-    }
-  }
-
-  const largestType = Array.from(typeTotals.values()).sort((a, b) => b.total - a.total)[0];
-  if (largestType) {
-    findings.push(`${largestType.label} is the largest reported incident type across the selected places.`);
-  }
-
-  if (hasAssault) {
-    findings.push("Person / Assault appears in the selected places; use Compare for side-by-side context.");
-  }
-
-  return findings;
+function PairwiseSection({ neighborhood }: { neighborhood: NeighborhoodAnalysis }) {
+  if (!neighborhood.pairwise?.length) return null;
+  return (
+    <section className="mc-pairwise" aria-label="Pairwise comparisons">
+      <div className="mc-breakdown-head">
+        <h5>Place-to-place comparisons</h5>
+        <span>{neighborhood.radius_m} m</span>
+      </div>
+      <ul>
+        {neighborhood.pairwise.map((pair) => (
+          <li key={`${pair.a_place_id}-${pair.b_place_id}`}>
+            {pair.a_label} vs {pair.b_label}: {pair.rate_ratio.toFixed(1)}× · 95% CI {pair.ci_lower.toFixed(1)}–{pair.ci_upper.toFixed(1)}× · adj p {pair.adjusted_p_value.toFixed(3)}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function IncidentDetailsTable({ details }: { details: IncidentDetailsResponse | null | undefined }) {
@@ -330,14 +258,11 @@ function IncidentDetailsCards({ details }: { details: IncidentDetailsResponse | 
   );
 }
 
-export function AnalyzeTab({ selected, analysis, summary, availableRadii, running, incidentDetails, error, panelWidthPx, onChange, onRun }: Props) {
+export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
   const canRun = selected.length >= 1 && !running;
-  const entries = findingEntries(summary, selected, analysis.radiusM);
-  const findings = buildFindings(summary, selected, analysis.radiusM);
   const width = panelWidthPx ?? Infinity;
   const incidentLayout = width >= INCIDENT_TABLE_MIN ? "table" : "cards";
-  const chartsWide = width >= CHARTS_TWO_UP_MIN;
 
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Analyze">
@@ -383,30 +308,23 @@ export function AnalyzeTab({ selected, analysis, summary, availableRadii, runnin
       {running ? (
         <div className="mc-analysis-loading" aria-live="polite" aria-busy="true">
           <span className="mc-sr">Running analysis…</span>
-          <div className="mc-skeleton" style={{ height: 84 }} />{/* findings */}
-          <div className="mc-skeleton" style={{ height: 132 }} />{/* charts */}
+          <div className="mc-skeleton" style={{ height: 96 }} />{/* verdict */}
+          <div className="mc-skeleton" style={{ height: 96 }} />{/* verdict */}
           <div className="mc-skeleton" style={{ height: 168 }} />{/* incidents */}
         </div>
       ) : (
         <>
-          <section className="mc-findings" aria-label="Findings summary">
-            <div className="mc-findings-head">
-              <h4>Findings summary</h4>
-              <span>{analysis.radiusM} m</span>
-            </div>
-            <ul>
-              {findings.map((finding) => <li key={finding}>{finding}</li>)}
-            </ul>
-            <p>Reported incident patterns do not predict personal risk.</p>
-          </section>
+          {neighborhood?.places?.map((place) => <VerdictBlock key={place.place_id} place={place} />)}
 
-          <IncidentCharts entries={entries} wide={chartsWide} />
+          {neighborhood?.pairwise?.length ? <PairwiseSection neighborhood={neighborhood} /> : null}
 
           {incidentLayout === "table" ? (
             <IncidentDetailsTable details={incidentDetails} />
           ) : (
             <IncidentDetailsCards details={incidentDetails} />
           )}
+
+          <MethodsAppendix />
         </>
       )}
     </div>

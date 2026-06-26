@@ -11,7 +11,5 @@ describe("map workspace styles", () => {
     expect(css).toMatch(/\.mc-incident-table th\{[^}]*font-size:11px;[^}]*color:#fff;/);
     expect(css).toMatch(/\.mc-incident-count\{[^}]*color:var\(--text\);/);
     expect(css).toMatch(/\.mc-breakdown-head h5\{[^}]*color:var\(--text\);/);
-    expect(css).toMatch(/\.mc-findings li\{[^}]*color:var\(--text\);/);
-    expect(css).toMatch(/\.mc-findings p\{[^}]*color:var\(--text\);/);
   });
 });
