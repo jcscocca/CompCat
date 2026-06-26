@@ -389,7 +389,11 @@ def test_dashboard_compare_rejects_cross_session_place_ids(tmp_path):
 def test_second_analyze_run_does_not_wipe_the_first(tmp_path):
     client = _client_with_places_and_crime(tmp_path)
     places = client.get("/places").json()["places"]
-    body = {"analysis_start_date": "2024-01-01", "analysis_end_date": "2024-01-31", "radii_m": [250]}
+    body = {
+        "analysis_start_date": "2024-01-01",
+        "analysis_end_date": "2024-01-31",
+        "radii_m": [250],
+    }
 
     client.post("/dashboard/analyze", json={**body, "place_ids": [places[0]["id"]]})
     client.post("/dashboard/analyze", json={**body, "place_ids": [places[1]["id"]]})

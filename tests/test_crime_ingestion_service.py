@@ -539,7 +539,7 @@ def test_summarize_for_user_retains_rows_across_two_calls(tmp_path):
     from app.models import PlaceCluster, PlaceCrimeSummary
     from app.services.crime_service import summarize_for_user
 
-    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     session = get_sessionmaker()()
 
     user_hash = "retention-test-user"

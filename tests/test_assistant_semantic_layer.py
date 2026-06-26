@@ -3,8 +3,6 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
 from app.assistant.schemas import AssistantDashboardState
 from app.assistant.semantic_layer import _crime_summaries, build_semantic_context
 from app.config import get_settings
