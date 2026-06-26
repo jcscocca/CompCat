@@ -132,7 +132,7 @@ With no `.env`, Waypoint uses a local SQLite database at
 of the box. Load the bundled sample crime data so analysis returns results:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/crime/ingest/sample
+curl -X POST http://127.0.0.1:8000/internal/crime/ingest/sample
 ```
 
 ### Running the dashboard
@@ -242,6 +242,10 @@ data through the admin endpoint.
 The dashboard drives the API for you, and FastAPI publishes interactive docs at `/docs`
 (Swagger UI) and `/openapi.json`. The public endpoints are grouped below.
 
+> Endpoints marked *internal* are hidden from the OpenAPI schema (`/internal/...`), allow
+> the demo-identity fallback, and are not called by the dashboard UI. Do not expose them
+> on bare public paths — `tests/test_internal_surface.py` enforces this.
+
 | Group | Endpoints |
 | --- | --- |
 | Health | `GET /health` |
@@ -250,11 +254,11 @@ The dashboard drives the API for you, and FastAPI publishes interactive docs at 
 | Places | `GET /places` · `POST /places` · `POST /places/bulk` · `PATCH /places/{id}` · `DELETE /places/{id}` |
 | Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` |
 | Analyst | `POST /assistant/chat` (Server-Sent Events) |
-| Routes | `POST /routes/alternatives` · `GET /routes/requests/{id}/comparison` |
-| Statistical analysis | `POST /analysis/sites/compare` · `POST /analysis/routes/compare` · `GET /analysis/comparisons/{id}` |
+| Routes (internal) | `POST /internal/routes/alternatives` · `GET /internal/routes/requests/{id}/comparison` |
+| Statistical analysis (internal) | `POST /internal/analysis/sites/compare` · `POST /internal/analysis/routes/compare` · `GET /internal/analysis/comparisons/{id}` |
 | Exports | `GET /exports/tableau/place-summary.csv` · `route-alternatives.csv` · `route-segments.csv` · `route-context.csv` · `statistical-comparisons.csv` |
-| Crime data | `POST /crime/ingest/sample` · `POST /crime/summarize` · `POST /admin/crime/ingest/socrata` |
-| Internal/demo | `POST /imports` · `GET /imports/{id}` · `POST /imports/{id}/normalize` |
+| Crime data | `POST /internal/crime/ingest/sample` · `POST /internal/crime/summarize` · `POST /admin/crime/ingest/socrata` |
+| Internal/demo | `POST /internal/imports` · `GET /internal/imports/{id}` · `POST /internal/imports/{id}/normalize` |
 
 A minimal end-to-end flow with `curl`:
 
@@ -269,7 +273,7 @@ curl -b demo.cookies -H "Content-Type: application/json" \
 
 # 3. Load sample crime data, then analyze the saved place
 #    (the bundled sample incidents are dated January 2024)
-curl -X POST http://127.0.0.1:8000/crime/ingest/sample
+curl -X POST http://127.0.0.1:8000/internal/crime/ingest/sample
 curl -b demo.cookies -H "Content-Type: application/json" \
   -d '{"place_ids":["<place_id>"],"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radii_m":[250,500]}' \
   http://127.0.0.1:8000/dashboard/analyze

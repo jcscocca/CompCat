@@ -25,7 +25,7 @@ def test_commute_scenario_upload_creates_dashboard_places(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/imports",
+        "/internal/imports",
         headers={"X-Demo-User-Id": "demo@example.com"},
         files={
             "file": (

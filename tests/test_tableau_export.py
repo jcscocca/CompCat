@@ -81,7 +81,7 @@ def test_tableau_export_csv_scopes_to_latest_run_not_all_runs(tmp_path):
     headers = {"X-Demo-User-Id": "demo@example.com"}
 
     client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (
@@ -91,7 +91,7 @@ def test_tableau_export_csv_scopes_to_latest_run_not_all_runs(tmp_path):
             )
         },
     )
-    client.post("/crime/ingest/sample")
+    client.post("/internal/crime/ingest/sample")
 
     summarize_body = {
         "analysis_start_date": "2024-01-01",
@@ -100,13 +100,13 @@ def test_tableau_export_csv_scopes_to_latest_run_not_all_runs(tmp_path):
     }
 
     # First run
-    client.post("/crime/summarize", headers=headers, json=summarize_body)
+    client.post("/internal/crime/summarize", headers=headers, json=summarize_body)
     first_rows = _data_rows(
         client.get("/internal/exports/tableau/place-summary.csv", headers=headers).text
     )
 
     # Second run — same params → old read-all would return 2× rows
-    client.post("/crime/summarize", headers=headers, json=summarize_body)
+    client.post("/internal/crime/summarize", headers=headers, json=summarize_body)
     second_rows = _data_rows(
         client.get("/internal/exports/tableau/place-summary.csv", headers=headers).text
     )

@@ -18,7 +18,7 @@ from app.services.route_service import (
 router = APIRouter()
 
 
-@router.post("/routes/alternatives")
+@router.post("/internal/routes/alternatives", include_in_schema=False)
 def alternatives(
     request: RouteRequestCreate,
     user_id_hash: Annotated[str, Depends(current_user_hash)],
@@ -30,7 +30,7 @@ def alternatives(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/routes/requests/{request_id}/comparison")
+@router.get("/internal/routes/requests/{request_id}/comparison", include_in_schema=False)
 def comparison(
     request_id: str,
     user_id_hash: Annotated[str, Depends(current_user_hash)],

@@ -9,7 +9,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def _run_summarize(client, headers, radii=None):
     client.post(
-        "/crime/summarize",
+        "/internal/crime/summarize",
         headers=headers,
         json={
             "analysis_start_date": "2024-01-01",
@@ -30,7 +30,7 @@ def test_dashboard_summary_scopes_to_latest_run_not_all_runs(tmp_path):
     headers = {"X-Demo-User-Id": "demo@example.com"}
 
     client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (
@@ -40,7 +40,7 @@ def test_dashboard_summary_scopes_to_latest_run_not_all_runs(tmp_path):
             )
         },
     )
-    client.post("/crime/ingest/sample")
+    client.post("/internal/crime/ingest/sample")
 
     # First run
     _run_summarize(client, headers, radii=[250])
@@ -73,7 +73,7 @@ def test_dashboard_summary_returns_places_totals_privacy_and_exports(tmp_path):
     headers = {"X-Demo-User-Id": "demo@example.com"}
 
     client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (
@@ -83,9 +83,9 @@ def test_dashboard_summary_returns_places_totals_privacy_and_exports(tmp_path):
             )
         },
     )
-    client.post("/crime/ingest/sample")
+    client.post("/internal/crime/ingest/sample")
     client.post(
-        "/crime/summarize",
+        "/internal/crime/summarize",
         headers=headers,
         json={
             "analysis_start_date": "2024-01-01",

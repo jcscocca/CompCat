@@ -21,12 +21,12 @@ class CrimeSummarizeRequest(BaseModel):
     radii_m: list[int] | None = Field(default=None)
 
 
-@router.post("/crime/ingest/sample")
+@router.post("/internal/crime/ingest/sample", include_in_schema=False)
 def ingest_sample(session: Annotated[Session, Depends(get_session)]) -> dict[str, int]:
     return ingest_sample_crime(session)
 
 
-@router.post("/crime/summarize")
+@router.post("/internal/crime/summarize", include_in_schema=False)
 def summarize(
     request: CrimeSummarizeRequest,
     user_id_hash: Annotated[str, Depends(current_user_hash)],

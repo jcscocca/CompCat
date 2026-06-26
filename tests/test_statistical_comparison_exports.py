@@ -44,7 +44,7 @@ def test_statistical_comparison_tableau_export_includes_site_pairwise_results(tm
     session.close()
 
     comparison_response = client.post(
-        "/analysis/sites/compare",
+        "/internal/analysis/sites/compare",
         json={
             "analysis_start_date": "2024-01-01",
             "analysis_end_date": "2024-01-31",
