@@ -17,7 +17,7 @@ def test_demo_api_flow_upload_normalize_crime_summarize_and_export(tmp_path):
     assert health.json()["status"] == "ok"
 
     upload = client.post(
-        "/imports",
+        "/internal/imports",
         headers=headers,
         files={
             "file": (
@@ -32,7 +32,7 @@ def test_demo_api_flow_upload_normalize_crime_summarize_and_export(tmp_path):
     assert upload.json()["status"] == "parsed"
     assert upload.json()["source_stop_count"] == 3
 
-    normalize = client.post(f"/imports/{import_id}/normalize", headers=headers)
+    normalize = client.post(f"/internal/imports/{import_id}/normalize", headers=headers)
     assert normalize.status_code == 200
     assert normalize.json()["stop_visit_count"] == 3
     assert normalize.json()["place_cluster_count"] == 1
