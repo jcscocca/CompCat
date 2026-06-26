@@ -8,6 +8,7 @@ from app.assistant.tools import AssistantToolError, execute_tool
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import CrimeIncident, PlaceCluster
+from tests.helpers_dashboard import session_with_places_and_beat_crime
 
 
 def _session_with_place_and_crime(tmp_path):
@@ -110,4 +111,46 @@ def test_get_incident_details_caps_limit_for_agent_path(tmp_path):
     assert result["arguments"]["limit"] == 100
     assert result["result"]["limit"] == 100
     assert result["result"]["total_count"] == 1
+
+
+def test_get_neighborhood_analysis_exposes_beat_baseline_stats(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    try:
+        result = execute_tool(
+            session,
+            user_hash,
+            "get_neighborhood_analysis",
+            {
+                "place_ids": [place_id],
+                "analysis_start_date": "2026-01-01",
+                "analysis_end_date": "2026-06-30",
+                "radii_m": [250],
+            },
+        )
+    finally:
+        session.close()
+
+    assert result["tool_name"] == "get_neighborhood_analysis"
+    place = result["result"]["places"][0]
+    assert place["beat"] == "M2"
+    assert place["baseline_available"] is True
+    # The CI / significance / verdict the assistant must interpret are all present.
+    for field in ("rate_ratio", "ci_lower", "ci_upper", "adjusted_p_value", "decision"):
+        assert field in place
+
+
+def test_neighborhood_tool_is_advertised_to_the_model():
+    from app.assistant.semantic_layer import AVAILABLE_TOOLS
+
+    names = {tool["name"] for tool in AVAILABLE_TOOLS}
+    assert "get_neighborhood_analysis" in names
+
+
+def test_planning_prompt_requests_statistical_interpretation():
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert "confidence interval" in text
+    assert "statistically significant" in text
+    assert "adjusted p-value" in text
 

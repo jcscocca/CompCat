@@ -18,7 +18,12 @@ from app.assistant.tools import AssistantToolError, execute_tool
 from app.config import get_settings
 
 SAFE_UNSAFE_TERMS = ("safest", "least safe", "unsafe", "safe?")
-SELECTION_TOOLS = ("run_place_analysis", "compare_places", "get_incident_details")
+SELECTION_TOOLS = (
+    "run_place_analysis",
+    "compare_places",
+    "get_neighborhood_analysis",
+    "get_incident_details",
+)
 
 
 async def run_assistant_turn(

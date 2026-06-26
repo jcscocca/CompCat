@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
+from app.analysis.beat_baselines import load_beat_areas
 from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardCompareRequest,
@@ -17,8 +19,14 @@ from app.services.dashboard_analysis_service import (
     incident_details_for_places,
 )
 from app.services.dashboard_service import dashboard_summary
+from app.services.neighborhood_service import neighborhood_analysis_for_places
 
 AGENT_INCIDENT_LIMIT = 100
+
+
+@lru_cache(maxsize=1)
+def _beat_areas() -> dict[str, float]:
+    return load_beat_areas()
 
 
 class AssistantToolError(ValueError):
@@ -66,6 +74,21 @@ def execute_tool(
                 offense_category=args.offense_category,
                 offense_subcategory=args.offense_subcategory,
                 nibrs_group=args.nibrs_group,
+            )
+            validated_arguments = args.model_dump(mode="json")
+        elif tool_name == "get_neighborhood_analysis":
+            args = DashboardAnalyzeRequest.model_validate(arguments)
+            result = neighborhood_analysis_for_places(
+                session=session,
+                user_id_hash=user_id_hash,
+                place_ids=args.place_ids,
+                radius_m=args.radii_m[0],
+                analysis_start_date=args.analysis_start_date,
+                analysis_end_date=args.analysis_end_date,
+                offense_category=args.offense_category,
+                offense_subcategory=args.offense_subcategory,
+                nibrs_group=args.nibrs_group,
+                area_lookup=_beat_areas(),
             )
             validated_arguments = args.model_dump(mode="json")
         elif tool_name == "get_incident_details":

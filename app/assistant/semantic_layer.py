@@ -35,6 +35,15 @@ AVAILABLE_TOOLS = [
         "description": "Compare reported incident context for selected places.",
     },
     {
+        "name": "get_neighborhood_analysis",
+        "description": (
+            "For each selected place, compare its reported-incident rate against its own "
+            "SPD police-beat baseline: exposure-adjusted rate ratio, 95% confidence "
+            "interval, statistical significance, and a verdict (above_clear, below_clear, "
+            "not_clear, or insufficient_data)."
+        ),
+    },
+    {
         "name": "get_incident_details",
         "description": "Fetch capped reported incident detail rows near selected places.",
     },
