@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.exports.tableau import build_place_summary_csv
 from app.models import PlaceCluster, PlaceCrimeSummary
 from app.schemas import PlaceCrimeSummaryData
+from app.services.analysis_runs import latest_analysis_run_id
 from app.services.crime_service import _cluster_data
 
 
@@ -16,12 +17,17 @@ def tableau_place_summary_csv(session: Session, user_id_hash: str) -> str:
             select(PlaceCluster).where(PlaceCluster.user_id_hash == user_id_hash)
         ).all()
     ]
-    summaries = [
-        _summary_data(row)
-        for row in session.scalars(
-            select(PlaceCrimeSummary).where(PlaceCrimeSummary.user_id_hash == user_id_hash)
-        ).all()
-    ]
+    run_id = latest_analysis_run_id(session, user_id_hash)
+    summaries = (
+        [
+            _summary_data(row)
+            for row in session.scalars(
+                select(PlaceCrimeSummary).where(PlaceCrimeSummary.analysis_run_id == run_id)
+            ).all()
+        ]
+        if run_id is not None
+        else []
+    )
     return build_place_summary_csv(clusters, summaries, tableau_safe=True)
 
 

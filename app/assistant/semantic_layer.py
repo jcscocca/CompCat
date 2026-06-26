@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.assistant.schemas import AssistantDashboardState, SemanticContextPacket
 from app.config import Settings
 from app.models import PlaceCluster, PlaceCrimeSummary
+from app.services.analysis_runs import latest_analysis_run_id
 from app.services.dashboard_service import dashboard_summary
 
 POLICY_CAVEATS = [
@@ -102,7 +103,10 @@ def _crime_summaries(
     user_id_hash: str,
     selected_ids: list[str],
 ) -> list[PlaceCrimeSummary]:
-    statement = select(PlaceCrimeSummary).where(PlaceCrimeSummary.user_id_hash == user_id_hash)
+    run_id = latest_analysis_run_id(session, user_id_hash)
+    if run_id is None:
+        return []
+    statement = select(PlaceCrimeSummary).where(PlaceCrimeSummary.analysis_run_id == run_id)
     if selected_ids:
         statement = statement.where(PlaceCrimeSummary.place_cluster_id.in_(selected_ids))
     return list(session.scalars(statement.order_by(PlaceCrimeSummary.radius_m.asc())))

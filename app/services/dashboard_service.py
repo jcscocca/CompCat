@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import PlaceCluster, PlaceCrimeSummary
+from app.services.analysis_runs import latest_analysis_run_id
 
 
 def dashboard_summary(
@@ -19,9 +20,14 @@ def dashboard_summary(
         .where(PlaceCluster.user_id_hash == user_id_hash)
         .order_by(PlaceCluster.visit_count.desc(), PlaceCluster.display_label.asc())
     ).all()
-    summaries = session.scalars(
-        select(PlaceCrimeSummary).where(PlaceCrimeSummary.user_id_hash == user_id_hash)
-    ).all()
+    run_id = latest_analysis_run_id(session, user_id_hash)
+    summaries = (
+        session.scalars(
+            select(PlaceCrimeSummary).where(PlaceCrimeSummary.analysis_run_id == run_id)
+        ).all()
+        if run_id is not None
+        else []
+    )
     privacy_counts = Counter(cluster.sensitivity_class for cluster in clusters)
     return {
         "totals": {

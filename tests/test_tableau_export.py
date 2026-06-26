@@ -1,7 +1,13 @@
 from datetime import date
+from pathlib import Path
+
+from fastapi.testclient import TestClient
 
 from app.exports.tableau import build_place_summary_csv
+from app.main import create_app
 from app.schemas import PlaceClusterData, PlaceCrimeSummaryData
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_tableau_export_excludes_sensitive_clusters_by_default_and_uses_display_coordinates():
@@ -56,6 +62,58 @@ def test_tableau_export_excludes_sensitive_clusters_by_default_and_uses_display_
     assert "47.61" in csv_text
     assert "47.609512" not in csv_text
     assert "PROPERTY" in csv_text
+
+
+def _data_rows(csv_text: str) -> list[str]:
+    """Return non-comment, non-header lines from a CSV response."""
+    lines = [r for r in csv_text.strip().splitlines() if r and not r.startswith("#")]
+    return lines[1:]  # strip header row
+
+
+def test_tableau_export_csv_scopes_to_latest_run_not_all_runs(tmp_path):
+    """Two identical analyze runs must not double-count rows in the exported CSV.
+
+    After a second run with the same params, the CSV must contain the same number
+    of data rows as after the first run, not 2× (which read-all would produce).
+    """
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    headers = {"X-Demo-User-Id": "demo@example.com"}
+
+    client.post(
+        "/imports",
+        headers=headers,
+        files={
+            "file": (
+                "recurring_places.csv",
+                (FIXTURES / "recurring_places.csv").read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+    client.post("/crime/ingest/sample")
+
+    summarize_body = {
+        "analysis_start_date": "2024-01-01",
+        "analysis_end_date": "2024-01-31",
+        "radii_m": [250],
+    }
+
+    # First run
+    client.post("/crime/summarize", headers=headers, json=summarize_body)
+    first_rows = _data_rows(
+        client.get("/internal/exports/tableau/place-summary.csv", headers=headers).text
+    )
+
+    # Second run — same params → old read-all would return 2× rows
+    client.post("/crime/summarize", headers=headers, json=summarize_body)
+    second_rows = _data_rows(
+        client.get("/internal/exports/tableau/place-summary.csv", headers=headers).text
+    )
+
+    assert len(second_rows) == len(first_rows), (
+        f"CSV row count doubled after second run: {len(second_rows)} != {len(first_rows)}"
+    )
 
 
 def test_tableau_export_accepts_direct_input_mode_clusters():
