@@ -7,6 +7,7 @@ import type {
   NeighborhoodPlace,
   Place,
 } from "../types";
+import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { MethodsAppendix } from "./MethodsAppendix";
 
 const INCIDENT_TABLE_MIN = 560;
@@ -270,8 +271,8 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
         <div className="mc-field">
           <label htmlFor="analysis-start-date">Date range</label>
           <div className="mc-inputs">
-            <input id="analysis-start-date" type="date" className="mc-inp" value={analysis.startDate} aria-label="Start date" onChange={(event) => onChange({ startDate: event.target.value })} />
-            <input id="analysis-end-date" type="date" className="mc-inp" value={analysis.endDate} aria-label="End date" onChange={(event) => onChange({ endDate: event.target.value })} />
+            <input id="analysis-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} aria-label="Start date" onChange={(event) => onChange({ startDate: event.target.value })} />
+            <input id="analysis-end-date" type="date" className="mc-inp" value={analysis.endDate} min={ANALYSIS_MIN_DATE} aria-label="End date" onChange={(event) => onChange({ endDate: event.target.value })} />
           </div>
         </div>
 
