@@ -1,5 +1,6 @@
 import { incidentCountForPlace } from "../lib/incidentSummaries";
 import type { AnalysisSettings, CrimeSummary, DashboardSummary, Place } from "../types";
+import { MethodsAppendix } from "./MethodsAppendix";
 
 type Props = {
   selected: Place[];
@@ -158,6 +159,8 @@ export function CompareTab({ selected, analysis, summary, comparison, running, o
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v4h1" /></svg>
         {REVISED_CAVEAT}
       </div>
+
+      <MethodsAppendix />
 
       <div className="mc-compare-actions">
         <span className="note">{selected.length} selected · {analysis.radiusM} m</span>
