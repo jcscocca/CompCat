@@ -20,7 +20,7 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
     assert ingest.status_code == 200
 
     route_response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -36,7 +36,7 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
     first_alternative_id = route_payload["alternatives"][0]["id"]
 
     other_route_response = other_client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Ballard",
             "destination_label": "University District",

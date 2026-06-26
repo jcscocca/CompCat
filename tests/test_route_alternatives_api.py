@@ -15,7 +15,7 @@ def test_route_alternatives_api_creates_request_and_ranked_routes(tmp_path):
     headers = {"X-Demo-User-Id": "route-user@example.com"}
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -44,7 +44,7 @@ def test_route_alternatives_api_creates_request_and_ranked_routes(tmp_path):
     assert payload["context_summaries"] == []
 
     comparison = client.get(
-        f"/routes/requests/{payload['request']['id']}/comparison",
+        f"/internal/routes/requests/{payload['request']['id']}/comparison",
         headers=headers,
     )
 
@@ -59,7 +59,7 @@ def test_route_alternatives_api_rejects_unknown_origin(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Not A Seattle Place",
             "destination_label": "Downtown Seattle",
@@ -77,7 +77,7 @@ def test_route_alternatives_api_rejects_unsupported_provider(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -96,7 +96,7 @@ def test_route_alternatives_api_validates_route_request_values(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -119,7 +119,7 @@ def test_route_comparison_is_scoped_to_request_user(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -132,7 +132,7 @@ def test_route_comparison_is_scoped_to_request_user(tmp_path):
     request_id = response.json()["request"]["id"]
 
     comparison = client.get(
-        f"/routes/requests/{request_id}/comparison",
+        f"/internal/routes/requests/{request_id}/comparison",
         headers={"X-Demo-User-Id": "different-user@example.com"},
     )
 
@@ -148,7 +148,7 @@ def test_route_alternatives_api_includes_sample_crime_context_summaries(tmp_path
     assert ingest.status_code == 200
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -173,7 +173,7 @@ def test_route_comparison_context_summaries_are_public_and_ordered(tmp_path):
     headers = {"X-Demo-User-Id": "route-user@example.com"}
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -234,7 +234,7 @@ def test_route_comparison_context_summaries_are_public_and_ordered(tmp_path):
     session.close()
 
     comparison = client.get(
-        f"/routes/requests/{payload['request']['id']}/comparison",
+        f"/internal/routes/requests/{payload['request']['id']}/comparison",
         headers=headers,
     )
 
@@ -265,7 +265,7 @@ def test_route_alternatives_response_includes_statistical_comparison_when_analyz
     client.post("/crime/ingest/sample")
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -283,7 +283,7 @@ def test_route_alternatives_response_includes_statistical_comparison_when_analyz
     assert payload["statistical_comparison"]["analytical"]["label"] == "Analytical"
 
     lookup = client.get(
-        f"/routes/requests/{payload['request']['id']}/comparison",
+        f"/internal/routes/requests/{payload['request']['id']}/comparison",
         headers=headers,
     )
 
@@ -298,7 +298,7 @@ def test_route_alternatives_are_sorted_with_statistical_winner_first(tmp_path):
     client.post("/crime/ingest/sample")
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
@@ -324,7 +324,7 @@ def test_route_alternatives_skips_statistical_comparison_for_single_alternative(
     client.post("/crime/ingest/sample")
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "University District",
@@ -373,7 +373,7 @@ def test_route_alternatives_skips_statistical_comparison_for_unanalyzable_geomet
     client.post("/crime/ingest/sample")
 
     response = client.post(
-        "/routes/alternatives",
+        "/internal/routes/alternatives",
         json={
             "origin_label": "Capitol Hill",
             "destination_label": "Downtown Seattle",
