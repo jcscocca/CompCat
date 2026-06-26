@@ -48,7 +48,7 @@ def test_site_comparison_api_returns_overview_and_analytical_payload(tmp_path):
     session.close()
 
     response = client.post(
-        "/analysis/sites/compare",
+        "/internal/analysis/sites/compare",
         json={
             "analysis_start_date": "2024-01-01",
             "analysis_end_date": "2024-02-29",
@@ -86,7 +86,7 @@ def test_site_comparison_api_returns_overview_and_analytical_payload(tmp_path):
     assert payload["analytical"]["pairwise_results"][0]["adjusted_p_value"] < 0.05
 
     lookup = client.get(
-        f"/analysis/comparisons/{payload['id']}",
+        f"/internal/analysis/comparisons/{payload['id']}",
         headers={"X-Demo-User-Id": "analysis-user@example.com"},
     )
     assert lookup.status_code == 200
@@ -102,7 +102,7 @@ def test_statistical_comparison_lookup_is_scoped_to_user(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/analysis/sites/compare",
+        "/internal/analysis/sites/compare",
         json={
             "analysis_start_date": "2024-01-01",
             "analysis_end_date": "2024-01-15",
@@ -128,7 +128,7 @@ def test_statistical_comparison_lookup_is_scoped_to_user(tmp_path):
     assert response.status_code == 200
 
     lookup = client.get(
-        f"/analysis/comparisons/{response.json()['id']}",
+        f"/internal/analysis/comparisons/{response.json()['id']}",
         headers={"X-Demo-User-Id": "other-user@example.com"},
     )
 
@@ -157,7 +157,7 @@ def test_route_comparison_api_returns_404_without_analysis_dates(tmp_path):
     session.close()
 
     response = client.post(
-        "/analysis/routes/compare",
+        "/internal/analysis/routes/compare",
         json={
             "route_request_id": route_request_id,
             "radius_m": 250,
@@ -174,7 +174,7 @@ def test_site_comparison_api_returns_400_for_reversed_dates(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/analysis/sites/compare",
+        "/internal/analysis/sites/compare",
         json={
             "analysis_start_date": "2024-02-01",
             "analysis_end_date": "2024-01-01",
@@ -207,7 +207,7 @@ def test_site_comparison_api_rejects_duplicate_option_ids(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/analysis/sites/compare",
+        "/internal/analysis/sites/compare",
         json={
             "analysis_start_date": "2024-01-01",
             "analysis_end_date": "2024-01-31",
@@ -240,7 +240,7 @@ def test_site_comparison_api_rejects_mixed_option_radii(tmp_path):
     client = TestClient(app)
 
     response = client.post(
-        "/analysis/sites/compare",
+        "/internal/analysis/sites/compare",
         json={
             "analysis_start_date": "2024-01-01",
             "analysis_end_date": "2024-01-31",

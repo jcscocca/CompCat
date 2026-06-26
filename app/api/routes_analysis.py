@@ -17,7 +17,7 @@ from app.services.analysis_service import (
 router = APIRouter()
 
 
-@router.post("/analysis/sites/compare")
+@router.post("/internal/analysis/sites/compare", include_in_schema=False)
 def compare_sites(
     request: SiteComparisonRequest,
     user_id_hash: Annotated[str, Depends(current_user_hash)],
@@ -38,7 +38,7 @@ def compare_sites(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/analysis/routes/compare")
+@router.post("/internal/analysis/routes/compare", include_in_schema=False)
 def compare_routes(
     request: RouteComparisonRequest,
     user_id_hash: Annotated[str, Depends(current_user_hash)],
@@ -57,7 +57,7 @@ def compare_routes(
     return payload
 
 
-@router.get("/analysis/comparisons/{comparison_id}")
+@router.get("/internal/analysis/comparisons/{comparison_id}", include_in_schema=False)
 def get_comparison(
     comparison_id: str,
     user_id_hash: Annotated[str, Depends(current_user_hash)],
