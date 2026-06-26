@@ -108,3 +108,25 @@ def test_http_status_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _make_client()
     with pytest.raises(LocalAgentUnavailable, match="LLM endpoint unavailable"):
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
+
+
+def test_extra_body_is_merged_into_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """extra_body (e.g. chat_template_kwargs) is merged into the request payload."""
+    captured: dict[str, object] = {}
+
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        captured.update(kwargs.get("json") or {})
+        return _json_response({"choices": [{"message": {"content": "hi"}}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    client = OpenAiLlmClient(
+        base_url="http://localhost:8080/v1",
+        model="test-model",
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+    )
+    result = asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
+
+    assert result == "hi"
+    assert captured["chat_template_kwargs"] == {"enable_thinking": False}
+    assert captured["model"] == "test-model"  # base payload still intact

@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     assistant_role: str = "waypoint_analyst"
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k"
+    # Disable chain-of-thought for thinking models (e.g. Qwen) so the answer
+    # lands in `content` rather than consuming the budget on reasoning_content.
+    llm_disable_thinking: bool = False
+    # Optional second endpoint. When both fallback values are set, the assistant
+    # fails over to this node if the primary is offline or returns no content.
+    llm_fallback_base_url: str = ""
+    llm_fallback_model: str = ""
+    llm_fallback_disable_thinking: bool = False
     assistant_max_tool_calls: int = 2
 
     @property

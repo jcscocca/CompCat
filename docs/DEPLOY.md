@@ -87,6 +87,24 @@ MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 `host.docker.internal:PORT` (the `extra_hosts` mapping in `docker-compose.yml` makes
 `host.docker.internal` resolve to the Docker host's gateway).
 
+**Optional automatic failover.** Set a second endpoint and the assistant tries the
+primary first, then fails over to the fallback when the primary is offline or returns
+no usable content. Failover activates only when **both** fallback values are set:
+
+```
+MCA_LLM_FALLBACK_BASE_URL=http://10.0.0.77:8080/v1
+MCA_LLM_FALLBACK_MODEL=qwen3.6-27b-q4-k-m-ctx32k
+```
+
+For llama.cpp "thinking" models (e.g. Qwen) that otherwise spend the whole token
+budget on `reasoning_content` and return empty content, disable the chain-of-thought
+so the answer lands in `content`. The flags are per-endpoint:
+
+```
+MCA_LLM_DISABLE_THINKING=false            # primary (gemma needs no thinking control)
+MCA_LLM_FALLBACK_DISABLE_THINKING=true    # fallback Qwen: emit content, not reasoning
+```
+
 If the endpoint or model is unreachable the assistant returns an error message, but
 every other part of the app — maps, analysis, neighborhood, compare, exports — is
 completely unaffected.
