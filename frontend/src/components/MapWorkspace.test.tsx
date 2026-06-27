@@ -24,6 +24,7 @@ vi.mock("../api/client", () => ({
   getIncidentDetails: vi.fn(),
   getNeighborhoodAnalysis: vi.fn(),
   getDashboardSummary: vi.fn(),
+  getInputModes: vi.fn().mockResolvedValue({ modes: [] }),
 }));
 
 import { MapWorkspace } from "./MapWorkspace";

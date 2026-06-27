@@ -22,6 +22,7 @@ vi.mock("./api/client", () => ({
     analysis: { available_radii_m: [250] },
     exports: { tableau_place_summary_csv: "/x.csv" },
   }),
+  getInputModes: vi.fn().mockResolvedValue({ modes: [] }),
 }));
 
 import App from "./App";

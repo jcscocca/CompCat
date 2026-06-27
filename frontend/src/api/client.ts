@@ -83,6 +83,24 @@ export function deletePlace(placeId: string): Promise<void> {
   return request(`/places/${placeId}`, { method: "DELETE" });
 }
 
+export async function uploadPersonalData(file: File): Promise<{ place_cluster_count: number }> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch("/uploads", { method: "POST", credentials: "include", body });
+  if (!response.ok) {
+    throw new Error((await response.text()) || `Upload failed (${response.status})`);
+  }
+  return response.json();
+}
+
+export function deletePersonalData(): Promise<{ place_clusters: number }> {
+  return request("/uploads", { method: "DELETE" });
+}
+
+export function getInputModes(): Promise<{ modes: { id: string }[] }> {
+  return request("/input-modes");
+}
+
 export function analyzePlaces(
   payload: AnalyzePlacesPayload,
 ): Promise<{ summary_count: number }> {

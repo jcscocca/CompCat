@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { clampWidth, DRAWER_DEFAULT, DRAWER_PEEK, DRAWER_WIDE, type DrawerPreset } from "../lib/drawer";
 import { loadDrawerState, saveDrawerState } from "../lib/drawerStorage";
@@ -44,6 +44,7 @@ export function MapWorkspace() {
   const comparisonVersionRef = useRef(0);
   const incidentDetailsVersionRef = useRef(0);
   const neighborhoodVersionRef = useRef(0);
+  const [personalUploadsEnabled, setPersonalUploadsEnabled] = useState(false);
 
   const refresh = async () => {
     setSummary(await getDashboardSummary());
@@ -64,6 +65,16 @@ export function MapWorkspace() {
       .then((next) => { if (isMounted) { setError(""); setSummary(next); } })
       .catch(() => { if (isMounted) { setError("Unable to start a dashboard session. Try again shortly."); } });
     return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getInputModes()
+      .then((data) => {
+        if (active) setPersonalUploadsEnabled(data.modes.some((mode) => mode.id === "personal_timeline"));
+      })
+      .catch(() => { if (active) setPersonalUploadsEnabled(false); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -375,6 +386,7 @@ export function MapWorkspace() {
               onDelete={handleDelete}
               onManualSubmit={handleManualSubmit}
               onImportSubmit={handleImport}
+              onUploaded={personalUploadsEnabled ? () => refreshWithFallback("Uploaded, but dashboard totals could not refresh.") : undefined}
             />
           ) : null}
           {activeTab === "analyze" ? (
