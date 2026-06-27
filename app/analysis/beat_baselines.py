@@ -87,6 +87,7 @@ class PlaceVsBeat:
     overdispersion_status: str
     minimum_data_status: str
     decision: str
+    exact_p_value: float | None = None
 
 
 def _minimum_data_status(
@@ -148,4 +149,5 @@ def place_vs_beat(
         overdispersion_status=test.overdispersion_status,
         minimum_data_status=status,
         decision=decision,
+        exact_p_value=test.exact_p_value,
     )

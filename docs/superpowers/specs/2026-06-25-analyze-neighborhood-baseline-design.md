@@ -16,11 +16,11 @@ Rebuild the Analyze tab to (1) remove the redundant findings/charts/table restat
 
 ## Decisions (locked in brainstorming)
 
-1. **Baseline = the place's own SPD police beat** (2018-present geometry). Each place is scored as an exposure-adjusted rate (incidents per km²·day) and compared to its beat's rate.
+1. **Baseline = the rest of the place's own SPD police beat** (2018-present geometry), i.e. the beat with the place's search-radius buffer carved out, so a place is never compared against itself. Each place is scored as an exposure-adjusted rate (incidents per km²·day) and compared to that rest-of-beat rate. The 95% CI shown for the ratio is dual to the decision p-value (one phi-aware Wald SE) and is presented in the analytical detail, labelled as a single-comparison interval. *(Refined 2026-06-26 — see `2026-06-26-neighborhood-verdict-methodology-design.md`.)*
 2. **Denominator = official beat area.** Computed once, offline, from Seattle's published "Seattle Police Beats 2018-Present" polygons, **reprojected to a local/equal-area CRS before measuring** (Web Mercator inflates area ~2× at Seattle's latitude; the place buffer is in true meters, so the beat must be too). Shipped as a static `beat → area_km²` lookup. No live geometry or point-in-polygon at runtime.
 3. **Data scope = 2018-01-01 onward.** Crime ingestion gains a 2018 floor; UI date pickers floor at 2018-01-01. This matches the single 2018-present beat vintage to the data and eliminates era-matching.
 4. **Layout = verdict-first with analytical on tap**, rendering the engine's existing overview/analytical tiers:
-   `verdict (ratio + decision badge) → evidence line (place rate, beat rate, 95% CI) → monthly trend → ▸ analytical detail (p, φ/method, adequacy, baseline, source) → nearest incidents`.
+   `verdict (ratio + decision badge) → evidence line (place rate, rest-of-beat rate) → monthly trend → ▸ analytical detail (95% CI, adjusted p, exact p, φ/method, adequacy, baseline, source) → nearest incidents`.
    One block per selected place. Filter controls move to the **top** of the panel (fixes "set filters after reading results").
 5. **Multi-place:** blocks stack; in addition to each place-vs-beat verdict, show place-vs-place pairwise comparisons. A beat too sparse under the active filter degrades to "insufficient data," never a fabricated ratio.
 6. **Methods appendix:** an always-accessible glossary (reusing the existing `BottomSheet`) reachable via an inline ⓘ next to each measure and a persistent "Methods" button. Analyze and Compare share one definition source. A test asserts every rendered measure has an entry.

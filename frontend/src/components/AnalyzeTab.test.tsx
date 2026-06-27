@@ -34,7 +34,8 @@ const homePlace: NeighborhoodPlace = {
   place_id: "p1", place_label: "Home", beat: "M2", radius_m: 250,
   baseline_available: true, decision: "above_clear", place_incident_count: 12,
   beat_incident_count: 60, place_rate: 0.67, beat_rate: 0.17, rate_ratio: 4.0,
-  ci_lower: 2.1, ci_upper: 7.6, adjusted_p_value: 0.002, method: "exact_conditional_poisson",
+  ci_lower: 2.1, ci_upper: 7.6, adjusted_p_value: 0.002, exact_p_value: 0.012,
+  method: "wald_log_rate_ratio",
   overdispersion_status: "poisson_ok", minimum_data_status: "met",
   nearest_incident_m: 42, monthly_counts: [1, 2, 1, 3, 2, 3], type_mix: [{ label: "ASSAULT", count: 7 }],
 };
@@ -90,6 +91,24 @@ describe("AnalyzeTab", () => {
     for (const id of ["reportedIncidentRate", "beatBaselineRate", "rateRatio", "confidenceInterval", "adjustedPValue", "overdispersion", "minimumDataStatus", "nearestIncident", "monthlyTrend"]) {
       expect(ids.has(id)).toBe(true);
     }
+  });
+
+  it("shows the confidence interval in analytical detail, not on the verdict line", () => {
+    const { container } = render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    const sub = container.querySelector(".mc-verdict-sub")!;
+    expect(sub.textContent).not.toMatch(/95% CI/);
+    const details = container.querySelector(".mc-analytical")!;
+    expect(details.textContent).toMatch(/95% CI/);
   });
 
   it("no longer renders the retired crime-mix chart", () => {

@@ -159,24 +159,47 @@ def neighborhood_analysis_for_places(
             offense_subcategory,
             nibrs_group,
         )
-        place_exposure = _place_exposure_km2_days(radius_m, days)
-        beat_exposure = area * days
-        place_monthly = _monthly_counts(place_incidents, analysis_start_date, analysis_end_date)
-        combined_monthly = [
-            p + b
-            for p, b in zip(
-                place_monthly,
-                _monthly_counts(beat_incidents, analysis_start_date, analysis_end_date),
-                strict=True,
+        # Rest of beat: the surrounding baseline EXCLUDING the place's own buffer, so the
+        # place is not compared against itself. Carve the buffer out by distance (incidents
+        # with missing coordinates stay in the baseline, the conservative choice).
+        rest_incidents = [
+            incident
+            for incident in beat_incidents
+            if incident.latitude is None
+            or incident.longitude is None
+            or haversine_m(
+                cluster.display_latitude,
+                cluster.display_longitude,
+                incident.latitude,
+                incident.longitude,
             )
+            > radius_m
         ]
+        place_exposure = _place_exposure_km2_days(radius_m, days)
+        buffer_km2 = pi * radius_m * radius_m / 1_000_000.0
+        rest_area = area - buffer_km2
+        if rest_area <= 0 or not rest_incidents:
+            raw.append(
+                {
+                    "cluster": cluster,
+                    "beat": beat,
+                    "area": area,
+                    "place_incidents": place_incidents,
+                    "baseline_too_small": True,
+                }
+            )
+            continue
+        beat_exposure = rest_area * days
+        place_monthly = _monthly_counts(place_incidents, analysis_start_date, analysis_end_date)
+        rest_monthly = _monthly_counts(rest_incidents, analysis_start_date, analysis_end_date)
+        combined_monthly = [p + r for p, r in zip(place_monthly, rest_monthly, strict=True)]
         # Adjust and decide on the overdispersion-aware p-value so the verdict honors
         # the dispersion its own analytical detail reports (mirrors comparison.py).
         dispersion = dispersion_status(combined_monthly)
         place_test = compare_incident_rates(
             count_a=len(place_incidents),
             exposure_a=max(place_exposure, 1e-9),
-            count_b=len(beat_incidents),
+            count_b=len(rest_incidents),
             exposure_b=max(beat_exposure, 1e-9),
             overdispersion_phi=dispersion.phi,
         )
@@ -187,7 +210,7 @@ def neighborhood_analysis_for_places(
                 "beat": beat,
                 "area": area,
                 "place_incidents": place_incidents,
-                "beat_incidents": beat_incidents,
+                "beat_incidents": rest_incidents,
                 "place_exposure": place_exposure,
                 "beat_exposure": beat_exposure,
                 "place_monthly": place_monthly,
@@ -213,6 +236,18 @@ def neighborhood_analysis_for_places(
                     **base,
                     "baseline_available": False,
                     "decision": "baseline_unavailable",
+                    "place_incident_count": len(entry.get("place_incidents", [])),
+                    "type_mix": _type_mix(entry.get("place_incidents", [])),
+                }
+            )
+            continue
+        if entry.get("baseline_too_small"):
+            places.append(
+                {
+                    **base,
+                    "baseline_available": False,
+                    "decision": "insufficient_data",
+                    "minimum_data_status": "baseline_too_small",
                     "place_incident_count": len(entry.get("place_incidents", [])),
                     "type_mix": _type_mix(entry.get("place_incidents", [])),
                 }
@@ -250,6 +285,7 @@ def neighborhood_analysis_for_places(
                 "ci_lower": result.ci_lower,
                 "ci_upper": result.ci_upper,
                 "adjusted_p_value": result.adjusted_p_value,
+                "exact_p_value": result.exact_p_value,
                 "method": result.method,
                 "overdispersion_status": result.overdispersion_status,
                 "minimum_data_status": result.minimum_data_status,

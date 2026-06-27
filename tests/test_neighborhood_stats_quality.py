@@ -77,7 +77,7 @@ def test_overdispersed_place_verdict_honors_overdispersion(tmp_path):
     )
     place = result["places"][0]
     assert place["place_incident_count"] == 13
-    assert place["beat_incident_count"] == 40
+    assert place["beat_incident_count"] == 27
     assert place["overdispersion_status"] == "overdispersed"
     # The overdispersion-aware test is NOT significant, so the verdict must not
     # claim 'above_clear', and the adjusted p must reflect the inflated variance.
@@ -94,3 +94,61 @@ def test_place_vs_beat_insufficient_when_place_count_below_floor():
     )
     assert result.minimum_data_status == "place_count_too_low"
     assert result.decision == "insufficient_data"
+
+
+def _session_with_hotspot_place(tmp_path):
+    """12 incidents inside the 250 m buffer (2/month, low temporal dispersion) and 6
+    elsewhere in the same beat (1/month). With the rest-of-beat baseline the contrast
+    is sharp and not overdispersed, so the verdict is 'above_clear'."""
+    from fastapi.testclient import TestClient
+
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'hot.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+    user_hash = public_user_hash(client.cookies.get("mca_session"))
+    plat, plon = 47.6100, -122.3300
+    session = get_sessionmaker()()
+    session.add(
+        PlaceCluster(
+            id="hot", user_id_hash=user_hash, cluster_version="t", cluster_method="manual",
+            centroid_latitude=plat, centroid_longitude=plon,
+            display_latitude=plat, display_longitude=plon, visit_count=5,
+            inferred_place_type="manual_place", sensitivity_class="normal",
+            display_label="Hot", label_source="test",
+        )
+    )
+    for month in range(1, 7):
+        for k in range(2):
+            session.add(
+                CrimeIncident(
+                    id=f"hot-near-{month}-{k}",
+                    offense_start_utc=datetime(2026, month, 10, tzinfo=UTC),
+                    offense_category="PROPERTY", beat="Z9",
+                    latitude=plat + 0.0005 + k * 0.0002, longitude=plon,
+                )
+            )
+    for month in range(1, 7):
+        session.add(
+            CrimeIncident(
+                id=f"hot-far-{month}",
+                offense_start_utc=datetime(2026, month, 20, tzinfo=UTC),
+                offense_category="PROPERTY", beat="Z9",
+                latitude=plat + 0.02, longitude=plon + 0.02 + month * 0.0005,
+            )
+        )
+    session.commit()
+    return session, user_hash
+
+
+def test_hotspot_reads_above_clear_after_removing_self_dilution(tmp_path):
+    session, user_hash = _session_with_hotspot_place(tmp_path)
+    result = neighborhood_analysis_for_places(
+        session=session, user_id_hash=user_hash, place_ids=["hot"], radius_m=250,
+        analysis_start_date=date(2026, 1, 1), analysis_end_date=date(2026, 6, 30),
+        offense_category=None, offense_subcategory=None, nibrs_group=None,
+        area_lookup={"Z9": 3.0},
+    )
+    place = result["places"][0]
+    assert place["place_incident_count"] == 12
+    assert place["beat_incident_count"] == 6  # rest of beat only
+    assert place["decision"] == "above_clear"
