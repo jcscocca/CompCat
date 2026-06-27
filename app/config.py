@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     geocoder_timeout_s: float = 5.0
     geocoder_min_interval_s: float = 1.0
 
+    routing_provider: str = "mock"
+    opentripplanner_base_url: str = ""
+    opentripplanner_timeout_s: float = 10.0
+
     @property
     def effective_session_cookie_secure(self) -> bool:
         if self.session_cookie_secure is not None:
