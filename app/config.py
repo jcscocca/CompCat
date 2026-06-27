@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     llm_fallback_disable_thinking: bool = False
     assistant_max_tool_calls: int = 2
 
+    geocoder_provider: str = "nominatim"
+    geocoder_base_url: str = "https://nominatim.openstreetmap.org/search"
+    geocoder_user_agent: str = "Waypoint/0.1"
+    geocoder_contact_email: str = ""
+    geocoder_cache_ttl_days: int = 30
+    geocoder_max_results: int = 5
+    geocoder_timeout_s: float = 5.0
+    geocoder_min_interval_s: float = 1.0
+
     @property
     def effective_session_cookie_secure(self) -> bool:
         if self.session_cookie_secure is not None:
@@ -62,6 +71,17 @@ class Settings(BaseSettings):
             joined_names = ", ".join(default_names)
             raise ValueError(
                 f"Production deployments must override local secret defaults: {joined_names}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def require_production_geocoder_contact(self) -> Settings:
+        if self.environment.lower() not in {"prod", "production"}:
+            return self
+        if not self.geocoder_contact_email.strip():
+            raise ValueError(
+                "Production deployments must set MCA_GEOCODER_CONTACT_EMAIL "
+                "(Nominatim requires an identifiable contact)."
             )
         return self
 

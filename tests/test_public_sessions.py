@@ -39,6 +39,7 @@ def test_public_session_cookie_defaults_secure_in_production(tmp_path, monkeypat
     monkeypatch.setenv("MCA_ENVIRONMENT", "production")
     monkeypatch.setenv("MCA_USER_HASH_SALT", "test-production-salt")
     monkeypatch.setenv("MCA_SESSION_SECRET", "test-production-session-secret")
+    monkeypatch.setenv("MCA_GEOCODER_CONTACT_EMAIL", "ops@example.com")
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
 
