@@ -11,6 +11,7 @@ from app.analysis.comparison import build_statistical_comparison
 from app.analysis.exposure import (
     count_incidents_in_place_buffer,
     count_incidents_in_route_corridor,
+    parse_route_geometry,
     place_exposure_square_km_days,
     route_corridor_exposure_square_km_days,
 )
@@ -22,7 +23,6 @@ from app.analysis.schemas import (
     StatisticalComparisonResult,
 )
 from app.models import (
-    CrimeIncident,
     RouteAlternative,
     RouteRequest,
     StatisticalComparison,
@@ -30,6 +30,7 @@ from app.models import (
     StatisticalPairwiseResult,
 )
 from app.schemas import CrimeIncidentData
+from app.services.incident_query_service import bounding_box_for_points, incidents_in_bbox
 
 
 def compare_site_options(
@@ -49,11 +50,21 @@ def compare_site_options(
         else AnalysisSiteOption.model_validate(option)
         for option in options
     ]
-    incidents = _incident_rows(session)
+    radius_m = site_options[0].radius_m
+    incidents = incidents_in_bbox(
+        session,
+        box=bounding_box_for_points(
+            [(option.latitude, option.longitude) for option in site_options], radius_m
+        ),
+        analysis_start_date=analysis_start_date,
+        analysis_end_date=analysis_end_date,
+        offense_category=offense_category,
+        offense_subcategory=offense_subcategory,
+        nibrs_group=nibrs_group,
+    )
     option_results: list[AnalysisOptionResult] = []
     period_counts_by_option_id: dict[str, list[int]] = {}
     geometry_metadata_by_option_id: dict[str, dict[str, Any]] = {}
-    radius_m = site_options[0].radius_m
 
     for option in site_options:
         matching_incidents = count_incidents_in_place_buffer(
@@ -132,7 +143,23 @@ def compare_route_request(
             .order_by(RouteAlternative.rank)
         )
     )
-    incidents = _incident_rows(session)
+    route_points = [
+        point
+        for alternative in alternatives
+        for point in parse_route_geometry(alternative.summary_geometry)
+    ]
+    if route_points:
+        incidents = incidents_in_bbox(
+            session,
+            box=bounding_box_for_points(route_points, request.radius_m),
+            analysis_start_date=route_request.analysis_start_date,
+            analysis_end_date=route_request.analysis_end_date,
+            offense_category=request.offense_category,
+            offense_subcategory=request.offense_subcategory,
+            nibrs_group=request.nibrs_group,
+        )
+    else:
+        incidents = []
     option_results: list[AnalysisOptionResult] = []
     period_counts_by_option_id: dict[str, list[int]] = {}
     geometry_metadata_by_option_id: dict[str, dict[str, Any]] = {}
@@ -484,31 +511,3 @@ def _json_dict(value: str | None) -> dict[str, Any] | None:
         return None
     parsed = json.loads(value)
     return parsed if isinstance(parsed, dict) else None
-
-
-def _incident_rows(session: Session) -> list[CrimeIncidentData]:
-    return [_incident_data(row) for row in session.scalars(select(CrimeIncident)).all()]
-
-
-def _incident_data(row: CrimeIncident) -> CrimeIncidentData:
-    return CrimeIncidentData(
-        id=row.id,
-        external_incident_id=row.external_incident_id,
-        report_number=row.report_number,
-        offense_id=row.offense_id,
-        offense_start_utc=row.offense_start_utc,
-        offense_end_utc=row.offense_end_utc,
-        report_utc=row.report_utc,
-        offense_category=row.offense_category,
-        offense_subcategory=row.offense_subcategory,
-        nibrs_group=row.nibrs_group,
-        precinct=row.precinct,
-        sector=row.sector,
-        beat=row.beat,
-        mcpp=row.mcpp,
-        block_address=row.block_address,
-        latitude=row.latitude,
-        longitude=row.longitude,
-        source_dataset=row.source_dataset,
-        snapshot_at=row.snapshot_at,
-    )
