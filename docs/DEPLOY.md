@@ -5,6 +5,39 @@ with Postgres alongside, via `docker compose`. Each tester's browser gets its ow
 isolated session (signed cookie → per-user data); the UI only calls session-scoped
 endpoints, so testers can't see each other's places.
 
+## Single host: everything on the ThinkPad
+
+This trial runs **entirely on the ThinkPad** — no second machine:
+
+- **Waypoint** (API + UI + Postgres) — this `docker compose` stack, on `:8000`.
+- **Analyst LLM** (LocalAgent / llama-swap) — already serving on the ThinkPad at `:8080`.
+- **Routing** (OpenTripPlanner) — `scripts/otp_thinkpad_setup.ps1`, on `:8090`.
+
+Because Waypoint runs in a container, it reaches the two host-port services via
+`host.docker.internal`. Put this wiring in `.env.deploy` (alongside the secrets from the next
+section):
+
+```
+MCA_LLM_BASE_URL=http://host.docker.internal:8080/v1
+MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
+MCA_ROUTING_PROVIDER=opentripplanner
+MCA_OPENTRIPPLANNER_BASE_URL=http://host.docker.internal:8090/otp/gtfs/v1
+```
+
+Bring-up order on the ThinkPad (PowerShell). The analyst (llama-swap) is already running, so
+there is nothing to start there:
+
+```powershell
+cp .env.deploy.example .env.deploy        # fill in secrets (next section) + the wiring above
+.\scripts\otp_thinkpad_setup.ps1          # routing: download data, build graph, serve :8090
+docker compose --env-file .env.deploy up -d --build   # Waypoint on :8000
+# then load crime data (step 3 below) and open http://localhost:8000
+```
+
+If `host.docker.internal` ever fails to resolve, substitute the ThinkPad's LAN IP
+(e.g. `http://10.0.0.76:8080/...`). Detailed steps for each piece (secrets, crime data,
+analyst, routing) follow.
+
 ## 1. Generate secrets
 
 The committed `docker-compose.yml` ships with `local-*` placeholder secrets that are
@@ -158,6 +191,65 @@ use the host's LAN IP or `host.docker.internal:8090`.
 
 If OTP is unreachable, `/routes` requests return an error; every other part of the app is
 unaffected (same graceful-degradation posture as the assistant).
+
+#### Running the OTP container day-to-day
+
+**Fastest path:** on the ThinkPad, run [`scripts/otp_thinkpad_setup.ps1`](../scripts/otp_thinkpad_setup.ps1)
+in PowerShell — it downloads the OSM + GTFS data, builds the graph, starts the container with the
+restart policy, and opens the firewall, then prints the exact `MCA_OPENTRIPPLANNER_BASE_URL` (with
+the host's LAN IP) to set on the Mac. The manual steps below do the same by hand.
+
+Building the graph is a one-time step that writes `graph.obj` into the data folder; after that
+you only run the lightweight **serve** container, which loads that graph. Run it with a restart
+policy so it comes back on its own after reboots / Docker restarts:
+
+```powershell
+cd C:\otp   # the folder that holds graph.obj
+docker run -d --name otp --restart unless-stopped -p 8090:8080 `
+  -e JAVA_TOOL_OPTIONS='-Xmx8g' -v ${PWD}:/var/opentripplanner `
+  docker.io/opentripplanner/opentripplanner:latest --load --serve
+```
+
+`--restart unless-stopped` is the important part: Docker Desktop restarts OTP automatically on
+boot, so normally you never start it by hand. Once that container exists:
+
+| Action | Command |
+| --- | --- |
+| Start it again | `docker start otp` |
+| Stop it | `docker stop otp` |
+| Restart | `docker restart otp` |
+| Follow logs (wait for `Grizzly server running`) | `docker logs -f otp` |
+| Status | `docker ps -a --filter name=otp` |
+| Recreate from scratch | `docker rm -f otp`, then re-run the `docker run …` above |
+
+If `docker run` says the name is already in use, the container already exists — use
+`docker start otp` (or `docker rm -f otp` first to recreate it with the restart policy).
+`--load` needs the saved `graph.obj`; if you ever built with `--serve` instead of `--save`,
+run `--build --save` once to produce it.
+
+**Confirm it is serving** — open `http://localhost:8090/graphiql`, or:
+
+```powershell
+curl http://localhost:8090/otp/gtfs/v1 -X POST -H "Content-Type: application/json" `
+  -d '{"query":"{ plan(from:{lat:47.62,lon:-122.32}, to:{lat:47.61,lon:-122.33}, transportModes:[{mode:TRANSIT},{mode:WALK}]) { itineraries { duration } } }"}'
+```
+
+**Point Waypoint at it.** When Waypoint runs on a *different* machine (e.g. a Mac), it reaches
+OTP over the LAN — use the ThinkPad's IP, and make sure the firewall allows the port. The setup
+script adds the rule; by hand, in an elevated PowerShell:
+`New-NetFirewallRule -DisplayName "OTP 8090" -Direction Inbound -Protocol TCP -LocalPort 8090 -Action Allow`.
+Set these where Waypoint runs (its `.env` / `.env.deploy`) and restart it:
+
+```
+MCA_ROUTING_PROVIDER=opentripplanner
+MCA_OPENTRIPPLANNER_BASE_URL=http://10.0.0.76:8090/otp/gtfs/v1
+```
+
+Use `http://localhost:8090/...` only if Waypoint runs on the ThinkPad itself (or
+`http://host.docker.internal:8090/...` if it is containerized on the ThinkPad).
+
+**Refresh transit data** when the GTFS feed changes: re-download it into the data folder,
+rebuild with `--build --save`, then `docker restart otp`.
 
 ## Stop / reset
 
