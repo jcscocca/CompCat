@@ -12,7 +12,9 @@ export default defineConfig({
     proxy: {
       "/sessions": backendTarget,
       "/places": backendTarget,
+      "/uploads": backendTarget,
       "/dashboard": backendTarget,
+      "/routes": backendTarget,
       "/exports": backendTarget,
       "/input-modes": backendTarget,
       "/assistant": backendTarget
