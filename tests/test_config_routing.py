@@ -22,10 +22,13 @@ def test_routing_settings_read_env(monkeypatch):
 
 def test_routing_env_vars_are_documented():
     # The live-routing toggle must be discoverable in the docs, not only wired in code:
-    # MCA_ROUTING_PROVIDER / MCA_OPENTRIPPLANNER_BASE_URL were previously absent from both
-    # the README config table and .env.example.
-    env_example = (_REPO_ROOT / ".env.example").read_text()
-    readme = (_REPO_ROOT / "README.md").read_text()
+    # config reference (README + .env.example) and the deploy runbook (docs/DEPLOY.md,
+    # which documents the analyst LLM the same way) must all name the enable vars.
+    docs = {
+        ".env.example": _REPO_ROOT / ".env.example",
+        "README.md": _REPO_ROOT / "README.md",
+        "docs/DEPLOY.md": _REPO_ROOT / "docs" / "DEPLOY.md",
+    }
     for var in ("MCA_ROUTING_PROVIDER", "MCA_OPENTRIPPLANNER_BASE_URL"):
-        assert var in env_example, f"{var} is not documented in .env.example"
-        assert var in readme, f"{var} is not documented in README.md"
+        for name, path in docs.items():
+            assert var in path.read_text(), f"{var} is not documented in {name}"

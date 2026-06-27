@@ -64,10 +64,13 @@ is created automatically on first load.
   password — fine on a trusted internal host. If the instance is internet-reachable,
   drop the `db` `ports:` mapping (the API reaches Postgres over the compose network)
   and set a real DB password.
-- **Open API surface:** a few non-`/internal/` endpoints (`/imports*`, `/analysis*`,
-  `/routes*`, one `/crime`) still accept an unauthenticated demo identity. The UI never
-  calls them, so this is not a tester-to-tester leak, but lock them down (roadmap WS5)
-  before any public exposure.
+- **Internal API surface:** the `/internal/*` endpoints (analysis, imports, crime
+  ingest/summary, route engine) are hidden from OpenAPI and accept the **demo-identity
+  fallback** instead of requiring a real session; the UI never calls them, and
+  `tests/test_internal_surface.py` keeps them off the bare public paths. Not a
+  tester-to-tester leak, but lock them down before any internet exposure. The public
+  endpoints the UI uses (`/places`, `/dashboard/*`, `/routes*`, `/uploads`, `/exports/*`)
+  all require a real session.
 
 ### Assistant
 
@@ -89,10 +92,11 @@ MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 
 **Optional automatic failover.** Set a second endpoint and the assistant tries the
 primary first, then fails over to the fallback when the primary is offline or returns
-no usable content. Failover activates only when **both** fallback values are set:
+no usable content. This needs a **second always-on host**, so skip it for the
+single-ThinkPad setup. Failover activates only when **both** fallback values are set:
 
 ```
-MCA_LLM_FALLBACK_BASE_URL=http://10.0.0.77:8080/v1
+MCA_LLM_FALLBACK_BASE_URL=http://<second-host>:8080/v1
 MCA_LLM_FALLBACK_MODEL=qwen3.6-27b-q4-k-m-ctx32k
 ```
 
@@ -108,6 +112,50 @@ MCA_LLM_FALLBACK_DISABLE_THINKING=true    # fallback Qwen: emit content, not rea
 If the endpoint or model is unreachable the assistant returns an error message, but
 every other part of the app — maps, analysis, neighborhood, compare, exports — is
 completely unaffected.
+
+### Routing (OpenTripPlanner)
+
+Route alternatives default to a built-in deterministic **mock** provider
+(`MCA_ROUTING_PROVIDER=mock`) — fine for the trial. To serve **live** routes for any
+origin/destination, point Waypoint at an OpenTripPlanner (OTP) instance.
+
+On a single-box (ThinkPad) setup the analyst LLM and OTP co-locate cleanly: the model uses
+the **GPU/VRAM**, while OTP is a JVM that uses **system RAM + CPU and no GPU**, so they do
+not contend. Run OTP on a port *other than* `8080` (llama-swap already owns `8080` on that
+host) — e.g. `8090` — then set in `.env.deploy`:
+
+```
+MCA_ROUTING_PROVIDER=opentripplanner
+MCA_OPENTRIPPLANNER_BASE_URL=http://10.0.0.76:8090/otp/routers/default
+```
+
+Same LAN-IP rule as the assistant: `127.0.0.1` will not resolve from inside the container —
+use the host's LAN IP or `host.docker.internal:8090`.
+
+**Standing up OTP** — two phases, build a graph once then serve it:
+
+1. Gather the inputs: a Washington/Puget Sound **OSM** extract
+   ([Geofabrik](https://download.geofabrik.de/north-america/us/washington.html)) and the
+   **Puget Sound Consolidated GTFS**
+   (`https://gtfs.sound.obaweb.org/prod/gtfs_puget_sound_consolidated.zip`).
+2. Put both in a folder and build + serve on `8090`, e.g. with the OTP 1.5 jar:
+
+   ```bash
+   java -Xmx8G -jar otp-1.5.0-shaded.jar --build /graphs --inMemory --port 8090
+   ```
+
+   The graph *build* is the only real RAM spike (it loads all the OSM + GTFS at once); the
+   ThinkPad's spare system RAM handles it, or build once on another machine and copy the
+   graph file over — *serving* only needs ~4–8 GB.
+
+> **OTP version:** the provider speaks the **OTP 1.x REST `/plan`** API (hence the `1.5.0`
+> jar and the `/otp/routers/default` base path). OTP 2.x replaced that REST API with
+> GraphQL, so a 2.x server would require `app/routing/opentripplanner_provider.py` to be
+> ported to the GraphQL API first. See the
+> [OTP 1.5 tutorial](https://docs.opentripplanner.org/en/v1.5.0/Basic-Tutorial/).
+
+If OTP is unreachable, `/routes` requests return an error; every other part of the app is
+unaffected (same graceful-degradation posture as the assistant).
 
 ## Stop / reset
 
