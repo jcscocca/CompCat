@@ -18,12 +18,14 @@ PUBLIC_PATHS = {
     "/exports/tableau/route-context.csv",
     "/exports/tableau/statistical-comparisons.csv",
     "/places/{place_id}",
+    "/routes/alternatives",
+    "/routes/requests/{request_id}/comparison",
 }
 
 # After internal-gating, none of these may appear in the public OpenAPI schema.
 # "/imports" intentionally has no trailing slash — the route is bare POST /imports.
 # Do not "fix" it to "/imports/", or the guard would stop matching that path.
-FORBIDDEN_PREFIXES = ("/internal/", "/analysis/", "/routes/", "/imports", "/crime/")
+FORBIDDEN_PREFIXES = ("/internal/", "/analysis/", "/imports", "/crime/")
 
 
 def _schema_paths(tmp_path) -> set[str]:
