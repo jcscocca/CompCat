@@ -9,7 +9,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.analysis.beat_baselines import NON_GEOGRAPHIC_BEATS, place_vs_beat
-from app.analysis.rate_tests import benjamini_hochberg, compare_incident_rates
+from app.analysis.rate_tests import (
+    benjamini_hochberg,
+    compare_incident_rates,
+    dispersion_status,
+)
 from app.models import CrimeIncident
 from app.normalization.geo import haversine_m
 from app.schemas import CrimeIncidentData, PlaceClusterData
@@ -157,11 +161,24 @@ def neighborhood_analysis_for_places(
         )
         place_exposure = _place_exposure_km2_days(radius_m, days)
         beat_exposure = area * days
+        place_monthly = _monthly_counts(place_incidents, analysis_start_date, analysis_end_date)
+        combined_monthly = [
+            p + b
+            for p, b in zip(
+                place_monthly,
+                _monthly_counts(beat_incidents, analysis_start_date, analysis_end_date),
+                strict=True,
+            )
+        ]
+        # Adjust and decide on the overdispersion-aware p-value so the verdict honors
+        # the dispersion its own analytical detail reports (mirrors comparison.py).
+        dispersion = dispersion_status(combined_monthly)
         place_test = compare_incident_rates(
             count_a=len(place_incidents),
             exposure_a=max(place_exposure, 1e-9),
             count_b=len(beat_incidents),
             exposure_b=max(beat_exposure, 1e-9),
+            overdispersion_phi=dispersion.phi,
         )
         p_values.append(place_test.p_value)
         raw.append(
@@ -173,6 +190,8 @@ def neighborhood_analysis_for_places(
                 "beat_incidents": beat_incidents,
                 "place_exposure": place_exposure,
                 "beat_exposure": beat_exposure,
+                "place_monthly": place_monthly,
+                "combined_monthly": combined_monthly,
             }
         )
 
@@ -200,21 +219,13 @@ def neighborhood_analysis_for_places(
             )
             continue
         place_incidents, beat_incidents = entry["place_incidents"], entry["beat_incidents"]
-        place_monthly = _monthly_counts(place_incidents, analysis_start_date, analysis_end_date)
-        combined_monthly = [
-            p + b
-            for p, b in zip(
-                place_monthly,
-                _monthly_counts(beat_incidents, analysis_start_date, analysis_end_date),
-                strict=True,
-            )
-        ]
+        place_monthly = entry["place_monthly"]
         result = place_vs_beat(
             place_count=len(place_incidents),
             place_exposure=entry["place_exposure"],
             beat_count=len(beat_incidents),
             beat_exposure=entry["beat_exposure"],
-            combined_monthly_counts=combined_monthly,
+            combined_monthly_counts=entry["combined_monthly"],
             analysis_days=days,
             adjusted_p_value=next(adjusted_iter),
         )
