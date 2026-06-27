@@ -110,8 +110,7 @@ function VerdictBlock({ place }: { place: NeighborhoodPlace }) {
       {place.baseline_available ? (
         <>
           <p className="mc-verdict-sub">
-            {place.place_label} vs beat {place.beat}: {place.place_rate?.toFixed(2)} vs {place.beat_rate?.toFixed(2)} /km²·day
-            {place.ci_lower != null ? ` · 95% CI ${place.ci_lower.toFixed(1)}–${place.ci_upper?.toFixed(1)}×` : null}
+            {place.place_label} vs surrounding beat {place.beat} (excludes this area): {place.place_rate?.toFixed(2)} vs {place.beat_rate?.toFixed(2)} /km²·day
           </p>
           {place.monthly_counts?.length ? (
             <div className="mc-spark" aria-hidden="true">
@@ -123,7 +122,9 @@ function VerdictBlock({ place }: { place: NeighborhoodPlace }) {
           <details className="mc-analytical">
             <summary>Analytical detail</summary>
             <dl>
+              <div><dt>95% CI (this comparison)</dt><dd>{place.ci_lower != null ? `${place.ci_lower.toFixed(1)}–${place.ci_upper?.toFixed(1)}×` : "—"}</dd></div>
               <div><dt>Adjusted p-value</dt><dd>{place.adjusted_p_value?.toFixed(3)}</dd></div>
+              <div><dt>Exact p-value</dt><dd>{place.exact_p_value != null ? place.exact_p_value.toFixed(3) : "—"}</dd></div>
               <div><dt>Dispersion</dt><dd>{place.overdispersion_status}</dd></div>
               <div><dt>Method</dt><dd>{place.method}</dd></div>
               <div><dt>Adequacy</dt><dd>{place.minimum_data_status}</dd></div>
@@ -134,6 +135,11 @@ function VerdictBlock({ place }: { place: NeighborhoodPlace }) {
                 {place.type_mix.map((t) => <li key={t.label}>{t.label} · {t.count}</li>)}
               </ul>
             ) : null}
+            <p className="mc-analytical-note">
+              The 95% CI is for this single comparison. The verdict also adjusts for
+              comparing multiple places (Benjamini–Hochberg) and requires at least a 25%
+              rate difference, so a CI that only just clears 1× can still read “not clear.”
+            </p>
           </details>
         </>
       ) : (

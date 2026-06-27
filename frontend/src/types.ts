@@ -148,6 +148,7 @@ export type NeighborhoodPlace = {
   ci_lower?: number;
   ci_upper?: number;
   adjusted_p_value?: number;
+  exact_p_value?: number | null;
   method?: string;
   overdispersion_status?: string;
   minimum_data_status?: string;
