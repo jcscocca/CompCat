@@ -64,10 +64,13 @@ is created automatically on first load.
   password — fine on a trusted internal host. If the instance is internet-reachable,
   drop the `db` `ports:` mapping (the API reaches Postgres over the compose network)
   and set a real DB password.
-- **Open API surface:** a few non-`/internal/` endpoints (`/imports*`, `/analysis*`,
-  `/routes*`, one `/crime`) still accept an unauthenticated demo identity. The UI never
-  calls them, so this is not a tester-to-tester leak, but lock them down (roadmap WS5)
-  before any public exposure.
+- **Internal API surface:** the `/internal/*` endpoints (analysis, imports, crime
+  ingest/summary, route engine) are hidden from OpenAPI and accept the **demo-identity
+  fallback** instead of requiring a real session; the UI never calls them, and
+  `tests/test_internal_surface.py` keeps them off the bare public paths. Not a
+  tester-to-tester leak, but lock them down before any internet exposure. The public
+  endpoints the UI uses (`/places`, `/dashboard/*`, `/routes*`, `/uploads`, `/exports/*`)
+  all require a real session.
 
 ### Assistant
 
