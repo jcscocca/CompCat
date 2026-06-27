@@ -1,6 +1,9 @@
+import pytest
+
 from app.routing.mock_provider import MockRoutingProvider
+from app.routing.opentripplanner_provider import OpenTripPlannerProvider
 from app.routing.place_resolver import resolve_route_place
-from app.routing.providers import get_routing_provider
+from app.routing.providers import UnsupportedRoutingProviderError, get_routing_provider
 from app.routing.schemas import RouteRequestData
 
 
@@ -64,3 +67,15 @@ def _last_geometry_pair(geometry: str | None) -> tuple[float, float]:
     assert geometry is not None
     lat, lon = geometry.split(";")[-1].split(",")
     return float(lat), float(lon)
+
+
+def test_factory_builds_opentripplanner_with_base_url():
+    provider = get_routing_provider(
+        "opentripplanner", opentripplanner_base_url="http://otp.example/otp/routers/default"
+    )
+    assert isinstance(provider, OpenTripPlannerProvider)
+
+
+def test_factory_rejects_opentripplanner_without_base_url():
+    with pytest.raises(UnsupportedRoutingProviderError):
+        get_routing_provider("opentripplanner")

@@ -15,7 +15,21 @@ class UnsupportedRoutingProviderError(ValueError):
     pass
 
 
-def get_routing_provider(provider_name: str) -> RoutingProvider:
+class RoutingProviderError(RuntimeError):
+    """A routing provider was reachable-in-principle but failed at request time."""
+
+
+def get_routing_provider(
+    provider_name: str, *, opentripplanner_base_url: str = ""
+) -> RoutingProvider:
     if provider_name == "mock":
         return MockRoutingProvider()
+    if provider_name == "opentripplanner":
+        if not opentripplanner_base_url:
+            raise UnsupportedRoutingProviderError(
+                "OpenTripPlanner base URL is not configured."
+            )
+        from app.routing.opentripplanner_provider import OpenTripPlannerProvider
+
+        return OpenTripPlannerProvider(opentripplanner_base_url)
     raise UnsupportedRoutingProviderError(f"Unsupported routing provider: {provider_name}")

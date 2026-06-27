@@ -365,7 +365,7 @@ def test_route_alternatives_skips_statistical_comparison_for_unanalyzable_geomet
 
     monkeypatch.setattr(
         "app.services.route_service.get_routing_provider",
-        lambda provider_name: BadGeometryProvider(),
+        lambda provider_name, **_kwargs: BadGeometryProvider(),
     )
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
@@ -426,3 +426,61 @@ def _bad_geometry_alternative(
         )
     ]
     return alternative
+
+
+def test_route_alternatives_maps_provider_error_to_502(tmp_path, monkeypatch):
+    from app.routing.providers import RoutingProviderError
+
+    class FailingProvider:
+        def get_routes(self, request):
+            raise RoutingProviderError("otp down")
+
+    monkeypatch.setattr(
+        "app.services.route_service.get_routing_provider",
+        lambda provider_name, **_kwargs: FailingProvider(),
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    response = client.post(
+        "/internal/routes/alternatives",
+        json={
+            "origin_label": "Capitol Hill",
+            "destination_label": "Downtown Seattle",
+            "mode": "transit",
+        },
+        headers={"X-Demo-User-Id": "route-user@example.com"},
+    )
+    assert response.status_code == 502
+
+
+def test_route_alternatives_uses_configured_default_provider(tmp_path, monkeypatch):
+    from app.config import Settings
+    from app.routing.mock_provider import MockRoutingProvider
+
+    captured = {}
+
+    def fake_factory(provider_name, *, opentripplanner_base_url=""):
+        captured["provider_name"] = provider_name
+        captured["base_url"] = opentripplanner_base_url
+        return MockRoutingProvider()
+
+    monkeypatch.setattr("app.services.route_service.get_routing_provider", fake_factory)
+    monkeypatch.setattr(
+        "app.services.route_service.get_settings",
+        lambda: Settings(routing_provider="opentripplanner", opentripplanner_base_url="http://otp"),
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    response = client.post(
+        "/internal/routes/alternatives",
+        json={
+            "origin_label": "Capitol Hill",
+            "destination_label": "Downtown Seattle",
+            "mode": "transit",
+        },
+        headers={"X-Demo-User-Id": "route-user@example.com"},
+    )
+    assert response.status_code == 200
+    assert captured["provider_name"] == "opentripplanner"
+    assert captured["base_url"] == "http://otp"
+    assert response.json()["request"]["provider"] == "opentripplanner"

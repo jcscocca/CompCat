@@ -31,7 +31,7 @@ class RouteRequestCreate(BaseModel):
     time_window: str | None = None
     preferences: list[str] = Field(default_factory=list)
     privacy_level: SupportedRoutePrivacyLevel = "generalized"
-    provider: str = "mock"
+    provider: str | None = None
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None
     radii_m: list[RouteRadiusMeters] = Field(default_factory=lambda: [250, 500], min_length=1)

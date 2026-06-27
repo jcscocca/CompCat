@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import current_user_hash
 from app.db import get_session
 from app.routing.place_resolver import UnknownRoutePlaceError
-from app.routing.providers import UnsupportedRoutingProviderError
+from app.routing.providers import RoutingProviderError, UnsupportedRoutingProviderError
 from app.routing.schemas import RouteRequestCreate
 from app.services.route_service import (
     create_route_alternatives,
@@ -28,6 +28,8 @@ def alternatives(
         return create_route_alternatives(session, request, user_id_hash)
     except (UnknownRoutePlaceError, UnsupportedRoutingProviderError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RoutingProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/internal/routes/requests/{request_id}/comparison", include_in_schema=False)

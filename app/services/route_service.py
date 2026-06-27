@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analysis.schemas import RouteComparisonRequest
+from app.config import get_settings
 from app.models import (
-    CrimeIncident,
     RouteAlternative,
     RouteContextSummary,
     RouteRequest,
@@ -23,8 +23,8 @@ from app.routing.schemas import (
     RouteRequestCreate,
     RouteRequestData,
 )
-from app.schemas import CrimeIncidentData
 from app.services.analysis_service import compare_route_request, latest_route_comparison_payload
+from app.services.incident_query_service import bounding_box_for_points, incidents_in_bbox
 
 
 def create_route_alternatives(
@@ -34,7 +34,11 @@ def create_route_alternatives(
 ) -> dict[str, object]:
     origin = resolve_route_place(request_payload.origin_label)
     destination = resolve_route_place(request_payload.destination_label)
-    routing_provider = get_routing_provider(request_payload.provider)
+    settings = get_settings()
+    provider_name = request_payload.provider or settings.routing_provider
+    routing_provider = get_routing_provider(
+        provider_name, opentripplanner_base_url=settings.opentripplanner_base_url
+    )
 
     route_request = RouteRequest(
         user_id_hash=user_id_hash,
@@ -56,7 +60,7 @@ def create_route_alternatives(
         time_window=request_payload.time_window,
         preferences_json=json.dumps(request_payload.preferences),
         privacy_level=request_payload.privacy_level,
-        provider=request_payload.provider,
+        provider=provider_name,
         status="ready",
         analysis_start_date=request_payload.analysis_start_date,
         analysis_end_date=request_payload.analysis_end_date,
@@ -76,7 +80,7 @@ def create_route_alternatives(
         time_window=request_payload.time_window,
         preferences=request_payload.preferences,
         privacy_level=request_payload.privacy_level,
-        provider=request_payload.provider,
+        provider=provider_name,
         status=route_request.status,
         created_at=route_request.created_at,
     )
@@ -127,7 +131,24 @@ def create_route_alternatives(
 
     if route_request.analysis_start_date and route_request.analysis_end_date:
         session.flush()
-        incidents = [_incident_data(row) for row in session.scalars(select(CrimeIncident)).all()]
+        context_points = [
+            coord
+            for alternative in route_alternatives
+            for segment in alternative.segments
+            for coord in (
+                (segment.start_latitude, segment.start_longitude),
+                (segment.end_latitude, segment.end_longitude),
+            )
+        ]
+        if context_points:
+            incidents = incidents_in_bbox(
+                session,
+                box=bounding_box_for_points(context_points, max(request_payload.radii_m)),
+                analysis_start_date=route_request.analysis_start_date,
+                analysis_end_date=route_request.analysis_end_date,
+            )
+        else:
+            incidents = []
         summaries = summarize_route_context(
             user_id_hash=user_id_hash,
             alternatives=route_alternatives,
@@ -396,30 +417,6 @@ def _context_summary_model(summary: RouteContextSummaryData) -> RouteContextSumm
         incidents_per_route=float(summary.incidents_per_route)
         if summary.incidents_per_route is not None
         else None,
-    )
-
-
-def _incident_data(row: CrimeIncident) -> CrimeIncidentData:
-    return CrimeIncidentData(
-        id=row.id,
-        external_incident_id=row.external_incident_id,
-        report_number=row.report_number,
-        offense_id=row.offense_id,
-        offense_start_utc=row.offense_start_utc,
-        offense_end_utc=row.offense_end_utc,
-        report_utc=row.report_utc,
-        offense_category=row.offense_category,
-        offense_subcategory=row.offense_subcategory,
-        nibrs_group=row.nibrs_group,
-        precinct=row.precinct,
-        sector=row.sector,
-        beat=row.beat,
-        mcpp=row.mcpp,
-        block_address=row.block_address,
-        latitude=row.latitude,
-        longitude=row.longitude,
-        source_dataset=row.source_dataset,
-        snapshot_at=row.snapshot_at,
     )
 
 
