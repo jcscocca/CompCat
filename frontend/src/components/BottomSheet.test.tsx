@@ -28,9 +28,9 @@ function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {})
 }
 
 describe("BottomSheet", () => {
-  it("renders four tabs and marks the active one", () => {
+  it("renders five tabs and marks the active one", () => {
     renderSheet({ activeTab: "places" });
-    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    expect(screen.getAllByRole("tab")).toHaveLength(5);
     expect(screen.getByRole("tab", { name: /places/i })).toHaveAttribute("aria-selected", "true");
   });
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createRouteAlternatives, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { clampWidth, DRAWER_DEFAULT, DRAWER_PEEK, DRAWER_WIDE, type DrawerPreset } from "../lib/drawer";
 import { loadDrawerState, saveDrawerState } from "../lib/drawerStorage";
@@ -17,7 +17,9 @@ import { MapLegend } from "./MapLegend";
 import { PinDraftPopover } from "./PinDraftPopover";
 import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
-import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, TabKey } from "../types";
+import { RoutesTab } from "./RoutesTab";
+import { parseRouteGeometry } from "../lib/routeGeometry";
+import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, RouteComparison, RouteLine, TabKey } from "../types";
 
 const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
 
@@ -37,6 +39,9 @@ export function MapWorkspace() {
   const [flyTo, setFlyTo] = useState<LatLng | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const [routeComparison, setRouteComparison] = useState<RouteComparison | null>(null);
+  const [routeRunning, setRouteRunning] = useState(false);
+  const [routeError, setRouteError] = useState<string>("");
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
     const window = currentYearAnalysisWindow();
     return { startDate: window.analysis_start_date, endDate: window.analysis_end_date, radiusM: 250, offenseCategory: "" };
@@ -294,6 +299,34 @@ export function MapWorkspace() {
     }
   }
 
+  const handleRunRoute = async (origin: string, destination: string, mode: string) => {
+    setRouteRunning(true);
+    setRouteError("");
+    try {
+      const result = await createRouteAlternatives({
+        origin_label: origin,
+        destination_label: destination,
+        mode,
+        analysis_start_date: analysis.startDate,
+        analysis_end_date: analysis.endDate,
+        radii_m: [analysis.radiusM],
+      });
+      setRouteComparison(result);
+    } catch (caught) {
+      setRouteError(caught instanceof Error ? caught.message : "Unable to compare routes.");
+    } finally {
+      setRouteRunning(false);
+    }
+  };
+
+  const routeLines: RouteLine[] = useMemo(() => {
+    if (!routeComparison) return [];
+    const recommendedId = routeComparison.statistical_comparison?.overview.recommendation_option_id ?? null;
+    return routeComparison.alternatives
+      .map((alt) => ({ id: alt.id, points: parseRouteGeometry(alt.summary_geometry), recommended: alt.id === recommendedId }))
+      .filter((line) => line.points.length >= 2);
+  }, [routeComparison]);
+
   return (
     <div className="mc-scope">
       <div
@@ -311,6 +344,7 @@ export function MapWorkspace() {
           tileConfig={defaultTileConfig}
           onMapClick={handleMapClick}
           onMarkerClick={handleToggleSelect}
+          routeLines={routeLines}
         />
 
         <header className="mc-topbar">
@@ -405,6 +439,9 @@ export function MapWorkspace() {
           ) : null}
           {activeTab === "compare" ? (
             <CompareTab selected={selected} analysis={analysis} summary={summary} comparison={comparison} running={comparing} onRun={handleCompare} />
+          ) : null}
+          {activeTab === "routes" ? (
+            <RoutesTab analysis={analysis} running={routeRunning} result={routeComparison} error={routeError} onRun={handleRunRoute} />
           ) : null}
           {activeTab === "export" ? <ExportTab href={exportHref} /> : null}
         </BottomSheet>
