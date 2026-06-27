@@ -1,0 +1,96 @@
+"""Regression tests for neighborhood-verdict statistics QA findings.
+
+#1 — the verdict must honor overdispersion. The service previously adjusted and
+     decided on a p-value computed WITHOUT the overdispersion factor, so an
+     overdispersed place whose overdispersion-aware test is not significant could
+     still ship as 'above_clear'.
+#5 — the minimum-data gate must require a minimum PLACE signal, not just a
+     combined (place + beat) count the busy beat satisfies on its own.
+"""
+from datetime import UTC, date, datetime
+
+from app.analysis.beat_baselines import place_vs_beat
+from app.db import get_sessionmaker
+from app.main import create_app
+from app.models import CrimeIncident, PlaceCluster
+from app.services.neighborhood_service import neighborhood_analysis_for_places
+from app.sessions import public_user_hash
+
+
+def _session_with_overdispersed_place(tmp_path):
+    """One place with 13 incidents in its 250 m buffer plus 27 more in the same
+    beat (outside the buffer), ALL in a single month -> strong temporal
+    overdispersion. Sized (place 13 vs beat 40, ~35 vs ~360 km^2-days) so the
+    no-phi exact test is significant but the phi-aware quasi-Poisson test is not.
+    """
+    from fastapi.testclient import TestClient
+
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'od.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+    user_hash = public_user_hash(client.cookies.get("mca_session"))
+    assert user_hash is not None
+
+    place_lat, place_lon = 47.6100, -122.3300
+    session = get_sessionmaker()()
+    session.add(
+        PlaceCluster(
+            id="od-place", user_id_hash=user_hash, cluster_version="t", cluster_method="manual",
+            centroid_latitude=place_lat, centroid_longitude=place_lon,
+            display_latitude=place_lat, display_longitude=place_lon,
+            visit_count=5, inferred_place_type="manual_place", sensitivity_class="normal",
+            display_label="OD place", label_source="test",
+        )
+    )
+    near = [
+        (0.0005, 0.0), (0.0008, 0.0003), (0.0, 0.0010), (0.0012, 0.0), (-0.0007, 0.0005),
+        (0.0006, -0.0004), (0.0009, 0.0006), (-0.0010, 0.0), (0.0003, 0.0011),
+        (0.0011, -0.0006), (-0.0005, -0.0008), (0.0007, 0.0009), (0.0, -0.0012),
+    ]  # 13 offsets, all < ~250 m
+    for i, (dlat, dlon) in enumerate(near):
+        session.add(
+            CrimeIncident(
+                id=f"od-near-{i}", offense_start_utc=datetime(2026, 5, 15, tzinfo=UTC),
+                offense_category="PROPERTY", beat="Z9",
+                latitude=place_lat + dlat, longitude=place_lon + dlon,
+            )
+        )
+    for i in range(27):  # 27 in beat Z9 but ~2 km away (outside the buffer), same month
+        session.add(
+            CrimeIncident(
+                id=f"od-far-{i}", offense_start_utc=datetime(2026, 5, 15, tzinfo=UTC),
+                offense_category="PROPERTY", beat="Z9",
+                latitude=place_lat + 0.02 + i * 0.0005, longitude=place_lon + 0.02,
+            )
+        )
+    session.commit()
+    return session, user_hash
+
+
+def test_overdispersed_place_verdict_honors_overdispersion(tmp_path):
+    session, user_hash = _session_with_overdispersed_place(tmp_path)
+    result = neighborhood_analysis_for_places(
+        session=session, user_id_hash=user_hash, place_ids=["od-place"], radius_m=250,
+        analysis_start_date=date(2026, 1, 1), analysis_end_date=date(2026, 6, 30),
+        offense_category=None, offense_subcategory=None, nibrs_group=None,
+        area_lookup={"Z9": 2.0},
+    )
+    place = result["places"][0]
+    assert place["place_incident_count"] == 13
+    assert place["beat_incident_count"] == 40
+    assert place["overdispersion_status"] == "overdispersed"
+    # The overdispersion-aware test is NOT significant, so the verdict must not
+    # claim 'above_clear', and the adjusted p must reflect the inflated variance.
+    assert place["adjusted_p_value"] > 0.05
+    assert place["decision"] == "not_clear"
+
+
+def test_place_vs_beat_insufficient_when_place_count_below_floor():
+    # A busy beat (combined count well over the threshold) must NOT yield a
+    # confident verdict for a place that has essentially no incidents of its own.
+    result = place_vs_beat(
+        place_count=0, place_exposure=35.0, beat_count=300, beat_exposure=360.0,
+        combined_monthly_counts=[50, 50, 50, 50, 50, 50], analysis_days=180,
+    )
+    assert result.minimum_data_status == "place_count_too_low"
+    assert result.decision == "insufficient_data"

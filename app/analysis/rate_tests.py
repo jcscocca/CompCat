@@ -9,6 +9,9 @@ ALPHA = 0.05
 DISPERSION_THRESHOLD = 1.2
 MAX_RATE_RATIO_FOR_RECOMMENDATION = 0.80
 MIN_COMBINED_COUNT = 10
+# A confident place-vs-beat verdict needs a minimum signal from the PLACE itself,
+# not just a combined count the busy beat satisfies on its own. Tunable.
+MIN_PLACE_COUNT = 3
 MIN_ANALYSIS_DAYS = 30
 Z_975 = 1.959963984540054
 

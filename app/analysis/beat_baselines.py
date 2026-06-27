@@ -11,6 +11,7 @@ from app.analysis.rate_tests import (
     MAX_RATE_RATIO_FOR_RECOMMENDATION,
     MIN_ANALYSIS_DAYS,
     MIN_COMBINED_COUNT,
+    MIN_PLACE_COUNT,
     compare_incident_rates,
     dispersion_status,
 )
@@ -96,6 +97,8 @@ def _minimum_data_status(
         return "date_range_too_short"
     if place_exposure <= 0 or beat_exposure <= 0:
         return "non_positive_exposure"
+    if place_count < MIN_PLACE_COUNT:
+        return "place_count_too_low"
     if place_count + beat_count < MIN_COMBINED_COUNT:
         return "combined_count_too_low"
     return "met"
