@@ -1,10 +1,10 @@
 import * as L from "leaflet";
 import { Fragment, useEffect } from "react";
-import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { Circle, MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from "react-leaflet";
 
 import { incidentCountForPlace } from "../lib/incidentSummaries";
 import type { TileConfig } from "../lib/mapTiles";
-import type { DashboardSummary, DraftPin, LatLng, Place } from "../types";
+import type { DashboardSummary, DraftPin, LatLng, Place, RouteLine } from "../types";
 
 const SEATTLE: [number, number] = [47.6062, -122.3321];
 
@@ -83,7 +83,19 @@ type Props = {
   tileConfig: TileConfig;
   onMapClick: (latlng: LatLng) => void;
   onMarkerClick: (placeId: string) => void;
+  routeLines?: RouteLine[];
 };
+
+function FitRouteBounds({ lines }: { lines: RouteLine[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const points = lines.flatMap((line) => line.points);
+    if (points.length >= 2) {
+      map.fitBounds(points as [number, number][], { padding: [40, 40] });
+    }
+  }, [lines, map]);
+  return null;
+}
 
 export function MapCanvas({
   places,
@@ -96,6 +108,7 @@ export function MapCanvas({
   tileConfig,
   onMapClick,
   onMarkerClick,
+  routeLines,
 }: Props) {
   const analyzedAtRadius = summary?.crime_summaries.some((entry) => entry.radius_m === radiusM) ?? false;
 
@@ -147,6 +160,18 @@ export function MapCanvas({
         );
       })}
       {draft ? <Marker position={[draft.latitude, draft.longitude]} icon={DRAFT_ICON} /> : null}
+      {routeLines?.map((line) => (
+        <Polyline
+          key={line.id}
+          positions={line.points}
+          pathOptions={{
+            color: line.recommended ? "#CD6A45" : "#6b7280",
+            weight: line.recommended ? 5 : 3,
+            opacity: line.recommended ? 0.9 : 0.5,
+          }}
+        />
+      ))}
+      {routeLines && routeLines.length > 0 ? <FitRouteBounds lines={routeLines} /> : null}
     </MapContainer>
   );
 }

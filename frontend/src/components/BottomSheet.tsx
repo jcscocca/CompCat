@@ -48,6 +48,17 @@ const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    key: "routes",
+    label: "Routes",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="6" cy="6" r="2.5" />
+        <circle cx="18" cy="18" r="2.5" />
+        <path d="M6 8.5v4a3 3 0 0 0 3 3h3M18 15.5v-4a3 3 0 0 0-3-3h-3" />
+      </svg>
+    ),
+  },
+  {
     key: "export",
     label: "Export",
     icon: (

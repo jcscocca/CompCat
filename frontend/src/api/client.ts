@@ -7,6 +7,7 @@ import type {
   NeighborhoodAnalysis,
   Place,
   PlaceCreate,
+  RouteComparison,
 } from "../types";
 
 type AnalyzePlacesPayload = {
@@ -99,6 +100,17 @@ export function deletePersonalData(): Promise<{ place_clusters: number }> {
 
 export function getInputModes(): Promise<{ modes: { id: string }[] }> {
   return request("/input-modes");
+}
+
+export function createRouteAlternatives(payload: {
+  origin_label: string;
+  destination_label: string;
+  mode: string;
+  analysis_start_date: string;
+  analysis_end_date: string;
+  radii_m: number[];
+}): Promise<RouteComparison> {
+  return request("/routes/alternatives", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function analyzePlaces(
