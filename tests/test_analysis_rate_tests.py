@@ -3,6 +3,7 @@ import math
 import pytest
 
 from app.analysis.rate_tests import (
+    ALPHA,
     DecisionClass,
     benjamini_hochberg,
     classify_pairwise_result,
@@ -11,7 +12,32 @@ from app.analysis.rate_tests import (
 )
 
 
-def test_compare_incident_rates_finds_lower_rate_with_exact_method():
+def test_ci_and_p_value_are_dual_in_non_overdispersed_branch():
+    # The decision p-value and the 95% CI now come from one phi-aware Wald SE,
+    # so "p < ALPHA" must be exactly equivalent to "the 95% CI excludes 1".
+    for count_a, exposure_a, count_b, exposure_b in [
+        (5, 100.0, 40, 100.0),   # clearly lower
+        (30, 100.0, 33, 100.0),  # borderline
+        (20, 100.0, 22, 100.0),  # not clear
+    ]:
+        result = compare_incident_rates(
+            count_a=count_a, exposure_a=exposure_a, count_b=count_b, exposure_b=exposure_b
+        )
+        excludes_one = result.ci_lower > 1.0 or result.ci_upper < 1.0
+        assert (result.p_value < ALPHA) == excludes_one
+        assert result.method == "wald_log_rate_ratio"
+        assert result.exact_p_value is not None
+
+
+def test_overdispersed_branch_has_no_exact_p_value():
+    result = compare_incident_rates(
+        count_a=8, exposure_a=100.0, count_b=40, exposure_b=100.0, overdispersion_phi=3.0
+    )
+    assert result.method == "quasi_poisson_log_rate_ratio"
+    assert result.exact_p_value is None
+
+
+def test_compare_incident_rates_finds_lower_rate_with_wald_method():
     result = compare_incident_rates(
         count_a=8,
         exposure_a=30.0,
@@ -19,7 +45,7 @@ def test_compare_incident_rates_finds_lower_rate_with_exact_method():
         exposure_b=30.0,
     )
 
-    assert result.method == "exact_conditional_poisson"
+    assert result.method == "wald_log_rate_ratio"
     assert result.rate_a == 8 / 30.0
     assert result.rate_b == 28 / 30.0
     assert round(result.rate_ratio, 3) == 0.286
@@ -132,7 +158,7 @@ def test_quasi_poisson_adjustment_weakens_high_dispersion_significance():
         overdispersion_phi=4.0,
     )
 
-    assert poisson.method == "exact_conditional_poisson"
+    assert poisson.method == "wald_log_rate_ratio"
     assert adjusted.method == "quasi_poisson_log_rate_ratio"
     assert adjusted.p_value > poisson.p_value
     assert adjusted.ci_lower < poisson.ci_lower

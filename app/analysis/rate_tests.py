@@ -49,26 +49,29 @@ def compare_incident_rates(
 
     rate_ratio = (safe_count_a / exposure_a) / (safe_count_b / exposure_b)
     phi = overdispersion_phi or 1.0
+    se_log_rr = math.sqrt(phi * ((1 / safe_count_a) + (1 / safe_count_b)))
+
+    # The displayed CI and the decision p-value are derived from ONE phi-aware Wald
+    # standard error, so "p_value < ALPHA" is dual to "the 95% CI excludes 1".
+    z_value = abs(math.log(rate_ratio)) / se_log_rr if se_log_rr else 0.0
+    p_value = math.erfc(z_value / math.sqrt(2))
+    ci_lower = math.exp(math.log(rate_ratio) - Z_975 * se_log_rr)
+    ci_upper = math.exp(math.log(rate_ratio) + Z_975 * se_log_rr)
 
     if phi > DISPERSION_THRESHOLD:
         method = "quasi_poisson_log_rate_ratio"
-        se_log_rr = math.sqrt(phi * ((1 / safe_count_a) + (1 / safe_count_b)))
-        z_value = abs(math.log(rate_ratio)) / se_log_rr if se_log_rr else 0.0
-        p_value = math.erfc(z_value / math.sqrt(2))
         overdispersion_status = "overdispersed"
+        exact_p_value: float | None = None
     else:
-        method = "exact_conditional_poisson"
-        p_value = _exact_conditional_poisson_p_value(
+        method = "wald_log_rate_ratio"
+        overdispersion_status = "poisson_ok"
+        # Retained for transparency; shown as a supplementary statistic, not decided on.
+        exact_p_value = _exact_conditional_poisson_p_value(
             count_a=count_a,
             exposure_a=exposure_a,
             count_b=count_b,
             exposure_b=exposure_b,
         )
-        se_log_rr = math.sqrt((1 / safe_count_a) + (1 / safe_count_b))
-        overdispersion_status = "poisson_ok"
-
-    ci_lower = math.exp(math.log(rate_ratio) - Z_975 * se_log_rr)
-    ci_upper = math.exp(math.log(rate_ratio) + Z_975 * se_log_rr)
 
     return RateTestResult(
         count_a=count_a,
@@ -86,6 +89,7 @@ def compare_incident_rates(
         overdispersion_status=overdispersion_status,
         used_continuity_correction=used_correction,
         caveat_text=" ".join(caveats),
+        exact_p_value=exact_p_value,
     )
 
 

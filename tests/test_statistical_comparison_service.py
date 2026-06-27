@@ -357,7 +357,7 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
         "radius_m": 250,
     }
     assert result["analytical"]["pairwise_results"][0]["method"] in {
-        "exact_conditional_poisson",
+        "wald_log_rate_ratio",
         "quasi_poisson_log_rate_ratio",
     }
     assert result["id"]

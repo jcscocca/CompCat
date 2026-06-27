@@ -44,6 +44,7 @@ class RateTestResult:
     overdispersion_status: str
     used_continuity_correction: bool
     caveat_text: str
+    exact_p_value: float | None = None
 
 
 class AnalysisSiteOption(BaseModel):
