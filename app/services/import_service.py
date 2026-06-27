@@ -40,6 +40,24 @@ def create_import_batch(
     if direct_result is not None:
         return persist_direct_place_import(session, direct_result, payload, filename, user_id_hash)
     result = parse_upload(payload, filename)
+    batch = persist_point_import(session, result, payload, filename, user_id_hash)
+    return {
+        "id": batch.id,
+        "status": batch.status,
+        "source_type": batch.source_type,
+        "detected_schema": batch.detected_schema,
+        "observation_count": len(result.observations),
+        "source_stop_count": len(result.source_stops),
+    }
+
+
+def persist_point_import(
+    session: Session,
+    result: ParseResult,
+    payload: bytes,
+    filename: str,
+    user_id_hash: str,
+) -> ImportBatch:
     times = _time_bounds(result)
     batch = ImportBatch(
         user_id_hash=user_id_hash,
@@ -92,14 +110,7 @@ def create_import_batch(
         )
     session.add_all(rows)
     session.commit()
-    return {
-        "id": batch.id,
-        "status": batch.status,
-        "source_type": batch.source_type,
-        "detected_schema": batch.detected_schema,
-        "observation_count": len(result.observations),
-        "source_stop_count": len(result.source_stops),
-    }
+    return batch
 
 
 def parse_direct_place_upload(
