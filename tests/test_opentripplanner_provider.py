@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -7,30 +9,48 @@ from app.routing.opentripplanner_provider import OpenTripPlannerProvider, _polyl
 from app.routing.providers import RoutingProviderError
 from app.routing.schemas import RouteLocation, RouteRequestData
 
-_SAMPLE_PLAN = {
-    "plan": {
-        "itineraries": [
-            {
-                "duration": 840, "walkDistance": 450.0, "transfers": 0,
-                "legs": [
-                    {"mode": "WALK", "distance": 250.0, "duration": 240, "transitLeg": False,
-                     "from": {"name": "Origin", "lat": 47.6190, "lon": -122.3210},
-                     "to": {"name": "Westlake", "lat": 47.6115, "lon": -122.3370},
-                     "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC_mqNvxq`@"}},
-                    {"mode": "TRAM", "distance": 1650.0, "duration": 420, "transitLeg": True,
-                     "from": {"name": "Westlake", "lat": 47.6115, "lon": -122.3370},
-                     "to": {"name": "Downtown", "lat": 47.6097, "lon": -122.3331},
-                     "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC"}},
-                ],
-            }
-        ]
+# Shape of an OTP2 GTFS GraphQL `plan` response (the `data` envelope), trimmed to the fields
+# the provider reads. transfer_count is derived from transit legs, so no `transfers` field is
+# needed; `route` is an object (shortName/longName), not a string as in the OTP1 REST API.
+_SAMPLE_RESPONSE = {
+    "data": {
+        "plan": {
+            "itineraries": [
+                {
+                    "duration": 840,
+                    "walkDistance": 450.0,
+                    "legs": [
+                        {
+                            "mode": "WALK",
+                            "distance": 250.0,
+                            "duration": 240,
+                            "transitLeg": False,
+                            "route": None,
+                            "from": {"name": "Origin", "lat": 47.6190, "lon": -122.3210},
+                            "to": {"name": "Westlake", "lat": 47.6115, "lon": -122.3370},
+                            "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC_mqNvxq`@"},
+                        },
+                        {
+                            "mode": "TRAM",
+                            "distance": 1650.0,
+                            "duration": 420,
+                            "transitLeg": True,
+                            "route": {"shortName": "1 Line", "longName": "Link Light Rail"},
+                            "from": {"name": "Westlake", "lat": 47.6115, "lon": -122.3370},
+                            "to": {"name": "Downtown", "lat": 47.6097, "lon": -122.3331},
+                            "legGeometry": {"points": "_p~iF~ps|U_ulLnnqC"},
+                        },
+                    ],
+                }
+            ]
+        }
     }
 }
 
 
 def _provider(handler) -> OpenTripPlannerProvider:
     return OpenTripPlannerProvider(
-        "http://otp.example/otp/routers/default",
+        "http://otp.example/otp/gtfs/v1",
         transport=httpx.MockTransport(handler),
     )
 
@@ -50,21 +70,32 @@ def test_decode_polyline_round_trips_known_value():
     assert points == [(38.5, -120.2), (40.7, -120.95), (43.252, -126.453)]
 
 
-def test_get_routes_maps_itinerary_and_legs():
+def test_get_routes_posts_graphql_and_maps_itinerary():
+    captured: dict[str, str] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path.endswith("/plan")
-        assert request.url.params["fromPlace"] == "47.619,-122.321"
-        assert request.url.params["mode"] == "TRANSIT,WALK"
-        return httpx.Response(200, json=_SAMPLE_PLAN)
+        assert request.method == "POST"
+        assert str(request.url) == "http://otp.example/otp/gtfs/v1"
+        captured["query"] = json.loads(request.content)["query"]
+        return httpx.Response(200, json=_SAMPLE_RESPONSE)
 
     alternatives = _provider(handler).get_routes(_request())
+
+    # The GraphQL query carries the plan args: coordinates and transit modes.
+    query = captured["query"]
+    assert "plan(" in query
+    assert "lat: 47.619" in query and "lon: -122.321" in query
+    assert "{mode: TRANSIT}" in query and "{mode: WALK}" in query
+
     assert len(alternatives) == 1
     alt = alternatives[0]
     assert alt.provider == "opentripplanner"
     assert alt.rank == 1
+    assert alt.route_label == "1 Line via OpenTripPlanner"
     assert alt.duration_minutes == 14.0
     assert alt.distance_m == 1900.0
     assert alt.walking_distance_m == 450.0
+    assert alt.transfer_count == 0  # one transit leg -> zero transfers
     assert alt.mode_mix == "walk,tram"
     assert [s.segment_type for s in alt.segments] == ["access", "ride"]
     assert alt.segments[0].mode == "walk"
@@ -79,9 +110,18 @@ def test_get_routes_wraps_transport_errors():
         _provider(handler).get_routes(_request())
 
 
+def test_get_routes_wraps_graphql_errors():
+    # GraphQL signals query errors with HTTP 200 + an `errors` array.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"errors": [{"message": "bad query"}]})
+
+    with pytest.raises(RoutingProviderError):
+        _provider(handler).get_routes(_request())
+
+
 def test_get_routes_wraps_bad_shape():
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"unexpected": True})
+        return httpx.Response(200, json={"data": {"plan": None}})
 
     with pytest.raises(RoutingProviderError):
         _provider(handler).get_routes(_request())

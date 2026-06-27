@@ -8,15 +8,23 @@ import httpx
 from app.routing.providers import RoutingProviderError
 from app.routing.schemas import RouteAlternativeData, RouteRequestData, RouteSegmentData
 
-_OTP_MODE_BY_REQUEST_MODE = {
-    "transit": "TRANSIT,WALK",
-    "walk": "WALK",
-    "bike": "BICYCLE",
-    "drive": "CAR",
+# Request mode -> OTP2 GTFS GraphQL `transportModes` enum values.
+_OTP_MODES_BY_REQUEST_MODE = {
+    "transit": ["TRANSIT", "WALK"],
+    "walk": ["WALK"],
+    "bike": ["BICYCLE"],
+    "drive": ["CAR"],
 }
+_DEFAULT_MODES = ["TRANSIT", "WALK"]
 
 
 class OpenTripPlannerProvider:
+    """Queries an OpenTripPlanner 2.x server via its GTFS GraphQL API.
+
+    ``base_url`` is the full GraphQL endpoint (e.g. ``http://host:8080/otp/gtfs/v1``); the
+    provider POSTs a ``plan`` query to it. OTP 1.x's REST ``/plan`` API is not supported.
+    """
+
     def __init__(
         self,
         base_url: str,
@@ -29,25 +37,20 @@ class OpenTripPlannerProvider:
         self._transport = transport
 
     def get_routes(self, request: RouteRequestData) -> list[RouteAlternativeData]:
-        params: dict[str, Any] = {
-            "fromPlace": f"{request.origin.latitude},{request.origin.longitude}",
-            "toPlace": f"{request.destination.latitude},{request.destination.longitude}",
-            "mode": _OTP_MODE_BY_REQUEST_MODE.get(request.mode, "TRANSIT,WALK"),
-            "numItineraries": 3,
-        }
-        if request.departure_date is not None:
-            params["date"] = request.departure_date.isoformat()
-        if request.departure_time:
-            params["time"] = request.departure_time
+        query = _build_plan_query(request)
         try:
             with httpx.Client(timeout=self.timeout_s, transport=self._transport) as client:
-                response = client.get(f"{self.base_url}/plan", params=params)
+                response = client.post(self.base_url, json={"query": query})
                 response.raise_for_status()
                 payload = response.json()
         except httpx.HTTPError as exc:
             raise RoutingProviderError(f"OpenTripPlanner request failed: {exc}") from exc
+        # GraphQL reports query errors with HTTP 200 + an `errors` array.
+        errors = payload.get("errors") if isinstance(payload, dict) else None
+        if errors:
+            raise RoutingProviderError(f"OpenTripPlanner returned GraphQL errors: {errors}")
         try:
-            itineraries = payload["plan"]["itineraries"]
+            itineraries = payload["data"]["plan"]["itineraries"]
             return [
                 _itinerary_to_alternative(request, index, itinerary)
                 for index, itinerary in enumerate(itineraries)
@@ -56,6 +59,22 @@ class OpenTripPlannerProvider:
             raise RoutingProviderError(
                 f"OpenTripPlanner returned an unexpected response shape: {exc}"
             ) from exc
+
+
+def _build_plan_query(request: RouteRequestData) -> str:
+    modes = _OTP_MODES_BY_REQUEST_MODE.get(request.mode, _DEFAULT_MODES)
+    modes_arg = "[" + ", ".join("{mode: " + mode + "}" for mode in modes) + "]"
+    date_arg = f', date: "{request.departure_date.isoformat()}"' if request.departure_date else ""
+    time_arg = f', time: "{request.departure_time}"' if request.departure_time else ""
+    return (
+        "{ plan("
+        f"from: {{lat: {request.origin.latitude}, lon: {request.origin.longitude}}}, "
+        f"to: {{lat: {request.destination.latitude}, lon: {request.destination.longitude}}}, "
+        f"transportModes: {modes_arg}, numItineraries: 3{date_arg}{time_arg}"
+        ") { itineraries { duration walkDistance legs { "
+        "mode duration distance transitLeg route { shortName longName } "
+        "from { name lat lon } to { name lat lon } legGeometry { points } } } } }"
+    )
 
 
 def _itinerary_to_alternative(
@@ -68,6 +87,8 @@ def _itinerary_to_alternative(
         if mode and mode not in modes:
             modes.append(mode)
     total_distance = sum(float(leg.get("distance", 0.0)) for leg in legs)
+    # OTP2 GraphQL has no itinerary-level transfer count; derive it from transit legs.
+    transit_legs = sum(1 for leg in legs if leg.get("transitLeg"))
     alternative = RouteAlternativeData(
         route_request_id=request.id,
         provider_route_id=f"otp-{index}",
@@ -75,7 +96,7 @@ def _itinerary_to_alternative(
         rank=index + 1,
         duration_minutes=_seconds_to_minutes(itinerary.get("duration")),
         distance_m=total_distance or None,
-        transfer_count=int(itinerary.get("transfers", 0)),
+        transfer_count=max(0, transit_legs - 1),
         walking_distance_m=_optional_float(itinerary.get("walkDistance")),
         mode_mix=",".join(modes) or request.mode,
         summary_geometry=_summary_geometry(legs),
@@ -124,8 +145,11 @@ def _leg_to_segment(
 
 def _alternative_label(request: RouteRequestData, legs: list[dict[str, Any]]) -> str:
     for leg in legs:
-        if leg.get("transitLeg") and leg.get("route"):
-            return f"{leg['route']} via OpenTripPlanner"
+        if leg.get("transitLeg"):
+            route = leg.get("route") or {}
+            name = route.get("shortName") or route.get("longName")
+            if name:
+                return f"{name} via OpenTripPlanner"
     return f"{request.mode.capitalize()} route via OpenTripPlanner"
 
 

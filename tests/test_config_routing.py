@@ -14,10 +14,10 @@ def test_routing_defaults_to_mock():
 
 def test_routing_settings_read_env(monkeypatch):
     monkeypatch.setenv("MCA_ROUTING_PROVIDER", "opentripplanner")
-    monkeypatch.setenv("MCA_OPENTRIPPLANNER_BASE_URL", "http://otp:8080/otp/routers/default")
+    monkeypatch.setenv("MCA_OPENTRIPPLANNER_BASE_URL", "http://otp:8080/otp/gtfs/v1")
     settings = Settings()
     assert settings.routing_provider == "opentripplanner"
-    assert settings.opentripplanner_base_url == "http://otp:8080/otp/routers/default"
+    assert settings.opentripplanner_base_url == "http://otp:8080/otp/gtfs/v1"
 
 
 def test_routing_env_vars_are_documented():

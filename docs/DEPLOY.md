@@ -126,7 +126,7 @@ host) — e.g. `8090` — then set in `.env.deploy`:
 
 ```
 MCA_ROUTING_PROVIDER=opentripplanner
-MCA_OPENTRIPPLANNER_BASE_URL=http://10.0.0.76:8090/otp/routers/default
+MCA_OPENTRIPPLANNER_BASE_URL=http://10.0.0.76:8090/otp/gtfs/v1
 ```
 
 Same LAN-IP rule as the assistant: `127.0.0.1` will not resolve from inside the container —
@@ -138,21 +138,23 @@ use the host's LAN IP or `host.docker.internal:8090`.
    ([Geofabrik](https://download.geofabrik.de/north-america/us/washington.html)) and the
    **Puget Sound Consolidated GTFS**
    (`https://gtfs.sound.obaweb.org/prod/gtfs_puget_sound_consolidated.zip`).
-2. Put both in a folder and build + serve on `8090`, e.g. with the OTP 1.5 jar:
+2. Put both in a folder and build + serve with OTP **2.x**, e.g.:
 
    ```bash
-   java -Xmx8G -jar otp-1.5.0-shaded.jar --build /graphs --inMemory --port 8090
+   java -Xmx8G -jar otp-2.7.0-shaded.jar --build --serve /graphs
    ```
+
+   OTP serves on `:8080` by default; since llama-swap already owns `:8080` on the ThinkPad,
+   put OTP behind a port map / reverse proxy on `:8090` (e.g. Docker `-p 8090:8080`).
 
    The graph *build* is the only real RAM spike (it loads all the OSM + GTFS at once); the
    ThinkPad's spare system RAM handles it, or build once on another machine and copy the
    graph file over — *serving* only needs ~4–8 GB.
 
-> **OTP version:** the provider speaks the **OTP 1.x REST `/plan`** API (hence the `1.5.0`
-> jar and the `/otp/routers/default` base path). OTP 2.x replaced that REST API with
-> GraphQL, so a 2.x server would require `app/routing/opentripplanner_provider.py` to be
-> ported to the GraphQL API first. See the
-> [OTP 1.5 tutorial](https://docs.opentripplanner.org/en/v1.5.0/Basic-Tutorial/).
+> **OTP version:** the provider speaks the **OTP 2.x GTFS GraphQL API** — it POSTs a `plan`
+> query to `MCA_OPENTRIPPLANNER_BASE_URL` (the full GraphQL endpoint, e.g. `…/otp/gtfs/v1`).
+> OTP 1.x's REST `/plan` API is not supported. See the
+> [GTFS GraphQL API docs](https://docs.opentripplanner.org/en/latest/apis/GTFS-GraphQL-API/).
 
 If OTP is unreachable, `/routes` requests return an error; every other part of the app is
 unaffected (same graceful-degradation posture as the assistant).

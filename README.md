@@ -96,7 +96,8 @@ canonical product objects are stop visits, recurring place clusters, and context
   incident context near route points. The default provider is a deterministic **mock** used for
   local development, tests, and dashboard validation. A live **OpenTripPlanner** provider is also
   built in but off by default; enable it by setting `MCA_ROUTING_PROVIDER=opentripplanner` and
-  `MCA_OPENTRIPPLANNER_BASE_URL` to a running OTP instance (see the configuration table). Route
+  `MCA_OPENTRIPPLANNER_BASE_URL` to a running OpenTripPlanner 2.x instance's GraphQL endpoint
+  (see the configuration table). Route
   exports (`route-alternatives.csv`, `route-segments.csv`, `route-context.csv`) never include raw
   GPS observations.
 - **Statistical comparison** compares place buffers and route corridors using exposure-adjusted
@@ -247,7 +248,7 @@ salt/secret and forces secure cookies.
 | `MCA_ASSISTANT_ROLE` | `waypoint_analyst` | Role sent to the LLM gateway. |
 | `MCA_ASSISTANT_MAX_TOOL_CALLS` | `2` | Max tool calls the Analyst may make per turn. |
 | `MCA_ROUTING_PROVIDER` | `mock` | Route alternatives provider: `mock` (deterministic, default) or `opentripplanner` (live). |
-| `MCA_OPENTRIPPLANNER_BASE_URL` | _unset_ | OTP router base URL (e.g. `http://localhost:8080/otp/routers/default`); required when the provider is `opentripplanner`. |
+| `MCA_OPENTRIPPLANNER_BASE_URL` | _unset_ | OTP2 GTFS GraphQL endpoint (e.g. `http://localhost:8080/otp/gtfs/v1`); required when the provider is `opentripplanner`. |
 | `MCA_OPENTRIPPLANNER_TIMEOUT_S` | `10.0` | HTTP timeout (seconds) for OpenTripPlanner requests. |
 
 Normalization thresholds for the internal upload pipeline are also configurable:
