@@ -113,11 +113,27 @@ canonical product objects are stop visits, recurring place clusters, and context
   explicitly suppressed clusters are excluded from exports.
 - Demo identity comes from the `X-Demo-User-Id` header (or `demo_user` when omitted) and is
   hashed server-side with `MCA_USER_HASH_SALT`.
-- Raw uploads (internal/demo mode) are temporary and deleted after normalization unless
-  `MCA_RAW_UPLOAD_RETENTION=true`.
+- Raw uploaded points are discarded after clustering: the public personal-upload path keeps
+  only the derived place clusters (the raw `StagingLocationObservation` points and per-visit
+  `StopVisit` rows are deleted) unless `MCA_RAW_UPLOAD_RETENTION=true`.
 
-**Roadmap (not yet implemented):** production authentication, encryption at rest, per-user tenant
-isolation, upload-retention controls, and explicit user-facing consent screens.
+### Personal uploads (disabled by default)
+
+Users can upload their own location history (Google Timeline JSON, CSV points, GeoJSON, or
+GPX) so the dashboard shows reported-incident context around the places they actually go.
+
+This feature **ships disabled**. It is gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`, which
+**defaults to `false`** — with it off, the `POST`/`DELETE /uploads` endpoints return `404`, the
+`personal_timeline` input mode is not advertised, and **no upload UI is rendered anywhere**.
+Enable it deliberately by setting `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`.
+
+Retention: by default only the derived place clusters are kept — raw points and per-visit
+stops are discarded immediately after clustering (set `MCA_RAW_UPLOAD_RETENTION=true` to keep
+the raw points for re-clustering). The upload panel includes a consent gate and a
+"Delete my uploaded data" control that erases every uploaded artifact for the user.
+
+**Roadmap (not yet implemented):** production authentication, encryption at rest, and per-user
+tenant isolation.
 
 ## Quick start
 
