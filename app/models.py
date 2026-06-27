@@ -370,3 +370,18 @@ class StatisticalPairwiseResult(Base):
     minimum_data_status: Mapped[str] = mapped_column(Text)
     caveat_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class GeocodeCache(Base):
+    __tablename__ = "geocode_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "query_normalized", name="uq_geocode_cache_provider_query"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    provider: Mapped[str] = mapped_column(Text)
+    query_normalized: Mapped[str] = mapped_column(Text)
+    results_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
