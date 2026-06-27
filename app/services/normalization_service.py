@@ -11,7 +11,11 @@ from app.models import (
     StagingLocationObservation,
     StopVisit,
 )
-from app.normalization.clusters import cluster_stop_visits, infer_sensitive_locations
+from app.normalization.clusters import (
+    CLUSTER_METHOD,
+    cluster_stop_visits,
+    infer_sensitive_locations,
+)
 from app.normalization.stops import detect_stops_from_observations, source_stop_to_stop_visit
 from app.schemas import LocationObservation, PlaceClusterData, SourceStop, StopVisitData
 
@@ -93,14 +97,24 @@ def normalize_import(
 
 def _delete_existing_normalization(session: Session, import_id: str, user_id_hash: str) -> None:
     cluster_ids = list(
-        session.scalars(select(PlaceCluster.id).where(PlaceCluster.user_id_hash == user_id_hash))
+        session.scalars(
+            select(PlaceCluster.id).where(
+                PlaceCluster.user_id_hash == user_id_hash,
+                PlaceCluster.cluster_method == CLUSTER_METHOD,
+            )
+        )
     )
     if cluster_ids:
         session.execute(
             delete(PlaceCrimeSummary).where(PlaceCrimeSummary.place_cluster_id.in_(cluster_ids))
         )
     session.execute(delete(StopVisit).where(StopVisit.import_id == import_id))
-    session.execute(delete(PlaceCluster).where(PlaceCluster.user_id_hash == user_id_hash))
+    session.execute(
+        delete(PlaceCluster).where(
+            PlaceCluster.user_id_hash == user_id_hash,
+            PlaceCluster.cluster_method == CLUSTER_METHOD,
+        )
+    )
     session.flush()
 
 
