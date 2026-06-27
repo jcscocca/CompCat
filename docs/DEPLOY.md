@@ -159,6 +159,57 @@ use the host's LAN IP or `host.docker.internal:8090`.
 If OTP is unreachable, `/routes` requests return an error; every other part of the app is
 unaffected (same graceful-degradation posture as the assistant).
 
+#### Running the OTP container day-to-day
+
+Building the graph is a one-time step that writes `graph.obj` into the data folder; after that
+you only run the lightweight **serve** container, which loads that graph. Run it with a restart
+policy so it comes back on its own after reboots / Docker restarts:
+
+```powershell
+cd C:\otp   # the folder that holds graph.obj
+docker run -d --name otp --restart unless-stopped -p 8090:8080 `
+  -e JAVA_TOOL_OPTIONS='-Xmx8g' -v ${PWD}:/var/opentripplanner `
+  docker.io/opentripplanner/opentripplanner:latest --load --serve
+```
+
+`--restart unless-stopped` is the important part: Docker Desktop restarts OTP automatically on
+boot, so normally you never start it by hand. Once that container exists:
+
+| Action | Command |
+| --- | --- |
+| Start it again | `docker start otp` |
+| Stop it | `docker stop otp` |
+| Restart | `docker restart otp` |
+| Follow logs (wait for `Grizzly server running`) | `docker logs -f otp` |
+| Status | `docker ps -a --filter name=otp` |
+| Recreate from scratch | `docker rm -f otp`, then re-run the `docker run …` above |
+
+If `docker run` says the name is already in use, the container already exists — use
+`docker start otp` (or `docker rm -f otp` first to recreate it with the restart policy).
+`--load` needs the saved `graph.obj`; if you ever built with `--serve` instead of `--save`,
+run `--build --save` once to produce it.
+
+**Confirm it is serving** — open `http://localhost:8090/graphiql`, or:
+
+```powershell
+curl http://localhost:8090/otp/gtfs/v1 -X POST -H "Content-Type: application/json" `
+  -d '{"query":"{ plan(from:{lat:47.62,lon:-122.32}, to:{lat:47.61,lon:-122.33}, transportModes:[{mode:TRANSIT},{mode:WALK}]) { itineraries { duration } } }"}'
+```
+
+**Point Waypoint at it** (Waypoint running on the same ThinkPad → `localhost`):
+
+```
+MCA_ROUTING_PROVIDER=opentripplanner
+MCA_OPENTRIPPLANNER_BASE_URL=http://localhost:8090/otp/gtfs/v1
+```
+
+Restart Waypoint after setting these. (If Waypoint itself runs in a container, use
+`http://host.docker.internal:8090/otp/gtfs/v1` — inside a container `localhost` is the
+container, not the host.)
+
+**Refresh transit data** when the GTFS feed changes: re-download it into the data folder,
+rebuild with `--build --save`, then `docker restart otp`.
+
 ## Stop / reset
 
 ```bash
