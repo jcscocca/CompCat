@@ -65,6 +65,16 @@ docker compose --env-file .env.deploy up -d --build
 
 ## 3. Load 2018+ crime data
 
+**Quick demo seed (optional, no network).** To get a fresh deploy rendering immediately
+with bundled synthetic incidents (≈400 rows across several beats, 2018–2025):
+
+```bash
+docker compose exec api python scripts/seed_crime.py    # or, for local dev: make seed-crime
+```
+
+This is demo data, not real SPD data; it's idempotent (re-running skips existing rows).
+For real data, run the Socrata ingest below.
+
 Beat-area reference data ships inside the image; crime incidents are ingested at
 runtime from Seattle's open data. Pull ~2018-onward incidents (newest first) — adjust
 the page count for how much you want (each page ≈ 5,000 incidents):
