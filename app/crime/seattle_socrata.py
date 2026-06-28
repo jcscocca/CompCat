@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from app.models import utc_now
 from app.parsers.base import parse_datetime
 from app.schemas import CrimeIncidentData
 
@@ -101,8 +102,10 @@ def crime_incident_from_mapping(row: dict[str, Any]) -> CrimeIncidentData:
         block_address=_first(row, "100_block_address", "block_address"),
         latitude=latitude,
         longitude=longitude,
-        snapshot_at=parse_datetime(_first(row, "snapshot_at"))
-        or parse_datetime("2024-01-01T00:00:00Z"),
+        # SPD rows carry no snapshot_at, so stamp the ingest time — this is "ingested-at"
+        # provenance (and powers last_ingested_at in the freshness endpoint), not a fixed
+        # as-of date. (Previously hardcoded to 2024-01-01, which was wrong for every row.)
+        snapshot_at=parse_datetime(_first(row, "snapshot_at")) or utc_now(),
     )
 
 
