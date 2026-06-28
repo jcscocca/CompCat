@@ -74,3 +74,53 @@ def test_public_dashboard_flow_without_uploads(tmp_path, monkeypatch):
     assert rows[0]["analysis_end_date"] == "2024-01-31"
     assert rows[0]["offense_category"] == "PROPERTY"
     assert rows[0]["incident_count"] == "1"
+
+
+def test_public_place_summary_export_excludes_sensitive_places(tmp_path):
+    # End-to-end guard for the sensitivity control: a place created via the public POST
+    # /places with a non-"normal" sensitivity_class (the wire the UI now uses) must be
+    # absent from the public Tableau place-summary export.
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+
+    normal = client.post(
+        "/places",
+        json={
+            "display_label": "Public stop",
+            "latitude": 47.609,
+            "longitude": -122.333,
+            "visit_count": 5,
+            "sensitivity_class": "normal",
+        },
+    )
+    sensitive = client.post(
+        "/places",
+        json={
+            "display_label": "My home",
+            "latitude": 47.610,
+            "longitude": -122.334,
+            "visit_count": 5,
+            "sensitivity_class": "home_candidate",
+        },
+    )
+    assert normal.status_code == 201
+    assert sensitive.status_code == 201
+
+    analyze = client.post(
+        "/dashboard/analyze",
+        json={
+            "place_ids": [normal.json()["id"], sensitive.json()["id"]],
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [250],
+            "offense_category": None,
+        },
+    )
+    assert analyze.status_code == 200
+
+    export_response = client.get("/exports/tableau/place-summary.csv")
+    assert export_response.status_code == 200
+    labels = [row["display_label"] for row in csv.DictReader(StringIO(export_response.text))]
+    assert "Public stop" in labels
+    assert "My home" not in labels

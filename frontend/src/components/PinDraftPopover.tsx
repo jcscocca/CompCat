@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 
+import { SENSITIVITY_OPTIONS } from "../lib/sensitivity";
 import type { DraftPin } from "../types";
 
 type Props = {
@@ -32,6 +33,16 @@ export function PinDraftPopover({ draft, saving, error, onChange, onSave, onCanc
         placeholder="Test location"
         onChange={(event) => onChange({ display_label: event.target.value })}
       />
+      <label htmlFor="draft-sensitivity">Sensitivity</label>
+      <select
+        id="draft-sensitivity"
+        value={draft.sensitivity_class}
+        onChange={(event) => onChange({ sensitivity_class: event.target.value })}
+      >
+        {SENSITIVITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
       {error ? <p className="mc-draft-error" role="alert">{error}</p> : null}
       <div className="mc-draft-actions">
         <button type="button" className="mc-ghost" onClick={onCancel} disabled={saving}>Cancel</button>

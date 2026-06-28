@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { FormEvent, useState } from "react";
 
 import { labelOrDefault } from "../lib/placeDefaults";
+import { SENSITIVITY_OPTIONS } from "../lib/sensitivity";
 import type { PlaceCreate } from "../types";
 
 type Props = {
@@ -12,6 +13,7 @@ export function PlaceForm({ onSubmit }: Props) {
   const [displayLabel, setDisplayLabel] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [sensitivity, setSensitivity] = useState("normal");
   const [error, setError] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -48,12 +50,13 @@ export function PlaceForm({ onSubmit }: Props) {
         latitude: numericLatitude,
         longitude: numericLongitude,
         visit_count: 1,
-        sensitivity_class: "normal",
+        sensitivity_class: sensitivity,
       });
 
       setDisplayLabel("");
       setLatitude("");
       setLongitude("");
+      setSensitivity("normal");
     } catch {
       setError("Unable to add place. Try again.");
     }
@@ -102,6 +105,18 @@ export function PlaceForm({ onSubmit }: Props) {
             />
           </div>
         </div>
+
+        <label htmlFor="sensitivity">Sensitivity</label>
+        <select
+          id="sensitivity"
+          name="sensitivity"
+          value={sensitivity}
+          onChange={(event) => setSensitivity(event.target.value)}
+        >
+          {SENSITIVITY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
 
         {error ? <p className="error">{error}</p> : null}
 
