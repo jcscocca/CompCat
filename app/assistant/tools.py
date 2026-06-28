@@ -194,6 +194,7 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
         "analysis": analysis,
         "neighborhood": neighborhood,
         "incidents": incidents,
+        "matched": resolved.matched,
         "created": resolved.created,
         "unresolved": resolved.unresolved,
     }
@@ -234,6 +235,7 @@ def _compare_places(
         "place_ids": resolved.place_ids,
         "settings_used": _settings_used(args, args.radius_m),
         "comparison": comparison,
+        "matched": resolved.matched,
         "created": resolved.created,
         "unresolved": resolved.unresolved,
     }

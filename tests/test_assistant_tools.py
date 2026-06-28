@@ -212,6 +212,7 @@ def test_select_places_resolves_and_passes_mode(tmp_path, monkeypatch):
     assert result["tool_name"] == "select_places"
     assert result["result"]["place_ids"] == ["place-1"]
     assert result["result"]["mode"] == "replace"
+    assert "matched" in result["result"]
 
 
 def test_analyze_places_bundles_neighborhood_and_incidents(tmp_path):
