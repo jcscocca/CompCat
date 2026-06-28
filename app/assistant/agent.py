@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+import re
+from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -17,7 +18,16 @@ from app.assistant.semantic_layer import build_semantic_context
 from app.assistant.tools import AssistantToolError, execute_tool
 from app.config import get_settings
 
-SAFE_UNSAFE_TERMS = ("safest", "least safe", "unsafe", "safe?")
+# Reject requests that ask the assistant to score/rank places by safety, danger, or risk —
+# the product invariant forbids it. Word-boundary matching so legitimate substrings
+# ("safely", "Safeway", "incident rate") don't false-trigger. The companion redirect points
+# users at the supported neutral framing (reported-incident counts / exposure-adjusted rates).
+_SAFETY_SCORE_PATTERN = re.compile(
+    r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|risk(?:y|ier|iest)?)\b"
+    r"|\b(?:rank|rate|score)\b\s+(?:these|those|them|the\s+)?"
+    r"(?:place|block|area|neighbou?rhood|route|street|spot|option|location)s?\b",
+    re.IGNORECASE,
+)
 SELECTION_TOOLS = (
     "run_place_analysis",
     "compare_places",
@@ -40,14 +50,15 @@ async def run_assistant_turn(
         data={"role": settings.assistant_role, "missing_context": context.missing_context},
     )
 
-    latest_user = _latest_user_text(messages)
-    if _asks_for_safety_score(latest_user):
+    if _asks_for_safety_score(_recent_user_texts(messages)):
         yield AssistantStreamEvent(
             event="token",
             data={
                 "delta": (
-                    "I can discuss reported incident context, but I cannot label "
-                    "places safe or unsafe or produce a personal safety score."
+                    "I can discuss reported incident context, but I can't label places "
+                    "safe or unsafe, rank them by safety, danger, or risk, or produce a "
+                    "personal safety score. I can instead order places by reported incident "
+                    "count or compare exposure-adjusted incident rates — just ask it that way."
                 )
             },
         )
@@ -95,16 +106,17 @@ async def run_assistant_turn(
         yield AssistantStreamEvent(event="error", data={"message": str(exc)})
 
 
-def _latest_user_text(messages: list[AssistantChatMessage]) -> str:
-    for message in reversed(messages):
-        if message.role == "user":
-            return message.content
-    return ""
+def _recent_user_texts(
+    messages: list[AssistantChatMessage], limit: int = 8
+) -> list[str]:
+    # Scan the recent user turns the model can actually see (prompts.py sends
+    # messages[-8:]), not just the newest one, so a safety-score request split across
+    # turns or carried by a short "yes, do that" follow-up still trips the guard.
+    return [message.content for message in messages[-limit:] if message.role == "user"]
 
 
-def _asks_for_safety_score(text: str) -> bool:
-    lowered = text.lower()
-    return any(term in lowered for term in SAFE_UNSAFE_TERMS)
+def _asks_for_safety_score(texts: Iterable[str]) -> bool:
+    return any(_SAFETY_SCORE_PATTERN.search(text) for text in texts)
 
 
 def _tool_arguments(

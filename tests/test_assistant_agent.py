@@ -205,6 +205,91 @@ def test_agent_redirects_safe_unsafe_language_without_model_call(tmp_path):
     assert client.calls == []
 
 
+def test_agent_redirects_broadened_safety_and_ranking_phrasings(tmp_path):
+    # Phrasings that slipped past the old 4-keyword substring guard must now be caught
+    # before any model call.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Which block is more dangerous?",
+        "How risky is this area?",
+        "Rank these places by safety.",
+        "Score the neighborhood for me.",
+        "Is it safe around here?",
+        "Which route is safer?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient([])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_when_safety_request_is_in_an_earlier_turn(tmp_path):
+    # Multi-turn: a safety-score request in an earlier user turn (with a short follow-up
+    # as the latest message) still trips the guard — no model call.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient([])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(role="user", content="Which place is safest?"),
+                    AssistantChatMessage(role="assistant", content="I can't score safety."),
+                    AssistantChatMessage(role="user", content="ok do it anyway"),
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert "reported incident" in events[1].data["delta"]
+    assert client.calls == []
+
+
+def test_agent_does_not_redirect_neutral_incident_question(tmp_path):
+    # False-positive guard: neutral phrasing that merely contains "rate"/"incident" must
+    # reach the model, not the safety redirect.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"final","message":"There was one reported incident."}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(
+                        role="user",
+                        content="What is the reported incident rate near place-1?",
+                    )
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert len(client.calls) == 1
+    assert events[1].data["delta"] == "There was one reported incident."
+
+
 def test_agent_fills_selection_tool_args_from_dashboard_state(tmp_path):
     # Real local models often emit a tool_call with empty arguments; the agent must
     # backfill the current selection (place/radius/dates) from the dashboard state.

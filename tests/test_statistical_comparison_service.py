@@ -61,7 +61,19 @@ def test_build_statistical_comparison_recommends_candidate_only_when_all_pairs_p
     assert result.recommendation_option_id == "a"
     assert result.recommendation_label == "Route A"
     assert "statistically lower reported-incident rate" in result.overview_summary_text
-    assert "safe" not in result.overview_summary_text.lower()
+    # Output-side invariant guard: the engine's user-facing verdict reports reported-incident
+    # context only — never safe/unsafe/danger/risk vocabulary, even on a "winning" comparison.
+    verdict_text = " ".join(
+        [
+            result.decision_class.value,
+            result.overview_summary_text,
+            result.recommendation_label or "",
+            result.pairwise_results[0].winner_label or "",
+            result.pairwise_results[0].decision_class.value,
+        ]
+    ).lower()
+    for banned in ("safe", "unsafe", "safety", "danger", "dangerous", "risk", "risky"):
+        assert banned not in verdict_text, banned
     assert (
         result.overview_caveat_text
         == "This describes reported incidents, not causation or personal outcomes."
@@ -70,6 +82,103 @@ def test_build_statistical_comparison_recommends_candidate_only_when_all_pairs_p
     assert result.pairwise_results[0].winner_option_id == "a"
     assert result.pairwise_results[0].winner_label == "Route A"
     assert result.pairwise_results[0].overdispersion_status == "poisson_ok"
+
+
+def test_build_statistical_comparison_floors_near_empty_candidate():
+    # Product-invariant guard: a near-zero-incident option must NOT be declared the
+    # "statistically lower" winner on combined count alone — that is a safety ranking on
+    # no per-option signal. The per-option MIN_PLACE_COUNT floor (already enforced on the
+    # neighborhood path) must apply to the compare/route path too.
+    result = build_statistical_comparison(
+        user_id_hash="user",
+        comparison_type="route",
+        geometry_type=GeometryType.ROUTE_CORRIDOR,
+        radius_m=500,
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        offense_category="PROPERTY",
+        offense_subcategory=None,
+        nibrs_group=None,
+        options=[
+            AnalysisOptionResult(
+                option_id="a",
+                option_label="Route A",
+                geometry_type=GeometryType.ROUTE_CORRIDOR,
+                radius_m=500,
+                incident_count=0,
+                exposure=30.0,
+                exposure_unit="square_km_days",
+                incident_rate=0.0,
+            ),
+            AnalysisOptionResult(
+                option_id="b",
+                option_label="Route B",
+                geometry_type=GeometryType.ROUTE_CORRIDOR,
+                radius_m=500,
+                incident_count=300,
+                exposure=30.0,
+                exposure_unit="square_km_days",
+                incident_rate=300 / 30.0,
+            ),
+        ],
+        period_counts_by_option_id={
+            "a": [0, 0, 0, 0],
+            "b": [75, 75, 75, 75],
+        },
+    )
+
+    assert result.decision_class == DecisionClass.INSUFFICIENT_DATA
+    assert result.recommendation_option_id is None
+    assert result.recommendation_label is None
+    assert result.pairwise_results[0].minimum_data_status == "option_count_too_low"
+    assert result.pairwise_results[0].winner_option_id is None
+    assert "safe" not in result.overview_summary_text.lower()
+
+
+def test_build_statistical_comparison_allows_candidate_at_min_place_count():
+    # Boundary: a candidate sitting exactly at MIN_PLACE_COUNT, with a clear contrast,
+    # still wins — the floor is a floor, not an off-by-one block.
+    result = build_statistical_comparison(
+        user_id_hash="user",
+        comparison_type="route",
+        geometry_type=GeometryType.ROUTE_CORRIDOR,
+        radius_m=500,
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        offense_category="PROPERTY",
+        offense_subcategory=None,
+        nibrs_group=None,
+        options=[
+            AnalysisOptionResult(
+                option_id="a",
+                option_label="Route A",
+                geometry_type=GeometryType.ROUTE_CORRIDOR,
+                radius_m=500,
+                incident_count=3,
+                exposure=30.0,
+                exposure_unit="square_km_days",
+                incident_rate=3 / 30.0,
+            ),
+            AnalysisOptionResult(
+                option_id="b",
+                option_label="Route B",
+                geometry_type=GeometryType.ROUTE_CORRIDOR,
+                radius_m=500,
+                incident_count=60,
+                exposure=30.0,
+                exposure_unit="square_km_days",
+                incident_rate=60 / 30.0,
+            ),
+        ],
+        period_counts_by_option_id={
+            "a": [1, 1, 1, 0],
+            "b": [15, 15, 15, 15],
+        },
+    )
+
+    assert result.decision_class == DecisionClass.STATISTICALLY_LOWER
+    assert result.recommendation_option_id == "a"
+    assert result.pairwise_results[0].minimum_data_status == "met"
 
 
 def test_build_statistical_comparison_keeps_alternatives_when_result_is_not_clear():

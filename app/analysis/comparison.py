@@ -6,6 +6,7 @@ from app.analysis.exposure import analysis_days
 from app.analysis.rate_tests import (
     MIN_ANALYSIS_DAYS,
     MIN_COMBINED_COUNT,
+    MIN_PLACE_COUNT,
     benjamini_hochberg,
     classify_pairwise_result,
     compare_incident_rates,
@@ -223,6 +224,12 @@ def _minimum_data_status(
         return "date_range_too_short"
     if candidate.exposure <= 0 or other.exposure <= 0:
         return "non_positive_exposure"
+    # Per-option floor (mirrors the neighborhood path's MIN_PLACE_COUNT gate). The
+    # candidate is the lowest-rate option and the only one that can win, so a near-empty
+    # candidate must not be declared "statistically lower" on a combined count the busy
+    # other option satisfies on its own — that would be a safety ranking on no signal.
+    if candidate.incident_count < MIN_PLACE_COUNT:
+        return "option_count_too_low"
     if candidate.incident_count + other.incident_count < MIN_COMBINED_COUNT:
         return "combined_count_too_low"
     return "met"
