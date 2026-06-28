@@ -1,9 +1,9 @@
 # Personal Data Upload (epic A)
 
 **Date:** 2026-06-26
-**Status:** Approved for implementation
+**Status:** Shipped — dark-launched in [PR #21](https://github.com/jcscocca/crime-commute-safety-tool/pull/21) (merged 2026-06-26); **enabled** on the single-host ThinkPad trial (PR #43, `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`). The app default in `config.py` stays `False`; kept off for any multi-user/public deploy.
 **Related:** roadmap epic **A** in `docs/superpowers/plans/2026-06-26-waypoint-next-steps-roadmap.md`;
-beta-scope deferral (personal upload + consent copy) recorded in the v2 backlog.
+deploy enablement in `.env.deploy.example` / `docs/DEPLOY.md`.
 
 ## Goal
 
