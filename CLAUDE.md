@@ -2,7 +2,7 @@
 
 Waypoint is a privacy-first web app for exploring **reported Seattle SPD incident
 context** around places and routes. FastAPI + SQLAlchemy/Alembic backend, React +
-TypeScript + Vite frontend, SQLite for dev / Postgres + PostGIS for deploy.
+TypeScript + Vite frontend, SQLite for dev / Postgres for deploy.
 
 ## Product invariant (do not break)
 
