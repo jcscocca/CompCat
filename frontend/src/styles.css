@@ -11,6 +11,13 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * Base resets + the Places modal forms (PlaceForm / BulkPlaceEntry) and Notice. The
+ * map-first dashboard is styled by styles/mapWorkspace.css (the mc- system); the old
+ * dashboard-layout rules that used to live here are gone — only what the modals/Notice
+ * still use remains.
+ */
+
 * {
   box-sizing: border-box;
 }
@@ -35,28 +42,6 @@ button:disabled {
   min-height: 100vh;
 }
 
-.app-shell {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  gap: 24px;
-  width: min(1180px, calc(100% - 32px));
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 24px 0 40px;
-}
-
-.topbar {
-  display: grid;
-  gap: 6px;
-  min-height: 72px;
-  padding: 16px 20px;
-  color: #f8fbfc;
-  background: #10282f;
-  border: 1px solid #183943;
-  border-radius: 8px;
-}
-
-.eyebrow,
 .panel-label {
   margin: 0 0 6px;
   color: #63d2cb;
@@ -64,78 +49,6 @@ button:disabled {
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
-}
-
-.topbar h1,
-.workspace h2,
-.panel h2 {
-  margin: 0;
-  line-height: 1.15;
-  letter-spacing: 0;
-}
-
-.topbar h1 {
-  font-size: 1.6rem;
-  font-weight: 760;
-}
-
-.icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  color: #f8fbfc;
-  background: #1f4b56;
-  border: 1px solid #316977;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  align-items: end;
-  padding: 22px;
-  background: #ffffff;
-  border: 1px solid #d8e0e6;
-  border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(38, 57, 66, 0.08);
-}
-
-.workspace-copy {
-  max-width: 720px;
-}
-
-.section-kicker {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-  color: #285a64;
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.workspace h2 {
-  color: #162026;
-  font-size: 1.35rem;
-}
-
-.workspace p {
-  max-width: 680px;
-  margin: 10px 0 0;
-  color: #4c5b64;
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  align-items: stretch;
 }
 
 .notice {
@@ -169,54 +82,18 @@ button:disabled {
 }
 
 .panel h2 {
+  margin: 0;
+  line-height: 1.15;
+  letter-spacing: 0;
   color: #162026;
   font-size: 1rem;
   font-weight: 750;
-}
-
-.summary-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(92px, 1fr));
-  gap: 10px;
-  min-width: 330px;
-}
-
-.summary-strip div {
-  display: grid;
-  gap: 5px;
-  min-height: 64px;
-  padding: 12px;
-  background: #f6f9fa;
-  border: 1px solid #e3e9ed;
-  border-radius: 8px;
-}
-
-.summary-strip span {
-  color: #65727a;
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.summary-strip strong {
-  color: #162026;
-  font-size: 1.35rem;
-  line-height: 1;
 }
 
 .place-form,
 .bulk-entry {
   display: grid;
   gap: 16px;
-}
-
-.table-panel {
-  grid-column: 1 / -1;
-}
-
-.controls,
-.metrics {
-  grid-column: 1 / -1;
 }
 
 .panel form {
@@ -233,10 +110,6 @@ button:disabled {
 .form-grid > div {
   display: grid;
   gap: 8px;
-}
-
-.controls-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 label {
@@ -292,148 +165,6 @@ button:focus-visible {
   border-color: #7e8c94;
 }
 
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  min-height: 0;
-}
-
-.metrics div {
-  min-height: 92px;
-  padding: 14px;
-  background: #f6f9fa;
-  border: 1px solid #e3e9ed;
-  border-radius: 8px;
-}
-
-.metric-value,
-.metric-label {
-  display: block;
-}
-
-.metric-value {
-  color: #162026;
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.metric-label,
-.muted {
-  color: #52616b;
-}
-
-.metric-label {
-  margin-top: 8px;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.comparison-panel,
-.export-panel {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-
-.comparison-panel p,
-.export-panel p {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.button-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: fit-content;
-  min-height: 42px;
-  padding: 0 14px;
-  color: #f8fbfc;
-  background: #1f4b56;
-  border: 1px solid #316977;
-  border-radius: 8px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.button-link:focus-visible {
-  outline: 3px solid rgba(43, 138, 145, 0.28);
-  outline-offset: 2px;
-}
-
-.table-panel .icon-button {
-  width: 36px;
-  height: 36px;
-  color: #285a64;
-  background: #f6f9fa;
-  border-color: #d8e0e6;
-}
-
-.count-pill {
-  flex: 0 0 auto;
-  padding: 5px 9px;
-  color: #1f5960;
-  background: #dff4f1;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.table-wrap {
-  width: 100%;
-  margin-top: 16px;
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  min-width: 680px;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 12px 10px;
-  text-align: left;
-  vertical-align: middle;
-  border-bottom: 1px solid #e3e9ed;
-}
-
-th {
-  color: #4c5b64;
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-td {
-  color: #263840;
-  font-size: 0.92rem;
-}
-
-td input[type="checkbox"] {
-  width: 18px;
-  min-height: 18px;
-  height: 18px;
-  padding: 0;
-  cursor: pointer;
-}
-
-.empty-cell {
-  color: #65727a;
-  text-align: center;
-}
-
 .error {
   margin: 0;
   color: #a33a33;
@@ -441,50 +172,8 @@ td input[type="checkbox"] {
   font-weight: 700;
 }
 
-@media (max-width: 900px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .controls-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .summary-strip {
-    min-width: 0;
-  }
-}
-
 @media (max-width: 640px) {
-  .app-shell {
-    width: min(100% - 24px, 1180px);
-    gap: 16px;
-    padding-top: 12px;
-  }
-
-  .topbar {
-    align-items: flex-start;
-    padding: 14px;
-  }
-
-  .topbar h1 {
-    max-width: 230px;
-    font-size: 1.28rem;
-  }
-
-  .workspace {
-    padding: 16px;
-  }
-
-  .dashboard-grid,
-  .form-grid,
-  .controls-grid,
-  .metrics,
-  .summary-strip {
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }
