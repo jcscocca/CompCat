@@ -6,7 +6,11 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
-from app.analysis.beat_baselines import load_beat_areas
+from app.analysis.beat_baselines import (
+    BeatPolygons,
+    load_beat_areas,
+    load_beat_polygons,
+)
 from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardCompareRequest,
@@ -27,6 +31,11 @@ AGENT_INCIDENT_LIMIT = 100
 @lru_cache(maxsize=1)
 def _beat_areas() -> dict[str, float]:
     return load_beat_areas()
+
+
+@lru_cache(maxsize=1)
+def _beat_polygons() -> BeatPolygons:
+    return load_beat_polygons()
 
 
 class AssistantToolError(ValueError):
@@ -89,6 +98,7 @@ def execute_tool(
                 offense_subcategory=args.offense_subcategory,
                 nibrs_group=args.nibrs_group,
                 area_lookup=_beat_areas(),
+                beat_polygons=_beat_polygons(),
             )
             validated_arguments = args.model_dump(mode="json")
         elif tool_name == "get_incident_details":

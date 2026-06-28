@@ -132,7 +132,7 @@ def test_get_neighborhood_analysis_exposes_beat_baseline_stats(tmp_path):
 
     assert result["tool_name"] == "get_neighborhood_analysis"
     place = result["result"]["places"][0]
-    assert place["beat"] == "M2"
+    assert place["beat"] == "M3"
     assert place["baseline_available"] is True
     # The CI / significance / verdict the assistant must interpret are all present.
     for field in ("rate_ratio", "ci_lower", "ci_upper", "adjusted_p_value", "decision"):

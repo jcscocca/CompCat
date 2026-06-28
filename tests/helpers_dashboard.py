@@ -10,16 +10,30 @@ from app.models import CrimeIncident, PlaceCluster
 from app.sessions import public_user_hash
 
 
+def square_beat_polygons(beat: str, lat: float, lon: float, half: float = 0.05):
+    """A single square beat polygon (~11 km across at ``half=0.05``) centred on
+    ``(lat, lon)``, in the ``BeatPolygons`` shape. Lets direct-call unit tests pin a
+    deterministic point-in-polygon beat assignment without loading the real geometry."""
+    ring = [
+        (lon - half, lat - half),
+        (lon + half, lat - half),
+        (lon + half, lat + half),
+        (lon - half, lat + half),
+        (lon - half, lat - half),
+    ]
+    return {beat: [[ring]]}
+
+
 def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
     """Seed one place plus SPD beat-tagged crime for neighborhood analysis tests.
 
-    Inserts a single ``PlaceCluster`` with display coordinates, several
-    ``CrimeIncident`` rows WITHIN 250 m carrying ``beat="M2"`` (so the place's
-    modal beat resolves to ``M2``), and additional ``beat="M2"`` rows OUTSIDE the
-    250 m buffer (so the beat-wide incident count exceeds the place count). All
-    incidents are dated across 2026-01..2026-06 so a full-range analysis has both
-    positive place and beat rates while a short sub-range falls below the minimum
-    analysis-window length.
+    Inserts a single ``PlaceCluster`` at a downtown point that the real beat polygons
+    (and ``square_beat_polygons("M3", ...)``) resolve to beat ``M3``, several
+    ``CrimeIncident`` rows WITHIN 250 m carrying ``beat="M3"``, and additional
+    ``beat="M3"`` rows OUTSIDE the 250 m buffer (so the beat-wide incident count
+    exceeds the place count). All incidents are dated across 2026-01..2026-06 so a
+    full-range analysis has both positive place and beat rates while a short sub-range
+    falls below the minimum analysis-window length.
 
     Returns ``(session, user_id_hash, place_id)``.
     """
@@ -35,8 +49,10 @@ def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
     assert user_hash is not None
 
     place_id = "neighborhood-place"
-    place_lat = 47.6100
-    place_lon = -122.3330
+    # Deep in beat M3's interior (clear M3 under ~165 m perturbation), so the real-asset
+    # tests don't sit on the M3/M2 boundary where a future polygon revision could flip them.
+    place_lat = 47.60945
+    place_lon = -122.33595
 
     session = sessionmaker()
     session.add(
@@ -75,7 +91,7 @@ def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
                 offense_category="PROPERTY",
                 offense_subcategory="Theft",
                 nibrs_group="PROPERTY",
-                beat="M2",
+                beat="M3",
                 latitude=place_lat + dlat,
                 longitude=place_lon + dlon,
             )
@@ -102,7 +118,7 @@ def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
                 offense_category="PROPERTY",
                 offense_subcategory="Burglary",
                 nibrs_group="PROPERTY",
-                beat="M2",
+                beat="M3",
                 latitude=place_lat + dlat,
                 longitude=place_lon + dlon,
             )

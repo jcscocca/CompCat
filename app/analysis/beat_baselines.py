@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from math import isfinite
@@ -19,6 +20,14 @@ from app.analysis.rate_tests import (
 DEFAULT_AREA_CSV = (
     Path(__file__).resolve().parent.parent / "data" / "seattle_police_beats_2018_area.csv"
 )
+DEFAULT_BEATS_GEOJSON = (
+    Path(__file__).resolve().parent.parent / "data" / "seattle_police_beats_2018.geojson"
+)
+
+# A beat polygon set: beat code -> list of polygons; each polygon is a list of linear
+# rings (ring 0 is the exterior, any others are holes); each ring is a list of
+# ``(longitude, latitude)`` vertices. Normalised from GeoJSON Polygon/MultiPolygon.
+BeatPolygons = dict[str, list[list[list[tuple[float, float]]]]]
 
 # Placeholder ``beat`` codes that SPD records on incidents but that are not real police
 # beats and therefore have no polygon in the published "Seattle Police Beats 2018-Present"
@@ -41,6 +50,70 @@ def load_beat_areas(path: Path | None = None) -> dict[str, float]:
                 raise ValueError(f"Beat {beat} has non-positive area {area}.")
             areas[beat] = area
     return areas
+
+
+def load_beat_polygons(path: Path | None = None) -> BeatPolygons:
+    """Load the WGS84 beat polygons used for point-in-polygon beat assignment.
+
+    Normalises GeoJSON ``Polygon`` and ``MultiPolygon`` features into the
+    ``BeatPolygons`` shape and skips the non-geographic placeholder beats (which
+    have no geometry). Coordinates stay ``(lon, lat)`` to match GeoJSON order.
+    """
+    source = path or DEFAULT_BEATS_GEOJSON
+    with Path(source).open(encoding="utf-8") as handle:
+        data = json.load(handle)
+
+    polygons: BeatPolygons = {}
+    for feature in data.get("features", []):
+        beat = (feature.get("properties", {}).get("beat") or "").strip()
+        geometry = feature.get("geometry") or {}
+        geom_type = geometry.get("type")
+        if not beat or beat in NON_GEOGRAPHIC_BEATS:
+            continue
+        if geom_type == "Polygon":
+            multi = [geometry["coordinates"]]
+        elif geom_type == "MultiPolygon":
+            multi = geometry["coordinates"]
+        else:
+            continue
+        rings = [
+            [[(float(x), float(y)) for x, y in ring] for ring in poly] for poly in multi
+        ]
+        polygons.setdefault(beat, []).extend(rings)
+    return polygons
+
+
+def _point_in_ring(lon: float, lat: float, ring: list[tuple[float, float]]) -> bool:
+    """Even-odd ray-casting (PNPOLY). The ``(yi > lat) != (yj > lat)`` guard ensures the
+    edge straddles the test latitude before the division, so ``yj - yi`` is never zero."""
+    inside = False
+    count = len(ring)
+    j = count - 1
+    for i in range(count):
+        xi, yi = ring[i]
+        xj, yj = ring[j]
+        if ((yi > lat) != (yj > lat)) and (
+            lon < (xj - xi) * (lat - yi) / (yj - yi) + xi
+        ):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _point_in_polygon(lon: float, lat: float, rings: list[list[tuple[float, float]]]) -> bool:
+    # Inside the exterior ring (rings[0]) and outside every hole (rings[1:]).
+    if not rings or not _point_in_ring(lon, lat, rings[0]):
+        return False
+    return not any(_point_in_ring(lon, lat, hole) for hole in rings[1:])
+
+
+def assign_beat(lon: float, lat: float, beat_polygons: BeatPolygons) -> str | None:
+    """Return the beat whose polygon contains ``(lon, lat)``, or ``None`` when the point
+    falls outside every beat (water, a coverage gap, or outside Seattle)."""
+    for beat, polygons in beat_polygons.items():
+        if any(_point_in_polygon(lon, lat, rings) for rings in polygons):
+            return beat
+    return None
 
 
 def missing_beat_areas(

@@ -7,7 +7,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.analysis.beat_baselines import load_beat_areas
+from app.analysis.beat_baselines import (
+    BeatPolygons,
+    load_beat_areas,
+    load_beat_polygons,
+)
 from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardCompareRequest,
@@ -32,6 +36,11 @@ router = APIRouter()
 @lru_cache(maxsize=1)
 def _beat_areas() -> dict[str, float]:
     return load_beat_areas()
+
+
+@lru_cache(maxsize=1)
+def _beat_polygons() -> BeatPolygons:
+    return load_beat_polygons()
 
 
 @router.post("/dashboard/analyze")
@@ -119,6 +128,7 @@ def dashboard_neighborhood(
             offense_subcategory=request.offense_subcategory,
             nibrs_group=request.nibrs_group,
             area_lookup=_beat_areas(),
+            beat_polygons=_beat_polygons(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

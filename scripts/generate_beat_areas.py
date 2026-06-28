@@ -1,8 +1,10 @@
-"""Generate app/data/seattle_police_beats_2018_area.csv from the published SPD
-2018-present beat polygons. Geodesic area (spherical excess), no GIS deps.
+"""Generate the SPD beat data assets from the published SPD 2018-present beat
+polygons: the per-beat geodesic area CSV (spherical excess) and the WGS84 polygon
+GeoJSON used for point-in-polygon beat assignment. No GIS deps.
 
     .venv/bin/python scripts/generate_beat_areas.py \
-        --out app/data/seattle_police_beats_2018_area.csv
+        --out app/data/seattle_police_beats_2018_area.csv \
+        --geojson-out app/data/seattle_police_beats_2018.geojson
 """
 from __future__ import annotations
 
@@ -43,17 +45,56 @@ def polygon_area_km2(coords: list) -> float:
     return max(0.0, outer - holes) / 1_000_000.0
 
 
+def _round_coords(node: object, precision: int) -> object:
+    """Recursively round every coordinate in a GeoJSON geometry to ``precision``
+    decimal places (~0.1 m at 6 dp), trimming on-disk size and float noise."""
+    if isinstance(node, list):
+        return [_round_coords(child, precision) for child in node]
+    if isinstance(node, float):
+        return round(node, precision)
+    return node
+
+
+def build_beats_geojson(features: list[dict], precision: int) -> dict:
+    """A minimal WGS84 FeatureCollection carrying only ``beat`` + geometry, sorted by
+    beat so the asset is reproducible (stable diffs) across regenerations."""
+    out_features = []
+    for feature in sorted(
+        features, key=lambda f: (f.get("properties", {}).get("beat") or "")
+    ):
+        beat = (feature.get("properties", {}).get("beat") or "").strip()
+        geom = feature.get("geometry") or {}
+        if not beat or geom.get("type") not in {"Polygon", "MultiPolygon"}:
+            continue
+        out_features.append(
+            {
+                "type": "Feature",
+                "properties": {"beat": beat},
+                "geometry": {
+                    "type": geom["type"],
+                    "coordinates": _round_coords(geom["coordinates"], precision),
+                },
+            }
+        )
+    return {"type": "FeatureCollection", "features": out_features}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--out", default="app/data/seattle_police_beats_2018_area.csv")
+    parser.add_argument(
+        "--geojson-out", default="app/data/seattle_police_beats_2018.geojson"
+    )
+    parser.add_argument("--coord-precision", type=int, default=6)
     args = parser.parse_args()
 
     with urlopen(args.url, timeout=60) as response:
         data = json.loads(response.read().decode("utf-8"))
 
+    features = data.get("features", [])
     areas: dict[str, float] = {}
-    for feature in data.get("features", []):
+    for feature in features:
         beat = (feature.get("properties", {}).get("beat") or "").strip()
         geom = feature.get("geometry") or {}
         if not beat or geom.get("type") not in {"Polygon", "MultiPolygon"}:
@@ -71,6 +112,12 @@ def main() -> int:
         for beat in sorted(areas):
             writer.writerow([beat, round(areas[beat], 4)])
     print(f"wrote {len(areas)} beats to {args.out}")
+
+    geojson = build_beats_geojson(features, args.coord_precision)
+    with open(args.geojson_out, "w", encoding="utf-8") as handle:
+        json.dump(geojson, handle, separators=(",", ":"))
+        handle.write("\n")
+    print(f"wrote {len(geojson['features'])} beat polygons to {args.geojson_out}")
     return 0
 
 

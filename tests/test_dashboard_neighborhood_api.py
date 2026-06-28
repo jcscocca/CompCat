@@ -13,14 +13,15 @@ from app.models import CrimeIncident
 def _client_with_beat_crime(tmp_path) -> tuple[TestClient, str]:
     """
     Create a TestClient with a public session, one place, and several crime
-    rows tagged with beat "M2" near that place, dated 2026.
+    rows tagged with beat "M3" (the beat the real polygons resolve that downtown
+    point to) near that place, dated 2026.
     Returns (client, place_id).
     """
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
     client.post("/sessions")
 
-    # Seed crime incidents near 47.6094, -122.3334, all tagged beat="M2"
+    # Seed crime incidents near 47.60945, -122.33595 (deep in beat M3), all tagged beat="M3"
     session = get_sessionmaker()()
     session.add_all(
         [
@@ -28,9 +29,9 @@ def _client_with_beat_crime(tmp_path) -> tuple[TestClient, str]:
                 id=f"incident-nb-{i}",
                 offense_start_utc=datetime(2026, 1, 10 + i, tzinfo=UTC),
                 offense_category="PROPERTY",
-                latitude=47.6094 + i * 0.0001,
-                longitude=-122.3334,
-                beat="M2",
+                latitude=47.60945 + i * 0.0001,
+                longitude=-122.33595,
+                beat="M3",
             )
             for i in range(5)
         ]
@@ -42,8 +43,8 @@ def _client_with_beat_crime(tmp_path) -> tuple[TestClient, str]:
         "/places",
         json={
             "display_label": "Downtown transfer stop",
-            "latitude": 47.6094,
-            "longitude": -122.3334,
+            "latitude": 47.60945,
+            "longitude": -122.33595,
             "visit_count": 12,
         },
     )

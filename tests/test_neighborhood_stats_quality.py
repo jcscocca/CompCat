@@ -15,6 +15,11 @@ from app.main import create_app
 from app.models import CrimeIncident, PlaceCluster
 from app.services.neighborhood_service import neighborhood_analysis_for_places
 from app.sessions import public_user_hash
+from tests.helpers_dashboard import square_beat_polygons
+
+# Both quality scenarios place their cluster at (47.6100, -122.3300) in a synthetic beat
+# "Z9"; a square polygon around that point pins the point-in-polygon beat assignment.
+_Z9_POLYGONS = square_beat_polygons("Z9", 47.6100, -122.3300)
 
 
 def _session_with_overdispersed_place(tmp_path):
@@ -73,7 +78,7 @@ def test_overdispersed_place_verdict_honors_overdispersion(tmp_path):
         session=session, user_id_hash=user_hash, place_ids=["od-place"], radius_m=250,
         analysis_start_date=date(2026, 1, 1), analysis_end_date=date(2026, 6, 30),
         offense_category=None, offense_subcategory=None, nibrs_group=None,
-        area_lookup={"Z9": 2.0},
+        area_lookup={"Z9": 2.0}, beat_polygons=_Z9_POLYGONS,
     )
     place = result["places"][0]
     assert place["place_incident_count"] == 13
@@ -146,7 +151,7 @@ def test_hotspot_reads_above_clear_after_removing_self_dilution(tmp_path):
         session=session, user_id_hash=user_hash, place_ids=["hot"], radius_m=250,
         analysis_start_date=date(2026, 1, 1), analysis_end_date=date(2026, 6, 30),
         offense_category=None, offense_subcategory=None, nibrs_group=None,
-        area_lookup={"Z9": 3.0},
+        area_lookup={"Z9": 3.0}, beat_polygons=_Z9_POLYGONS,
     )
     place = result["places"][0]
     assert place["place_incident_count"] == 12

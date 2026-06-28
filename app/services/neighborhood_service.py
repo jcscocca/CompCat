@@ -5,10 +5,10 @@ from datetime import date
 from math import pi
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.analysis.beat_baselines import NON_GEOGRAPHIC_BEATS, place_vs_beat
+from app.analysis.beat_baselines import BeatPolygons, assign_beat, place_vs_beat
 from app.analysis.rate_tests import (
     benjamini_hochberg,
     compare_incident_rates,
@@ -21,7 +21,6 @@ from app.services.crime_service import _cluster_data, _incident_data
 from app.services.dashboard_analysis_service import (
     _analysis_datetime_bounds,
     _filtered_incidents,
-    _incident_bounding_boxes,
     _selected_clusters,
     _validate_date_range,
 )
@@ -66,15 +65,14 @@ def _incidents_in_radius(
     return out
 
 
-def _assign_beat(session: Session, cluster: PlaceClusterData, radius_m: int) -> str | None:
-    box = _incident_bounding_boxes([cluster], radius_m)
-    if not box:
+def _assign_beat(cluster: PlaceClusterData, beat_polygons: BeatPolygons) -> str | None:
+    # Beat is fixed geography: assign the place to the SPD beat polygon that contains its
+    # display point. A true point-in-polygon test (vs. the old plurality vote of nearby
+    # incidents' beats) assigns places near a beat boundary correctly, which keeps the
+    # rest-of-beat baseline honest.
+    if cluster.display_latitude is None or cluster.display_longitude is None:
         return None
-    # Beat is fixed geography: assign from ALL nearby incidents, ignoring date/offense filters.
-    rows = session.scalars(select(CrimeIncident).where(or_(*box))).all()
-    near = _incidents_in_radius(cluster, [_incident_data(r) for r in rows], radius_m)
-    beats = Counter(i.beat for i in near if i.beat and i.beat not in NON_GEOGRAPHIC_BEATS)
-    return beats.most_common(1)[0][0] if beats else None
+    return assign_beat(cluster.display_longitude, cluster.display_latitude, beat_polygons)
 
 
 def _beat_incidents(
@@ -124,6 +122,7 @@ def neighborhood_analysis_for_places(
     offense_subcategory: str | None,
     nibrs_group: str | None,
     area_lookup: dict[str, float],
+    beat_polygons: BeatPolygons,
 ) -> dict[str, Any]:
     _validate_date_range(analysis_start_date, analysis_end_date)
     days = _analysis_days(analysis_start_date, analysis_end_date)
@@ -145,7 +144,7 @@ def neighborhood_analysis_for_places(
             raw.append({"cluster": cluster, "beat": None})
             continue
         place_incidents = _incidents_in_radius(cluster, buffered, radius_m)
-        beat = _assign_beat(session, cluster, radius_m)
+        beat = _assign_beat(cluster, beat_polygons)
         area = area_lookup.get(beat) if beat else None
         if beat is None or area is None:
             raw.append({"cluster": cluster, "beat": beat, "place_incidents": place_incidents})
