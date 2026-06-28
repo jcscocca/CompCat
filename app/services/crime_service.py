@@ -14,6 +14,44 @@ from app.schemas import CrimeIncidentData, PlaceClusterData, PlaceCrimeSummaryDa
 from app.services.analysis_runs import create_analysis_run
 
 
+def _as_date_str(value: object) -> str | None:
+    # SQLite may return aggregate datetimes as ISO strings; Postgres returns datetimes.
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value[:10]
+    return value.date().isoformat()
+
+
+def _as_iso(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return value.isoformat()
+
+
+def crime_data_freshness(session: Session) -> dict[str, object]:
+    """Coverage/freshness of the (global, shared) reported-incident dataset: how many
+    incidents, the date range they span, and when they were last ingested. Powers a
+    "reported incidents through <date>" surface so users know the data isn't live."""
+    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
+    count, data_through, earliest, last_ingested_at = session.execute(
+        select(
+            func.count(CrimeIncident.id),
+            func.max(observed),
+            func.min(observed),
+            func.max(CrimeIncident.snapshot_at),
+        )
+    ).one()
+    return {
+        "incident_count": count or 0,
+        "data_through": _as_date_str(data_through),
+        "earliest": _as_date_str(earliest),
+        "last_ingested_at": _as_iso(last_ingested_at),
+    }
+
+
 def ingest_sample_crime(session: Session) -> dict[str, int]:
     fixture_path = resources.files("app.data").joinpath("sample_crime.csv")
     incidents = load_crime_csv(fixture_path)
