@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RoutesTab } from "./RoutesTab";
@@ -53,15 +53,17 @@ describe("RoutesTab", () => {
 
   it("lists saved places in the From and To pickers", () => {
     render(<RoutesTab analysis={analysis} running={false} places={places} geocodeSearch={vi.fn()} onRun={vi.fn()} />);
-    expect(screen.getAllByRole("option", { name: "Home" }).length).toBe(2);
-    expect(screen.getAllByRole("option", { name: "Office" }).length).toBe(2);
+    // Each endpoint chooser shows the full option list until one is picked, so each place
+    // appears as a selectable row in both the From and To lists.
+    expect(screen.getAllByRole("button", { name: "Home" }).length).toBe(2);
+    expect(screen.getAllByRole("button", { name: "Office" }).length).toBe(2);
   });
 
   it("runs with the selected place endpoints", () => {
     const onRun = vi.fn();
     render(<RoutesTab analysis={analysis} running={false} places={places} geocodeSearch={vi.fn()} onRun={onRun} />);
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "place:p1" } });
-    fireEvent.change(screen.getByLabelText("To"), { target: { value: "place:p2" } });
+    fireEvent.click(within(screen.getByRole("list", { name: "From options" })).getByRole("button", { name: "Home" }));
+    fireEvent.click(within(screen.getByRole("list", { name: "To options" })).getByRole("button", { name: "Office" }));
     fireEvent.click(screen.getByRole("button", { name: /compare routes/i }));
     expect(onRun).toHaveBeenCalledWith({ place_id: "p1" }, { place_id: "p2" }, "transit");
   });
@@ -71,7 +73,7 @@ describe("RoutesTab", () => {
     render(<RoutesTab analysis={analysis} running={false} places={places} geocodeSearch={geocodeSearch} onRun={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/find an address/i), { target: { value: "400 Broad" } });
     fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
-    await screen.findAllByRole("option", { name: /400 Broad St/ });
+    await screen.findAllByRole("button", { name: /400 Broad St/ });
     expect(geocodeSearch).toHaveBeenCalledWith("400 Broad");
   });
 });

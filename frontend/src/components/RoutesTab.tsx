@@ -47,6 +47,51 @@ function perLegContext(result: RouteComparison, alternativeId: string, radiusM: 
   return [...byLabel.entries()].map(([label, count]) => ({ label, count }));
 }
 
+function EndpointChooser({
+  idBase,
+  label,
+  options,
+  selectedKey,
+  onSelect,
+}: {
+  idBase: string;
+  label: string;
+  options: EndpointOption[];
+  selectedKey: string;
+  onSelect: (key: string) => void;
+}) {
+  const selected = options.find((option) => option.key === selectedKey) ?? null;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mc-field">
+      <label id={`${idBase}-label`}>{label}</label>
+      {selected && !open ? (
+        <div className="mc-chosen">
+          <span>{selected.label}</span>
+          <button type="button" className="mc-chip" onClick={() => setOpen(true)}>Change</button>
+        </div>
+      ) : options.length > 0 ? (
+        <ul className="mc-results" aria-label={`${label} options`}>
+          {options.map((option) => (
+            <li key={option.key}>
+              <button
+                type="button"
+                aria-pressed={option.key === selectedKey}
+                onClick={() => {
+                  onSelect(option.key);
+                  setOpen(false);
+                }}
+              >
+                <span className="mc-result-label">{option.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function RoutesTab({ analysis, running, result, error, places, geocodeSearch, onRun }: Props) {
   const [geoResults, setGeoResults] = useState<GeocodeResult[]>([]);
   const [query, setQuery] = useState("");
@@ -96,7 +141,7 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
       <div className="mc-querybar">
         <div className="mc-field">
           <label htmlFor="route-address">Find an address</label>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="mc-field-row">
             <input
               id="route-address"
               className="mc-inp"
@@ -110,20 +155,8 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
           </div>
           {searchError ? <p className="mc-inline-error" role="alert">{searchError}</p> : null}
         </div>
-        <div className="mc-field">
-          <label htmlFor="route-origin">From</label>
-          <select id="route-origin" className="mc-inp" value={originKey} onChange={(e) => setOriginKey(e.target.value)}>
-            <option value="">Select a place…</option>
-            {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="mc-field">
-          <label htmlFor="route-destination">To</label>
-          <select id="route-destination" className="mc-inp" value={destinationKey} onChange={(e) => setDestinationKey(e.target.value)}>
-            <option value="">Select a place…</option>
-            {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-          </select>
-        </div>
+        <EndpointChooser idBase="route-origin" label="From" options={options} selectedKey={originKey} onSelect={setOriginKey} />
+        <EndpointChooser idBase="route-destination" label="To" options={options} selectedKey={destinationKey} onSelect={setDestinationKey} />
         <div className="mc-field">
           <label id="route-mode-label">Mode</label>
           <div className="mc-chips" role="group" aria-labelledby="route-mode-label">
