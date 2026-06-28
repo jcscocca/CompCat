@@ -343,16 +343,12 @@ def _request_to_dict(route_request: RouteRequest) -> dict[str, Any]:
         "id": route_request.id,
         "origin": {
             "label": route_request.origin_label,
-            "latitude": route_request.origin_latitude,
-            "longitude": route_request.origin_longitude,
             "display_latitude": route_request.origin_display_latitude,
             "display_longitude": route_request.origin_display_longitude,
             "location_type": route_request.origin_location_type,
         },
         "destination": {
             "label": route_request.destination_label,
-            "latitude": route_request.destination_latitude,
-            "longitude": route_request.destination_longitude,
             "display_latitude": route_request.destination_display_latitude,
             "display_longitude": route_request.destination_display_longitude,
             "location_type": route_request.destination_location_type,

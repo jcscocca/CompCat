@@ -101,3 +101,18 @@ def test_route_still_accepts_legacy_labels(tmp_path):
     )
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["alternatives"]) >= 2
+
+
+def test_response_omits_precise_endpoint_coordinates(tmp_path):
+    client = _client(tmp_path)
+    client.post("/sessions")
+    home = _make_place(client, "Home", 47.623, -122.321)
+    office = _make_place(client, "Office", 47.609, -122.335)
+    resp = client.post(
+        "/routes/alternatives",
+        json={"origin": {"place_id": home["id"]}, "destination": {"place_id": office["id"]},
+              "mode": "transit", **_ANALYSIS},
+    )
+    origin = resp.json()["request"]["origin"]
+    assert "latitude" not in origin and "longitude" not in origin
+    assert "display_latitude" in origin
