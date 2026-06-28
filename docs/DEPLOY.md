@@ -192,6 +192,13 @@ use the host's LAN IP or `host.docker.internal:8090`.
 If OTP is unreachable, `/routes` requests return an error; every other part of the app is
 unaffected (same graceful-degradation posture as the assistant).
 
+> **Local macOS validation (Apple Silicon):** the same Docker recipe runs natively (arm64,
+> no `--platform` flag). Use `~/otp` as the data dir, raise Docker Desktop memory to ≥14 GB for
+> the one-time `--build --save`, and point the app at `http://localhost:8090/otp/gtfs/v1`
+> (**not** `host.docker.internal`, which is only for the containerized ThinkPad deploy). The
+> setup script is Windows-only; on macOS run the `docker run … --build --save` and
+> `--load --serve` commands by hand with the pinned `…/opentripplanner:2.7.0` image.
+
 #### Running the OTP container day-to-day
 
 **Fastest path:** on the ThinkPad, run [`scripts/otp_thinkpad_setup.ps1`](../scripts/otp_thinkpad_setup.ps1)
@@ -207,7 +214,7 @@ policy so it comes back on its own after reboots / Docker restarts:
 cd C:\otp   # the folder that holds graph.obj
 docker run -d --name otp --restart unless-stopped -p 8090:8080 `
   -e JAVA_TOOL_OPTIONS='-Xmx8g' -v ${PWD}:/var/opentripplanner `
-  docker.io/opentripplanner/opentripplanner:latest --load --serve
+  docker.io/opentripplanner/opentripplanner:2.7.0 --load --serve
 ```
 
 `--restart unless-stopped` is the important part: Docker Desktop restarts OTP automatically on
