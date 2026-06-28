@@ -12,7 +12,7 @@ from app.places.schemas import ManualPlaceCreate
 from app.services.manual_place_service import create_manual_place
 
 
-@dataclass(frozen=True)
+@dataclass
 class ResolvedPlaces:
     place_ids: list[str] = field(default_factory=list)
     matched: list[dict[str, Any]] = field(default_factory=list)
