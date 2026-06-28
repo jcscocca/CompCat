@@ -116,6 +116,28 @@ def test_public_route_ignores_client_provider_override(tmp_path):
     assert resp.json()["request"]["provider"] == "mock"
 
 
+def test_invalid_departure_time_is_rejected(tmp_path):
+    client = _client(tmp_path)
+    client.post("/sessions")
+    resp = client.post(
+        "/routes/alternatives",
+        json={"origin_label": "Capitol Hill", "destination_label": "Downtown Seattle",
+              "mode": "transit", "departure_time": "8 oclock", **_ANALYSIS},
+    )
+    assert resp.status_code == 422
+
+
+def test_valid_departure_time_is_accepted(tmp_path):
+    client = _client(tmp_path)
+    client.post("/sessions")
+    resp = client.post(
+        "/routes/alternatives",
+        json={"origin_label": "Capitol Hill", "destination_label": "Downtown Seattle",
+              "mode": "transit", "departure_time": "08:00", **_ANALYSIS},
+    )
+    assert resp.status_code == 200, resp.text
+
+
 def test_response_omits_precise_endpoint_coordinates(tmp_path):
     client = _client(tmp_path)
     client.post("/sessions")

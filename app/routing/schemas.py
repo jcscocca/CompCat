@@ -48,7 +48,7 @@ class RouteRequestCreate(BaseModel):
     destination: RouteEndpoint | None = None
     mode: SupportedRouteMode = "transit"
     departure_date: date | None = None
-    departure_time: str | None = None
+    departure_time: str | None = Field(default=None, pattern=r"^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$")
     time_window: str | None = None
     preferences: list[str] = Field(default_factory=list)
     privacy_level: SupportedRoutePrivacyLevel = "generalized"
