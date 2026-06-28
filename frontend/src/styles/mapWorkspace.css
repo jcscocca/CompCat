@@ -392,7 +392,7 @@ input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
 .mc-method-read{font-style:italic;color:var(--faint) !important;}
 .mc-method code{display:block;margin-top:6px;font-family:var(--f-mono);font-size:11px;color:var(--clay);background:rgba(205,106,69,.08);border:1px solid rgba(205,106,69,.18);border-radius:7px;padding:5px 9px;overflow-wrap:anywhere;}
 
-.mc-topbar,.mc-controls,.mc-legend,.mc-empty,.mc-error{z-index:1100;}
+.mc-topbar,.mc-controls,.mc-legend,.mc-assistant,.mc-empty,.mc-error{z-index:1100;}
 .mc-workspace-panel{z-index:1200;}
 .mc-frame .leaflet-bottom.leaflet-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
 .mc-empty{top:34%;}
