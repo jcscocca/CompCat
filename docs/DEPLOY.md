@@ -105,6 +105,21 @@ is created automatically on first load.
   endpoints the UI uses (`/places`, `/dashboard/*`, `/routes*`, `/uploads`, `/exports/*`)
   all require a real session.
 
+### Personal location-history uploads
+
+The `/uploads` surface (import a Google Timeline / CSV / GeoJSON / GPX location history into
+saved places) is gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`. It is **enabled** in
+`.env.deploy.example` for this single-host trial; the endpoints 404 and the upload UI is
+hidden when it is false.
+
+- **What's stored:** raw points are discarded after clustering (`MCA_RAW_UPLOAD_RETENTION`
+  stays `false`) — only the derived place clusters are kept. Users can delete their uploaded
+  data from the UI.
+- **Keep it OFF for any shared/multi-user or public deployment.** An upload is real personal
+  data tied to a session; the **Roadmap (not yet implemented)** items above —
+  production authentication, encryption at rest, and per-user tenant isolation — are genuine
+  prerequisites before exposing this beyond a single trusted host.
+
 ### Assistant
 
 The AI panel (chat assistant) calls an **OpenAI-compatible** model gateway (e.g. a

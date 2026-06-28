@@ -37,8 +37,12 @@ The remaining work, reframed as epics. A is the headline new feature; B–E hard
 
 - **A — Personal data upload.** Google Timeline / CSV / GeoJSON / GPX ingest + consent &
   caveat copy (this absorbs WS5's last item), privacy/retention review, then flip
-  `public_enable_personal_uploads`. Scaffolding exists (`app/input_modes.py`
-  `personal_timeline` stub behind the flag). **Deferred by the user** — do not build for v1.
+  `public_enable_personal_uploads`. **Update (2026-06-28): SHIPPED + merged** — real parsers,
+  consent/caveat copy, retention (discard-raw), delete control, UI gating, and tests all
+  exist behind `public_enable_personal_uploads` (the anti-rot CI guard is
+  `tests/test_uploads_api.py`). Disposition decided: **enabled on the single-host ThinkPad
+  trial** (see `.env.deploy.example` / docs/DEPLOY.md), kept OFF for any multi-user/public
+  deploy pending production auth + encryption-at-rest + tenant isolation.
 - **B — Live routing provider** (= WS6). OpenTripPlanner behind the existing provider
   interface + `MCA_ROUTING_PROVIDER`; keep the mock as the test/local default; wire the
   built-but-unwired route-alternatives surface into the UI.
@@ -71,10 +75,12 @@ The remaining work, reframed as epics. A is the headline new feature; B–E hard
 - Tests asserting SQL-filtered counts match the current Python implementation for place
   buffers and route corridors. Check/extend indexes (`alembic/versions/0005_crime_filter_idx.py`).
 
-### A — Personal upload (deferred)
-- Parsers for Google Timeline JSON, point CSV, GeoJSON, GPX → place clusters.
-- User-facing consent + caveat copy before the mode can be enabled (WS5's last item).
-- Privacy/retention review; then enable `public_enable_personal_uploads`.
+### A — Personal upload (SHIPPED 2026-06-28; enabled on the single-host trial)
+- ✅ Parsers for Google Timeline JSON, point CSV, GeoJSON, GPX → place clusters.
+- ✅ User-facing consent + caveat copy.
+- ✅ Privacy/retention (discard-raw default) + delete control.
+- ✅ `public_enable_personal_uploads` enabled for the ThinkPad single-host trial only; stays
+  off for multi-user/public until production auth + encryption-at-rest + tenant isolation.
 
 ---
 
