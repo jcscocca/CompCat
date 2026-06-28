@@ -233,3 +233,47 @@ def test_analyze_places_bundles_neighborhood_and_incidents(tmp_path):
     assert payload["created"] == []
     assert payload["unresolved"] == []
 
+
+def test_compare_places_by_name_persists_analysis_and_compares(tmp_path, monkeypatch):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    # Add a second place so a comparison is possible.
+    session.add(
+        PlaceCluster(
+            id="place-2",
+            user_id_hash=user_hash,
+            cluster_version="manual-v1",
+            cluster_method="manual",
+            centroid_latitude=47.62,
+            centroid_longitude=-122.34,
+            display_latitude=47.62,
+            display_longitude=-122.34,
+            visit_count=1,
+            sensitivity_class="normal",
+            display_label="Second stop",
+            inferred_place_type="manual_place",
+            label_source="manual",
+        )
+    )
+    session.commit()
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: _FakeProvider([]))
+    try:
+        result = execute_tool(
+            session,
+            user_hash,
+            "compare_places",
+            {
+                "queries": ["Library stop", "Second stop"],
+                "analysis_start_date": "2024-01-01",
+                "analysis_end_date": "2024-01-31",
+                "radius_m": 250,
+                "offense_category": "PROPERTY",
+            },
+        )
+    finally:
+        session.close()
+    payload = result["result"]
+    assert result["tool_name"] == "compare_places"
+    assert sorted(payload["place_ids"]) == ["place-1", "place-2"]
+    assert payload["settings_used"]["radius_m"] == 250
+    assert "comparison" in payload
+

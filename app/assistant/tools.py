@@ -14,7 +14,6 @@ from app.analysis.beat_baselines import (
 )
 from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
-    DashboardCompareRequest,
     DashboardIncidentDetailsRequest,
 )
 from app.assistant.place_resolution import ResolvedPlaces, resolve_place_queries
@@ -199,6 +198,44 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
     }
 
 
+def _compare_places(
+    session: Session, user_id_hash: str, args: ComparePlacesByNameArgs
+) -> dict[str, Any]:
+    resolved = _resolve_or_select(session, user_id_hash, args.queries, args.place_ids)
+    if len(resolved.place_ids) < 2:
+        raise AssistantToolError("Name at least two places to compare.")
+    # Persist an analysis run at this radius so the dashboard summary has rows for the cards.
+    analyze_selected_places(
+        session=session,
+        user_id_hash=user_id_hash,
+        place_ids=resolved.place_ids,
+        radii_m=[args.radius_m],
+        analysis_start_date=args.analysis_start_date,
+        analysis_end_date=args.analysis_end_date,
+        offense_category=args.offense_category,
+        offense_subcategory=args.offense_subcategory,
+        nibrs_group=args.nibrs_group,
+    )
+    comparison = compare_selected_places(
+        session=session,
+        user_id_hash=user_id_hash,
+        place_ids=resolved.place_ids,
+        radius_m=args.radius_m,
+        analysis_start_date=args.analysis_start_date,
+        analysis_end_date=args.analysis_end_date,
+        offense_category=args.offense_category,
+        offense_subcategory=args.offense_subcategory,
+        nibrs_group=args.nibrs_group,
+    )
+    return {
+        "place_ids": resolved.place_ids,
+        "settings_used": _settings_used(args, args.radius_m),
+        "comparison": comparison,
+        "created": resolved.created,
+        "unresolved": resolved.unresolved,
+    }
+
+
 def execute_tool(
     session: Session,
     user_id_hash: str,
@@ -225,18 +262,8 @@ def execute_tool(
             )
             validated_arguments = args.model_dump(mode="json")
         elif tool_name == "compare_places":
-            args = DashboardCompareRequest.model_validate(arguments)
-            result = compare_selected_places(
-                session=session,
-                user_id_hash=user_id_hash,
-                place_ids=args.place_ids,
-                radius_m=args.radius_m,
-                analysis_start_date=args.analysis_start_date,
-                analysis_end_date=args.analysis_end_date,
-                offense_category=args.offense_category,
-                offense_subcategory=args.offense_subcategory,
-                nibrs_group=args.nibrs_group,
-            )
+            args = ComparePlacesByNameArgs.model_validate(arguments)
+            result = _compare_places(session, user_id_hash, args)
             validated_arguments = args.model_dump(mode="json")
         elif tool_name == "get_neighborhood_analysis":
             args = DashboardAnalyzeRequest.model_validate(arguments)
