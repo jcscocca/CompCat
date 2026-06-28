@@ -181,7 +181,28 @@ MCA_OPENTRIPPLANNER_BASE_URL=http://10.0.0.76:8090/otp/gtfs/v1
 Same LAN-IP rule as the assistant: `127.0.0.1` will not resolve from inside the container —
 use the host's LAN IP or `host.docker.internal:8090`.
 
-**Standing up OTP** — two phases, build a graph once then serve it:
+**Standing up OTP — scripted (recommended).** A helper downloads the OSM + GTFS inputs,
+builds the graph, and starts a Dockerized `otp` container on `:8090` (uses the upstream OTP
+image, so no host Java needed):
+
+```bash
+scripts/otp_setup.sh                 # Linux/macOS  (--rebuild to force a fresh graph)
+# or on Windows:  .\scripts\otp_thinkpad_setup.ps1
+```
+
+It prints the exact `MCA_ROUTING_PROVIDER` / `MCA_OPENTRIPPLANNER_BASE_URL` to set. Re-runs
+skip the download/build when the data and graph already exist.
+
+Alternatively, a **docker-compose `otp` profile** serves a *prebuilt* graph (it only
+`--load`s, so build the graph once first via `scripts/otp_setup.sh` or
+`docker compose run --rm otp --build --save`, with the OSM+GTFS in `OTP_DATA_DIR`):
+
+```bash
+docker compose --profile otp up -d otp
+# then the api can reach it in-network: MCA_OPENTRIPPLANNER_BASE_URL=http://otp:8080/otp/gtfs/v1
+```
+
+**Standing up OTP — by hand** (two phases, build a graph once then serve it):
 
 1. Gather the inputs: a Washington/Puget Sound **OSM** extract
    ([Geofabrik](https://download.geofabrik.de/north-america/us/washington.html)) and the

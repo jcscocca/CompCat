@@ -47,5 +47,23 @@ services:
       db:
         condition: service_healthy
 
+  # Optional live-routing engine. Off by default (profile "otp"). It only --loads a
+  # prebuilt graph, so build the graph once first (RAM-heavy, downloads OSM+GTFS):
+  #   scripts/otp_setup.sh --rebuild        # downloads data + builds + serves, OR
+  #   docker compose run --rm otp --build --save   # if OSM+GTFS are already in OTP_DATA_DIR
+  # then:  docker compose --profile otp up -d otp
+  # With this service the api can reach OTP in-network at http://otp:8080/otp/gtfs/v1.
+  otp:
+    image: docker.io/opentripplanner/opentripplanner:latest
+    profiles: ["otp"]
+    command: ["--load", "--serve"]
+    environment:
+      JAVA_TOOL_OPTIONS: ${OTP_HEAP:--Xmx8g}
+    volumes:
+      - ${OTP_DATA_DIR:-./otp-data}:/var/opentripplanner
+    ports:
+      - "8090:8080"
+    restart: unless-stopped
+
 volumes:
   mca-postgres:
