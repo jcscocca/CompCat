@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 import { streamAssistantChat } from "../api/client";
 import type { AssistantDashboardState, AssistantMessage } from "../types";
@@ -11,31 +12,29 @@ type ToolActivity = {
   label: string;
 };
 
+const OFFLINE_MESSAGE =
+  "The analyst is offline right now. Your data is unaffected — the rest of Waypoint works.";
+
 export function AssistantPanel({ dashboardState }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [input, setInput] = useState("");
   const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
-  const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
   const [sending, setSending] = useState(false);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const content = input.trim();
-    if (!content || sending) return;
-
-    const nextMessages: AssistantMessage[] = [...messages, { role: "user", content }];
+  async function sendTurn(turnMessages: AssistantMessage[]) {
     let assistantText = "";
-    setMessages(nextMessages);
-    setInput("");
+    let errored = false;
+    setMessages(turnMessages);
     setDraft("");
-    setError("");
+    setOffline(false);
     setToolActivity([]);
     setSending(true);
 
     try {
       await streamAssistantChat(
-        { messages: nextMessages, dashboard_state: dashboardState },
+        { messages: turnMessages, dashboard_state: dashboardState },
         {
           onEvent: (event) => {
             if (event.event === "tool") {
@@ -47,20 +46,38 @@ export function AssistantPanel({ dashboardState }: Props) {
               setDraft(assistantText);
             }
             if (event.event === "error") {
-              setError(event.data.message || "Assistant unavailable.");
+              errored = true;
             }
           },
         },
       );
-      if (assistantText.trim()) {
-        setMessages([...nextMessages, { role: "assistant", content: assistantText.trim() }]);
+      // Don't commit a partial/empty answer when the turn errored — surface the degraded
+      // state instead, so a "Retry" re-sends the same (still-unanswered) last turn.
+      if (!errored && assistantText.trim()) {
+        setMessages([...turnMessages, { role: "assistant", content: assistantText.trim() }]);
       }
       setDraft("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Assistant unavailable.");
+      if (errored) setOffline(true);
+    } catch {
+      setDraft("");
+      setOffline(true);
     } finally {
       setSending(false);
     }
+  }
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = input.trim();
+    if (!content || sending) return;
+    setInput("");
+    void sendTurn([...messages, { role: "user", content }]);
+  }
+
+  function handleRetry() {
+    // The last message is the user turn that got no answer; re-send the conversation as-is.
+    if (sending || messages.length === 0) return;
+    void sendTurn(messages);
   }
 
   return (
@@ -72,11 +89,15 @@ export function AssistantPanel({ dashboardState }: Props) {
 
       <div className="mc-assistant-log" aria-live="polite">
         {messages.map((message, index) => (
-          <p key={`${message.role}-${index}`} className={`mc-assistant-msg is-${message.role}`}>
-            {message.content}
-          </p>
+          <div key={`${message.role}-${index}`} className={`mc-assistant-msg is-${message.role}`}>
+            {message.role === "assistant" ? (
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            ) : (
+              message.content
+            )}
+          </div>
         ))}
-        {draft ? <p className="mc-assistant-msg is-assistant">{draft}</p> : null}
+        {draft ? <div className="mc-assistant-msg is-assistant">{draft}</div> : null}
         {messages.length === 0 && !draft ? <p className="mc-assistant-empty">No messages</p> : null}
       </div>
 
@@ -88,7 +109,14 @@ export function AssistantPanel({ dashboardState }: Props) {
         </ul>
       ) : null}
 
-      {error ? <p className="mc-assistant-error" role="status">{error}</p> : null}
+      {offline ? (
+        <div className="mc-assistant-error" role="status">
+          <p>{OFFLINE_MESSAGE}</p>
+          <button type="button" className="mc-chip" onClick={handleRetry} disabled={sending}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <form className="mc-assistant-form" onSubmit={handleSubmit}>
         <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
@@ -105,4 +133,3 @@ export function AssistantPanel({ dashboardState }: Props) {
     </aside>
   );
 }
-

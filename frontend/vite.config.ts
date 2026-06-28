@@ -22,6 +22,13 @@ export default defineConfig({
   },
   build: {
     outDir: "../app/static/dashboard",
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split the markdown renderer (react-markdown + micromark/* deps) into its own
+        // chunk so it doesn't bloat the main bundle past the size-warning threshold.
+        manualChunks: { markdown: ["react-markdown"] }
+      }
+    }
   }
 });

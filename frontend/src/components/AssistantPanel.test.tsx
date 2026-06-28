@@ -92,5 +92,39 @@ describe("AssistantPanel", () => {
     expect(await screen.findByText("second answer")).toBeInTheDocument();
     expect(screen.queryByText(/compare_places/)).not.toBeInTheDocument();
   });
+
+  it("shows a friendly offline state with retry instead of the raw error", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        sseResponse('event: error\ndata: {"message":"LLM endpoint unavailable: boom"}\n\n'),
+      );
+
+    render(<AssistantPanel dashboardState={dashboardState} />);
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(/analyst is offline/i)).toBeInTheDocument();
+    // The developer-facing exception text must not leak to the user.
+    expect(screen.queryByText(/LLM endpoint unavailable/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders markdown in committed assistant messages", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(
+        'event: token\ndata: {"delta":"**bold** answer"}\n\n' + "event: done\ndata: {}\n\n",
+      ),
+    );
+
+    render(<AssistantPanel dashboardState={dashboardState} />);
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const bold = await screen.findByText("bold");
+    expect(bold.tagName).toBe("STRONG");
+  });
 });
 
