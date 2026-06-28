@@ -6,6 +6,7 @@ import { Notice } from "./Notice";
 import { PersonalUpload } from "./PersonalUpload";
 import { PlaceForm } from "./PlaceForm";
 import { incidentCountForPlace } from "../lib/incidentSummaries";
+import { isSensitive } from "../lib/sensitivity";
 import type { DashboardSummary, Place, PlaceCreate } from "../types";
 
 type Props = {
@@ -67,7 +68,14 @@ export function PlacesTab({
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Places">
       <div className="mc-panel-head">
-        <h4>Saved places <b>{places.length}</b></h4>
+        <h4>
+          Saved places <b>{places.length}</b>
+          {summary && summary.privacy.suppressed > 0 ? (
+            <span className="cnt" title="Hidden from public exports">
+              {summary.privacy.suppressed} hidden
+            </span>
+          ) : null}
+        </h4>
         <div className="mc-head-actions">
           <button type="button" className={`mc-tinybtn${addPinMode ? " on" : ""}`} onClick={onStartAddPin}>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -106,6 +114,9 @@ export function PlacesTab({
                 <div className="meta">
                   <div className="nm">{place.display_label}</div>
                   <div className="sub">{coords(place)}</div>
+                  {isSensitive(place.sensitivity_class) ? (
+                    <span className="cnt" title="Excluded from public CSV exports">Hidden from exports</span>
+                  ) : null}
                 </div>
                 <div className="right">
                   {count !== null ? <span className="cnt">{count} inc.</span> : null}

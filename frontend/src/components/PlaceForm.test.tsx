@@ -46,4 +46,19 @@ describe("PlaceForm", () => {
       sensitivity_class: "normal",
     });
   });
+
+  it("sends the chosen sensitivity class so the place can be hidden from exports", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(<PlaceForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("Latitude"), { target: { value: "47.621" } });
+    fireEvent.change(screen.getByLabelText("Longitude"), { target: { value: "-122.321" } });
+    fireEvent.change(screen.getByLabelText("Sensitivity"), { target: { value: "home_candidate" } });
+    fireEvent.click(screen.getByRole("button", { name: /add place/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ sensitivity_class: "home_candidate" }),
+    );
+  });
 });

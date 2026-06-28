@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PinDraftPopover } from "./PinDraftPopover";
 import type { DraftPin } from "../types";
 
-const draft: DraftPin = { latitude: 47.6097, longitude: -122.3331, display_label: "", visit_count: 1, source: "map" };
+const draft: DraftPin = { latitude: 47.6097, longitude: -122.3331, display_label: "", visit_count: 1, sensitivity_class: "normal", source: "map" };
 
 afterEach(cleanup);
 

@@ -115,7 +115,7 @@ describe("MapCanvas", () => {
       <MapCanvas
         places={[place]}
         selectedIds={new Set()}
-        draft={{ latitude: 47.6, longitude: -122.3, display_label: "", visit_count: 1, source: "map" }}
+        draft={{ latitude: 47.6, longitude: -122.3, display_label: "", visit_count: 1, sensitivity_class: "normal", source: "map" }}
         addPinMode
         summary={null}
         radiusM={250}

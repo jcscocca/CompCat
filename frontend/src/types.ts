@@ -138,6 +138,7 @@ export type DraftPin = {
   longitude: number;
   display_label: string;
   visit_count: number;
+  sensitivity_class: string;
   source: "map" | "search";
 };
 

@@ -170,7 +170,7 @@ export function MapWorkspace() {
 
   function handleMapClick(latlng: LatLng) {
     if (!addPinMode) return;
-    setDraft({ latitude: latlng.lat, longitude: latlng.lng, display_label: "", visit_count: 1, source: "map" });
+    setDraft({ latitude: latlng.lat, longitude: latlng.lng, display_label: "", visit_count: 1, sensitivity_class: "normal", source: "map" });
     setDraftError("");
     setAddPinMode(false);
     setActiveTab("places");
@@ -178,7 +178,7 @@ export function MapWorkspace() {
   }
 
   function handleSearchSelect(result: GeocodeResult) {
-    setDraft({ latitude: result.latitude, longitude: result.longitude, display_label: result.label, visit_count: 1, source: "search" });
+    setDraft({ latitude: result.latitude, longitude: result.longitude, display_label: result.label, visit_count: 1, sensitivity_class: "normal", source: "search" });
     setFlyTo({ lat: result.latitude, lng: result.longitude });
     setDraftError("");
     setActiveTab("places");
@@ -194,7 +194,7 @@ export function MapWorkspace() {
         latitude: draft.latitude,
         longitude: draft.longitude,
         visit_count: 1,
-        sensitivity_class: "normal",
+        sensitivity_class: draft.sensitivity_class,
       });
       selectPlaceIds([created.id]);
       setDraft(null);
