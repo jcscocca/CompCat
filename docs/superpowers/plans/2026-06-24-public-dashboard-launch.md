@@ -156,7 +156,7 @@ Modify `app/config.py`:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MCA_", env_file=".env", env_file_encoding="utf-8")
 
-    database_url: str = "sqlite+pysqlite:///./localagent-output/mobility.sqlite3"
+    database_url: str = "sqlite+pysqlite:///./dev-output/mobility.sqlite3"
     user_hash_salt: str = "local-demo-salt"
     session_secret: str = "local-dashboard-session-secret"
     public_enable_personal_uploads: bool = False
@@ -3077,7 +3077,7 @@ Create `.dockerignore`:
 .pytest_cache
 .ruff_cache
 .superpowers
-localagent-output
+dev-output
 frontend/node_modules
 frontend/dist
 app/static/dashboard

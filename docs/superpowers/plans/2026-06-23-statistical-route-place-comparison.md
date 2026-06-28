@@ -1695,7 +1695,7 @@ Expected: PASS.
 Run:
 
 ```bash
-MCA_DATABASE_URL=sqlite+pysqlite:///./localagent-output/statistical-plan-check.sqlite3 .venv/bin/alembic upgrade head
+MCA_DATABASE_URL=sqlite+pysqlite:///./dev-output/statistical-plan-check.sqlite3 .venv/bin/alembic upgrade head
 ```
 
 Expected: command exits 0 and applies through `0003_statistical_comparisons`.
@@ -3099,7 +3099,7 @@ Expected: PASS.
 Run:
 
 ```bash
-MCA_DATABASE_URL=sqlite+pysqlite:///./localagent-output/statistical-final.sqlite3 .venv/bin/alembic upgrade head
+MCA_DATABASE_URL=sqlite+pysqlite:///./dev-output/statistical-final.sqlite3 .venv/bin/alembic upgrade head
 ```
 
 Expected: command exits 0.

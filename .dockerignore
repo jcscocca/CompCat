@@ -3,7 +3,7 @@
 .pytest_cache
 .ruff_cache
 .superpowers
-localagent-output
+dev-output
 frontend/node_modules
 frontend/dist
 frontend/tsconfig.tsbuildinfo

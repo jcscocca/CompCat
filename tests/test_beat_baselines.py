@@ -11,7 +11,7 @@ from app.analysis.beat_baselines import (
     place_vs_beat,
 )
 
-DEV_DB = Path(__file__).resolve().parent.parent / "localagent-output" / "mobility.sqlite3"
+DEV_DB = Path(__file__).resolve().parent.parent / "dev-output" / "mobility.sqlite3"
 
 
 def _write_csv(tmp_path, rows):

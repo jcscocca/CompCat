@@ -202,7 +202,7 @@ SSL_CERT_FILE=$(.venv/bin/python -c "import certifi;print(certifi.where())") \
 .venv/bin/python - <<'PY'
 import sqlite3
 from app.analysis.beat_baselines import load_beat_areas, missing_beat_areas
-con = sqlite3.connect("localagent-output/mobility.sqlite3")
+con = sqlite3.connect("dev-output/mobility.sqlite3")
 db_beats = [r[0] for r in con.execute("SELECT DISTINCT beat FROM crime_incidents WHERE beat IS NOT NULL AND beat<>''")]
 missing = missing_beat_areas(db_beats, load_beat_areas())
 print("missing beat areas:", sorted(missing))

@@ -1,5 +1,11 @@
 # Waypoint Analyst Agent Implementation Plan
 
+> **Superseded (historical record):** This plan wired the assistant through **LocalAgent**
+> for LLM routing/streaming. LocalAgent has since been **retired** — the assistant now calls
+> an OpenAI-compatible endpoint directly (`MCA_LLM_BASE_URL` / `MCA_LLM_MODEL`); the client
+> module is `app/assistant/llm_client.py` (not `localagent_client.py`). Mentions of LocalAgent
+> and `MCA_LOCALAGENT_BASE_URL` below describe the original design. See CLAUDE.md / docs/DEPLOY.md.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a Waypoint analyst agent that explains dashboard data and triggers approved analyses through Waypoint tools while using LocalAgent for local LLM routing and streaming.

@@ -452,7 +452,7 @@ Run:
 
 ```bash
 .venv/bin/python -m pytest tests/test_route_models_migration.py -q
-MCA_DATABASE_URL=sqlite+pysqlite:///./localagent-output/route-migration.sqlite3 .venv/bin/alembic upgrade head
+MCA_DATABASE_URL=sqlite+pysqlite:///./dev-output/route-migration.sqlite3 .venv/bin/alembic upgrade head
 ```
 
 Expected: PASS and migration reaches head.
@@ -817,7 +817,7 @@ git commit -m "feat: export route comparisons for tableau"
 - [ ] Run migration smoke check:
 
 ```bash
-MCA_DATABASE_URL=sqlite+pysqlite:///./localagent-output/route-final.sqlite3 .venv/bin/alembic upgrade head
+MCA_DATABASE_URL=sqlite+pysqlite:///./dev-output/route-final.sqlite3 .venv/bin/alembic upgrade head
 ```
 
 - [ ] Smoke test API manually if time permits:

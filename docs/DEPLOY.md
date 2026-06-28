@@ -10,7 +10,7 @@ endpoints, so testers can't see each other's places.
 This trial runs **entirely on the ThinkPad** — no second machine:
 
 - **Waypoint** (API + UI + Postgres) — this `docker compose` stack, on `:8000`.
-- **Analyst LLM** (LocalAgent / llama-swap) — already serving on the ThinkPad at `:8080`.
+- **Analyst LLM** (llama-swap, OpenAI-compatible) — already serving on the ThinkPad at `:8080`.
 - **Routing** (OpenTripPlanner) — `scripts/otp_thinkpad_setup.ps1`, on `:8090`.
 
 Because Waypoint runs in a container, it reaches the two host-port services via

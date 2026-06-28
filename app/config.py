@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MCA_", env_file=".env", env_file_encoding="utf-8")
 
     environment: str = "local"
-    database_url: str = "sqlite+pysqlite:///./localagent-output/mobility.sqlite3"
+    database_url: str = "sqlite+pysqlite:///./dev-output/mobility.sqlite3"
     user_hash_salt: str = DEFAULT_USER_HASH_SALT
     session_secret: str = DEFAULT_SESSION_SECRET
     session_cookie_secure: bool | None = None

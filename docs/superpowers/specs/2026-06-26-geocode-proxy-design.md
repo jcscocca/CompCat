@@ -93,7 +93,7 @@ PlaceSearch ──GET /dashboard/geocode?q=…──▶ dashboard_geocode (requi
   happens at the endpoint, keeping the geocoding package decoupled from `app/api`.
 - `GeocodeProvider` protocol: `search(query: str) -> list[GeocodeHit]`.
 - `NominatimProvider`: `httpx.Client` with `geocoder_timeout_s` timeout (mirrors the
-  timeout discipline in `app/assistant/localagent_client.py`); sends an identifying
+  timeout discipline in `app/assistant/llm_client.py`); sends an identifying
   `User-Agent` built from `geocoder_user_agent` + `geocoder_contact_email`; requests
   `format=jsonv2&limit=<geocoder_max_results>`; maps rows to `GeocodeHit(label, latitude,
   longitude, source="nominatim")`. Raises `GeocoderUpstreamError` on non-2xx response or

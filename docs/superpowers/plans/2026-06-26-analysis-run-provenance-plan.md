@@ -324,7 +324,7 @@ from app.services.analysis_runs import latest_analysis_run_id
 **Files:** none (verification only).
 
 - [ ] **Step 1: Run** `make test-all` → backend pytest + ruff + frontend test + frontend build all pass. (Frontend is unaffected, but `test-all` confirms no cross-impact.)
-- [ ] **Step 2: Migration check** — `.venv/bin/alembic upgrade head` against a fresh sqlite (`MCA_DATABASE_URL=sqlite+pysqlite:///./localagent-output/ws2-migration-check.sqlite3 .venv/bin/alembic upgrade head`) succeeds and reaches `0006_analysis_runs`.
+- [ ] **Step 2: Migration check** — `.venv/bin/alembic upgrade head` against a fresh sqlite (`MCA_DATABASE_URL=sqlite+pysqlite:///./dev-output/ws2-migration-check.sqlite3 .venv/bin/alembic upgrade head`) succeeds and reaches `0006_analysis_runs`.
 - [ ] **Step 3: Confirm** `git status` clean and only the intended files changed.
 
 ---

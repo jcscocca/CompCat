@@ -5,6 +5,12 @@
 > built — notably the configurable tool-call limit, the JSON-only planning
 > contract with no separate repair round, and dashboard-state argument backfill.
 
+> **Superseded note (post-consolidation):** LocalAgent was later **retired**. The
+> assistant now calls an OpenAI-compatible LLM endpoint directly (`MCA_LLM_BASE_URL` /
+> `MCA_LLM_MODEL`) via `app/assistant/llm_client.py`. References below to LocalAgent and
+> `localagent_client.py` describe the original v1 transport, not the current wiring. See
+> CLAUDE.md / docs/DEPLOY.md.
+
 ## Objective
 
 Build a Tableau-Agent-like analyst for Waypoint that can explain the current

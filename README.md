@@ -148,7 +148,7 @@ make run            # start the API on http://127.0.0.1:8000 (SQLite by default)
 ```
 
 With no `.env`, Waypoint uses a local SQLite database at
-`./localagent-output/mobility.sqlite3` and creates its schema on startup, so `make run` works out
+`./dev-output/mobility.sqlite3` and creates its schema on startup, so `make run` works out
 of the box. Load the bundled sample crime data so analysis returns results:
 
 ```bash
@@ -233,7 +233,7 @@ salt/secret and forces secure cookies.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `MCA_ENVIRONMENT` | `local` | Deployment environment; `production` enforces secret overrides and secure cookies. |
-| `MCA_DATABASE_URL` | `sqlite+pysqlite:///./localagent-output/mobility.sqlite3` | SQLAlchemy database URL (use a Postgres URL for production). |
+| `MCA_DATABASE_URL` | `sqlite+pysqlite:///./dev-output/mobility.sqlite3` | SQLAlchemy database URL (use a Postgres URL for production). |
 | `MCA_USER_HASH_SALT` | `local-demo-salt` | Salt for hashing demo user identity. Must be overridden in production. |
 | `MCA_SESSION_SECRET` | `local-dashboard-session-secret` | Session cookie secret. Must be overridden in production. |
 | `MCA_SESSION_COOKIE_SECURE` | auto | Force secure cookies; defaults to on in production. |

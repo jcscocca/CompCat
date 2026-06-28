@@ -6,7 +6,7 @@ __pycache__/
 .env
 .env.deploy
 .superpowers/
-localagent-output/
+dev-output/
 dist/
 build/
 frontend/node_modules/
