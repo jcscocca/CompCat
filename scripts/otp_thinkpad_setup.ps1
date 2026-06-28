@@ -22,7 +22,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Image    = "docker.io/opentripplanner/opentripplanner:latest"
+$Image    = "docker.io/opentripplanner/opentripplanner:2.7.0"
 $OsmUrl    = "https://download.geofabrik.de/north-america/us/washington-latest.osm.pbf"
 $GtfsUrl   = "https://gtfs.sound.obaweb.org/prod/gtfs_puget_sound_consolidated.zip"
 $OsmFile   = Join-Path $DataDir "washington-latest.osm.pbf"

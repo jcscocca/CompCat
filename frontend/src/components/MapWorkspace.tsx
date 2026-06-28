@@ -19,7 +19,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
 import { RoutesTab } from "./RoutesTab";
 import { parseRouteGeometry } from "../lib/routeGeometry";
-import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, RouteComparison, RouteLine, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, RouteComparison, RouteEndpointInput, RouteLine, TabKey } from "../types";
 
 const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
 
@@ -299,13 +299,13 @@ export function MapWorkspace() {
     }
   }
 
-  const handleRunRoute = async (origin: string, destination: string, mode: string) => {
+  const handleRunRoute = async (origin: RouteEndpointInput, destination: RouteEndpointInput, mode: string) => {
     setRouteRunning(true);
     setRouteError("");
     try {
       const result = await createRouteAlternatives({
-        origin_label: origin,
-        destination_label: destination,
+        origin,
+        destination,
         mode,
         analysis_start_date: analysis.startDate,
         analysis_end_date: analysis.endDate,
@@ -441,7 +441,15 @@ export function MapWorkspace() {
             <CompareTab selected={selected} analysis={analysis} summary={summary} comparison={comparison} running={comparing} onRun={handleCompare} />
           ) : null}
           {activeTab === "routes" ? (
-            <RoutesTab analysis={analysis} running={routeRunning} result={routeComparison} error={routeError} onRun={handleRunRoute} />
+            <RoutesTab
+              analysis={analysis}
+              running={routeRunning}
+              result={routeComparison}
+              error={routeError}
+              places={places}
+              geocodeSearch={geocodingProvider.search}
+              onRun={handleRunRoute}
+            />
           ) : null}
           {activeTab === "export" ? <ExportTab href={exportHref} /> : null}
         </BottomSheet>

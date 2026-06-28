@@ -25,7 +25,9 @@ def alternatives(
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, object]:
     try:
-        return create_route_alternatives(session, request, user_id_hash)
+        return create_route_alternatives(
+            session, request, user_id_hash, allow_provider_override=True
+        )
     except (UnknownRoutePlaceError, UnsupportedRoutingProviderError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RoutingProviderError as exc:

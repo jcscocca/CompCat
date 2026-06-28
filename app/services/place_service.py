@@ -27,6 +27,15 @@ def list_places(
     return [_cluster_data(row) for row in rows]
 
 
+def get_place(session: Session, place_id: str, user_id_hash: str) -> PlaceCluster | None:
+    return session.scalar(
+        select(PlaceCluster).where(
+            PlaceCluster.id == place_id,
+            PlaceCluster.user_id_hash == user_id_hash,
+        )
+    )
+
+
 def _cluster_data(row: PlaceCluster) -> PlaceClusterData:
     return PlaceClusterData(
         id=row.id,

@@ -459,7 +459,7 @@ def test_route_alternatives_uses_configured_default_provider(tmp_path, monkeypat
 
     captured = {}
 
-    def fake_factory(provider_name, *, opentripplanner_base_url=""):
+    def fake_factory(provider_name, *, opentripplanner_base_url="", opentripplanner_timeout_s=10.0):
         captured["provider_name"] = provider_name
         captured["base_url"] = opentripplanner_base_url
         return MockRoutingProvider()

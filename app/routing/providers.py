@@ -20,7 +20,10 @@ class RoutingProviderError(RuntimeError):
 
 
 def get_routing_provider(
-    provider_name: str, *, opentripplanner_base_url: str = ""
+    provider_name: str,
+    *,
+    opentripplanner_base_url: str = "",
+    opentripplanner_timeout_s: float = 10.0,
 ) -> RoutingProvider:
     if provider_name == "mock":
         return MockRoutingProvider()
@@ -31,5 +34,7 @@ def get_routing_provider(
             )
         from app.routing.opentripplanner_provider import OpenTripPlannerProvider
 
-        return OpenTripPlannerProvider(opentripplanner_base_url)
+        return OpenTripPlannerProvider(
+            opentripplanner_base_url, timeout_s=opentripplanner_timeout_s
+        )
     raise UnsupportedRoutingProviderError(f"Unsupported routing provider: {provider_name}")

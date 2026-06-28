@@ -123,6 +123,10 @@ export type RouteComparison = {
 
 export type RouteLine = { id: string; points: [number, number][]; recommended: boolean };
 
+export type RouteEndpointInput =
+  | { place_id: string }
+  | { latitude: number; longitude: number; label: string };
+
 export type DrawerState = { collapsed: boolean; widthPx: number };
 
 export type LatLng = { lat: number; lng: number };

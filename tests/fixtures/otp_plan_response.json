@@ -1,0 +1,172 @@
+{
+    "data": {
+        "plan": {
+            "itineraries": [
+                {
+                    "duration": 1948,
+                    "walkDistance": 2222.97,
+                    "legs": [
+                        {
+                            "mode": "WALK",
+                            "duration": 1948.0,
+                            "distance": 2222.97,
+                            "transitLeg": false,
+                            "route": null,
+                            "from": {
+                                "name": "Origin",
+                                "lat": 47.623,
+                                "lon": -122.321
+                            },
+                            "to": {
+                                "name": "Destination",
+                                "lat": 47.609,
+                                "lon": -122.335
+                            },
+                            "legGeometry": {
+                                "points": "_ktaHhyqiV@F?DZA`D?@?B??BAlD@@J@F@@H@J?@ABtA?B@@@@B@JBHDFB@@@F@h@A?dCBF?J?JH?H?BF?V?BBH@BJLHHBDFN@H@J?H?T@@@?|A?B@vA?@?@BBFDJ?D@F@A?@@?FT?@?@BDBJBJ@B??@?@BN`@BHDDHRBFDFFJDBBD@B@DDFJN@@?B?@@BPLZ?FFFFZVTNPLPN`@ZtAdAJHJFrAdAFF@@NNBFBDDFBJPB@??B@@~@zC@?DDzB@t@?dA?@CD?L?JAB??@@@?@@?B?|@@B??@fB@^?@A@CBD@D@F@FBFDAd@zAb@rA@C@?JEHRJZ^nAj@hB`@lAb@vAJK@ABFBBNb@NJpFz@?PRBPPHHZ`Ab@pADCDEBHBDBJBD?DfApDD@B@@?@D@J@T@@b@tAh@~A@ABFBHBLBD?@@DdAfDDAz@u@"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "duration": 1009,
+                    "walkDistance": 736.36,
+                    "legs": [
+                        {
+                            "mode": "WALK",
+                            "duration": 496.0,
+                            "distance": 482.85,
+                            "transitLeg": false,
+                            "route": null,
+                            "from": {
+                                "name": "Origin",
+                                "lat": 47.623,
+                                "lon": -122.321
+                            },
+                            "to": {
+                                "name": "Capitol Hill",
+                                "lat": 47.61956,
+                                "lon": -122.320389
+                            },
+                            "legGeometry": {
+                                "points": "_ktaHhyqiV?OAS?EjDAR?F?@A?EB?F@D@BA@B`@?rB?B?@A?CD?D?F@DC?D@@BAzB?L?F?JAH?J?F?B???B?@A?AB@J?L@@CH[@??c@TMVW?BlAG"
+                            }
+                        },
+                        {
+                            "mode": "TRAM",
+                            "duration": 270.0,
+                            "distance": 2380.97,
+                            "transitLeg": true,
+                            "route": {
+                                "shortName": "2 Line",
+                                "longName": "Lynnwood - Downtown Redmond"
+                            },
+                            "from": {
+                                "name": "Capitol Hill",
+                                "lat": 47.61956,
+                                "lon": -122.320389
+                            },
+                            "to": {
+                                "name": "Symphony",
+                                "lat": 47.607246,
+                                "lon": -122.335754
+                            },
+                            "legGeometry": {
+                                "points": "gusaHxtqiVzHCn@?l@@`@Db@D`@Hb@H`@L`@N`@N^R^T^T^X\\X\\ZZ^Z^X`@X`@Xd@Vd@Vf@Tf@Rh@Rj@Pl@Pl@Ll@Nn@Jn@Jp@Jp@Fp@Fp@Dr@Dr@Br@@r@?r@?t@Ar@Cr@Er@Ep@Gr@Gp@Ih@k@`EEf@C\\A\\A\\?\\@\\B\\B\\DZF^Lf@Nh@~HxVj@vBnBhG??h@~AHTLRLNLLNHNFNDR@VCTGTKXUhGqFlAmAbEsDFG"
+                            }
+                        },
+                        {
+                            "mode": "WALK",
+                            "duration": 243.0,
+                            "distance": 253.51,
+                            "transitLeg": false,
+                            "route": null,
+                            "from": {
+                                "name": "Symphony",
+                                "lat": 47.607246,
+                                "lon": -122.335754
+                            },
+                            "to": {
+                                "name": "Destination",
+                                "lat": 47.609,
+                                "lon": -122.335
+                            },
+                            "legGeometry": {
+                                "points": "ghqaHnutiVEKiAbAABCAGUGQ?Ee@}AKHMLa@oAC?AEAAEIIQCEcAz@]Z"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "duration": 1009,
+                    "walkDistance": 736.36,
+                    "legs": [
+                        {
+                            "mode": "WALK",
+                            "duration": 496.0,
+                            "distance": 482.85,
+                            "transitLeg": false,
+                            "route": null,
+                            "from": {
+                                "name": "Origin",
+                                "lat": 47.623,
+                                "lon": -122.321
+                            },
+                            "to": {
+                                "name": "Capitol Hill",
+                                "lat": 47.61956,
+                                "lon": -122.320389
+                            },
+                            "legGeometry": {
+                                "points": "_ktaHhyqiV?OAS?EjDAR?F?@A?EB?F@D@BA@B`@?rB?B?@A?CD?D?F@DC?D@@BAzB?L?F?JAH?J?F?B???B?@A?AB@J?L@@CH[@??c@TMVW?BlAG"
+                            }
+                        },
+                        {
+                            "mode": "TRAM",
+                            "duration": 270.0,
+                            "distance": 2380.97,
+                            "transitLeg": true,
+                            "route": {
+                                "shortName": "1 Line",
+                                "longName": "Lynnwood - Federal Way"
+                            },
+                            "from": {
+                                "name": "Capitol Hill",
+                                "lat": 47.61956,
+                                "lon": -122.320389
+                            },
+                            "to": {
+                                "name": "Symphony",
+                                "lat": 47.607246,
+                                "lon": -122.335754
+                            },
+                            "legGeometry": {
+                                "points": "gusaHxtqiVzHCn@?l@@`@Db@D`@Hb@H`@L`@N`@N^R^T^T^X\\X\\ZZ^Z^X`@X`@Xd@Vd@Vf@Tf@Rh@Rj@Pl@Pl@Ll@Nn@Jn@Jp@Jp@Fp@Fp@Dr@Dr@Br@@r@?r@?t@Ar@Cr@Er@Ep@Gr@Gp@Ih@k@`EEf@C\\A\\A\\?\\@\\B\\B\\DZF^Lf@Nh@~HxVj@vBnBhG??h@~AHTLRLNLLNHNFNDR@VCTGTKXUhGqFlAmAbEsDFG"
+                            }
+                        },
+                        {
+                            "mode": "WALK",
+                            "duration": 243.0,
+                            "distance": 253.51,
+                            "transitLeg": false,
+                            "route": null,
+                            "from": {
+                                "name": "Symphony",
+                                "lat": 47.607246,
+                                "lon": -122.335754
+                            },
+                            "to": {
+                                "name": "Destination",
+                                "lat": 47.609,
+                                "lon": -122.335
+                            },
+                            "legGeometry": {
+                                "points": "ghqaHnutiVEKiAbAABCAGUGQ?Ee@}AKHMLa@oAC?AEAAEIIQCEcAz@]Z"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

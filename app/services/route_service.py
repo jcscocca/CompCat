@@ -15,29 +15,72 @@ from app.models import (
     RouteSegment,
 )
 from app.routing.context import summarize_route_context
-from app.routing.place_resolver import resolve_route_place
+from app.routing.place_resolver import UnknownRoutePlaceError, resolve_route_place
 from app.routing.providers import get_routing_provider
 from app.routing.schemas import (
     RouteAlternativeData,
     RouteContextSummaryData,
+    RouteEndpoint,
+    RouteLocation,
     RouteRequestCreate,
     RouteRequestData,
 )
 from app.services.analysis_service import compare_route_request, latest_route_comparison_payload
 from app.services.incident_query_service import bounding_box_for_points, incidents_in_bbox
+from app.services.place_service import get_place
+
+
+def _resolve_endpoint(
+    session: Session,
+    user_id_hash: str,
+    endpoint: RouteEndpoint | None,
+    label: str | None,
+) -> RouteLocation:
+    if endpoint is not None and endpoint.place_id is not None:
+        place = get_place(session, endpoint.place_id, user_id_hash)
+        if place is None:
+            raise UnknownRoutePlaceError(f"Unknown saved place: {endpoint.place_id}")
+        return RouteLocation(
+            label=endpoint.label or place.display_label or "Saved place",
+            latitude=place.centroid_latitude,
+            longitude=place.centroid_longitude,
+            display_latitude=place.display_latitude,
+            display_longitude=place.display_longitude,
+            location_type=place.inferred_place_type,
+            source="saved_place",
+        )
+    if endpoint is not None and endpoint.latitude is not None and endpoint.longitude is not None:
+        return RouteLocation(
+            label=endpoint.label or f"{endpoint.latitude:.5f}, {endpoint.longitude:.5f}",
+            latitude=endpoint.latitude,
+            longitude=endpoint.longitude,
+            source="geocoded",
+        )
+    if label is not None:
+        return resolve_route_place(label)
+    raise UnknownRoutePlaceError("No origin or destination provided")
 
 
 def create_route_alternatives(
     session: Session,
     request_payload: RouteRequestCreate,
     user_id_hash: str,
+    *,
+    allow_provider_override: bool = False,
 ) -> dict[str, object]:
-    origin = resolve_route_place(request_payload.origin_label)
-    destination = resolve_route_place(request_payload.destination_label)
+    origin = _resolve_endpoint(
+        session, user_id_hash, request_payload.origin, request_payload.origin_label
+    )
+    destination = _resolve_endpoint(
+        session, user_id_hash, request_payload.destination, request_payload.destination_label
+    )
     settings = get_settings()
-    provider_name = request_payload.provider or settings.routing_provider
+    requested_provider = request_payload.provider if allow_provider_override else None
+    provider_name = requested_provider or settings.routing_provider
     routing_provider = get_routing_provider(
-        provider_name, opentripplanner_base_url=settings.opentripplanner_base_url
+        provider_name,
+        opentripplanner_base_url=settings.opentripplanner_base_url,
+        opentripplanner_timeout_s=settings.opentripplanner_timeout_s,
     )
 
     route_request = RouteRequest(
@@ -307,16 +350,12 @@ def _request_to_dict(route_request: RouteRequest) -> dict[str, Any]:
         "id": route_request.id,
         "origin": {
             "label": route_request.origin_label,
-            "latitude": route_request.origin_latitude,
-            "longitude": route_request.origin_longitude,
             "display_latitude": route_request.origin_display_latitude,
             "display_longitude": route_request.origin_display_longitude,
             "location_type": route_request.origin_location_type,
         },
         "destination": {
             "label": route_request.destination_label,
-            "latitude": route_request.destination_latitude,
-            "longitude": route_request.destination_longitude,
             "display_latitude": route_request.destination_display_latitude,
             "display_longitude": route_request.destination_display_longitude,
             "location_type": route_request.destination_location_type,

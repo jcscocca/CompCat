@@ -125,3 +125,37 @@ def test_get_routes_wraps_bad_shape():
 
     with pytest.raises(RoutingProviderError):
         _provider(handler).get_routes(_request())
+
+
+def test_get_routing_provider_passes_timeout():
+    from app.routing.providers import get_routing_provider
+
+    provider = get_routing_provider(
+        "opentripplanner", opentripplanner_base_url="http://otp", opentripplanner_timeout_s=3.5
+    )
+    assert provider.timeout_s == 3.5
+
+
+def test_provider_parses_recorded_live_response():
+    # Contract regression: an actual OTP 2.7 `plan` response captured from a live Puget Sound
+    # graph (Capitol Hill -> Downtown) must keep parsing. If a future OTP image changes the
+    # GTFS GraphQL schema, re-capture tests/fixtures/otp_plan_response.json and update as needed.
+    from pathlib import Path
+
+    payload = json.loads(
+        (Path(__file__).parent / "fixtures" / "otp_plan_response.json").read_text()
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    alternatives = _provider(handler).get_routes(_request())
+
+    assert alternatives, "expected at least one itinerary from the recorded response"
+    assert any(
+        a.mode_mix and "tram" in a.mode_mix.lower() for a in alternatives
+    ), "expected a transit (Link light rail) alternative in the recorded response"
+    first = alternatives[0]
+    assert first.summary_geometry and ";" in first.summary_geometry
+    assert first.transfer_count >= 0
+    assert first.segments[0].segment_type == "access"
