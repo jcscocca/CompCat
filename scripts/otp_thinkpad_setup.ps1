@@ -7,7 +7,7 @@
   Downloads the OSM extract + GTFS feed (if missing), builds the OTP graph, and starts a
   container named "otp" with a restart policy so it returns after reboots. Also opens the
   Windows firewall for the port (needs an elevated PowerShell) so other machines on the LAN
-  — e.g. a Mac running Waypoint — can reach it. Re-running is safe: it skips the download and
+  - e.g. a Mac running Waypoint - can reach it. Re-running is safe: it skips the download and
   build when the data / graph already exist (use -Rebuild to force a fresh graph).
 
 .EXAMPLE
@@ -33,12 +33,12 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
   throw "Docker not found. Install Docker Desktop and retry."
 }
 docker version *> $null
-if ($LASTEXITCODE -ne 0) { throw "Docker isn't responding — start Docker Desktop and retry." }
+if ($LASTEXITCODE -ne 0) { throw "Docker isn't responding - start Docker Desktop and retry." }
 
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
 if (-not (Test-Path $OsmFile)) {
-  Write-Host "==> Downloading Washington OSM extract (large — can take several minutes)..."
+  Write-Host "==> Downloading Washington OSM extract (large - can take several minutes)..."
   Invoke-WebRequest -Uri $OsmUrl -OutFile $OsmFile
 }
 if (-not (Test-Path $GtfsFile)) {
@@ -51,7 +51,7 @@ if ($Rebuild -or -not (Test-Path $Graph)) {
   docker run --rm -e "JAVA_TOOL_OPTIONS=-Xmx$Heap" -v "${DataDir}:/var/opentripplanner" $Image --build --save
   if ($LASTEXITCODE -ne 0) { throw "Graph build failed (see output above)." }
 } else {
-  Write-Host "==> graph.obj already present — skipping build (use -Rebuild to force)."
+  Write-Host "==> graph.obj already present - skipping build (use -Rebuild to force)."
 }
 
 Write-Host "==> (Re)starting the 'otp' container on port $Port..."
