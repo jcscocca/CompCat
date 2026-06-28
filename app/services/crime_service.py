@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, time
 from importlib import resources
+from math import cos, radians
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.crime.seattle_socrata import load_crime_csv
@@ -32,6 +33,51 @@ def ingest_sample_crime(session: Session) -> dict[str, int]:
     return {"inserted_count": inserted}
 
 
+def _incidents_near_clusters(
+    session: Session,
+    clusters: list[PlaceClusterData],
+    radii_m: list[int],
+    analysis_start_date: date,
+    analysis_end_date: date,
+) -> list[CrimeIncidentData]:
+    """Load only incidents within the clusters' combined bounding box and date range,
+    rather than the whole ``crime_incidents`` table. ``summarize_place_crime`` re-filters
+    by exact radius and date afterward, so this is a SQL pre-filter, not a behavior change.
+
+    The bbox+date WHERE mirrors ``incident_query_service.incidents_in_bbox``; it is inlined
+    here because that module imports ``_incident_data`` from this one, so importing it back
+    would be a circular import.
+    """
+    points = [
+        (cluster.display_latitude, cluster.display_longitude)
+        for cluster in clusters
+        if cluster.display_latitude is not None and cluster.display_longitude is not None
+    ]
+    if not points or not radii_m:
+        return []
+    radius_m = max(radii_m)
+    lats = [lat for lat, _ in points]
+    lons = [lon for _, lon in points]
+    lat_pad = radius_m / 111_320
+    lon_scale = max(abs(cos(radians(sum(lats) / len(lats)))), 0.01)
+    lon_pad = radius_m / (111_320 * lon_scale)
+    start_at = datetime.combine(analysis_start_date, time.min, tzinfo=UTC)
+    end_at = datetime.combine(analysis_end_date, time.max, tzinfo=UTC)
+    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
+    stmt = (
+        select(CrimeIncident)
+        .where(CrimeIncident.latitude.is_not(None))
+        .where(CrimeIncident.longitude.is_not(None))
+        .where(CrimeIncident.latitude >= min(lats) - lat_pad)
+        .where(CrimeIncident.latitude <= max(lats) + lat_pad)
+        .where(CrimeIncident.longitude >= min(lons) - lon_pad)
+        .where(CrimeIncident.longitude <= max(lons) + lon_pad)
+        .where(observed >= start_at)
+        .where(observed <= end_at)
+    )
+    return [_incident_data(row) for row in session.scalars(stmt).all()]
+
+
 def summarize_for_user(
     session: Session,
     user_id_hash: str,
@@ -45,7 +91,9 @@ def summarize_for_user(
             select(PlaceCluster).where(PlaceCluster.user_id_hash == user_id_hash)
         ).all()
     ]
-    incidents = [_incident_data(row) for row in session.scalars(select(CrimeIncident)).all()]
+    incidents = _incidents_near_clusters(
+        session, clusters, radii_m, analysis_start_date, analysis_end_date
+    )
     summaries = summarize_place_crime(
         clusters,
         incidents,
