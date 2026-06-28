@@ -99,6 +99,8 @@ export type RouteAlternative = {
 
 export type RouteContextSummaryItem = {
   route_alternative_id: string;
+  route_segment_id?: string | null;
+  context_label?: string | null;
   radius_m: number;
   incident_count: number;
   nearest_incident_m: number | null;

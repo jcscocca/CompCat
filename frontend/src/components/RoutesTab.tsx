@@ -31,6 +31,22 @@ function corridorContext(result: RouteComparison, alternativeId: string, radiusM
   return { count, nearest, types };
 }
 
+type LegContext = { label: string; count: number };
+
+// Break the corridor total into per-leg context. Each context summary is anchored at one of
+// the route's stops (context_label); group by that label so the user sees reported-incident
+// context near each leg's stops, not just the whole-corridor sum.
+function perLegContext(result: RouteComparison, alternativeId: string, radiusM: number): LegContext[] {
+  const byLabel = new Map<string, number>();
+  for (const row of result.context_summaries) {
+    if (row.route_alternative_id !== alternativeId || row.radius_m !== radiusM) continue;
+    const label = row.context_label?.trim();
+    if (!label) continue;
+    byLabel.set(label, (byLabel.get(label) ?? 0) + row.incident_count);
+  }
+  return [...byLabel.entries()].map(([label, count]) => ({ label, count }));
+}
+
 export function RoutesTab({ analysis, running, result, error, places, geocodeSearch, onRun }: Props) {
   const [geoResults, setGeoResults] = useState<GeocodeResult[]>([]);
   const [query, setQuery] = useState("");
@@ -150,6 +166,7 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
 
             {result.alternatives.map((alt) => {
               const ctx = corridorContext(result, alt.id, analysis.radiusM);
+              const legs = perLegContext(result, alt.id, analysis.radiusM);
               return (
                 <section key={alt.id} className={`mc-verdict${alt.id === recommendedId ? " tone-ok" : ""}`} aria-label={`Route ${alt.route_label}`}>
                   <div className="mc-verdict-head">
@@ -165,6 +182,16 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
                     {ctx.nearest != null ? ` · nearest ${Math.round(ctx.nearest)} m` : ""}
                     {ctx.types.length ? ` · ${ctx.types.join(", ")}` : ""}
                   </p>
+                  {legs.length > 1 ? (
+                    <ul className="mc-breakdown" aria-label="Reported incidents near each leg's stops">
+                      {legs.map((leg) => (
+                        <li key={leg.label} className="mc-breakdown-row">
+                          <span>{leg.label}</span>
+                          <span className="cnt">{leg.count} reported incident{leg.count === 1 ? "" : "s"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </section>
               );
             })}
