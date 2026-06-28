@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas import new_id
 
@@ -22,9 +22,30 @@ class RouteLocation(BaseModel):
     source: str = "local_fixture"
 
 
+class RouteEndpoint(BaseModel):
+    place_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    label: str | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "RouteEndpoint":
+        has_place = self.place_id is not None
+        has_coords = self.latitude is not None and self.longitude is not None
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be provided together")
+        if has_place and has_coords:
+            raise ValueError("provide either place_id or latitude/longitude, not both")
+        if not has_place and not has_coords:
+            raise ValueError("provide place_id or latitude/longitude")
+        return self
+
+
 class RouteRequestCreate(BaseModel):
-    origin_label: str
-    destination_label: str
+    origin_label: str | None = None
+    destination_label: str | None = None
+    origin: RouteEndpoint | None = None
+    destination: RouteEndpoint | None = None
     mode: SupportedRouteMode = "transit"
     departure_date: date | None = None
     departure_time: str | None = None
