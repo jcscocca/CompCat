@@ -8,6 +8,7 @@ import type {
   Place,
   PlaceCreate,
   RouteComparison,
+  RouteEndpointInput,
 } from "../types";
 
 type AnalyzePlacesPayload = {
@@ -103,8 +104,8 @@ export function getInputModes(): Promise<{ modes: { id: string }[] }> {
 }
 
 export function createRouteAlternatives(payload: {
-  origin_label: string;
-  destination_label: string;
+  origin: RouteEndpointInput;
+  destination: RouteEndpointInput;
   mode: string;
   analysis_start_date: string;
   analysis_end_date: string;
