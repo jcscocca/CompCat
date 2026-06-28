@@ -1,4 +1,4 @@
-.PHONY: install test lint run migrate demo ingest-crime frontend-install frontend-test frontend-build test-all docker-build
+.PHONY: install test lint run migrate demo seed-crime ingest-crime frontend-install frontend-test frontend-build test-all docker-build
 
 install:
 	python3.11 -m venv .venv
@@ -18,6 +18,9 @@ migrate:
 
 demo:
 	curl -s http://127.0.0.1:8000/health
+
+seed-crime:
+	.venv/bin/python scripts/seed_crime.py
 
 ingest-crime:
 	@if [ -z "$$MCA_ADMIN_INGEST_TOKEN" ]; then \
