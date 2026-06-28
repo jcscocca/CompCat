@@ -18,6 +18,37 @@ jobs:
       - run: ruff check .
       - run: pytest tests -q
 
+  backend-postgres:
+    # Proves migrations apply and the app runs on Postgres (the deploy DB), not just SQLite.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mca
+          POSTGRES_USER: mca
+          POSTGRES_PASSWORD: mca
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mca -d mca"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MCA_DATABASE_URL: postgresql+psycopg://mca:mca@localhost:5432/mca
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[dev]'
+      - name: Migrate to head on Postgres
+        run: alembic upgrade head
+      - name: Postgres parity smoke
+        run: pytest tests/test_postgres_smoke.py -q
+
   frontend:
     runs-on: ubuntu-latest
     steps:
