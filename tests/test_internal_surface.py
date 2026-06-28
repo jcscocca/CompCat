@@ -16,7 +16,6 @@ PUBLIC_PATHS = {
     "/exports/tableau/route-alternatives.csv",
     "/exports/tableau/route-segments.csv",
     "/exports/tableau/route-context.csv",
-    "/exports/tableau/statistical-comparisons.csv",
     "/places/{place_id}",
     "/routes/alternatives",
     "/routes/requests/{request_id}/comparison",

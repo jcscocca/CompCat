@@ -4,7 +4,12 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.api.deps import required_public_user_hash
-from app.config import DEFAULT_SESSION_SECRET, DEFAULT_USER_HASH_SALT, Settings
+from app.config import (
+    DEFAULT_ADMIN_INGEST_TOKEN,
+    DEFAULT_SESSION_SECRET,
+    DEFAULT_USER_HASH_SALT,
+    Settings,
+)
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import PlaceCluster
@@ -58,6 +63,35 @@ def test_production_settings_reject_default_secret_material():
         )
 
 
+def _prod_settings_overrides() -> dict[str, str]:
+    """Non-default secret/contact material so only the field under test can fail."""
+    return {
+        "environment": "production",
+        "user_hash_salt": "test-production-salt",
+        "session_secret": "test-production-session-secret",
+        "geocoder_contact_email": "ops@example.com",
+    }
+
+
+def test_production_settings_reject_default_admin_ingest_token():
+    with pytest.raises(
+        ValidationError, match=r"Production deployments must override.*MCA_ADMIN_INGEST_TOKEN"
+    ):
+        Settings(**_prod_settings_overrides(), admin_ingest_token=DEFAULT_ADMIN_INGEST_TOKEN)
+
+
+def test_production_settings_allow_overridden_admin_ingest_token():
+    settings = Settings(**_prod_settings_overrides(), admin_ingest_token="a-real-secret-token")
+    assert settings.admin_ingest_token == "a-real-secret-token"
+
+
+def test_production_settings_allow_unset_admin_ingest_token():
+    # Unset token keeps admin ingest fail-closed (the route 403s), which is a safe
+    # production posture — only the guessable shipped default is rejected.
+    settings = Settings(**_prod_settings_overrides())
+    assert settings.admin_ingest_token is None
+
+
 def test_public_read_routes_reject_demo_header_without_session(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
@@ -70,7 +104,6 @@ def test_public_read_routes_reject_demo_header_without_session(tmp_path):
         "/exports/tableau/route-alternatives.csv",
         "/exports/tableau/route-segments.csv",
         "/exports/tableau/route-context.csv",
-        "/exports/tableau/statistical-comparisons.csv",
     ):
         response = client.get(path, headers=headers)
 

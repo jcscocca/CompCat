@@ -6,7 +6,7 @@ import json
 import httpx
 import pytest
 
-from app.assistant.localagent_client import LocalAgentUnavailable, OpenAiLlmClient
+from app.assistant.llm_client import LlmUnavailable, OpenAiLlmClient
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8080/v1/chat/completions")
 
@@ -41,7 +41,7 @@ def test_complete_returns_content(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_empty_content_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Whitespace-only content triggers LocalAgentUnavailable."""
+    """Whitespace-only content triggers LlmUnavailable."""
     response_data = {
         "choices": [{"message": {"content": "   ", "reasoning_content": "some thinking"}}]
     }
@@ -52,12 +52,12 @@ def test_empty_content_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
     client = _make_client()
-    with pytest.raises(LocalAgentUnavailable, match="empty content"):
+    with pytest.raises(LlmUnavailable, match="empty content"):
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
 
 
 def test_none_content_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """None content (key missing) triggers LocalAgentUnavailable."""
+    """None content (key missing) triggers LlmUnavailable."""
     response_data = {"choices": [{"message": {"reasoning_content": "some thinking"}}]}
 
     async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
@@ -66,12 +66,12 @@ def test_none_content_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
     client = _make_client()
-    with pytest.raises(LocalAgentUnavailable, match="empty content"):
+    with pytest.raises(LlmUnavailable, match="empty content"):
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
 
 
 def test_http_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An HTTP connection error is wrapped in LocalAgentUnavailable."""
+    """An HTTP connection error is wrapped in LlmUnavailable."""
 
     async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
         raise httpx.ConnectError("connection refused")
@@ -79,12 +79,12 @@ def test_http_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
     client = _make_client()
-    with pytest.raises(LocalAgentUnavailable, match="LLM endpoint unavailable"):
+    with pytest.raises(LlmUnavailable, match="LLM endpoint unavailable"):
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
 
 
 def test_bad_response_shape_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unexpected JSON shape raises LocalAgentUnavailable."""
+    """Unexpected JSON shape raises LlmUnavailable."""
     response_data = {"result": "unexpected"}
 
     async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
@@ -93,12 +93,12 @@ def test_bad_response_shape_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
     client = _make_client()
-    with pytest.raises(LocalAgentUnavailable, match="unexpected response shape"):
+    with pytest.raises(LlmUnavailable, match="unexpected response shape"):
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
 
 
 def test_http_status_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A non-2xx HTTP status is wrapped in LocalAgentUnavailable."""
+    """A non-2xx HTTP status is wrapped in LlmUnavailable."""
 
     async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
         return _json_response({"error": "not found"}, status_code=404)
@@ -106,7 +106,7 @@ def test_http_status_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
 
     client = _make_client()
-    with pytest.raises(LocalAgentUnavailable, match="LLM endpoint unavailable"):
+    with pytest.raises(LlmUnavailable, match="LLM endpoint unavailable"):
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
 
 

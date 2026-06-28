@@ -382,7 +382,7 @@ def step9_assistant(id1: str) -> bool:
             event_type = None  # reset for next pair
 
     if error_detail is not None:
-        _warn(label, f"assistant returned error (LocalAgent may be down): {error_detail}")
+        _warn(label, f"assistant returned error (LLM endpoint may be down): {error_detail}")
         return True  # soft — model stack may not be running
 
     if not saw_done:

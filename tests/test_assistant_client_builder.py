@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.api.routes_assistant import build_assistant_llm_client
-from app.assistant.localagent_client import FailoverLlmClient, OpenAiLlmClient
+from app.assistant.llm_client import FailoverLlmClient, OpenAiLlmClient
 
 _NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}}
 

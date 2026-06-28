@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.assistant.localagent_client import AssistantLlmClient, LocalAgentUnavailable
+from app.assistant.llm_client import AssistantLlmClient, LlmUnavailable
 from app.assistant.prompts import build_followup_messages, build_planning_messages
 from app.assistant.schemas import (
     AssistantChatMessage,
@@ -91,7 +91,7 @@ async def run_assistant_turn(
         message = _final_message(plan)
         yield AssistantStreamEvent(event="token", data={"delta": message})
         yield AssistantStreamEvent(event="done", data={})
-    except (AssistantToolError, LocalAgentUnavailable, ValueError) as exc:
+    except (AssistantToolError, LlmUnavailable, ValueError) as exc:
         yield AssistantStreamEvent(event="error", data={"message": str(exc)})
 
 

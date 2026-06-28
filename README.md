@@ -66,11 +66,11 @@ Under the hood the assistant plans with an LLM and can call a small set of read-
 `suggest_followups`), capped at `MCA_ASSISTANT_MAX_TOOL_CALLS` per turn. Responses stream back to
 the browser token by token.
 
-The assistant talks to a **separate LLM gateway** (the "LocalAgent" service) that implements a
-streaming completion API. Waypoint reaches it at `MCA_LOCALAGENT_BASE_URL`
-(default `http://127.0.0.1:8010`) using the role `MCA_ASSISTANT_ROLE`
-(default `waypoint_analyst`). If no gateway is running, the rest of the dashboard works normally —
-only the Analyst panel is unavailable. See [Running the Analyst](#running-the-analyst-optional).
+The assistant talks directly to an **OpenAI-compatible LLM endpoint** (any server exposing a
+`/chat/completions` API — llama.cpp/llama-swap, vLLM, etc.). Waypoint reaches it at
+`MCA_LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`) using the model `MCA_LLM_MODEL`. If no
+endpoint is running, the rest of the dashboard works normally — only the Analyst panel is
+unavailable. See [Running the Analyst](#running-the-analyst-optional).
 
 ## Input modes
 
@@ -183,16 +183,17 @@ VITE_BACKEND_TARGET=http://127.0.0.1:8001 npm run dev
 
 ### Running the Analyst (optional)
 
-The Analyst panel needs a running LLM gateway that implements the LocalAgent streaming API.
-Start your gateway (on its own port so it does not collide with the API on `8000`) and point
-Waypoint at it:
+The Analyst panel needs a running OpenAI-compatible LLM endpoint (any server exposing a
+`/chat/completions` API — llama.cpp/llama-swap, vLLM, etc.). Start your endpoint (on its own
+port so it does not collide with the API on `8000`) and point Waypoint at it:
 
 ```bash
-export MCA_LOCALAGENT_BASE_URL=http://127.0.0.1:8010   # this is the default
+export MCA_LLM_BASE_URL=http://127.0.0.1:8080/v1   # this is the default
+export MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 make run
 ```
 
-Without a gateway the dashboard still works; the Analyst panel is simply disabled.
+Without an LLM endpoint the dashboard still works; the Analyst panel is simply disabled.
 
 ### Running with Postgres/PostGIS
 
@@ -239,13 +240,14 @@ salt/secret and forces secure cookies.
 | `MCA_STATIC_DASHBOARD_DIR` | `app/static/dashboard` | Where the built dashboard is served from. |
 | `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` | `false` | Surface the personal timeline upload mode (internal/demo). |
 | `MCA_RAW_UPLOAD_RETENTION` | `false` | Keep raw uploads instead of deleting them after normalization. |
-| `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. |
+| `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. The guessable Compose default (`local-admin-token`) is rejected at boot in production. |
 | `MCA_CRIME_RADII_M` | `[250,500,1000]` | Default analysis radii in meters. |
 | `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL. |
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
 | `SOCRATA_APP_TOKEN` | _unset_ | Optional Socrata app token for higher rate limits. |
-| `MCA_LOCALAGENT_BASE_URL` | `http://127.0.0.1:8010` | LLM gateway URL for the Analyst. |
-| `MCA_ASSISTANT_ROLE` | `waypoint_analyst` | Role sent to the LLM gateway. |
+| `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL for the Analyst. |
+| `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent to the LLM endpoint. |
+| `MCA_ASSISTANT_ROLE` | `waypoint_analyst` | Analyst role label included in assistant responses. |
 | `MCA_ASSISTANT_MAX_TOOL_CALLS` | `2` | Max tool calls the Analyst may make per turn. |
 | `MCA_ROUTING_PROVIDER` | `mock` | Route alternatives provider: `mock` (deterministic, default) or `opentripplanner` (live). |
 | `MCA_OPENTRIPPLANNER_BASE_URL` | _unset_ | OTP2 GTFS GraphQL endpoint (e.g. `http://localhost:8080/otp/gtfs/v1`); required when the provider is `opentripplanner`. |

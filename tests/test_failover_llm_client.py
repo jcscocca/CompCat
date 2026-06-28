@@ -6,8 +6,8 @@ import logging
 
 import pytest
 
-from app.assistant import localagent_client
-from app.assistant.localagent_client import FailoverLlmClient, LocalAgentUnavailable
+from app.assistant import llm_client
+from app.assistant.llm_client import FailoverLlmClient, LlmUnavailable
 
 _MESSAGES = [{"role": "user", "content": "hi"}]
 
@@ -21,7 +21,7 @@ def _capture_failover_logs():
     records: list[logging.LogRecord] = []
     handler = logging.Handler()
     handler.emit = records.append
-    logger = localagent_client.logger
+    logger = llm_client.logger
     previous_level = logger.level
     previous_disabled = logger.disabled
     previous_global_disable = logging.root.manager.disable
@@ -86,8 +86,8 @@ def test_primary_success_skips_fallback() -> None:
 
 
 def test_failover_when_primary_unavailable() -> None:
-    """A primary LocalAgentUnavailable falls through to the next client."""
-    primary = _FakeClient(base_url="primary", error=LocalAgentUnavailable("primary down"))
+    """A primary LlmUnavailable falls through to the next client."""
+    primary = _FakeClient(base_url="primary", error=LlmUnavailable("primary down"))
     fallback = _FakeClient(base_url="fallback", content="from-fallback")
     client = FailoverLlmClient([primary, fallback])
 
@@ -100,11 +100,11 @@ def test_failover_when_primary_unavailable() -> None:
 
 def test_all_clients_failing_raises_with_all_labels() -> None:
     """If every client fails, the error names each failed endpoint."""
-    primary = _FakeClient(base_url="primary", error=LocalAgentUnavailable("primary down"))
-    fallback = _FakeClient(base_url="fallback", error=LocalAgentUnavailable("fallback down"))
+    primary = _FakeClient(base_url="primary", error=LlmUnavailable("primary down"))
+    fallback = _FakeClient(base_url="fallback", error=LlmUnavailable("fallback down"))
     client = FailoverLlmClient([primary, fallback])
 
-    with pytest.raises(LocalAgentUnavailable) as excinfo:
+    with pytest.raises(LlmUnavailable) as excinfo:
         asyncio.run(client.complete(_MESSAGES, role="x"))
 
     message = str(excinfo.value)
@@ -123,7 +123,7 @@ def test_kwargs_are_forwarded() -> None:
 
 
 def test_non_availability_error_propagates_without_failover() -> None:
-    """A non-LocalAgentUnavailable error is not masked and stops failover."""
+    """A non-LlmUnavailable error is not masked and stops failover."""
     primary = _FakeClient(base_url="primary", error=RuntimeError("unexpected bug"))
     fallback = _FakeClient(base_url="fallback", content="from-fallback")
     client = FailoverLlmClient([primary, fallback])
@@ -140,7 +140,7 @@ def test_empty_client_list_raises_value_error() -> None:
 
 def test_failover_emits_warning() -> None:
     """A non-final failure logs a warning naming the next endpoint."""
-    primary = _FakeClient(base_url="primary", error=LocalAgentUnavailable("down"))
+    primary = _FakeClient(base_url="primary", error=LlmUnavailable("down"))
     fallback = _FakeClient(base_url="fallback", content="ok")
     client = FailoverLlmClient([primary, fallback])
 
@@ -154,11 +154,11 @@ def test_failover_emits_warning() -> None:
 
 def test_final_failure_emits_no_failover_warning() -> None:
     """The last client failing should not log a (non-existent) failover."""
-    only = _FakeClient(base_url="only", error=LocalAgentUnavailable("down"))
+    only = _FakeClient(base_url="only", error=LlmUnavailable("down"))
     client = FailoverLlmClient([only])
 
     with _capture_failover_logs() as records:
-        with pytest.raises(LocalAgentUnavailable):
+        with pytest.raises(LlmUnavailable):
             asyncio.run(client.complete(_MESSAGES, role="x"))
 
     assert not any("failing over" in r.getMessage() for r in records)

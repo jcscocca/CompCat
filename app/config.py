@@ -5,6 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_USER_HASH_SALT = "local-demo-salt"
 DEFAULT_SESSION_SECRET = "local-dashboard-session-secret"
+# Matches the guessable fallback baked into docker-compose.yml so the production
+# boot validator rejects exactly what the local Compose stack ships with.
+DEFAULT_ADMIN_INGEST_TOKEN = "local-admin-token"
 
 
 class Settings(BaseSettings):
@@ -28,7 +31,6 @@ class Settings(BaseSettings):
     socrata_dataset_id: str = "tazs-3rd5"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
-    localagent_base_url: str = "http://127.0.0.1:8010"
     assistant_role: str = "waypoint_analyst"
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k"
@@ -71,6 +73,8 @@ class Settings(BaseSettings):
             default_names.append("MCA_USER_HASH_SALT")
         if self.session_secret == DEFAULT_SESSION_SECRET:
             default_names.append("MCA_SESSION_SECRET")
+        if self.admin_ingest_token == DEFAULT_ADMIN_INGEST_TOKEN:
+            default_names.append("MCA_ADMIN_INGEST_TOKEN")
         if default_names:
             joined_names = ", ".join(default_names)
             raise ValueError(

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import required_public_user_hash
 from app.assistant.agent import run_assistant_turn
-from app.assistant.localagent_client import (
+from app.assistant.llm_client import (
     AssistantLlmClient,
     FailoverLlmClient,
     OpenAiLlmClient,

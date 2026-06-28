@@ -30,7 +30,8 @@ copy.
 
 The assistant calls an OpenAI-compatible endpoint directly: `MCA_LLM_BASE_URL`,
 `MCA_LLM_MODEL`. If unreachable, only the chat panel is affected — the rest of the app
-works. (The old LocalAgent gateway / `MCA_LOCALAGENT_BASE_URL` is being retired.)
+works. (The old LocalAgent gateway and its `MCA_LOCALAGENT_BASE_URL` env var have been
+retired; the client module is `app/assistant/llm_client.py`.)
 
 ## Verification gate
 

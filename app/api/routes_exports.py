@@ -13,7 +13,6 @@ from app.services.route_export_service import (
     tableau_route_context_csv,
     tableau_route_segments_csv,
 )
-from app.services.statistical_export_service import tableau_statistical_comparisons_csv
 
 router = APIRouter()
 
@@ -75,18 +74,4 @@ def export_route_context(
         content=tableau_route_context_csv(session, user_id_hash),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=route-context.csv"},
-    )
-
-
-@router.get("/exports/tableau/statistical-comparisons.csv")
-def export_statistical_comparisons(
-    user_id_hash: Annotated[str, Depends(required_public_user_hash)],
-    session: Annotated[Session, Depends(get_session)],
-) -> Response:
-    return Response(
-        content=tableau_statistical_comparisons_csv(session, user_id_hash),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": "attachment; filename=statistical-comparisons.csv"
-        },
     )
