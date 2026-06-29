@@ -1,6 +1,6 @@
-import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { useAddressSearch } from "../lib/useAddressSearch";
 import type { GeocodingProvider } from "../lib/geocoding";
 import type { GeocodeResult } from "../types";
 
@@ -9,32 +9,17 @@ type Props = {
   onSelectResult: (result: GeocodeResult) => void;
 };
 
-type Status = "idle" | "loading" | "done" | "error";
-
 export function PlaceSearch({ provider, onSelectResult }: Props) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GeocodeResult[]>([]);
-  const [status, setStatus] = useState<Status>("idle");
+  const { query, setQuery, status, results, runSearch } = useAddressSearch(provider.search);
 
-  async function runSearch(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!query.trim()) {
-      return;
-    }
-    setStatus("loading");
-    try {
-      const found = await provider.search(query);
-      setResults(found);
-      setStatus("done");
-    } catch {
-      setResults([]);
-      setStatus("error");
-    }
+    void runSearch();
   }
 
   return (
     <div className="mc-search-wrap">
-      <form className="mc-search mc-search--sheet" onSubmit={runSearch} role="search">
+      <form className="mc-search mc-search--sheet" onSubmit={onSubmit} role="search">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4.3-4.3" />

@@ -51,7 +51,7 @@ hardening and the Phase 4 public-launch gate**.
 
 - [x] **Harden the safety-refusal guard** — shipped: the object-first regex gap was fixed (#59), and an output-side guard on the model's answer plus broadened ranking/determiner detection landed in #63 (closing #60). Residual synonym-lexicon and non-English breadth is lower-priority follow-up. _(Original analysis, retained for context:)_ The guard was substantially broadened: it is now a broad `re` pattern scanning recent turns (last 8 user messages), not just the latest message. It catches "which block is more dangerous", "how risky", "safest", "unsafe", etc. **However**, a regex gap remains: the `(?:these|those|them|the\s+)?` group is missing a trailing `\s+`, so "rank these places" / "score these areas" (object-before-verb order) bypass it. Fix the `_SAFETY_SCORE_PATTERN` in `app/assistant/agent.py` and add the **output-side guard test** asserting the engine and assistant never emit `safe/unsafe/dangerous/risk` language. (`test_statistical_comparison_service.py` has an output check for compare summaries; there is no analogous test for the assistant response token stream.)
 - [x] **Close the rigor asymmetry — route path verified.** `MIN_PLACE_COUNT` / `MIN_COMBINED_COUNT` live in the shared `build_statistical_comparison` engine (`app/analysis/comparison.py`), which **both** `compare_site_options` and `compare_route_request` funnel through — so the route path applies the per-option floor identically; there was no asymmetry. Locked in end-to-end by `tests/test_statistical_comparison_service.py::test_compare_route_request_floors_near_empty_candidate` (a 1-incident candidate corridor is not declared the winner despite a high combined count).
-- [ ] **Deferred neighborhood-stats QA:** The `benjamini_hochberg` correction runs *after* candidate pairs are assembled and tests run — the uncorrected p-value selects the lowest-rate candidate *before* BH adjustment. This means the winner is chosen on pre-correction signal; review whether this is the intended design or an uncorrected candidate-selection step. Also: overdispersion is modeled (φ stored, correction applied when finite); small-sample behavior and multiple-comparison edge cases remain unreviewed.
+- [ ] **Deferred neighborhood-stats QA:** The candidate-selection-before-BH question is **reviewed and resolved** (#65) — selecting the lowest-rate candidate before BH is a real selective-inference effect, but the decision is conservative by design (must be statistically lower than every alternative, an effect-size floor, and the data floors), so selection alone cannot crown a winner. Documented in `docs/analysis/statistical-route-place-comparison.md` and pinned by a test. Still open: overdispersion small-sample behavior and the multiple-comparison edge cases.
 - [x] **Point-in-polygon beat assignment** — `assign_beat` + `load_beat_polygons` (pure-Python ray-casting) implemented in `app/analysis/beat_baselines.py` and wired into `app/services/neighborhood_service.py` (the main analyze path). Also used by assistant tools. Shipped.
 
 ## Phase 2 — Data & ops durability
@@ -63,9 +63,9 @@ hardening and the Phase 4 public-launch gate**.
 - [x] **Decouple OTP bring-up from Windows** — bash script + compose profile (#39).
 
 ## Phase 3 — Product breadth
-*Mostly shipped. Two items fully done; one (MapWorkspace split) not yet done.*
+*Mostly shipped; the `MapWorkspace` per-tab-hooks split is the one remaining sub-item.*
 
-- [x] **Routes UX to parity:** `mc-` components throughout RoutesTab (#40); per-leg corridor breakdown (#40); route Tableau export links surfaced in ExportTab (#40). Note: `PlaceSearch` (`frontend/src/components/PlaceSearch.tsx`) is used by Places (via MapWorkspace); RoutesTab still uses its own inline `geocodeSearch` prop — the "extract one shared address-search component" sub-item is **not yet done** but the other Routes UX items are shipped.
+- [x] **Routes UX to parity:** `mc-` components throughout RoutesTab (#40); per-leg corridor breakdown (#40); route Tableau export links surfaced in ExportTab (#40); shared address-search extracted — both `PlaceSearch` (Places) and `RoutesTab` now share the `useAddressSearch` hook (`frontend/src/lib/useAddressSearch.ts`), removing the duplicated geocode state machine (their result rendering legitimately differs — a clickable list vs From/To endpoint options — so only the search state machine is shared).
 - [x] **Sensitivity-class UI:** `PlaceForm.tsx` includes a sensitivity selector backed by `SENSITIVITY_OPTIONS`; exports respect the class. This is the "classify/suppress affordance" — v1 scoped to exports (#44).
 - [x] **Assistant:** token streaming (SSE via `StreamingResponse`), friendly "analyst offline" degraded state + Retry button, markdown rendering (#42). Failover LLM client also shipped.
 - [x] **Frontend cleanup:** ~322 lines trimmed from dead `styles.css` (#41); Analyst panel clamped on mobile (#41). MapWorkspace is still 497 lines — the "split into per-tab hooks" sub-item is **not yet done**.
@@ -82,13 +82,13 @@ hardening and the Phase 4 public-launch gate**.
 
 ## If you pick five things first
 
-Phases 0 and 2 are done; Phase 3 is mostly done; the safety-guard hardening (#59, #63) and the route-path floor are now resolved. The next five, ordered by invariant risk and leverage:
+Phases 0 and 2 are done; Phase 3 is mostly done; the safety-guard hardening (#59, #63), the route-path floor, the candidate-selection-before-BH review (#65), and the shared address-search extraction are now resolved. The next five, ordered by invariant risk and leverage:
 
-1. **Review candidate-selection-before-BH in neighborhood stats** — `comparison.py` picks the lowest-rate candidate *before* running BH correction; confirm this is intentional and document it.
-2. **Extract a shared address-search component for Routes** — `RoutesTab` still has its own inline `geocodeSearch` prop; `PlaceSearch` exists but is only wired into Places via MapWorkspace.
-3. **Surface data-freshness in the UI** — the freshness endpoint exists; show the "data through <date>" indicator in the dashboard so users know the window.
-4. **Split the 497-line `MapWorkspace`** into per-tab hooks (the remaining Phase 3 cleanup sub-item).
-5. **Scope the Phase 4 public-launch gate** — production auth / encryption-at-rest / tenant isolation, the largest trial→product gap.
+1. **Surface data-freshness in the UI** — the freshness endpoint exists; show the "data through <date>" indicator in the dashboard so users know the window.
+2. **Split the 497-line `MapWorkspace`** into per-tab hooks (the remaining Phase 3 cleanup sub-item).
+3. **Finish the neighborhood-stats QA** — review overdispersion small-sample behavior and the multiple-comparison edge cases (the remaining Phase 1 analytical item).
+4. **Scope the Phase 4 public-launch gate** — production auth / encryption-at-rest / tenant isolation, the largest trial→product gap.
+5. **Lock down / delete the internal duplicate surface** (~6 mirror routers) and the demo-identity fallback (a Phase 4 prerequisite).
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
