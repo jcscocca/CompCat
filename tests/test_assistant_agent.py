@@ -717,3 +717,37 @@ def test_execute_tool_does_not_double_wrap_assistant_tool_error():
         execute_tool(None, "user-1", "definitely_not_a_tool", {})
     assert not isinstance(excinfo.value.__cause__, AssistantToolError)
 
+
+def test_analyze_places_settings_used_matches_bridge_contract(tmp_path):
+    # #62: settings_used must echo only the fields the frontend bridge (AnalysisSettings) can
+    # apply — radius/date range/offense_category — not offense_subcategory/nibrs_group, which the
+    # UI has no control for and the bridge silently dropped. The analysis still honors them as
+    # filters; they're simply not surfaced in the settings echo.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"tool_call","tool_name":"analyze_places","arguments":{}}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze.")],
+                AssistantDashboardState(
+                    selected_place_ids=["place-1"],
+                    analysis_start_date=date(2024, 1, 1),
+                    analysis_end_date=date(2024, 1, 31),
+                    radii_m=[250],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    tool_event = next(event for event in events if event.event == "tool")
+    assert set(tool_event.data["result"]["settings_used"]) == {
+        "radius_m",
+        "analysis_start_date",
+        "analysis_end_date",
+        "offense_category",
+    }
+

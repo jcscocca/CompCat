@@ -42,7 +42,6 @@ class Settings(BaseSettings):
     llm_fallback_base_url: str = ""
     llm_fallback_model: str = ""
     llm_fallback_disable_thinking: bool = False
-    assistant_max_tool_calls: int = 2
 
     geocoder_provider: str = "nominatim"
     geocoder_base_url: str = "https://nominatim.openstreetmap.org/search"

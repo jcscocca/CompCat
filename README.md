@@ -63,8 +63,7 @@ as safe or unsafe.
 
 Under the hood the assistant plans with an LLM and can call a small set of read-only tools
 (`get_dashboard_summary`, `run_place_analysis`, `compare_places`, `get_incident_details`,
-`suggest_followups`), capped at `MCA_ASSISTANT_MAX_TOOL_CALLS` per turn. Responses stream back to
-the browser token by token.
+`suggest_followups`). Responses stream back to the browser token by token.
 
 The assistant talks directly to an **OpenAI-compatible LLM endpoint** (any server exposing a
 `/chat/completions` API — llama.cpp/llama-swap, vLLM, etc.). Waypoint reaches it at
@@ -248,7 +247,6 @@ salt/secret and forces secure cookies.
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL for the Analyst. |
 | `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent to the LLM endpoint. |
 | `MCA_ASSISTANT_ROLE` | `waypoint_analyst` | Analyst role label included in assistant responses. |
-| `MCA_ASSISTANT_MAX_TOOL_CALLS` | `2` | Max tool calls the Analyst may make per turn. |
 | `MCA_ROUTING_PROVIDER` | `mock` | Route alternatives provider: `mock` (deterministic, default) or `opentripplanner` (live). |
 | `MCA_OPENTRIPPLANNER_BASE_URL` | _unset_ | OTP2 GTFS GraphQL endpoint (e.g. `http://localhost:8080/otp/gtfs/v1`); required when the provider is `opentripplanner`. |
 | `MCA_OPENTRIPPLANNER_TIMEOUT_S` | `10.0` | HTTP timeout (seconds) for OpenTripPlanner requests. |

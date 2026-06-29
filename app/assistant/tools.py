@@ -175,13 +175,14 @@ def _resolve_or_select(
 def _settings_used(
     args: AnalyzePlacesArgs | ComparePlacesByNameArgs, radius_m: int
 ) -> dict[str, Any]:
+    # Echo only the fields the frontend bridge (AnalysisSettings) can apply. The analysis still
+    # honors offense_subcategory / nibrs_group as filters; they're omitted here because the UI
+    # has no control for them, keeping settings_used 1:1 with what the bridge consumes.
     return {
         "radius_m": radius_m,
         "analysis_start_date": args.analysis_start_date.isoformat(),
         "analysis_end_date": args.analysis_end_date.isoformat(),
         "offense_category": args.offense_category,
-        "offense_subcategory": args.offense_subcategory,
-        "nibrs_group": args.nibrs_group,
     }
 
 

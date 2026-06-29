@@ -5,6 +5,9 @@ import type {
   NeighborhoodAnalysis,
 } from "../types";
 
+// Mirrors the backend `_settings_used` echo (app/assistant/tools.py): only the fields the
+// dashboard's AnalysisSettings can apply. offense_subcategory / nibrs_group are honored as
+// filters server-side but intentionally not echoed (no UI control), keeping the contract 1:1.
 type SettingsUsed = {
   radius_m?: number;
   analysis_start_date?: string;
