@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useAddressSearch } from "../lib/useAddressSearch";
 import type { AnalysisSettings, GeocodeResult, Place, RouteComparison, RouteEndpointInput } from "../types";
 
 const MODES: { value: string; label: string }[] = [
@@ -93,10 +94,14 @@ function EndpointChooser({
 }
 
 export function RoutesTab({ analysis, running, result, error, places, geocodeSearch, onRun }: Props) {
-  const [geoResults, setGeoResults] = useState<GeocodeResult[]>([]);
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
+  const { query, setQuery, status: searchStatus, results: geoResults, runSearch } =
+    useAddressSearch(geocodeSearch);
+  const searchError =
+    searchStatus === "error"
+      ? "Address search failed. Try again."
+      : searchStatus === "done" && geoResults.length === 0
+        ? "No matches for that address."
+        : "";
   const [originKey, setOriginKey] = useState("");
   const [destinationKey, setDestinationKey] = useState("");
   const [mode, setMode] = useState("transit");
@@ -120,22 +125,6 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
   const destinationOption = options.find((o) => o.key === destinationKey) ?? null;
   const canRun = originOption !== null && destinationOption !== null && !running;
 
-  async function handleSearch() {
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    setSearching(true);
-    setSearchError("");
-    try {
-      const results = await geocodeSearch(trimmed);
-      setGeoResults(results);
-      if (results.length === 0) setSearchError("No matches for that address.");
-    } catch {
-      setSearchError("Address search failed. Try again.");
-    } finally {
-      setSearching(false);
-    }
-  }
-
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Routes">
       <div className="mc-querybar">
@@ -149,8 +138,8 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
               onChange={(e) => setQuery(e.target.value)}
               placeholder="e.g. 400 Broad St, Seattle"
             />
-            <button type="button" className="mc-chip" disabled={searching} onClick={handleSearch}>
-              {searching ? "Searching…" : "Search"}
+            <button type="button" className="mc-chip" disabled={searchStatus === "loading"} onClick={() => void runSearch()}>
+              {searchStatus === "loading" ? "Searching…" : "Search"}
             </button>
           </div>
           {searchError ? <p className="mc-inline-error" role="alert">{searchError}</p> : null}
