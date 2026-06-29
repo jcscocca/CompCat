@@ -125,14 +125,16 @@ function ProfileBars({
   counts,
   highlight,
   labelFor,
+  summary,
 }: {
   counts: number[];
   highlight: Set<number>;
   labelFor: (index: number) => string;
+  summary: string;
 }) {
   const max = Math.max(1, ...counts);
   return (
-    <div className="mc-temporal-bars" aria-hidden="true">
+    <div className="mc-temporal-bars" role="img" aria-label={summary}>
       {counts.map((n, i) => (
         <span
           key={i}
@@ -161,6 +163,8 @@ function TemporalSection({ temporal, windowLabel }: { temporal: TemporalProfile;
   const hourHighlight = new Set<number>();
   for (let h = tw.startHour; h < tw.endHour; h += 1) hourHighlight.add(h);
   const { share } = windowShare(temporal, tw);
+  const hourPeak = temporal.hour_counts.indexOf(Math.max(...temporal.hour_counts));
+  const dayPeak = temporal.dow_counts.indexOf(Math.max(...temporal.dow_counts));
 
   return (
     <div className="mc-temporal">
@@ -168,11 +172,21 @@ function TemporalSection({ temporal, windowLabel }: { temporal: TemporalProfile;
 
       <div className="mc-temporal-profile">
         <span className="mc-temporal-axis">By hour</span>
-        <ProfileBars counts={temporal.hour_counts} highlight={hourHighlight} labelFor={(h) => `${h}:00`} />
+        <ProfileBars
+          counts={temporal.hour_counts}
+          highlight={hourHighlight}
+          labelFor={(h) => `${h}:00`}
+          summary={`Reported incidents by hour of day; most around ${hourPeak}:00.`}
+        />
       </div>
       <div className="mc-temporal-profile">
         <span className="mc-temporal-axis">By day</span>
-        <ProfileBars counts={temporal.dow_counts} highlight={dayHighlight} labelFor={(d) => DOW_LABELS[d]} />
+        <ProfileBars
+          counts={temporal.dow_counts}
+          highlight={dayHighlight}
+          labelFor={(d) => DOW_LABELS[d]}
+          summary={`Reported incidents by day of week; most on ${DOW_LABELS[dayPeak]}.`}
+        />
       </div>
 
       <div className="mc-temporal-window" role="group" aria-label="Travel window">
@@ -216,7 +230,7 @@ function TemporalSection({ temporal, windowLabel }: { temporal: TemporalProfile;
       </div>
 
       <p className="mc-temporal-callout">
-        {Math.round(share * 100)}% of the {temporal.total_with_time} reported incidents with a recorded time ({windowLabel}) fell in your travel window.
+        {Math.round(share * 100)}% of the {temporal.total_with_time} reported incidents with a recorded time{windowLabel ? ` (${windowLabel})` : ""} fell in your travel window.
       </p>
       {temporal.total_with_time < 20 ? (
         <p className="mc-temporal-note">Based on {temporal.total_with_time} incidents — interpret with caution.</p>
