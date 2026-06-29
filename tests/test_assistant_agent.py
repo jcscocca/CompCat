@@ -657,3 +657,63 @@ def test_agent_redirects_safety_language_in_model_final_message(tmp_path):
     assert "reported incident" in delta  # replaced with the standard redirect
     assert len(client.calls) == 1  # the model WAS called (input guard didn't fire)
 
+
+def test_agent_clarifies_when_date_range_or_radius_missing(tmp_path):
+    # #61: a selection-tool call with no date range / radius set must ASK (clarify), not hard-error.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"tool_call","tool_name":"analyze_places","arguments":{}}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze my places.")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),  # no dates, no radii
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]  # clarify, not error
+    delta = events[1].data["delta"].lower()
+    assert "date" in delta or "radius" in delta
+
+
+def test_agent_clarifies_empty_select_places_instead_of_wiping(tmp_path):
+    # #61: select_places with no queries (non-clear) must clarify, not silently clear the selection.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        ['{"type":"tool_call","tool_name":"select_places",'
+         '"arguments":{"queries":[],"mode":"replace"}}']
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="select")],
+                AssistantDashboardState(selected_place_ids=["place-1", "place-2"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    # A clarification (token/done), never a tool event that would apply replace-with-empty.
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert "tool" not in [event.event for event in events]
+    assert events[1].data["delta"]
+
+
+def test_execute_tool_does_not_double_wrap_assistant_tool_error():
+    # #61: an AssistantToolError raised inside execute_tool must propagate as-is, not be
+    # re-wrapped by the broad `except ValueError` clause (AssistantToolError subclasses ValueError).
+    import pytest
+
+    from app.assistant.tools import AssistantToolError, execute_tool
+
+    with pytest.raises(AssistantToolError) as excinfo:
+        execute_tool(None, "user-1", "definitely_not_a_tool", {})
+    assert not isinstance(excinfo.value.__cause__, AssistantToolError)
+
