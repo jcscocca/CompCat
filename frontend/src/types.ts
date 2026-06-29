@@ -156,6 +156,16 @@ export type AnalysisSettings = {
   offenseCategory: string;
 };
 
+export type AssistantToolEffect = {
+  selection?: { mode: "replace" | "add" | "clear"; ids: string[] };
+  settings?: Partial<AnalysisSettings>;
+  comparison?: Record<string, unknown> | null;
+  neighborhood?: NeighborhoodAnalysis | null;
+  incidents?: IncidentDetailsResponse | null;
+  refetchSummary?: boolean;
+  tab?: TabKey;
+};
+
 export type AssistantMessage = {
   role: "user" | "assistant";
   content: string;

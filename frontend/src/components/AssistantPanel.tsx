@@ -6,6 +6,7 @@ import type { AssistantDashboardState, AssistantMessage } from "../types";
 
 type Props = {
   dashboardState: AssistantDashboardState;
+  onToolResult?: (data: { tool_name?: string; result?: unknown }) => void;
 };
 
 type ToolActivity = {
@@ -15,7 +16,7 @@ type ToolActivity = {
 const OFFLINE_MESSAGE =
   "The analyst is offline right now. Your data is unaffected — the rest of Waypoint works.";
 
-export function AssistantPanel({ dashboardState }: Props) {
+export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [input, setInput] = useState("");
@@ -40,6 +41,7 @@ export function AssistantPanel({ dashboardState }: Props) {
             if (event.event === "tool") {
               const toolName = String(event.data.tool_name ?? "tool");
               setToolActivity((current) => [{ label: toolName }, ...current].slice(0, 4));
+              onToolResult?.(event.data);
             }
             if (event.event === "token") {
               assistantText += event.data.delta ?? "";

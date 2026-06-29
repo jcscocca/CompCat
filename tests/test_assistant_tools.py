@@ -6,6 +6,7 @@ import pytest
 
 from app.assistant.tools import AssistantToolError, execute_tool
 from app.db import get_sessionmaker
+from app.geocoding.providers import GeocodeHit
 from app.main import create_app
 from app.models import CrimeIncident, PlaceCluster
 from tests.helpers_dashboard import session_with_places_and_beat_crime
@@ -139,11 +140,18 @@ def test_get_neighborhood_analysis_exposes_beat_baseline_stats(tmp_path):
         assert field in place
 
 
-def test_neighborhood_tool_is_advertised_to_the_model():
+def test_advertised_menu_is_the_six_poc_tools():
     from app.assistant.semantic_layer import AVAILABLE_TOOLS
 
     names = {tool["name"] for tool in AVAILABLE_TOOLS}
-    assert "get_neighborhood_analysis" in names
+    assert names == {
+        "add_place",
+        "select_places",
+        "analyze_places",
+        "compare_places",
+        "get_dashboard_summary",
+        "suggest_followups",
+    }
 
 
 def test_planning_prompt_requests_statistical_interpretation():
@@ -153,4 +161,149 @@ def test_planning_prompt_requests_statistical_interpretation():
     assert "confidence interval" in text
     assert "statistically significant" in text
     assert "adjusted p-value" in text
+
+
+class _FakeProvider:
+    def __init__(self, hits):
+        self._hits = hits
+
+    def search(self, query):
+        return self._hits
+
+
+def test_add_place_geocodes_and_creates(tmp_path, monkeypatch):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    monkeypatch.setattr(
+        "app.assistant.tools.build_provider",
+        lambda settings: _FakeProvider(
+            [
+                GeocodeHit(
+                    label="Pike Place Market, Seattle",
+                    latitude=47.6097,
+                    longitude=-122.3422,
+                    source="nominatim",
+                )
+            ]
+        ),
+    )
+    try:
+        result = execute_tool(session, user_hash, "add_place", {"query": "Pike Place Market"})
+    finally:
+        session.close()
+    assert result["tool_name"] == "add_place"
+    payload = result["result"]
+    assert payload["created"] is True
+    assert payload["place"]["display_label"] == "Pike Place Market"
+    assert payload["address"] == "Pike Place Market, Seattle"
+
+
+def test_select_places_resolves_and_passes_mode(tmp_path, monkeypatch):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    monkeypatch.setattr(
+        "app.assistant.tools.build_provider",
+        lambda settings: _FakeProvider([]),  # "Library stop" already exists, no geocode needed
+    )
+    try:
+        result = execute_tool(
+            session, user_hash, "select_places", {"queries": ["Library stop"], "mode": "replace"}
+        )
+    finally:
+        session.close()
+    assert result["tool_name"] == "select_places"
+    assert result["result"]["place_ids"] == ["place-1"]
+    assert result["result"]["mode"] == "replace"
+    assert "matched" in result["result"]
+
+
+def test_analyze_places_bundles_neighborhood_and_incidents(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    try:
+        result = execute_tool(
+            session,
+            user_hash,
+            "analyze_places",
+            {
+                "place_ids": [place_id],  # no queries -> use selection
+                "analysis_start_date": "2026-01-01",
+                "analysis_end_date": "2026-06-30",
+                "radii_m": [250],
+            },
+        )
+    finally:
+        session.close()
+    payload = result["result"]
+    assert result["tool_name"] == "analyze_places"
+    assert payload["place_ids"] == [place_id]
+    assert payload["settings_used"]["radius_m"] == 250
+    assert payload["analysis"]["summary_count"] >= 1
+    assert payload["neighborhood"]["places"][0]["beat"] == "M3"
+    assert "incidents" in payload
+    assert payload["created"] == []
+    assert payload["unresolved"] == []
+
+
+def test_compare_places_by_name_persists_analysis_and_compares(tmp_path, monkeypatch):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    # Add a second place so a comparison is possible.
+    session.add(
+        PlaceCluster(
+            id="place-2",
+            user_id_hash=user_hash,
+            cluster_version="manual-v1",
+            cluster_method="manual",
+            centroid_latitude=47.62,
+            centroid_longitude=-122.34,
+            display_latitude=47.62,
+            display_longitude=-122.34,
+            visit_count=1,
+            sensitivity_class="normal",
+            display_label="Second stop",
+            inferred_place_type="manual_place",
+            label_source="manual",
+        )
+    )
+    session.commit()
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: _FakeProvider([]))
+    try:
+        result = execute_tool(
+            session,
+            user_hash,
+            "compare_places",
+            {
+                "queries": ["Library stop", "Second stop"],
+                "analysis_start_date": "2024-01-01",
+                "analysis_end_date": "2024-01-31",
+                "radius_m": 250,
+                "offense_category": "PROPERTY",
+            },
+        )
+    finally:
+        session.close()
+    payload = result["result"]
+    assert result["tool_name"] == "compare_places"
+    assert sorted(payload["place_ids"]) == ["place-1", "place-2"]
+    assert payload["settings_used"]["radius_m"] == 250
+    assert "comparison" in payload
+    assert payload["created"] == []
+    assert payload["unresolved"] == []
+
+
+def test_compare_places_requires_two_places(tmp_path, monkeypatch):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: _FakeProvider([]))
+    try:
+        with pytest.raises(AssistantToolError):
+            execute_tool(
+                session,
+                user_hash,
+                "compare_places",
+                {
+                    "queries": ["Library stop"],
+                    "analysis_start_date": "2024-01-01",
+                    "analysis_end_date": "2024-01-31",
+                    "radius_m": 250,
+                },
+            )
+    finally:
+        session.close()
 

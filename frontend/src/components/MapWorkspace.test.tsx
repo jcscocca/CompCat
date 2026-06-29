@@ -25,10 +25,11 @@ vi.mock("../api/client", () => ({
   getNeighborhoodAnalysis: vi.fn(),
   getDashboardSummary: vi.fn(),
   getInputModes: vi.fn().mockResolvedValue({ modes: [] }),
+  streamAssistantChat: vi.fn(),
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, createBulkPlaces, createPlace, createSession, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis } from "../api/client";
+import { analyzePlaces, createBulkPlaces, createPlace, createSession, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import type { DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place } from "../types";
 
@@ -310,5 +311,71 @@ describe("MapWorkspace", () => {
     vi.mocked(createSession).mockRejectedValue(new Error("no session"));
     render(<MapWorkspace />);
     expect(await screen.findByText(/unable to start a dashboard session/i)).toBeInTheDocument();
+  });
+
+  it("opens the Compare tab with the overview when the assistant returns compare_places", async () => {
+    const a: Place = { ...home, id: "a", display_label: "Alpha" };
+    const b: Place = { ...work, id: "b", display_label: "Bravo" };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([a, b]));
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({
+        event: "tool",
+        data: {
+          tool_name: "compare_places",
+          result: {
+            place_ids: ["a", "b"],
+            settings_used: {
+              radius_m: 250,
+              analysis_start_date: "2026-01-01",
+              analysis_end_date: "2026-06-30",
+              offense_category: null,
+            },
+            comparison: { overview: { summary_text: "More reported incidents at Alpha." } },
+          },
+        },
+      });
+      handlers.onEvent({ event: "token", data: { delta: "Compared Alpha and Bravo." } });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    await screen.findByText("Alpha");
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), {
+      target: { value: "compare Alpha and Bravo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    // Only resolves if the bridge replaced the selection (so CompareTab has 2 places),
+    // set the comparison, and switched to the Compare tab.
+    expect(await screen.findByText("More reported incidents at Alpha.")).toBeInTheDocument();
+  });
+
+  it("opens the Analyze tab with incidents when the assistant returns analyze_places", async () => {
+    const a: Place = { ...home, id: "a", display_label: "Alpha" };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([a]));
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({
+        event: "tool",
+        data: {
+          tool_name: "analyze_places",
+          result: {
+            place_ids: ["a"],
+            settings_used: { radius_m: 250, analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30", offense_category: null },
+            neighborhood: makeNeighborhoodAnalysis(),
+            incidents: makeIncidentDetails(),
+          },
+        },
+      });
+      handlers.onEvent({ event: "token", data: { delta: "Analyzed Alpha." } });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+    render(<MapWorkspace />);
+    await screen.findByText("Alpha");
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("100 BLOCK MAIN ST")).toBeInTheDocument();
   });
 });

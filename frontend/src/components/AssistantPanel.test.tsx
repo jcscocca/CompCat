@@ -112,6 +112,24 @@ describe("AssistantPanel", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
+  it("forwards tool result data to onToolResult", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(
+        'event: tool\ndata: {"tool_name":"compare_places","result":{"place_ids":["a","b"]}}\n\n' +
+          'event: token\ndata: {"delta":"done"}\n\n' +
+          "event: done\ndata: {}\n\n",
+      ),
+    );
+    const onToolResult = vi.fn();
+    render(<AssistantPanel dashboardState={dashboardState} onToolResult={onToolResult} />);
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "compare" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("done");
+    expect(onToolResult).toHaveBeenCalledWith(
+      expect.objectContaining({ tool_name: "compare_places", result: { place_ids: ["a", "b"] } }),
+    );
+  });
+
   it("renders markdown in committed assistant messages", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       sseResponse(

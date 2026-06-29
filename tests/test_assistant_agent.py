@@ -426,6 +426,26 @@ def test_agent_dedupes_duplicate_radii_when_backfilling(tmp_path):
     assert events[1].data["arguments"]["radii_m"] == [250]
 
 
+def test_analyze_places_args_are_backfilled_from_dashboard_state():
+    from app.assistant.agent import _tool_arguments
+
+    state = AssistantDashboardState(
+        selected_place_ids=["place-1"],
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        radii_m=[250, 250],
+        offense_category="PROPERTY",
+    )
+    # Model named a place -> queries preserved; selection/settings still backfilled.
+    args = _tool_arguments("analyze_places", state, {"queries": ["Pike Place"]})
+
+    assert args["queries"] == ["Pike Place"]
+    assert args["place_ids"] == ["place-1"]
+    assert args["radii_m"] == [250]
+    assert args["analysis_start_date"] == "2024-01-01"
+    assert args["offense_category"] == "PROPERTY"
+
+
 def test_neighborhood_tool_arguments_are_backfilled_from_dashboard_state():
     # get_neighborhood_analysis must be treated as a selection tool so the agent
     # backfills place_ids / dates / (deduped) radii when the model omits them; the

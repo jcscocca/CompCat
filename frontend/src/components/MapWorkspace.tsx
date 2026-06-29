@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createRouteAlternatives, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
+import { interpretToolResult } from "../lib/assistantBridge";
 import { clampWidth, DRAWER_DEFAULT, DRAWER_PEEK, DRAWER_WIDE, type DrawerPreset } from "../lib/drawer";
 import { loadDrawerState, saveDrawerState } from "../lib/drawerStorage";
 import { geocodingProvider } from "../lib/geocoding";
@@ -160,6 +161,43 @@ export function MapWorkspace() {
       ids.forEach((id) => next.add(id));
       return next;
     });
+  }
+
+  function applyAssistantToolResult(data: { tool_name?: string; result?: unknown }) {
+    const effect = interpretToolResult(data);
+    if (!effect) return;
+    if (effect.settings) {
+      setAnalysis((current) => ({ ...current, ...effect.settings }));
+    }
+    if (effect.selection) {
+      const { mode, ids } = effect.selection;
+      setSelectedIds((current) => {
+        if (mode === "clear") return new Set<string>();
+        if (mode === "replace") return new Set(ids);
+        const next = new Set(current);
+        ids.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+    // Set result slices AFTER selection (we did NOT call invalidateAnalysisContext, so they stick).
+    // The incoming tool result is the source of truth for the panes it drives, so clear the slices
+    // it does NOT own — otherwise a prior manual Analyze/Compare leaves stale data for the new selection.
+    if (effect.comparison !== undefined) {
+      // compare_places owns the comparison; any prior analyze slices are now stale.
+      setNeighborhood(null);
+      setIncidentDetails(null);
+      setComparison(effect.comparison);
+    }
+    if (effect.neighborhood !== undefined || effect.incidents !== undefined) {
+      // analyze_places owns neighborhood + incidents; any prior comparison is now stale.
+      setComparison(null);
+      if (effect.neighborhood !== undefined) setNeighborhood(effect.neighborhood);
+      if (effect.incidents !== undefined) setIncidentDetails(effect.incidents);
+    }
+    if (effect.refetchSummary) {
+      void refreshWithFallback("Analyst updated the view, but dashboard totals could not refresh.");
+    }
+    if (effect.tab) setActiveTab(effect.tab);
   }
 
   function handleStartAddPin() {
@@ -376,7 +414,7 @@ export function MapWorkspace() {
 
         <MapLegend />
 
-        <AssistantPanel dashboardState={assistantState} />
+        <AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} />
 
         {error && activeTab !== "analyze" ? <p className="mc-error" role="alert">{error}</p> : null}
 

@@ -23,29 +23,37 @@ POLICY_CAVEATS = [
 
 AVAILABLE_TOOLS = [
     {
-        "name": "get_dashboard_summary",
-        "description": "Read current dashboard totals and saved places.",
-    },
-    {
-        "name": "run_place_analysis",
-        "description": "Refresh reported incident summaries for selected places.",
-    },
-    {
-        "name": "compare_places",
-        "description": "Compare reported incident context for selected places.",
-    },
-    {
-        "name": "get_neighborhood_analysis",
+        "name": "add_place",
         "description": (
-            "For each selected place, compare its reported-incident rate against its own "
-            "SPD police-beat baseline: exposure-adjusted rate ratio, 95% confidence "
-            "interval, statistical significance, and a verdict (above_clear, below_clear, "
-            "not_clear, or insufficient_data)."
+            "Find a place by name or address and save it. Pass the user's place "
+            "name/address as 'query'."
         ),
     },
     {
-        "name": "get_incident_details",
-        "description": "Fetch capped reported incident detail rows near selected places.",
+        "name": "select_places",
+        "description": (
+            "Resolve place names to saved places (creating any missing) and set the "
+            "current selection. Pass names as 'queries'; 'mode' is replace, add, or clear."
+        ),
+    },
+    {
+        "name": "analyze_places",
+        "description": (
+            "Resolve place names (or use the current selection), run the reported-incident "
+            "analysis, and return the neighborhood-vs-beat verdicts and incident details. "
+            "Pass names as 'queries'."
+        ),
+    },
+    {
+        "name": "compare_places",
+        "description": (
+            "Resolve two or more place names (or use the selection), run the analysis, and "
+            "compare their reported-incident context. Pass names as 'queries'."
+        ),
+    },
+    {
+        "name": "get_dashboard_summary",
+        "description": "Read current dashboard totals and saved places.",
     },
     {
         "name": "suggest_followups",

@@ -33,6 +33,7 @@ SELECTION_TOOLS = (
     "compare_places",
     "get_neighborhood_analysis",
     "get_incident_details",
+    "analyze_places",
 )
 
 
