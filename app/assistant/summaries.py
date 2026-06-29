@@ -48,7 +48,7 @@ def _select_places_summary(result: dict[str, Any]) -> str:
     elif not result.get("unresolved"):
         parts.append("No matching places.")
     parts.extend(_unresolved_sentences(result))
-    return " ".join(parts)
+    return " ".join(parts) if parts else "No matching places."
 
 
 def _analyze_places_summary(result: dict[str, Any]) -> str:
@@ -57,7 +57,7 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
     sentences: list[str] = []
     for place in places:
         label = place.get("place_label") or "The place"
-        count = place.get("place_incident_count")
+        count = place.get("place_incident_count") or 0
         if place.get("baseline_available") and place.get("rate_ratio") is not None:
             phrase = _DECISION_PHRASES.get(place.get("decision"), "compared to its beat")
             ci = ""
@@ -81,7 +81,9 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
     options = overview.get("options") or []
     parts: list[str] = []
     counts = "; ".join(
-        f"{o.get('label')}: {o.get('incident_count')}" for o in options if o.get("label")
+        f"{o.get('label')}: {o.get('incident_count')}"
+        for o in options
+        if o.get("label") and o.get("incident_count") is not None
     )
     if counts:
         parts.append(f"Reported incidents within {radius} m — {counts}.")
@@ -92,7 +94,7 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
 
 
 def _dashboard_summary(result: dict[str, Any]) -> str:
-    count = (result.get("totals") or {}).get("place_count")
+    count = (result.get("totals") or {}).get("place_count") or 0
     return f"You have {count} saved place{'' if count == 1 else 's'}."
 
 

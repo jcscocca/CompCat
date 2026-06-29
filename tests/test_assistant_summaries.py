@@ -96,3 +96,32 @@ def test_summary_appends_provenance_for_created_and_unresolved():
 
 def test_unknown_tool_returns_nonempty():
     assert build_tool_summary(_envelope("run_place_analysis", {"summary_count": 1})) == "Done."
+
+
+def test_select_places_summary_modes():
+    base = {"matched": [{"label": "Home"}], "created": [], "unresolved": []}
+
+    def summary(result):
+        return build_tool_summary(_envelope("select_places", result))
+
+    assert summary({**base, "mode": "replace"}) == "Selected Home."
+    assert summary({**base, "mode": "add"}) == "Added Home."
+    assert summary({"mode": "clear"}) == "Cleared the selection."
+
+
+def test_analyze_summary_without_baseline():
+    places = [{
+        "place_label": "Home",
+        "baseline_available": False,
+        "decision": "baseline_unavailable",
+        "place_incident_count": 5,
+    }]
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {"places": places},
+        "created": [],
+        "unresolved": [],
+    }
+    text = build_tool_summary(_envelope("analyze_places", result))
+    assert "Home: 5 reported incidents within 250 m" in text
+    assert "no beat baseline available" in text
