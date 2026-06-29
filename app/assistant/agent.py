@@ -20,14 +20,28 @@ from app.assistant.tools import AssistantClarification, AssistantToolError, exec
 from app.config import get_settings
 
 # Reject requests that ask the assistant to score/rank places by safety, danger, or risk —
-# the product invariant forbids it. Word-boundary matching so legitimate substrings
-# ("safely", "Safeway", "incident rate") don't false-trigger. The companion redirect points
-# users at the supported neutral framing (reported-incident counts / exposure-adjusted rates).
+# the product invariant forbids it. Two arms: (1) a safety-vocabulary lexicon, and (2) a
+# rank/rate/score verb followed (through any run of determiners/possessives) by a place noun.
+# Word-boundary matching keeps legitimate substrings ("safely", "Safeway", "incident rate")
+# and allowed count framing ("which area has the most crime") from false-triggering. The guard
+# runs on BOTH the incoming user text and the model's final answer (see run_assistant_turn).
 _SAFETY_SCORE_PATTERN = re.compile(
-    r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|risk(?:y|ier|iest)?)\b"
-    r"|\b(?:rank|rate|score)\b\s+(?:(?:these|those|them|the)\s+)?"
+    r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|hazard(?:ous)?|peril(?:ous)?"
+    r"|risk(?:y|ier|iest)?)\b"
+    r"|\bcrime[-\s]free\b"
+    r"|\b(?:rank|rate|score)\b\s+"
+    r"(?:(?:the|these|those|this|that|them|my|your|our|their|its|his|her|a|an|all|both"
+    r"|any|some|each|every)\s+)*"
     r"(?:place|block|area|neighbou?rhood|route|street|spot|option|location)s?\b",
     re.IGNORECASE,
+)
+
+# Single source for the refusal/redirect text, reused by the input- and output-side guards.
+_SAFETY_REDIRECT = (
+    "I can discuss reported incident context, but I can't label places safe or unsafe, rank "
+    "them by safety, danger, or risk, or produce a personal safety score. I can instead order "
+    "places by reported incident count or compare exposure-adjusted incident rates — just ask "
+    "it that way."
 )
 SELECTION_TOOLS = (
     "run_place_analysis",
@@ -56,17 +70,7 @@ async def run_assistant_turn(
     )
 
     if _asks_for_safety_score(_recent_user_texts(messages)):
-        yield AssistantStreamEvent(
-            event="token",
-            data={
-                "delta": (
-                    "I can discuss reported incident context, but I can't label places "
-                    "safe or unsafe, rank them by safety, danger, or risk, or produce a "
-                    "personal safety score. I can instead order places by reported incident "
-                    "count or compare exposure-adjusted incident rates — just ask it that way."
-                )
-            },
-        )
+        yield AssistantStreamEvent(event="token", data={"delta": _SAFETY_REDIRECT})
         yield AssistantStreamEvent(event="done", data={})
         return
 
@@ -111,6 +115,10 @@ async def run_assistant_turn(
     except ValueError as exc:
         yield AssistantStreamEvent(event="error", data={"message": str(exc)})
         return
+    # Output-side invariant guard: a model answer that slipped past the input guard must not
+    # stream safety-ranking language; replace it with the standard redirect.
+    if _SAFETY_SCORE_PATTERN.search(message):
+        message = _SAFETY_REDIRECT
     yield AssistantStreamEvent(event="token", data={"delta": message})
     yield AssistantStreamEvent(event="done", data={})
 

@@ -548,3 +548,206 @@ def test_assistant_answer_stream_emits_no_safety_ranking_language(tmp_path):
     finally:
         session.close()
 
+
+def test_agent_redirects_object_first_ranking_with_determiners_and_possessives(tmp_path):
+    # #60: the rank/rate/score arm must catch ranking requests regardless of the determiner or
+    # possessive before the place-noun. #59 only handled these/those/them/the.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Rate my places",
+        "Rank this place",
+        "Score all the spots",
+        "Rank your neighborhoods",
+        "Rate that block",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_additional_safety_synonyms(tmp_path):
+    # #60: broadened lexicon — synonyms beyond safe/danger/risk must also trip the guard.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Is this area hazardous?",
+        "How perilous is downtown?",
+        "Is it crime-free around here?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_allowed_count_or_neutral_phrasings(tmp_path):
+    # #60 guard against over-matching: incident-count ranking and neutral phrasings are ALLOWED
+    # and must reach the model, not the safety redirect.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Which area has the most crime?",
+        "Is my data secure?",
+        "What is the reported incident rate near place-1?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing  # reached the model, not the redirect
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_safety_language_in_model_final_message(tmp_path):
+    # #60 output-side guard: even when a request slips past the input guard, a model final
+    # answer containing safety-ranking language must be replaced with the redirect, not streamed.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"final","message":"Area A is safer than Area B."}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Where should I walk?")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    delta = events[1].data["delta"]
+    assert "safer" not in delta  # the model's safety-ranking phrasing must not leak
+    assert "reported incident" in delta  # replaced with the standard redirect
+    assert len(client.calls) == 1  # the model WAS called (input guard didn't fire)
+
+
+def test_agent_clarifies_when_date_range_or_radius_missing(tmp_path):
+    # #61: a selection-tool call with no date range / radius set must ASK (clarify), not hard-error.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"tool_call","tool_name":"analyze_places","arguments":{}}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze my places.")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),  # no dates, no radii
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]  # clarify, not error
+    delta = events[1].data["delta"].lower()
+    assert "date" in delta or "radius" in delta
+
+
+def test_agent_clarifies_empty_select_places_instead_of_wiping(tmp_path):
+    # #61: select_places with no queries (non-clear) must clarify, not silently clear the selection.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        ['{"type":"tool_call","tool_name":"select_places",'
+         '"arguments":{"queries":[],"mode":"replace"}}']
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="select")],
+                AssistantDashboardState(selected_place_ids=["place-1", "place-2"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    # A clarification (token/done), never a tool event that would apply replace-with-empty.
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert "tool" not in [event.event for event in events]
+    assert events[1].data["delta"]
+
+
+def test_execute_tool_does_not_double_wrap_assistant_tool_error():
+    # #61: an AssistantToolError raised inside execute_tool must propagate as-is, not be
+    # re-wrapped by the broad `except ValueError` clause (AssistantToolError subclasses ValueError).
+    import pytest
+
+    from app.assistant.tools import AssistantToolError, execute_tool
+
+    with pytest.raises(AssistantToolError) as excinfo:
+        execute_tool(None, "user-1", "definitely_not_a_tool", {})
+    assert not isinstance(excinfo.value.__cause__, AssistantToolError)
+
+
+def test_analyze_places_settings_used_matches_bridge_contract(tmp_path):
+    # #62: settings_used must echo only the fields the frontend bridge (AnalysisSettings) can
+    # apply — radius/date range/offense_category — not offense_subcategory/nibrs_group, which the
+    # UI has no control for and the bridge silently dropped. The analysis still honors them as
+    # filters; they're simply not surfaced in the settings echo.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"tool_call","tool_name":"analyze_places","arguments":{}}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze.")],
+                AssistantDashboardState(
+                    selected_place_ids=["place-1"],
+                    analysis_start_date=date(2024, 1, 1),
+                    analysis_end_date=date(2024, 1, 31),
+                    radii_m=[250],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    tool_event = next(event for event in events if event.event == "tool")
+    assert set(tool_event.data["result"]["settings_used"]) == {
+        "radius_m",
+        "analysis_start_date",
+        "analysis_end_date",
+        "offense_category",
+    }
+

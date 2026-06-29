@@ -55,7 +55,7 @@ Three additional tool branches exist in `execute_tool` (`run_place_analysis`, `g
 
 **Tool-call cap**
 
-`app/config.py` exposes `assistant_max_tool_calls` (env var `MCA_ASSISTANT_MAX_TOOL_CALLS`, default `2`). In the current single-planning-call architecture the agent executes at most one tool per turn, so this setting is available for future multi-step expansion but is not enforced in a loop today.
+The single-planning-call architecture executes at most one tool per turn, so there is no separately-configurable per-turn cap. (The earlier `MCA_ASSISTANT_MAX_TOOL_CALLS` setting was removed once the multi-tool loop went away.)
 
 **Argument backfill**
 
@@ -117,7 +117,6 @@ The agent influences the right-hand dashboard pane by emitting `tool` SSE events
 | `MCA_LLM_FALLBACK_BASE_URL` | `""` | Second endpoint; failover activates only when this and `MCA_LLM_FALLBACK_MODEL` are both set |
 | `MCA_LLM_FALLBACK_MODEL` | `""` | Model for the fallback endpoint |
 | `MCA_LLM_FALLBACK_DISABLE_THINKING` | `false` | Suppress thinking on the fallback model |
-| `MCA_ASSISTANT_MAX_TOOL_CALLS` | `2` | Cap for future multi-step tool loops |
 
 The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_assistant_llm_client` on each request.
 

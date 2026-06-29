@@ -70,9 +70,11 @@ class SelectPlacesArgs(BaseModel):
 class AnalyzePlacesArgs(BaseModel):
     queries: list[str] = Field(default_factory=list)
     place_ids: list[str] = Field(default_factory=list)
-    analysis_start_date: date
-    analysis_end_date: date
-    radii_m: list[int] = Field(min_length=1)
+    # Optional so a missing date range / radius surfaces as a clarification (see
+    # _require_analysis_window) instead of a raw ValidationError -> hard error.
+    analysis_start_date: date | None = None
+    analysis_end_date: date | None = None
+    radii_m: list[int] = Field(default_factory=list)
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
@@ -81,12 +83,35 @@ class AnalyzePlacesArgs(BaseModel):
 class ComparePlacesByNameArgs(BaseModel):
     queries: list[str] = Field(default_factory=list)
     place_ids: list[str] = Field(default_factory=list)
-    analysis_start_date: date
-    analysis_end_date: date
-    radius_m: int = Field(gt=0, le=5000)
+    # Optional so a missing window surfaces as a clarification, not a ValidationError.
+    analysis_start_date: date | None = None
+    analysis_end_date: date | None = None
+    radius_m: int | None = Field(default=None, gt=0, le=5000)
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
+
+
+def _require_analysis_window(
+    start: date | None, end: date | None, radius: list[int] | int | None
+) -> None:
+    """Clarify (don't hard-error) when the analysis window is incomplete.
+
+    The dashboard backfills these from its current state; when nothing is set the args arrive
+    empty. Raising AssistantClarification turns a raw ValidationError into a friendly question.
+    """
+    missing: list[str] = []
+    if start is None:
+        missing.append("a start date")
+    if end is None:
+        missing.append("an end date")
+    if not radius:
+        missing.append("a radius")
+    if missing:
+        raise AssistantClarification(
+            "I need " + ", ".join(missing) + " to run that. Set the date range and radius on the "
+            "dashboard (or include them in your request) and ask again."
+        )
 
 
 def _select_places(
@@ -95,6 +120,10 @@ def _select_places(
     normalized_mode = mode if mode in {"replace", "add", "clear"} else "replace"
     if normalized_mode == "clear":
         return {"place_ids": [], "mode": "clear", "matched": [], "created": [], "unresolved": []}
+    if not queries:
+        raise AssistantClarification(
+            "Name at least one place to select, or say 'clear all' to deselect everything."
+        )
     provider = build_provider(get_settings())
     resolved = resolve_place_queries(session, user_id_hash, queries, provider)
     return {
@@ -146,13 +175,14 @@ def _resolve_or_select(
 def _settings_used(
     args: AnalyzePlacesArgs | ComparePlacesByNameArgs, radius_m: int
 ) -> dict[str, Any]:
+    # Echo only the fields the frontend bridge (AnalysisSettings) can apply. The analysis still
+    # honors offense_subcategory / nibrs_group as filters; they're omitted here because the UI
+    # has no control for them, keeping settings_used 1:1 with what the bridge consumes.
     return {
         "radius_m": radius_m,
         "analysis_start_date": args.analysis_start_date.isoformat(),
         "analysis_end_date": args.analysis_end_date.isoformat(),
         "offense_category": args.offense_category,
-        "offense_subcategory": args.offense_subcategory,
-        "nibrs_group": args.nibrs_group,
     }
 
 
@@ -160,6 +190,7 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
     resolved = _resolve_or_select(session, user_id_hash, args.queries, args.place_ids)
     if not resolved.place_ids:
         raise AssistantClarification("Name a place to analyze, or select one on the dashboard.")
+    _require_analysis_window(args.analysis_start_date, args.analysis_end_date, args.radii_m)
     radii = list(dict.fromkeys(args.radii_m))
     radius_m = radii[0]
     analysis = analyze_selected_places(
@@ -218,6 +249,7 @@ def _compare_places(
         raise AssistantClarification(
             "Name at least two places to compare, or select them on the dashboard."
         )
+    _require_analysis_window(args.analysis_start_date, args.analysis_end_date, args.radius_m)
     # Persist an analysis run at this radius so the dashboard summary has rows for the cards.
     analyze_selected_places(
         session=session,
@@ -337,6 +369,8 @@ def execute_tool(
             validated_arguments = args.model_dump(mode="json")
         else:
             raise AssistantToolError(f"Unknown assistant tool: {tool_name}")
+    except AssistantToolError:
+        raise
     except ValidationError as exc:
         raise AssistantToolError(str(exc)) from exc
     except ValueError as exc:
