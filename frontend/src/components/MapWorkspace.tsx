@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createRouteAlternatives, createSession, deletePlace, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
+import { createBulkPlaces, createPlace, deletePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { interpretToolResult } from "../lib/assistantBridge";
-import { clampWidth, DRAWER_DEFAULT, DRAWER_PEEK, DRAWER_WIDE, type DrawerPreset } from "../lib/drawer";
-import { loadDrawerState, saveDrawerState } from "../lib/drawerStorage";
+import { DRAWER_PEEK } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { defaultTileConfig } from "../lib/mapTiles";
-import { labelOrDefault } from "../lib/placeDefaults";
+import { useAnalyze } from "../lib/useAnalyze";
+import { useCompare } from "../lib/useCompare";
+import { useDashboardData } from "../lib/useDashboardData";
+import { useDrawer } from "../lib/useDrawer";
+import { usePinDraft } from "../lib/usePinDraft";
+import { useRoutes } from "../lib/useRoutes";
 import { AnalyzeTab } from "./AnalyzeTab";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
@@ -20,147 +24,27 @@ import { PinDraftPopover } from "./PinDraftPopover";
 import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
 import { RoutesTab } from "./RoutesTab";
-import { parseRouteGeometry } from "../lib/routeGeometry";
-import type { AnalysisSettings, AssistantDashboardState, DashboardFreshness, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, RouteComparison, RouteEndpointInput, RouteLine, TabKey } from "../types";
-
-const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
+import type { AnalysisSettings, AssistantDashboardState, PlaceCreate, TabKey } from "../types";
 
 export function MapWorkspace() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [comparison, setComparison] = useState<Record<string, unknown> | null>(null);
-  const [incidentDetails, setIncidentDetails] = useState<IncidentDetailsResponse | null>(null);
-  const [neighborhood, setNeighborhood] = useState<NeighborhoodAnalysis | null>(null);
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("places");
-  const [drawer, setDrawer] = useState<DrawerState>(() => loadDrawerState());
-  const [addPinMode, setAddPinMode] = useState(false);
-  const [draft, setDraft] = useState<DraftPin | null>(null);
-  const [draftSaving, setDraftSaving] = useState(false);
-  const [draftError, setDraftError] = useState("");
-  const [flyTo, setFlyTo] = useState<LatLng | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [comparing, setComparing] = useState(false);
-  const [routeComparison, setRouteComparison] = useState<RouteComparison | null>(null);
-  const [routeRunning, setRouteRunning] = useState(false);
-  const [routeError, setRouteError] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
     const window = currentYearAnalysisWindow();
     return { startDate: window.analysis_start_date, endDate: window.analysis_end_date, radiusM: 250, offenseCategory: "" };
   });
-  const comparisonVersionRef = useRef(0);
-  const incidentDetailsVersionRef = useRef(0);
-  const neighborhoodVersionRef = useRef(0);
-  const [personalUploadsEnabled, setPersonalUploadsEnabled] = useState(false);
-  const [freshness, setFreshness] = useState<DashboardFreshness | null>(null);
 
-  const refresh = async () => {
-    setSummary(await getDashboardSummary());
-  };
-  const refreshWithFallback = async (fallbackMessage: string) => {
-    try {
-      await refresh();
-    } catch {
-      setError(fallbackMessage);
-    }
-  };
+  const data = useDashboardData();
+  const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset } = useDrawer();
+  const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError });
+  const compare = useCompare({ selectedIds, analysis, setError: data.setError });
+  const routes = useRoutes(analysis);
 
-  useEffect(() => {
-    let isMounted = true;
-    setError("");
-    createSession()
-      .then(() => getDashboardSummary())
-      .then((next) => { if (isMounted) { setError(""); setSummary(next); } })
-      .catch(() => { if (isMounted) { setError("Unable to start a dashboard session. Try again shortly."); } });
-    return () => { isMounted = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    getDashboardFreshness()
-      .then((data) => { if (active) setFreshness(data); })
-      .catch(() => { if (active) setFreshness(null); });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    getInputModes()
-      .then((data) => {
-        if (active) setPersonalUploadsEnabled(data.modes.some((mode) => mode.id === "personal_timeline"));
-      })
-      .catch(() => { if (active) setPersonalUploadsEnabled(false); });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") { setAddPinMode(false); setDraft(null); }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    saveDrawerState(drawer);
-  }, [drawer]);
-
-  useEffect(() => {
-    function onResize() {
-      setDrawer((current) => ({ ...current, widthPx: clampWidth(current.widthPx) }));
-    }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  function handleDrawerResize(px: number) {
-    setDrawer((current) => ({ ...current, widthPx: clampWidth(px) }));
-  }
-
-  function handleToggleCollapsed() {
-    setDrawer((current) => ({ ...current, collapsed: !current.collapsed }));
-  }
-
-  function handleDrawerPreset(preset: DrawerPreset) {
-    setDrawer((current) => {
-      if (preset === "peek") return { ...current, collapsed: true };
-      return { collapsed: false, widthPx: clampWidth(preset === "wide" ? DRAWER_WIDE : DRAWER_DEFAULT) };
-    });
-  }
-
-  const places: Place[] = useMemo(() => summary?.places ?? [], [summary]);
-  const selected = useMemo(() => places.filter((place) => selectedIds.has(place.id)), [places, selectedIds]);
-  const availableRadii = summary?.analysis.available_radii_m ?? [];
-  const exportHref = summary?.exports.tableau_place_summary_csv || DEFAULT_EXPORT;
-  const assistantState: AssistantDashboardState = useMemo(() => ({
-    selected_place_ids: Array.from(selectedIds),
-    analysis_start_date: analysis.startDate || null,
-    analysis_end_date: analysis.endDate || null,
-    radii_m: [analysis.radiusM],
-    offense_category: analysis.offenseCategory || null,
-    offense_subcategory: null,
-    nibrs_group: null,
-  }), [analysis, selectedIds]);
-
-  function invalidateComparison() {
-    comparisonVersionRef.current += 1;
-    setComparison(null);
-  }
-
-  function invalidateIncidentDetails() {
-    incidentDetailsVersionRef.current += 1;
-    setIncidentDetails(null);
-  }
-
-  function invalidateNeighborhood() {
-    neighborhoodVersionRef.current += 1;
-    setNeighborhood(null);
-  }
-
+  // Selection and analysis-control changes drop any current Analyze/Compare results (and
+  // invalidate in-flight ones) so a stale pane never lingers against a new selection.
   function invalidateAnalysisContext() {
-    invalidateComparison();
-    invalidateIncidentDetails();
-    invalidateNeighborhood();
+    analyze.invalidate();
+    compare.invalidate();
   }
 
   function selectPlaceIds(ids: string[]) {
@@ -173,86 +57,12 @@ export function MapWorkspace() {
     });
   }
 
-  function applyAssistantToolResult(data: { tool_name?: string; result?: unknown }) {
-    const effect = interpretToolResult(data);
-    if (!effect) return;
-    if (effect.settings) {
-      setAnalysis((current) => ({ ...current, ...effect.settings }));
-    }
-    if (effect.selection) {
-      const { mode, ids } = effect.selection;
-      setSelectedIds((current) => {
-        if (mode === "clear") return new Set<string>();
-        if (mode === "replace") return new Set(ids);
-        const next = new Set(current);
-        ids.forEach((id) => next.add(id));
-        return next;
-      });
-    }
-    // Set result slices AFTER selection (we did NOT call invalidateAnalysisContext, so they stick).
-    // The incoming tool result is the source of truth for the panes it drives, so clear the slices
-    // it does NOT own — otherwise a prior manual Analyze/Compare leaves stale data for the new selection.
-    if (effect.comparison !== undefined) {
-      // compare_places owns the comparison; any prior analyze slices are now stale.
-      setNeighborhood(null);
-      setIncidentDetails(null);
-      setComparison(effect.comparison);
-    }
-    if (effect.neighborhood !== undefined || effect.incidents !== undefined) {
-      // analyze_places owns neighborhood + incidents; any prior comparison is now stale.
-      setComparison(null);
-      if (effect.neighborhood !== undefined) setNeighborhood(effect.neighborhood);
-      if (effect.incidents !== undefined) setIncidentDetails(effect.incidents);
-    }
-    if (effect.refetchSummary) {
-      void refreshWithFallback("Analyst updated the view, but dashboard totals could not refresh.");
-    }
-    if (effect.tab) setActiveTab(effect.tab);
-  }
-
-  function handleStartAddPin() {
-    setAddPinMode(true);
-    setActiveTab("places");
-    setDrawer((current) => ({ ...current, collapsed: true }));
-  }
-
-  function handleMapClick(latlng: LatLng) {
-    if (!addPinMode) return;
-    setDraft({ latitude: latlng.lat, longitude: latlng.lng, display_label: "", visit_count: 1, sensitivity_class: "normal", source: "map" });
-    setDraftError("");
-    setAddPinMode(false);
-    setActiveTab("places");
-    setDrawer((current) => ({ ...current, collapsed: false }));
-  }
-
-  function handleSearchSelect(result: GeocodeResult) {
-    setDraft({ latitude: result.latitude, longitude: result.longitude, display_label: result.label, visit_count: 1, sensitivity_class: "normal", source: "search" });
-    setFlyTo({ lat: result.latitude, lng: result.longitude });
-    setDraftError("");
-    setActiveTab("places");
-  }
-
-  async function handleSaveDraft() {
-    if (!draft) return;
-    setDraftSaving(true);
-    setDraftError("");
-    try {
-      const created = await createPlace({
-        display_label: labelOrDefault(draft.display_label),
-        latitude: draft.latitude,
-        longitude: draft.longitude,
-        visit_count: 1,
-        sensitivity_class: draft.sensitivity_class,
-      });
-      selectPlaceIds([created.id]);
-      setDraft(null);
-      await refreshWithFallback("Saved, but dashboard totals could not refresh.");
-    } catch {
-      setDraftError("Unable to save pin. Try again.");
-    } finally {
-      setDraftSaving(false);
-    }
-  }
+  const pinDraft = usePinDraft({
+    selectPlaceIds,
+    refreshWithFallback: data.refreshWithFallback,
+    setActiveTab,
+    setDrawerCollapsed,
+  });
 
   function handleToggleSelect(id: string) {
     invalidateAnalysisContext();
@@ -263,136 +73,103 @@ export function MapWorkspace() {
     });
   }
 
-  async function handleDelete(id: string) {
-    setError("");
-    invalidateAnalysisContext();
-    try {
-      await deletePlace(id);
-      setSelectedIds((current) => { const next = new Set(current); next.delete(id); return next; });
-      await refreshWithFallback("Removed place, but dashboard totals could not refresh.");
-    } catch {
-      setError("Unable to remove place. Try again.");
-    }
-  }
-
-  async function handleManualSubmit(place: PlaceCreate) {
-    setError("");
-    const created = await createPlace(place);
-    selectPlaceIds([created.id]);
-    await refreshWithFallback("Saved, but dashboard totals could not refresh.");
-  }
-
-  async function handleImport(csv: string) {
-    setError("");
-    const result = await createBulkPlaces(csv);
-    selectPlaceIds(result.places.map((place) => place.id));
-    await refreshWithFallback("Imported rows, but dashboard totals could not refresh.");
-  }
-
   function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
     invalidateAnalysisContext();
     setAnalysis((current) => ({ ...current, ...patch }));
   }
 
-  async function handleAnalyze() {
-    if (selectedIds.size < 1) return;
-    setError("");
-    setAnalyzing(true);
-    const version = incidentDetailsVersionRef.current + 1;
-    incidentDetailsVersionRef.current = version;
-    setIncidentDetails(null);
-    const nVersion = neighborhoodVersionRef.current + 1;
-    neighborhoodVersionRef.current = nVersion;
-    setNeighborhood(null);
-    const payload = {
-      place_ids: Array.from(selectedIds),
-      analysis_start_date: analysis.startDate,
-      analysis_end_date: analysis.endDate,
-      radii_m: [analysis.radiusM],
-      offense_category: analysis.offenseCategory || null,
-    };
+  async function handleDelete(id: string) {
+    data.setError("");
+    invalidateAnalysisContext();
     try {
-      await analyzePlaces(payload);
-      const details = await getIncidentDetails(payload);
-      if (incidentDetailsVersionRef.current === version) setIncidentDetails(details);
-      const neighborhoodResult = await getNeighborhoodAnalysis(payload);
-      if (neighborhoodVersionRef.current === nVersion) setNeighborhood(neighborhoodResult);
-      await refreshWithFallback("Analysis ran, but dashboard totals could not refresh.");
+      await deletePlace(id);
+      setSelectedIds((current) => { const next = new Set(current); next.delete(id); return next; });
+      await data.refreshWithFallback("Removed place, but dashboard totals could not refresh.");
     } catch {
-      setError("Unable to run analysis. Try again.");
-    } finally {
-      setAnalyzing(false);
+      data.setError("Unable to remove place. Try again.");
     }
   }
 
-  async function handleCompare() {
-    if (selectedIds.size < 2) return;
-    setError("");
-    setComparing(true);
-    const version = comparisonVersionRef.current + 1;
-    comparisonVersionRef.current = version;
-    try {
-      const result = await comparePlaces({
-        place_ids: Array.from(selectedIds),
-        analysis_start_date: analysis.startDate,
-        analysis_end_date: analysis.endDate,
-        radius_m: analysis.radiusM,
-        offense_category: analysis.offenseCategory || null,
-      });
-      if (comparisonVersionRef.current === version) setComparison(result);
-    } catch {
-      if (comparisonVersionRef.current === version) setError("Unable to compare places. Try again.");
-    } finally {
-      setComparing(false);
-    }
+  async function handleManualSubmit(place: PlaceCreate) {
+    data.setError("");
+    const created = await createPlace(place);
+    selectPlaceIds([created.id]);
+    await data.refreshWithFallback("Saved, but dashboard totals could not refresh.");
   }
 
-  const handleRunRoute = async (origin: RouteEndpointInput, destination: RouteEndpointInput, mode: string) => {
-    setRouteRunning(true);
-    setRouteError("");
-    try {
-      const result = await createRouteAlternatives({
-        origin,
-        destination,
-        mode,
-        analysis_start_date: analysis.startDate,
-        analysis_end_date: analysis.endDate,
-        radii_m: [analysis.radiusM],
-      });
-      setRouteComparison(result);
-    } catch (caught) {
-      setRouteError(caught instanceof Error ? caught.message : "Unable to compare routes.");
-    } finally {
-      setRouteRunning(false);
-    }
-  };
+  async function handleImport(csv: string) {
+    data.setError("");
+    const result = await createBulkPlaces(csv);
+    selectPlaceIds(result.places.map((place) => place.id));
+    await data.refreshWithFallback("Imported rows, but dashboard totals could not refresh.");
+  }
 
-  const routeLines: RouteLine[] = useMemo(() => {
-    if (!routeComparison) return [];
-    const recommendedId = routeComparison.statistical_comparison?.overview.recommendation_option_id ?? null;
-    return routeComparison.alternatives
-      .map((alt) => ({ id: alt.id, points: parseRouteGeometry(alt.summary_geometry), recommended: alt.id === recommendedId }))
-      .filter((line) => line.points.length >= 2);
-  }, [routeComparison]);
+  function applyAssistantToolResult(payload: { tool_name?: string; result?: unknown }) {
+    const effect = interpretToolResult(payload);
+    if (!effect) return;
+    if (effect.settings) {
+      setAnalysis((current) => ({ ...current, ...effect.settings }));
+    }
+    if (effect.selection) {
+      const { mode, ids } = effect.selection;
+      // Set the selection directly (NOT via selectPlaceIds) so it does NOT invalidate the
+      // analysis context — the analyst-provided slices below must stick to the new selection.
+      setSelectedIds((current) => {
+        if (mode === "clear") return new Set<string>();
+        if (mode === "replace") return new Set(ids);
+        const next = new Set(current);
+        ids.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+    // The tool result is the source of truth for the panes it drives; clear the slice it does
+    // NOT own so a prior manual Analyze/Compare does not leave stale data for the new selection.
+    if (effect.comparison !== undefined) {
+      analyze.invalidate();
+      compare.applyAssistant(effect.comparison);
+    }
+    if (effect.neighborhood !== undefined || effect.incidents !== undefined) {
+      compare.invalidate();
+      analyze.applyAssistant({ neighborhood: effect.neighborhood, incidents: effect.incidents });
+    }
+    if (effect.refetchSummary) {
+      void data.refreshWithFallback("Analyst updated the view, but dashboard totals could not refresh.");
+    }
+    if (effect.tab) setActiveTab(effect.tab);
+  }
+
+  const selected = useMemo(
+    () => data.places.filter((place) => selectedIds.has(place.id)),
+    [data.places, selectedIds],
+  );
+  const assistantState: AssistantDashboardState = useMemo(() => ({
+    selected_place_ids: Array.from(selectedIds),
+    analysis_start_date: analysis.startDate || null,
+    analysis_end_date: analysis.endDate || null,
+    radii_m: [analysis.radiusM],
+    offense_category: analysis.offenseCategory || null,
+    offense_subcategory: null,
+    nibrs_group: null,
+  }), [analysis, selectedIds]);
 
   return (
     <div className="mc-scope">
       <div
-        className={`mc-frame${addPinMode ? " is-placing-pin" : ""}`}
+        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}`}
         style={{ "--panel-width": `${drawer.collapsed ? DRAWER_PEEK : drawer.widthPx}px` } as CSSProperties}
       >
         <MapCanvas
-          places={places}
+          places={data.places}
           selectedIds={selectedIds}
-          draft={draft}
-          addPinMode={addPinMode}
-          summary={summary}
+          draft={pinDraft.draft}
+          addPinMode={pinDraft.addPinMode}
+          summary={data.summary}
           radiusM={analysis.radiusM}
-          flyTo={flyTo}
+          flyTo={pinDraft.flyTo}
           tileConfig={defaultTileConfig}
-          onMapClick={handleMapClick}
+          onMapClick={pinDraft.handleMapClick}
           onMarkerClick={handleToggleSelect}
-          routeLines={routeLines}
+          routeLines={routes.routeLines}
         />
 
         <header className="mc-topbar">
@@ -403,7 +180,7 @@ export function MapWorkspace() {
             <span className="mc-wordmark">Waypoint</span>
           </div>
           <div className="mc-topbar-right">
-            <DataFreshness freshness={freshness} />
+            <DataFreshness freshness={data.freshness} />
             <div className="mc-status"><span className="dot" />Public session - Seattle</div>
           </div>
         </header>
@@ -412,15 +189,15 @@ export function MapWorkspace() {
           <div className="mc-actionrow">
             <button
               type="button"
-              className={`mc-addpin${addPinMode ? " is-armed" : ""}`}
-              aria-pressed={addPinMode}
-              onClick={() => (addPinMode ? setAddPinMode(false) : handleStartAddPin())}
+              className={`mc-addpin${pinDraft.addPinMode ? " is-armed" : ""}`}
+              aria-pressed={pinDraft.addPinMode}
+              onClick={() => (pinDraft.addPinMode ? pinDraft.setAddPinMode(false) : pinDraft.startAddPin())}
             >
               <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
               Add pin
             </button>
           </div>
-          {addPinMode ? (
+          {pinDraft.addPinMode ? (
             <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
           ) : null}
         </div>
@@ -429,9 +206,9 @@ export function MapWorkspace() {
 
         <AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} />
 
-        {error && activeTab !== "analyze" ? <p className="mc-error" role="alert">{error}</p> : null}
+        {data.error && activeTab !== "analyze" ? <p className="mc-error" role="alert">{data.error}</p> : null}
 
-        {places.length === 0 && !draft ? (
+        {data.places.length === 0 && !pinDraft.draft ? (
           <div className="mc-empty">
             <h3>Map your places</h3>
             <p>Choose <strong>Add pin</strong> then click the map, or search for an address in the Places tab.</p>
@@ -443,66 +220,66 @@ export function MapWorkspace() {
           onTabChange={setActiveTab}
           collapsed={drawer.collapsed}
           widthPx={drawer.widthPx}
-          onToggleCollapsed={handleToggleCollapsed}
-          onResize={handleDrawerResize}
-          onPreset={handleDrawerPreset}
-          tabBadges={{ places: places.length, compare: selectedIds.size }}
+          onToggleCollapsed={onToggleCollapsed}
+          onResize={onDrawerResize}
+          onPreset={onPreset}
+          tabBadges={{ places: data.places.length, compare: selectedIds.size }}
         >
           {activeTab === "places" ? (
             <PlacesTab
-              places={places}
+              places={data.places}
               selectedIds={selectedIds}
-              summary={summary}
+              summary={data.summary}
               radiusM={analysis.radiusM}
-              addPinMode={addPinMode}
-              search={<PlaceSearch provider={geocodingProvider} onSelectResult={handleSearchSelect} />}
-              draftPopover={draft ? (
+              addPinMode={pinDraft.addPinMode}
+              search={<PlaceSearch provider={geocodingProvider} onSelectResult={pinDraft.handleSearchSelect} />}
+              draftPopover={pinDraft.draft ? (
                 <PinDraftPopover
-                  draft={draft}
-                  saving={draftSaving}
-                  error={draftError}
-                  onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
-                  onSave={handleSaveDraft}
-                  onCancel={() => setDraft(null)}
+                  draft={pinDraft.draft}
+                  saving={pinDraft.draftSaving}
+                  error={pinDraft.draftError}
+                  onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
+                  onSave={pinDraft.saveDraft}
+                  onCancel={() => pinDraft.setDraft(null)}
                 />
               ) : null}
-              onStartAddPin={handleStartAddPin}
+              onStartAddPin={pinDraft.startAddPin}
               onToggleSelect={handleToggleSelect}
               onDelete={handleDelete}
               onManualSubmit={handleManualSubmit}
               onImportSubmit={handleImport}
-              onUploaded={personalUploadsEnabled ? () => refreshWithFallback("Uploaded, but dashboard totals could not refresh.") : undefined}
+              onUploaded={data.personalUploadsEnabled ? () => data.refreshWithFallback("Uploaded, but dashboard totals could not refresh.") : undefined}
             />
           ) : null}
           {activeTab === "analyze" ? (
             <AnalyzeTab
               selected={selected}
               analysis={analysis}
-              availableRadii={availableRadii}
-              running={analyzing}
-              incidentDetails={incidentDetails}
-              neighborhood={neighborhood}
-              error={error}
+              availableRadii={data.availableRadii}
+              running={analyze.running}
+              incidentDetails={analyze.incidentDetails}
+              neighborhood={analyze.neighborhood}
+              error={data.error}
               panelWidthPx={drawer.widthPx}
               onChange={handleAnalysisChange}
-              onRun={handleAnalyze}
+              onRun={analyze.runAnalyze}
             />
           ) : null}
           {activeTab === "compare" ? (
-            <CompareTab selected={selected} analysis={analysis} summary={summary} comparison={comparison} running={comparing} onRun={handleCompare} />
+            <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} />
           ) : null}
           {activeTab === "routes" ? (
             <RoutesTab
               analysis={analysis}
-              running={routeRunning}
-              result={routeComparison}
-              error={routeError}
-              places={places}
+              running={routes.running}
+              result={routes.result}
+              error={routes.error}
+              places={data.places}
               geocodeSearch={geocodingProvider.search}
-              onRun={handleRunRoute}
+              onRun={routes.runRoute}
             />
           ) : null}
-          {activeTab === "export" ? <ExportTab href={exportHref} /> : null}
+          {activeTab === "export" ? <ExportTab href={data.exportHref} /> : null}
         </BottomSheet>
       </div>
     </div>
