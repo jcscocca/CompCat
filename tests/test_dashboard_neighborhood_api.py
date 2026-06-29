@@ -93,3 +93,32 @@ def test_neighborhood_endpoint_requires_public_session(tmp_path):
         },
     )
     assert response.status_code == 401
+
+
+def test_neighborhood_endpoint_includes_temporal_and_no_safety_language(neighborhood_client):
+    import json
+
+    client, place_id = neighborhood_client
+    response = client.post(
+        "/dashboard/neighborhood",
+        json={
+            "place_ids": [place_id],
+            "analysis_start_date": "2026-01-01",
+            "analysis_end_date": "2026-06-30",
+            "radii_m": [250],
+            "offense_category": None,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    temporal = body["places"][0]["temporal"]
+    assert len(temporal["hour_counts"]) == 24
+    assert len(temporal["dow_counts"]) == 7
+    assert len(temporal["hour_by_dow"]) == 7
+    assert all(len(row) == 24 for row in temporal["hour_by_dow"])
+    assert temporal["total_with_time"] == 5  # the 5 seeded in-radius incidents
+
+    # Invariant: the payload reports context, never a safety judgment.
+    blob = json.dumps(body).lower()
+    for banned in ("unsafe", "dangerous", "safest", "risky", "avoid "):
+        assert banned not in blob
