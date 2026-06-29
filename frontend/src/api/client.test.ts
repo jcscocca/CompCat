@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPlace, deletePlace, getDashboardSummary, streamAssistantChat } from "./client";
+import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, streamAssistantChat } from "./client";
 import type { AssistantDashboardState } from "../types";
 
 afterEach(() => {
@@ -69,6 +69,27 @@ describe("api client", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 500 }));
 
     await expect(getDashboardSummary()).rejects.toThrow("Request failed with status 500");
+  });
+
+  it("fetches dashboard freshness from the public endpoint", async () => {
+    const payload = {
+      incident_count: 5,
+      data_through: "2026-06-22",
+      earliest: "2008-01-01",
+      last_ingested_at: "2026-06-23T00:00:00Z",
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getDashboardFreshness()).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/dashboard/freshness",
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   it("skips a malformed assistant SSE frame and still delivers later valid events", async () => {

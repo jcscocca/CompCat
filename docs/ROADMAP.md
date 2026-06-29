@@ -70,6 +70,7 @@ hardening and the Phase 4 public-launch gate**.
 - [x] **Assistant:** token streaming (SSE via `StreamingResponse`), friendly "analyst offline" degraded state + Retry button, markdown rendering (#42). Failover LLM client also shipped.
 - [x] **Frontend cleanup:** ~322 lines trimmed from dead `styles.css` (#41); Analyst panel clamped on mobile (#41). MapWorkspace is still 497 lines — the "split into per-tab hooks" sub-item is **not yet done**.
 - [x] **Personal-upload disposition decided:** enabled on single-host ThinkPad trial (`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` in `.env.deploy.example` with explicit "keep OFF for shared/public" guardrail), with consent/retention copy in `docs/DEPLOY.md` (#43).
+- [x] **Data-freshness indicator:** the dashboard topbar shows a "Data through <date>" pill sourced from `GET /dashboard/freshness` (`frontend/src/components/DataFreshness.tsx`), so users know the shared SPD dataset isn't live.
 
 ## Phase 4 — Path to public
 *The big gate — prerequisite to move from a ~5-tester internal trial to any public exposure.*
@@ -82,13 +83,13 @@ hardening and the Phase 4 public-launch gate**.
 
 ## If you pick five things first
 
-Phases 0 and 2 are done; Phase 3 is mostly done; the safety-guard hardening (#59, #63), the route-path floor, the candidate-selection-before-BH review (#65), and the shared address-search extraction are now resolved. The next five, ordered by invariant risk and leverage:
+Phases 0 and 2 are done; Phase 3 is essentially done (only the `MapWorkspace` split remains); the safety-guard hardening (#59, #63), the route-path floor, the candidate-selection-before-BH review (#65), the shared address-search extraction, and the data-freshness indicator are now resolved. The next five, ordered by invariant risk and leverage:
 
-1. **Surface data-freshness in the UI** — the freshness endpoint exists; show the "data through <date>" indicator in the dashboard so users know the window.
-2. **Split the 497-line `MapWorkspace`** into per-tab hooks (the remaining Phase 3 cleanup sub-item).
-3. **Finish the neighborhood-stats QA** — review overdispersion small-sample behavior and the multiple-comparison edge cases (the remaining Phase 1 analytical item).
-4. **Scope the Phase 4 public-launch gate** — production auth / encryption-at-rest / tenant isolation, the largest trial→product gap.
-5. **Lock down / delete the internal duplicate surface** (~6 mirror routers) and the demo-identity fallback (a Phase 4 prerequisite).
+1. **Split the 497-line `MapWorkspace`** into per-tab hooks (the last remaining Phase 3 cleanup sub-item).
+2. **Finish the neighborhood-stats QA** — review overdispersion small-sample behavior and the multiple-comparison edge cases (the remaining Phase 1 analytical item).
+3. **Scope the Phase 4 public-launch gate** — production auth / encryption-at-rest / tenant isolation, the largest trial→product gap.
+4. **Lock down / delete the internal duplicate surface** (~6 mirror routers) and the demo-identity fallback (a Phase 4 prerequisite).
+5. **Productionize the edge** — TLS/reverse-proxy, backups, and observability (metrics/tracing/structured logs), the rest of the Phase 4 ops gate.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

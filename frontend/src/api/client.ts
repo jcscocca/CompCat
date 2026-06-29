@@ -2,6 +2,7 @@ import type {
   AssistantDashboardState,
   AssistantMessage,
   AssistantStreamEvent,
+  DashboardFreshness,
   DashboardSummary,
   IncidentDetailsResponse,
   NeighborhoodAnalysis,
@@ -63,6 +64,10 @@ export function createSession(): Promise<{ session_state: string }> {
 
 export function getDashboardSummary(): Promise<DashboardSummary> {
   return request("/dashboard/summary");
+}
+
+export function getDashboardFreshness(): Promise<DashboardFreshness> {
+  return request("/dashboard/freshness");
 }
 
 export function createPlace(payload: PlaceCreate): Promise<Place> {

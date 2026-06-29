@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createRouteAlternatives, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createRouteAlternatives, createSession, deletePlace, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getInputModes, getNeighborhoodAnalysis } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { clampWidth, DRAWER_DEFAULT, DRAWER_PEEK, DRAWER_WIDE, type DrawerPreset } from "../lib/drawer";
@@ -12,6 +12,7 @@ import { AnalyzeTab } from "./AnalyzeTab";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
 import { CompareTab } from "./CompareTab";
+import { DataFreshness } from "./DataFreshness";
 import { ExportTab } from "./ExportTab";
 import { MapCanvas } from "./MapCanvas";
 import { MapLegend } from "./MapLegend";
@@ -20,7 +21,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
 import { RoutesTab } from "./RoutesTab";
 import { parseRouteGeometry } from "../lib/routeGeometry";
-import type { AnalysisSettings, AssistantDashboardState, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, RouteComparison, RouteEndpointInput, RouteLine, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, DashboardFreshness, DashboardSummary, DrawerState, DraftPin, GeocodeResult, IncidentDetailsResponse, LatLng, NeighborhoodAnalysis, Place, PlaceCreate, RouteComparison, RouteEndpointInput, RouteLine, TabKey } from "../types";
 
 const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
 
@@ -51,6 +52,7 @@ export function MapWorkspace() {
   const incidentDetailsVersionRef = useRef(0);
   const neighborhoodVersionRef = useRef(0);
   const [personalUploadsEnabled, setPersonalUploadsEnabled] = useState(false);
+  const [freshness, setFreshness] = useState<DashboardFreshness | null>(null);
 
   const refresh = async () => {
     setSummary(await getDashboardSummary());
@@ -71,6 +73,14 @@ export function MapWorkspace() {
       .then((next) => { if (isMounted) { setError(""); setSummary(next); } })
       .catch(() => { if (isMounted) { setError("Unable to start a dashboard session. Try again shortly."); } });
     return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getDashboardFreshness()
+      .then((data) => { if (active) setFreshness(data); })
+      .catch(() => { if (active) setFreshness(null); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -392,7 +402,10 @@ export function MapWorkspace() {
             </span>
             <span className="mc-wordmark">Waypoint</span>
           </div>
-          <div className="mc-status"><span className="dot" />Public session - Seattle</div>
+          <div className="mc-topbar-right">
+            <DataFreshness freshness={freshness} />
+            <div className="mc-status"><span className="dot" />Public session - Seattle</div>
+          </div>
         </header>
 
         <div className="mc-controls">

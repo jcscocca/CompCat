@@ -71,6 +71,13 @@ export type DashboardSummary = {
   };
 };
 
+export type DashboardFreshness = {
+  incident_count: number;
+  data_through: string | null;
+  earliest: string | null;
+  last_ingested_at: string | null;
+};
+
 export type PlaceCreate = {
   display_label: string;
   latitude: number;

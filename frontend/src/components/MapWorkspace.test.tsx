@@ -24,6 +24,7 @@ vi.mock("../api/client", () => ({
   getIncidentDetails: vi.fn(),
   getNeighborhoodAnalysis: vi.fn(),
   getDashboardSummary: vi.fn(),
+  getDashboardFreshness: vi.fn().mockResolvedValue(null),
   getInputModes: vi.fn().mockResolvedValue({ modes: [] }),
   streamAssistantChat: vi.fn(),
 }));
