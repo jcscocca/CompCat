@@ -19,10 +19,9 @@ lives in the code and the spec/plan pairs under `docs/superpowers/`.
 Waypoint is a **disciplined, low-debt, near-shipped v1**. The analytical core (rate-ratio
 engine, neighborhood baselines, exposure model) is genuinely production-grade and well-tested;
 the public dashboard, places, geocoding, exports, and the Analyst are all real and wired. A
-repo-wide marker sweep found **essentially zero in-code TODO/FIXME debt**. The substantial
-Phase 0–3 work has landed: Phase 0 sharp edges are all closed, Phase 2 data and ops items
-are shipped, Phase 3 product breadth is mostly done. The remaining work is **Phase 1 invariant
-hardening and the Phase 4 public-launch gate**.
+repo-wide marker sweep found **essentially zero in-code TODO/FIXME debt**. All of the
+planned Phase 0–3 work has now landed — the sharp edges, the analytical-invariant hardening,
+the data/ops durability, and the product-breadth items are all closed. No queued work remains.
 
 ## Maturity snapshot
 
@@ -32,7 +31,6 @@ hardening and the Phase 4 public-launch gate**.
 | **Beta-ready** | Assistant (decision-tree router, streaming SSE, friendly offline state + Retry, markdown), Routes/OTP (live OTP + mock fallback, per-leg breakdown, export links), single-host ThinkPad deploy stack, Socrata incremental backfill + data-freshness endpoint, sensitivity-class UI (place creation + exports), personal-upload (enabled on single-host trial, flag-gated elsewhere), seed dataset |
 | **Half-baked** | Real-data query perf still has residual full-table paths outside the main summarize path; data-freshness surface exposed via API but not surfaced in the UI; Postgres-in-prod (CI-proven but not long-run validated); MapWorkspace still a 497-line hub (not split into per-tab hooks) |
 | **Open — invariant risk** | Safety-refusal guard substantially broadened (broad regex, scans last 8 user turns) but a regex gap lets "rank these places" / "score these areas" bypass it (missing `\s+` inside optional noun clause); no output-side guard test on the assistant response token stream |
-| **Deferred** | Production auth / encryption-at-rest / tenant isolation (the public-launch gate) |
 | **Deprecated / dead** | LocalAgent gateway + `MCA_LOCALAGENT_BASE_URL`, `statistical-comparisons.csv` public export (removed — was dead surface), ~6 internal duplicate routers (internal-gated, still present) |
 
 ---
@@ -72,25 +70,21 @@ hardening and the Phase 4 public-launch gate**.
 - [x] **Personal-upload disposition decided:** enabled on single-host ThinkPad trial (`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` in `.env.deploy.example` with explicit "keep OFF for shared/public" guardrail), with consent/retention copy in `docs/DEPLOY.md` (#43).
 - [x] **Data-freshness indicator:** the dashboard topbar shows a "Data through <date>" pill sourced from `GET /dashboard/freshness` (`frontend/src/components/DataFreshness.tsx`), so users know the shared SPD dataset isn't live.
 
-## Phase 4 — Path to public
-*The big gate — prerequisite to move from a ~5-tester internal trial to any public exposure.*
+## What's next
 
-- [ ] **Production authentication, encryption-at-rest, per-user tenant isolation** — explicitly deferred today (identity is a hashed `X-Demo-User-Id`); the single largest gap between trial and product.
-- [ ] **Lock down / delete the internal duplicate surface** (~6 mirror routers in `routes_analysis.py`, `routes_routes.py`, `routes_imports.py`, `routes_exports.py`, `routes_dashboard.py`, `routes_places.py`, `routes_crime.py`) and the demo-identity fallback.
-- [ ] **Productionize the edge:** TLS/reverse-proxy, HA, backups, observability (metrics/tracing/structured logs), multi-worker serving.
-
----
-
-## If you pick five things first
-
-Phases 0–3 are complete and the full Phase 1 analytical tail is now closed — the safety-guard hardening (#59, #63), the route-path floor, the neighborhood-stats QA (#65, #69), the shared address-search extraction, the data-freshness indicator, and the `MapWorkspace` per-tab-hooks split (#68) are all resolved. The only remaining work is the Phase 4 public-launch gate, **deferred for now by preference**:
-
-1. **Phase 4: production auth / encryption-at-rest / tenant isolation** — the public-launch foundation and the largest trial→product gap.
-2. **Phase 4: lock down / delete the internal duplicate surface** (~6 mirror routers) and the demo-identity fallback.
-3. **Phase 4: productionize the edge** — TLS/reverse-proxy, backups, and observability (metrics/tracing/structured logs).
-
-With Phases 0–3 done, Waypoint is a disciplined, low-debt internal-trial v1; the Phase 4 gate is the work to cross only when public exposure becomes the goal.
+All of the planned work (Phases 0–3) is complete — there is no queued work. Waypoint is a disciplined, low-debt internal-trial v1. When a new unit of work is chosen, it follows the cadence in **Conventions** below.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.
+
+---
+
+> **Eventual public release — a note, not planned work.** A public release is the intended
+> *final* step for Waypoint, but it is **not on the roadmap as planned work** and has **no
+> date**. If it is ever pursued it would require substantial work that is deliberately *not*
+> queued above: production hardening (real authentication, encryption at rest, per-user tenant
+> isolation, a locked-down edge surface) and product polish (real OTP routing in place of the
+> mock, user accounts with cross-session persistence, first-run onboarding, automated SPD data
+> refresh, address-search polish). None of this is scheduled. Until then — and for the
+> foreseeable future — Waypoint stays a disciplined, low-debt internal-trial v1.
