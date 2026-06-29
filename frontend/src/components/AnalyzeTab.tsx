@@ -134,7 +134,7 @@ function VerdictCard({ place, windowLabel }: { place: NeighborhoodPlace; windowL
           <details className="mc-analytical">
             <summary>How we know</summary>
             <dl>
-              <div><dt>Place vs beat rate</dt><dd>{place.place_rate?.toFixed(2)} vs {place.beat_rate?.toFixed(2)} /km²·day</dd></div>
+              <div><dt>Place vs beat rate</dt><dd>{place.place_rate != null && place.beat_rate != null ? `${place.place_rate.toFixed(2)} vs ${place.beat_rate.toFixed(2)} /km²·day` : "—"}</dd></div>
               <div><dt>95% CI (this comparison)</dt><dd>{place.ci_lower != null && place.ci_upper != null ? `${place.ci_lower.toFixed(1)}–${place.ci_upper.toFixed(1)}×` : "—"}</dd></div>
               <div><dt>Adjusted p-value</dt><dd>{place.adjusted_p_value != null ? place.adjusted_p_value.toFixed(3) : "—"}</dd></div>
               <div><dt>Exact p-value</dt><dd>{place.exact_p_value != null ? place.exact_p_value.toFixed(3) : "—"}</dd></div>
