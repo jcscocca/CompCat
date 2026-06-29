@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     geocoder_max_results: int = 5
     geocoder_timeout_s: float = 5.0
     geocoder_min_interval_s: float = 1.0
+    # Waypoint only has Seattle SPD data, so region-lock geocoding: bias (and by default
+    # hard-restrict via bounded) results to a Seattle-metro bounding box so ambiguous names
+    # like "Capitol Hill" resolve in Seattle, not the globally-dominant match (e.g. DC).
+    # Nominatim viewbox format: "x1,y1,x2,y2" = lon,lat,lon,lat (W,N corner then E,S corner).
+    geocoder_viewbox: str = "-122.55,47.78,-122.10,47.43"
+    geocoder_bounded: bool = True
 
     routing_provider: str = "mock"
     opentripplanner_base_url: str = ""

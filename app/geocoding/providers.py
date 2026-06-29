@@ -34,16 +34,26 @@ class NominatimProvider:
         user_agent: str,
         max_results: int,
         timeout_s: float,
+        viewbox: str = "",
+        bounded: bool = False,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.base_url = base_url
         self.user_agent = user_agent
         self.max_results = max_results
         self.timeout_s = timeout_s
+        self.viewbox = viewbox
+        self.bounded = bounded
         self._transport = transport
 
     def search(self, query: str) -> list[GeocodeHit]:
         params = {"format": "jsonv2", "limit": self.max_results, "q": query}
+        # Region-lock to the configured viewbox (e.g. Seattle metro). bounded=1 hard-restricts
+        # results to the box so ambiguous names cannot resolve to another city.
+        if self.viewbox:
+            params["viewbox"] = self.viewbox
+            if self.bounded:
+                params["bounded"] = 1
         headers = {"User-Agent": self.user_agent, "Accept": "application/json"}
         try:
             with httpx.Client(timeout=self.timeout_s, transport=self._transport) as client:
@@ -82,5 +92,7 @@ def build_provider(settings: Settings) -> GeocodeProvider:
             user_agent=_user_agent(settings),
             max_results=settings.geocoder_max_results,
             timeout_s=settings.geocoder_timeout_s,
+            viewbox=settings.geocoder_viewbox,
+            bounded=settings.geocoder_bounded,
         )
     raise ValueError(f"Unknown geocoder provider: {settings.geocoder_provider!r}")
