@@ -73,6 +73,20 @@ Because the selected option must dominate all alternatives by a material margin,
 alone cannot manufacture a recommendation; the design errs toward `not_statistically_clear`
 rather than toward over-claiming a lower-incident option.
 
+### Small Samples And Temporal Dispersion
+
+The overdispersion factor is estimated from per-month incident counts. With fewer than two
+months in the analysis window the factor cannot be estimated at all, and the comparison (or the
+place-vs-beat neighborhood verdict) is reported as a model warning rather than a clear claim.
+With only two or three months the estimate is noisy and can understate the true overdispersion,
+which would narrow the confidence interval more than the data warrant.
+
+This residual small-sample risk is bounded by the other guards: a recommendation still requires
+a material effect size (a rate ratio at or below 0.80, or at or above 1.25 for the place-vs-beat
+verdict) and must clear the minimum-count and minimum-window floors, so a noisy dispersion
+estimate alone cannot produce a confident verdict. A longer analysis window — more monthly
+periods — is the way to obtain a firmer dispersion estimate.
+
 ## Recommendation Threshold
 
 - adjusted p-value below 0.05

@@ -171,6 +171,13 @@ def test_benjamini_hochberg_adjusts_p_values_monotonically():
     assert adjusted == [0.03, 0.04, 0.04]
 
 
+def test_benjamini_hochberg_makes_no_correction_for_a_single_or_empty_comparison():
+    # A lone comparison (e.g. analyzing one place against its beat) has no multiplicity to
+    # correct, so the adjusted p must equal the raw p; an empty set yields an empty result.
+    assert benjamini_hochberg([0.037]) == [0.037]
+    assert benjamini_hochberg([]) == []
+
+
 @pytest.mark.parametrize("p_value", [-0.01, 1.01, math.inf, math.nan])
 def test_benjamini_hochberg_rejects_invalid_p_values(p_value):
     with pytest.raises(ValueError, match="P-values must be finite values between 0 and 1"):

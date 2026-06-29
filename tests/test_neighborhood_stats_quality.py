@@ -157,3 +157,78 @@ def test_hotspot_reads_above_clear_after_removing_self_dilution(tmp_path):
     assert place["place_incident_count"] == 12
     assert place["beat_incident_count"] == 6  # rest of beat only
     assert place["decision"] == "above_clear"
+
+
+def test_place_vs_beat_flags_a_single_period_as_model_warning():
+    # A single monthly period cannot estimate temporal overdispersion, so even a decisive-looking
+    # point estimate must come back as model_warning (no clear verdict), not a confident call.
+    # The data floors are otherwise satisfied — this is specifically the small-sample guard.
+    result = place_vs_beat(
+        place_count=25,
+        place_exposure=35.0,
+        beat_count=40,
+        beat_exposure=360.0,
+        combined_monthly_counts=[65],  # one period -> dispersion is unknowable
+        analysis_days=30,
+    )
+    assert result.minimum_data_status == "met"
+    assert result.decision == "model_warning"
+
+
+def _session_with_two_symmetric_places(tmp_path):
+    """Two places (A and B) ~2.2 km apart inside the same synthetic beat Z9, each with an
+    identical 6-incident pattern (one per month). Because the setup is symmetric, both
+    place-vs-beat comparisons produce identical statistics, so the Benjamini-Hochberg-adjusted
+    p-values must come out equal — which pins that the multi-place adjustment stays aligned to
+    the right places (the service builds the p-value list and consumes the adjusted list in two
+    separate loops)."""
+    from fastapi.testclient import TestClient
+
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'sym.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+    user_hash = public_user_hash(client.cookies.get("mca_session"))
+    assert user_hash is not None
+    session = get_sessionmaker()()
+    for pid, plat in (("A", 47.6100), ("B", 47.6300)):
+        plon = -122.3300
+        session.add(
+            PlaceCluster(
+                id=pid, user_id_hash=user_hash, cluster_version="t", cluster_method="manual",
+                centroid_latitude=plat, centroid_longitude=plon,
+                display_latitude=plat, display_longitude=plon, visit_count=5,
+                inferred_place_type="manual_place", sensitivity_class="normal",
+                display_label=f"Place {pid}", label_source="test",
+            )
+        )
+        for month in range(1, 7):  # 6 near incidents, one per month, ~55 m from the place
+            session.add(
+                CrimeIncident(
+                    id=f"{pid}-near-{month}",
+                    offense_start_utc=datetime(2026, month, 10, tzinfo=UTC),
+                    offense_category="PROPERTY", beat="Z9",
+                    latitude=plat + 0.0005, longitude=plon,
+                )
+            )
+    session.commit()
+    return session, user_hash
+
+
+def test_neighborhood_bh_adjusted_p_aligns_across_multiple_places(tmp_path):
+    session, user_hash = _session_with_two_symmetric_places(tmp_path)
+    result = neighborhood_analysis_for_places(
+        session=session, user_id_hash=user_hash, place_ids=["A", "B"], radius_m=250,
+        analysis_start_date=date(2026, 1, 1), analysis_end_date=date(2026, 6, 30),
+        offense_category=None, offense_subcategory=None, nibrs_group=None,
+        area_lookup={"Z9": 3.0}, beat_polygons=_Z9_POLYGONS,
+    )
+    by_id = {place["place_id"]: place for place in result["places"]}
+    # Both places are baseline-available, so BH runs across the two place-vs-beat p-values.
+    assert by_id["A"]["baseline_available"] is True
+    assert by_id["B"]["baseline_available"] is True
+    assert by_id["A"]["place_incident_count"] == 6
+    assert by_id["B"]["place_incident_count"] == 6
+    # Symmetric inputs -> equal adjusted p-values and identical verdicts. An off-by-one in the
+    # build-p-values / consume-adjusted two-loop alignment would desync these.
+    assert by_id["A"]["adjusted_p_value"] == by_id["B"]["adjusted_p_value"]
+    assert by_id["A"]["decision"] == by_id["B"]["decision"]

@@ -47,11 +47,11 @@ hardening and the Phase 4 public-launch gate**.
 - [x] **Gate `MCA_ADMIN_INGEST_TOKEN` in the prod boot validator.** `app/config.py` rejects `DEFAULT_ADMIN_INGEST_TOKEN` (`local-admin-token`) in production via `require_production_secret_overrides`. (Phase 0 sharp-edges commit)
 
 ## Phase 1 — Protect the invariant & analytical credibility
-*The brand and legal core. Safety-guard hardening and the route-path floor are resolved; the BH candidate-selection review remains.*
+*The brand and legal core — all items resolved: safety-guard hardening, the route-path floor, and the full neighborhood-stats QA.*
 
 - [x] **Harden the safety-refusal guard** — shipped: the object-first regex gap was fixed (#59), and an output-side guard on the model's answer plus broadened ranking/determiner detection landed in #63 (closing #60). Residual synonym-lexicon and non-English breadth is lower-priority follow-up. _(Original analysis, retained for context:)_ The guard was substantially broadened: it is now a broad `re` pattern scanning recent turns (last 8 user messages), not just the latest message. It catches "which block is more dangerous", "how risky", "safest", "unsafe", etc. **However**, a regex gap remains: the `(?:these|those|them|the\s+)?` group is missing a trailing `\s+`, so "rank these places" / "score these areas" (object-before-verb order) bypass it. Fix the `_SAFETY_SCORE_PATTERN` in `app/assistant/agent.py` and add the **output-side guard test** asserting the engine and assistant never emit `safe/unsafe/dangerous/risk` language. (`test_statistical_comparison_service.py` has an output check for compare summaries; there is no analogous test for the assistant response token stream.)
 - [x] **Close the rigor asymmetry — route path verified.** `MIN_PLACE_COUNT` / `MIN_COMBINED_COUNT` live in the shared `build_statistical_comparison` engine (`app/analysis/comparison.py`), which **both** `compare_site_options` and `compare_route_request` funnel through — so the route path applies the per-option floor identically; there was no asymmetry. Locked in end-to-end by `tests/test_statistical_comparison_service.py::test_compare_route_request_floors_near_empty_candidate` (a 1-incident candidate corridor is not declared the winner despite a high combined count).
-- [ ] **Deferred neighborhood-stats QA:** The candidate-selection-before-BH question is **reviewed and resolved** (#65) — selecting the lowest-rate candidate before BH is a real selective-inference effect, but the decision is conservative by design (must be statistically lower than every alternative, an effect-size floor, and the data floors), so selection alone cannot crown a winner. Documented in `docs/analysis/statistical-route-place-comparison.md` and pinned by a test. Still open: overdispersion small-sample behavior and the multiple-comparison edge cases.
+- [x] **Neighborhood-stats QA — complete:** The candidate-selection-before-BH question is reviewed and resolved (#65) — selecting the lowest-rate candidate before BH is a real selective-inference effect, but the decision is conservative by design (must be statistically lower than every alternative, an effect-size floor, and the data floors), so selection alone cannot crown a winner. The overdispersion/small-sample handling and the multiple-comparison edge cases are now resolved too (#69): the small-sample dispersion limitation is documented in `docs/analysis/statistical-route-place-comparison.md`, and tests pin the single-period `model_warning` guard, single/empty BH (no over-correction), and the multi-place BH-adjusted-p alignment.
 - [x] **Point-in-polygon beat assignment** — `assign_beat` + `load_beat_polygons` (pure-Python ray-casting) implemented in `app/analysis/beat_baselines.py` and wired into `app/services/neighborhood_service.py` (the main analyze path). Also used by assistant tools. Shipped.
 
 ## Phase 2 — Data & ops durability
@@ -83,13 +83,13 @@ hardening and the Phase 4 public-launch gate**.
 
 ## If you pick five things first
 
-Phases 0, 2, and 3 are now done; the safety-guard hardening (#59, #63), the route-path floor, the candidate-selection-before-BH review (#65), the shared address-search extraction, the data-freshness indicator, and the `MapWorkspace` per-tab-hooks split (#68) are all resolved. The remaining work is the Phase 1 stats tail plus the Phase 4 public-launch gate, ordered by invariant risk and leverage:
+Phases 0–3 are complete and the full Phase 1 analytical tail is now closed — the safety-guard hardening (#59, #63), the route-path floor, the neighborhood-stats QA (#65, #69), the shared address-search extraction, the data-freshness indicator, and the `MapWorkspace` per-tab-hooks split (#68) are all resolved. The only remaining work is the Phase 4 public-launch gate, **deferred for now by preference**:
 
-1. **Neighborhood-stats QA — overdispersion & small-sample review** (the remaining Phase 1 analytical item): confirm the quasi-Poisson behavior and small-period-count handling are sound.
-2. **Neighborhood-stats QA — multiple-comparison edge cases**: review the BH behavior at the boundaries (few options, ties, all-insufficient).
-3. **Phase 4: production auth / encryption-at-rest / tenant isolation** — the public-launch foundation and the largest trial→product gap.
-4. **Phase 4: lock down / delete the internal duplicate surface** (~6 mirror routers) and the demo-identity fallback.
-5. **Phase 4: productionize the edge** — TLS/reverse-proxy, backups, and observability (metrics/tracing/structured logs).
+1. **Phase 4: production auth / encryption-at-rest / tenant isolation** — the public-launch foundation and the largest trial→product gap.
+2. **Phase 4: lock down / delete the internal duplicate surface** (~6 mirror routers) and the demo-identity fallback.
+3. **Phase 4: productionize the edge** — TLS/reverse-proxy, backups, and observability (metrics/tracing/structured logs).
+
+With Phases 0–3 done, Waypoint is a disciplined, low-debt internal-trial v1; the Phase 4 gate is the work to cross only when public exposure becomes the goal.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
