@@ -305,6 +305,26 @@ describe("AnalyzeTab", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
   });
 
+  it("relabels incident copy to 911 calls on the calls layer", () => {
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={{ ...analysis, layer: "calls" }}
+        availableRadii={[250]}
+        running={false}
+        panelWidthPx={640}
+        neighborhood={{ ...neighborhood, places: [homePlace] }}
+        incidentDetails={oneIncident}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    // Verdict, incident-details header, and reveal summary all reflect the active layer.
+    expect(screen.getByText(/Home has more 911 calls than its surrounding beat\./i)).toBeInTheDocument();
+    expect(screen.getByText("911 calls near selected places")).toBeInTheDocument();
+    expect(screen.getByText(/See the 1 911 call\b/i)).toBeInTheDocument();
+  });
+
   it("shows loading skeletons while analysis is running", () => {
     const { container } = render(<AnalyzeTab selected={[home]} analysis={analysis} availableRadii={[250]} running={true} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.getByText("Running analysis…")).toBeInTheDocument();
@@ -357,8 +377,8 @@ describe("AnalyzeTab", () => {
     render(
       <AnalyzeTab selected={[home]} analysis={analysis} availableRadii={[250]} running={false} neighborhood={{ ...neighborhood, places: [lowN] }} onChange={vi.fn()} onRun={vi.fn()} />,
     );
-    expect(screen.getByText(/Based on 8 incidents — interpret with caution\./i)).toBeInTheDocument();
-    expect(screen.getByText(/3 incidents had no recorded time/i)).toBeInTheDocument();
+    expect(screen.getByText(/Based on 8 reported incidents — interpret with caution\./i)).toBeInTheDocument();
+    expect(screen.getByText(/3 reported incidents had no recorded time/i)).toBeInTheDocument();
   });
 
   it("shows an empty temporal state when no incidents have a recorded time", () => {

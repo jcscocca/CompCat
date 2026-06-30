@@ -1,4 +1,5 @@
 import { incidentCountForPlace } from "../lib/incidentSummaries";
+import { incidentNoun } from "../lib/layerCopy";
 import type { AnalysisSettings, CrimeSummary, DashboardSummary, Place } from "../types";
 import { MethodsAppendix } from "./MethodsAppendix";
 
@@ -79,23 +80,25 @@ function rowInsight(row: BreakdownRow, selected: Place[]) {
   const highest = ranked[0];
   const lowest = ranked[ranked.length - 1];
   if (!highest || !lowest || highest.count === lowest.count) {
-    return `Selected places have the same reported ${row.label} incident count.`;
+    return `Selected places have the same ${row.label} count.`;
   }
   const diff = highest.count - lowest.count;
-  return `${highest.place.display_label} has ${diff} more reported ${row.label} incident${diff === 1 ? "" : "s"} than ${lowest.place.display_label}.`;
+  return `${highest.place.display_label} has ${diff} more ${row.label} than ${lowest.place.display_label}.`;
 }
 
 export function CompareTab({ selected, analysis, summary, comparison, running, onRun }: Props) {
   const overview = (comparison?.overview ?? null) as { summary_text?: string } | null;
   const canRun = selected.length >= 2 && !running;
   const rows = breakdownRows(summary, selected, analysis.radiusM);
-  const showPersonGuidance = analysis.offenseCategory !== "" && analysis.offenseCategory !== "PERSON";
+  const showPersonGuidance =
+    analysis.layer !== "calls" && analysis.offenseCategory !== "" && analysis.offenseCategory !== "PERSON";
+  const noun = incidentNoun(analysis.layer);
 
   if (selected.length < 2) {
     return (
       <div className="mc-panel is-active" role="tabpanel" aria-label="Compare">
         <div className="mc-panel-head"><h4>Compare places</h4></div>
-        <p className="mc-empty-list">Select at least two places to compare reported-incident context.</p>
+        <p className="mc-empty-list">Select at least two places to compare {noun.singular} context.</p>
       </div>
     );
   }
@@ -115,7 +118,7 @@ export function CompareTab({ selected, analysis, summary, comparison, running, o
                 {place.display_label}
               </div>
               <div className="big">{count ?? "N/A"}</div>
-              <div className="cap">{count === null ? "not analyzed yet" : "reported incidents in range"}</div>
+              <div className="cap">{count === null ? "not analyzed yet" : `${noun.plural} in range`}</div>
               {count !== null ? <div className="mc-cmpmeta">{nearestIncidentText(entries)}</div> : null}
             </div>
           );

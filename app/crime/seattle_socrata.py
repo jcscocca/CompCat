@@ -201,6 +201,12 @@ def load_arrest_csv(path: Path) -> list[CrimeIncidentData]:
         return [arrest_from_mapping(row) for row in reader]
 
 
+def load_calls_csv(path: Path) -> list[CrimeIncidentData]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        return [call_from_mapping(row) for row in reader]
+
+
 def _date_window_where(
     start_date: date | None, end_date: date | None, field: str = "offense_date"
 ) -> str:
