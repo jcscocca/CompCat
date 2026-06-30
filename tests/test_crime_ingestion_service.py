@@ -671,3 +671,76 @@ def test_ingest_crime_incidents_keys_dedup_by_source(tmp_path):
     ).all()
     assert {r.source_dataset for r in rows} == {"seattle_spd_crime", "seattle_spd_arrests"}
     session.close()
+
+
+def test_admin_socrata_ingest_source_arrests_uses_registry(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    calls = []
+
+    def fake_fetch_page(self, limit, offset, start_date=None, end_date=None):
+        calls.append({"dataset_id": self.dataset_id, "date_field": self.date_field})
+        return [
+            CrimeIncidentData(
+                external_incident_id="arr-1",
+                source_dataset="seattle_spd_arrests",
+                offense_start_utc=datetime(2024, 1, 11, tzinfo=UTC),
+                latitude=47.61,
+                longitude=-122.34,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.SeattleSocrataClient.fetch_page", fake_fetch_page
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/crime/ingest/socrata?source=seattle_spd_arrests&limit=10&offset=0",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"inserted_count": 1, "skipped_count": 0}
+    assert calls == [{"dataset_id": "9bjs-7a7w", "date_field": "arrest_occurred_date_time"}]
+
+
+def test_admin_socrata_ingest_rejects_unknown_source(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    response = client.post(
+        "/admin/crime/ingest/socrata?source=not-a-source",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+    assert response.status_code == 422
+    assert "Unknown source" in response.json()["detail"]
+
+
+def test_admin_socrata_backfill_scopes_watermark_to_source(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    captured = {}
+
+    def fake_latest_observed_date(session, source_dataset="seattle_spd_crime"):
+        captured["source_dataset"] = source_dataset
+        return None
+
+    def fake_fetch_page(self, limit, offset, start_date=None, end_date=None):
+        return []
+
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.latest_observed_date", fake_latest_observed_date
+    )
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.SeattleSocrataClient.fetch_page", fake_fetch_page
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/crime/ingest/socrata?source=seattle_spd_arrests&mode=backfill",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+
+    assert response.status_code == 200
+    assert captured["source_dataset"] == "seattle_spd_arrests"

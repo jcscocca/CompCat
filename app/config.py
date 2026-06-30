@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     crime_radii_m: list[int] = Field(default_factory=lambda: [250, 500, 1000])
     socrata_base_url: str = "https://data.seattle.gov/resource"
     socrata_dataset_id: str = "tazs-3rd5"
+    socrata_arrests_dataset_id: str = "9bjs-7a7w"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
     assistant_role: str = "waypoint_analyst"
