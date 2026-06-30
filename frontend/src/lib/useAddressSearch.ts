@@ -47,6 +47,11 @@ export function useAddressSearch(
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // On unmount, abort whatever request is currently in flight. The per-query effect cleanup
+  // only aborts the effect's own controller; this also covers a runSearch request still in
+  // flight when the component unmounts (e.g. switching tabs), avoiding a post-unmount setState.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   // Single source of truth for the empty/done/error + abort-guard logic, shared by the
   // debounce effect and runSearch.
   function runFetch(trimmed: string, controller: AbortController): Promise<void> {
