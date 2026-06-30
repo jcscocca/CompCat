@@ -74,9 +74,9 @@ the data/ops durability, and the product-breadth items are all closed. No queued
 *The next slate, chosen 2026-06-29. Worked one item at a time per Conventions.*
 
 **Harden & polish**
-- [ ] **H1 · Query-perf sweep** — fix the residual full-table query paths outside `summarize_for_user`; add indexes / SQL-filtered paths.
+- [x] **H1 · Query-perf sweep** — shipped (lean): a query audit found the main public incident paths already bbox+date+category SQL-filtered (the audit's `_beat_incidents` flag was a false positive — its whole-beat load is the rest-of-beat baseline). The one genuine full-table-on-every-load path, `crime_data_freshness`, is now TTL-cached in-process (#73). Deferred: ingest stats-row/watermark; real spatial index (R*Tree/PostGIS).
 - [ ] **H2 · Long-run Postgres validation** — exercise the prod stack on Postgres under sustained/load conditions beyond the CI parity smoke.
-- [ ] **H3 · Address-search polish** — debounce, result ranking, error/empty states, recent searches across Places + Routes.
+- [x] **H3 · Address-search polish** — shipped (#72): debounced type-ahead with stale-request abort, first-class empty/error states with shared copy, a shared localStorage recent-places history (Places dropdown + Routes From/To options), and a client-side Seattle-bbox guard. Result ranking dropped (no relevance metadata). Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-address-search-polish*`.
 - [ ] **H4 · Assistant guard breadth** — close the residual synonym-lexicon / non-English gaps in the safety-refusal guard.
 
 **New capabilities**

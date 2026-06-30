@@ -452,6 +452,8 @@ input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
 .mc-incident-reveal>summary::-webkit-details-marker{display:none;}
 .mc-analytical>summary::-webkit-details-marker{display:none;}
 
+/* Recent searches — reuses mc-results list look; a subtle separator from the search form */
+.mc-recent{border-top:1px solid var(--line);padding-top:6px;}
 /* Temporal analysis — descriptive hour-of-day + day-of-week, neutral palette */
 .mc-temporal{margin-top:12px;padding-top:11px;border-top:1px solid var(--line);display:grid;gap:8px;}
 .mc-temporal-title{margin:0;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);}

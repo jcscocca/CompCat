@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useAddressSearch } from "../lib/useAddressSearch";
+import { useAddressSearch, SEARCH_EMPTY_MSG, SEARCH_ERROR_MSG } from "../lib/useAddressSearch";
 import type { AnalysisSettings, GeocodeResult, Place, RouteComparison, RouteEndpointInput } from "../types";
 
 const MODES: { value: string; label: string }[] = [
@@ -9,7 +9,7 @@ const MODES: { value: string; label: string }[] = [
   { value: "drive", label: "Drive" },
 ];
 
-type EndpointOption = { key: string; label: string; input: RouteEndpointInput };
+type EndpointOption = { key: string; label: string; input: RouteEndpointInput; geoResult?: GeocodeResult };
 
 type Props = {
   analysis: AnalysisSettings;
@@ -34,9 +34,6 @@ function corridorContext(result: RouteComparison, alternativeId: string, radiusM
 
 type LegContext = { label: string; count: number };
 
-// Break the corridor total into per-leg context. Each context summary is anchored at one of
-// the route's stops (context_label); group by that label so the user sees reported-incident
-// context near each leg's stops, not just the whole-corridor sum.
 function perLegContext(result: RouteComparison, alternativeId: string, radiusM: number): LegContext[] {
   const byLabel = new Map<string, number>();
   for (const row of result.context_summaries) {
@@ -59,7 +56,7 @@ function EndpointChooser({
   label: string;
   options: EndpointOption[];
   selectedKey: string;
-  onSelect: (key: string) => void;
+  onSelect: (key: string, geoResult?: GeocodeResult) => void;
 }) {
   const selected = options.find((option) => option.key === selectedKey) ?? null;
   const [open, setOpen] = useState(false);
@@ -79,7 +76,7 @@ function EndpointChooser({
                 type="button"
                 aria-pressed={option.key === selectedKey}
                 onClick={() => {
-                  onSelect(option.key);
+                  onSelect(option.key, option.geoResult);
                   setOpen(false);
                 }}
               >
@@ -94,14 +91,16 @@ function EndpointChooser({
 }
 
 export function RoutesTab({ analysis, running, result, error, places, geocodeSearch, onRun }: Props) {
-  const { query, setQuery, status: searchStatus, results: geoResults, runSearch } =
+  const { query, setQuery, status: searchStatus, results: geoResults, recent, runSearch, rememberPlace } =
     useAddressSearch(geocodeSearch);
+
   const searchError =
     searchStatus === "error"
-      ? "Address search failed. Try again."
-      : searchStatus === "done" && geoResults.length === 0
-        ? "No matches for that address."
+      ? SEARCH_ERROR_MSG
+      : searchStatus === "empty"
+        ? SEARCH_EMPTY_MSG
         : "";
+
   const [originKey, setOriginKey] = useState("");
   const [destinationKey, setDestinationKey] = useState("");
   const [mode, setMode] = useState("transit");
@@ -111,14 +110,33 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
       key: `place:${p.id}`,
       label: p.display_label,
       input: { place_id: p.id } as RouteEndpointInput,
+      geoResult: undefined,
     }));
     const geoOptions = geoResults.map((g) => ({
       key: `geo:${g.latitude},${g.longitude}`,
       label: g.label,
       input: { latitude: g.latitude, longitude: g.longitude, label: g.label } as RouteEndpointInput,
+      geoResult: g,
     }));
-    return [...placeOptions, ...geoOptions];
-  }, [places, geoResults]);
+
+    // Recent options fill the From/To pickers when there's no active search. During an
+    // active search (geoResults present) most recents yield to the search results, but a
+    // recent that is the currently-selected origin/destination must stay in `options` — the
+    // selection is derived from this same array, so dropping it would silently revert the
+    // chosen endpoint. Dedup recent against place and geo keys.
+    const existingKeys = new Set([...placeOptions.map((o) => o.key), ...geoOptions.map((o) => o.key)]);
+    const recentOptions = recent
+      .map((r) => ({
+        key: `geo:${r.latitude},${r.longitude}`,
+        label: r.label,
+        input: { latitude: r.latitude, longitude: r.longitude, label: r.label } as RouteEndpointInput,
+        geoResult: r,
+      }))
+      .filter((o) => !existingKeys.has(o.key))
+      .filter((o) => geoResults.length === 0 || o.key === originKey || o.key === destinationKey);
+
+    return [...placeOptions, ...geoOptions, ...recentOptions];
+  }, [places, geoResults, recent, originKey, destinationKey]);
 
   const recommendedId = result?.statistical_comparison?.overview.recommendation_option_id ?? null;
   const originOption = options.find((o) => o.key === originKey) ?? null;
@@ -144,8 +162,20 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
           </div>
           {searchError ? <p className="mc-inline-error" role="alert">{searchError}</p> : null}
         </div>
-        <EndpointChooser idBase="route-origin" label="From" options={options} selectedKey={originKey} onSelect={setOriginKey} />
-        <EndpointChooser idBase="route-destination" label="To" options={options} selectedKey={destinationKey} onSelect={setDestinationKey} />
+        <EndpointChooser
+          idBase="route-origin"
+          label="From"
+          options={options}
+          selectedKey={originKey}
+          onSelect={(key, geoResult) => { if (geoResult) rememberPlace(geoResult); setOriginKey(key); }}
+        />
+        <EndpointChooser
+          idBase="route-destination"
+          label="To"
+          options={options}
+          selectedKey={destinationKey}
+          onSelect={(key, geoResult) => { if (geoResult) rememberPlace(geoResult); setDestinationKey(key); }}
+        />
         <div className="mc-field">
           <label id="route-mode-label">Mode</label>
           <div className="mc-chips" role="group" aria-labelledby="route-mode-label">
