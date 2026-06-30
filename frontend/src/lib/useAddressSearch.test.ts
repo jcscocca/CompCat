@@ -6,15 +6,18 @@ import { DEBOUNCE_MS, SEARCH_EMPTY_MSG, SEARCH_ERROR_MSG, useAddressSearch } fro
 
 beforeEach(() => {
   vi.useFakeTimers();
+  localStorage.clear();
 });
 
 afterEach(() => {
   vi.runAllTimers();
   vi.useRealTimers();
+  localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 describe("useAddressSearch", () => {
-  // ── direct runSearch (immediate, existing behaviour) ─────────────────────
+  // ── direct runSearch (immediate) ──────────────────────────────────────────
 
   it("runSearch runs a trimmed search immediately and exposes done results", async () => {
     const search = vi.fn().mockResolvedValue([
@@ -108,14 +111,12 @@ describe("useAddressSearch", () => {
     act(() => vi.advanceTimersByTime(100));
     act(() => result.current.setQuery("cap"));
     act(() => vi.advanceTimersByTime(100));
-    // still under 300 ms from the second keystroke
     expect(search).not.toHaveBeenCalled();
 
     await act(async () => {
       vi.advanceTimersByTime(DEBOUNCE_MS);
     });
 
-    // only called once for the final query
     expect(search).toHaveBeenCalledTimes(1);
     expect(search).toHaveBeenCalledWith("cap", expect.anything());
   });
@@ -133,15 +134,12 @@ describe("useAddressSearch", () => {
 
     const { result } = renderHook(() => useAddressSearch(search));
 
-    // fire debounce for "ca"
     act(() => result.current.setQuery("ca"));
     await act(async () => { vi.advanceTimersByTime(DEBOUNCE_MS); });
 
-    // fire debounce for "cap" before first resolves
     act(() => result.current.setQuery("cap"));
     await act(async () => { vi.advanceTimersByTime(DEBOUNCE_MS); });
 
-    // second call resolves immediately; first resolves late
     resolveFirst([{ label: "Stale Result", latitude: 47.50, longitude: -122.30, source: "nominatim" }]);
     await act(async () => { await Promise.resolve(); });
 
@@ -154,12 +152,10 @@ describe("useAddressSearch", () => {
     ]);
     const { result } = renderHook(() => useAddressSearch(search));
 
-    // populate results first
     act(() => result.current.setQuery("pike"));
     await act(async () => { vi.advanceTimersByTime(DEBOUNCE_MS); });
     expect(result.current.status).toBe("done");
 
-    // clear the query
     await act(async () => { result.current.setQuery(""); });
     expect(result.current.status).toBe("idle");
     expect(result.current.results).toEqual([]);
@@ -172,8 +168,51 @@ describe("useAddressSearch", () => {
 
     act(() => result.current.setQuery("pike"));
     unmount();
-    // advance past debounce — should not throw / update
     await act(async () => { vi.advanceTimersByTime(DEBOUNCE_MS * 2); });
     expect(search).not.toHaveBeenCalled();
+  });
+
+  // ── recent places + rememberPlace ─────────────────────────────────────────
+
+  it("exposes an empty recent list on mount when nothing is stored", () => {
+    const search = vi.fn().mockResolvedValue([]);
+    const { result } = renderHook(() => useAddressSearch(search));
+    expect(result.current.recent).toEqual([]);
+  });
+
+  it("loads persisted recent places on mount", () => {
+    const pike = { label: "Pike Place", latitude: 47.61, longitude: -122.34, source: "nominatim" };
+    localStorage.setItem("waypoint.search.recent", JSON.stringify([pike]));
+    const search = vi.fn().mockResolvedValue([]);
+    const { result } = renderHook(() => useAddressSearch(search));
+    expect(result.current.recent).toHaveLength(1);
+    expect(result.current.recent[0]).toEqual(pike);
+  });
+
+  it("rememberPlace updates the recent list in state and persists it", () => {
+    const search = vi.fn().mockResolvedValue([]);
+    const { result } = renderHook(() => useAddressSearch(search));
+    const pike = { label: "Pike Place", latitude: 47.61, longitude: -122.34, source: "nominatim" };
+
+    act(() => { result.current.rememberPlace(pike); });
+
+    expect(result.current.recent).toHaveLength(1);
+    expect(result.current.recent[0]).toEqual(pike);
+    const stored = JSON.parse(localStorage.getItem("waypoint.search.recent") ?? "[]");
+    expect(stored[0]).toEqual(pike);
+  });
+
+  it("rememberPlace deduplicates and keeps the most recent first", () => {
+    const search = vi.fn().mockResolvedValue([]);
+    const { result } = renderHook(() => useAddressSearch(search));
+    const pike = { label: "Pike Place", latitude: 47.61, longitude: -122.34, source: "nominatim" };
+    const capitol = { label: "Capitol Hill", latitude: 47.625, longitude: -122.322, source: "nominatim" };
+
+    act(() => { result.current.rememberPlace(pike); });
+    act(() => { result.current.rememberPlace(capitol); });
+    act(() => { result.current.rememberPlace(pike); });
+
+    expect(result.current.recent[0]).toEqual(pike);
+    expect(result.current.recent.filter((r) => r.label === pike.label)).toHaveLength(1);
   });
 });

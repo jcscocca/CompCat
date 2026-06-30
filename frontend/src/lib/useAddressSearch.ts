@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { GeocodeResult } from "../types";
+import { addRecentPlace, loadRecentPlaces } from "./searchHistory";
 
 export type AddressSearchStatus = "idle" | "loading" | "done" | "empty" | "error";
 
@@ -13,7 +14,9 @@ export interface AddressSearch {
   setQuery: (value: string) => void;
   status: AddressSearchStatus;
   results: GeocodeResult[];
+  recent: GeocodeResult[];
   runSearch: () => Promise<void>;
+  rememberPlace: (result: GeocodeResult) => void;
 }
 
 /**
@@ -25,6 +28,9 @@ export interface AddressSearch {
  * Type-ahead: a useEffect on query debounces the search ~300 ms after the last keystroke,
  * aborting any in-flight stale request. runSearch() bypasses the debounce for immediate
  * triggers (Enter key / Search button).
+ *
+ * Recent places: loaded from localStorage on mount; updated via rememberPlace (call inside
+ * the consumer's existing select handler so selection logic stays in the consumer).
  */
 export function useAddressSearch(
   search: (query: string, signal?: AbortSignal) => Promise<GeocodeResult[]>,
@@ -32,16 +38,14 @@ export function useAddressSearch(
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [status, setStatus] = useState<AddressSearchStatus>("idle");
+  const [recent, setRecent] = useState<GeocodeResult[]>(() => loadRecentPlaces());
 
-  // Holds the AbortController for the in-flight debounced request.
   const abortRef = useRef<AbortController | null>(null);
-  // Holds the debounce timer id.
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
 
-    // Clear any pending debounce and abort the current in-flight request.
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -88,7 +92,6 @@ export function useAddressSearch(
     if (!trimmed) {
       return;
     }
-    // Cancel the pending debounce so we don't double-fire.
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -110,5 +113,10 @@ export function useAddressSearch(
     }
   }
 
-  return { query, setQuery, status, results, runSearch };
+  function rememberPlace(result: GeocodeResult) {
+    const next = addRecentPlace(result);
+    setRecent(next);
+  }
+
+  return { query, setQuery, status, results, recent, runSearch, rememberPlace };
 }
