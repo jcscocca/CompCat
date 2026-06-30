@@ -53,7 +53,7 @@ def tableau_route_segments_csv(session: Session, user_id_hash: str) -> str:
 
 def tableau_route_context_csv(session: Session, user_id_hash: str) -> str:
     rows = session.execute(
-        select(RouteContextSummary)
+        select(RouteContextSummary, RouteRequest)
         .join(RouteAlternative, RouteAlternative.id == RouteContextSummary.route_alternative_id)
         .join(RouteRequest, RouteRequest.id == RouteAlternative.route_request_id)
         .where(RouteContextSummary.user_id_hash == user_id_hash)
@@ -72,8 +72,8 @@ def tableau_route_context_csv(session: Session, user_id_hash: str) -> str:
             RouteContextSummary.nibrs_group,
             RouteContextSummary.id,
         )
-    ).scalars()
-    return build_route_context_csv([_context_row(summary) for summary in rows])
+    ).all()
+    return build_route_context_csv([_context_row(summary, request) for summary, request in rows])
 
 
 def _alternative_row(alternative: RouteAlternative, request: RouteRequest) -> dict[str, object]:
@@ -93,6 +93,7 @@ def _alternative_row(alternative: RouteAlternative, request: RouteRequest) -> di
         "analysis_start_date": request.analysis_start_date,
         "analysis_end_date": request.analysis_end_date,
         "radii_m": _radii_text(request.radii_m_json),
+        "layer": request.layer or "reported",
         "created_at": alternative.created_at,
     }
 
@@ -117,7 +118,7 @@ def _segment_row(segment: RouteSegment) -> dict[str, object]:
     }
 
 
-def _context_row(summary: RouteContextSummary) -> dict[str, object]:
+def _context_row(summary: RouteContextSummary, request: RouteRequest) -> dict[str, object]:
     return {
         "user_id_hash": summary.user_id_hash,
         "route_alternative_id": summary.route_alternative_id,
@@ -133,6 +134,7 @@ def _context_row(summary: RouteContextSummary) -> dict[str, object]:
         "incident_count": summary.incident_count,
         "nearest_incident_m": summary.nearest_incident_m,
         "incidents_per_route": summary.incidents_per_route,
+        "layer": request.layer or "reported",
         "created_at": summary.created_at,
     }
 

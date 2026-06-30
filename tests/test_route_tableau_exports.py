@@ -75,6 +75,7 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
         "analysis_start_date",
         "analysis_end_date",
         "radii_m",
+        "layer",
         "created_at",
     }
     assert {
@@ -158,6 +159,7 @@ def test_route_tableau_exports_include_route_alternatives_segments_and_context(t
         "incident_count",
         "nearest_incident_m",
         "incidents_per_route",
+        "layer",
         "created_at",
     }
     assert {

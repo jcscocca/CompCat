@@ -21,6 +21,7 @@ ROUTE_ALTERNATIVE_COLUMNS = [
     "analysis_start_date",
     "analysis_end_date",
     "radii_m",
+    "layer",
     "created_at",
 ]
 
@@ -57,6 +58,7 @@ ROUTE_CONTEXT_COLUMNS = [
     "incident_count",
     "nearest_incident_m",
     "incidents_per_route",
+    "layer",
     "created_at",
 ]
 

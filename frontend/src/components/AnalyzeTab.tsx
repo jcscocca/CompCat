@@ -336,7 +336,7 @@ function PairwiseSection({ neighborhood }: { neighborhood: NeighborhoodAnalysis 
   );
 }
 
-function IncidentDetailsTable({ details, noun }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun }) {
+function IncidentDetailsTable({ details, noun, isCalls }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun; isCalls: boolean }) {
   if (!details) return null;
 
   const isCapped = details.total_count > details.returned_count;
@@ -361,8 +361,9 @@ function IncidentDetailsTable({ details, noun }: { details: IncidentDetailsRespo
                 <tr>
                   <th scope="col">Place</th>
                   <th scope="col">Date/time</th>
-                  <th scope="col">Category</th>
-                  <th scope="col">Subcategory</th>
+                  {/* 911 calls carry no offense category — show only the call type. */}
+                  {isCalls ? null : <th scope="col">Category</th>}
+                  <th scope="col">{isCalls ? "Call type" : "Subcategory"}</th>
                   <th scope="col">Distance</th>
                   <th scope="col">Block/address</th>
                   <th scope="col">ID</th>
@@ -373,7 +374,7 @@ function IncidentDetailsTable({ details, noun }: { details: IncidentDetailsRespo
                   <tr key={`${incident.place_id}-${incident.incident_id}`}>
                     <td>{incident.place_label}</td>
                     <td>{formatIncidentTime(incident.occurred_at || incident.reported_at)}</td>
-                    <td>{incidentCategoryLabel(incident)}</td>
+                    {isCalls ? null : <td>{incidentCategoryLabel(incident)}</td>}
                     <td>{incidentSubtypeLabel(incident)}</td>
                     <td>{formatDistanceMeters(incident.distance_m)}</td>
                     <td>{incident.block_address || "Unavailable"}</td>
@@ -389,7 +390,7 @@ function IncidentDetailsTable({ details, noun }: { details: IncidentDetailsRespo
   );
 }
 
-function IncidentDetailsCards({ details, noun }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun }) {
+function IncidentDetailsCards({ details, noun, isCalls }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun; isCalls: boolean }) {
   if (!details) return null;
 
   const isCapped = details.total_count > details.returned_count;
@@ -416,7 +417,7 @@ function IncidentDetailsCards({ details, noun }: { details: IncidentDetailsRespo
                   <em>{formatDistanceMeters(incident.distance_m)}</em>
                 </div>
                 <div className="mc-icard-tags">
-                  <span>{incidentCategoryLabel(incident)}</span>
+                  {isCalls ? null : <span>{incidentCategoryLabel(incident)}</span>}
                   <span>{incidentSubtypeLabel(incident)}</span>
                   <span>{formatIncidentTime(incident.occurred_at || incident.reported_at)}</span>
                 </div>
@@ -518,15 +519,15 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
             <details className="mc-incident-reveal">
               <summary>See the {incidentDetails.total_count} {countNoun(noun, incidentDetails.total_count)}</summary>
               {incidentLayout === "table" ? (
-                <IncidentDetailsTable details={incidentDetails} noun={noun} />
+                <IncidentDetailsTable details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
               ) : (
-                <IncidentDetailsCards details={incidentDetails} noun={noun} />
+                <IncidentDetailsCards details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
               )}
             </details>
           ) : incidentLayout === "table" ? (
-            <IncidentDetailsTable details={incidentDetails} noun={noun} />
+            <IncidentDetailsTable details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
           ) : (
-            <IncidentDetailsCards details={incidentDetails} noun={noun} />
+            <IncidentDetailsCards details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
           )}
 
           <MethodsAppendix />

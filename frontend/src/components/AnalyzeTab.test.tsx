@@ -329,6 +329,9 @@ describe("AnalyzeTab", () => {
     expect(screen.getByText(/Home has more 911 calls than its surrounding beat\./i)).toBeInTheDocument();
     expect(screen.getByText("911 calls near selected places")).toBeInTheDocument();
     expect(screen.getByText(/See the 1 911 call\b/i)).toBeInTheDocument();
+    // The incident table drops the (always-empty) Category column and renames Subcategory.
+    expect(screen.getByRole("columnheader", { name: "Call type" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Category" })).not.toBeInTheDocument();
   });
 
   it("shows loading skeletons while analysis is running", () => {
