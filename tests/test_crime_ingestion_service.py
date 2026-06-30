@@ -599,3 +599,148 @@ def test_summarize_for_user_retains_rows_across_two_calls(tmp_path):
     assert len(run_ids) == 2
 
     session.close()
+
+
+def test_socrata_client_windows_on_source_date_field(monkeypatch):
+    from app.crime.seattle_socrata import arrest_from_mapping
+
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps([]).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        return FakeResponse()
+
+    monkeypatch.setattr("app.crime.seattle_socrata.urlopen", fake_urlopen)
+    client = SeattleSocrataClient(
+        base_url="https://data.seattle.gov/resource",
+        dataset_id="9bjs-7a7w",
+        mapper=arrest_from_mapping,
+        date_field="arrest_occurred_date_time",
+    )
+    client.fetch_page(limit=10, offset=0, start_date=date(2026, 4, 1), end_date=date(2026, 6, 22))
+
+    query = parse_qs(urlparse(captured["url"]).query)
+    assert "9bjs-7a7w.json" in captured["url"]
+    assert query["$order"] == ["arrest_occurred_date_time DESC"]
+    assert query["$where"] == [
+        "arrest_occurred_date_time between '2026-04-01T00:00:00' "
+        "and '2026-06-22T23:59:59'"
+    ]
+
+
+def test_ingest_crime_incidents_keys_dedup_by_source(tmp_path):
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    incidents = [
+        CrimeIncidentData(
+            external_incident_id="shared-99",
+            source_dataset="seattle_spd_crime",
+            offense_start_utc=datetime(2024, 1, 10, tzinfo=UTC),
+            latitude=47.609,
+            longitude=-122.333,
+        ),
+        CrimeIncidentData(
+            external_incident_id="shared-99",
+            source_dataset="seattle_spd_arrests",
+            offense_start_utc=datetime(2024, 1, 10, tzinfo=UTC),
+            latitude=47.609,
+            longitude=-122.333,
+        ),
+        CrimeIncidentData(
+            external_incident_id="shared-99",
+            source_dataset="seattle_spd_arrests",  # in-run duplicate of the arrest row
+            offense_start_utc=datetime(2024, 1, 10, tzinfo=UTC),
+            latitude=47.609,
+            longitude=-122.333,
+        ),
+    ]
+    result = ingest_crime_incidents(session, incidents)
+    assert result == {"inserted_count": 2, "skipped_count": 1}
+    rows = session.scalars(
+        select(CrimeIncident).where(CrimeIncident.external_incident_id == "shared-99")
+    ).all()
+    assert {r.source_dataset for r in rows} == {"seattle_spd_crime", "seattle_spd_arrests"}
+    session.close()
+
+
+def test_admin_socrata_ingest_source_arrests_uses_registry(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    calls = []
+
+    def fake_fetch_page(self, limit, offset, start_date=None, end_date=None):
+        calls.append({"dataset_id": self.dataset_id, "date_field": self.date_field})
+        return [
+            CrimeIncidentData(
+                external_incident_id="arr-1",
+                source_dataset="seattle_spd_arrests",
+                offense_start_utc=datetime(2024, 1, 11, tzinfo=UTC),
+                latitude=47.61,
+                longitude=-122.34,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.SeattleSocrataClient.fetch_page", fake_fetch_page
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/crime/ingest/socrata?source=seattle_spd_arrests&limit=10&offset=0",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"inserted_count": 1, "skipped_count": 0}
+    assert calls == [{"dataset_id": "9bjs-7a7w", "date_field": "arrest_occurred_date_time"}]
+
+
+def test_admin_socrata_ingest_rejects_unknown_source(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    response = client.post(
+        "/admin/crime/ingest/socrata?source=not-a-source",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+    assert response.status_code == 422
+    assert "Unknown source" in response.json()["detail"]
+
+
+def test_admin_socrata_backfill_scopes_watermark_to_source(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    captured = {}
+
+    def fake_latest_observed_date(session, source_dataset="seattle_spd_crime"):
+        captured["source_dataset"] = source_dataset
+        return None
+
+    def fake_fetch_page(self, limit, offset, start_date=None, end_date=None):
+        return []
+
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.latest_observed_date", fake_latest_observed_date
+    )
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.SeattleSocrataClient.fetch_page", fake_fetch_page
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/crime/ingest/socrata?source=seattle_spd_arrests&mode=backfill",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+
+    assert response.status_code == 200
+    assert captured["source_dataset"] == "seattle_spd_arrests"

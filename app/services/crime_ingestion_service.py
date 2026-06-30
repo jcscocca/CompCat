@@ -15,27 +15,29 @@ def ingest_crime_incidents(
 ) -> dict[str, int]:
     inserted_count = 0
     skipped_count = 0
-    seen_external_ids: set[str] = set()
+    seen_keys: set[tuple[str, str]] = set()
 
     for incident in incidents:
         if not incident.external_incident_id:
             skipped_count += 1
             continue
 
-        if incident.external_incident_id in seen_external_ids:
+        key = (incident.source_dataset, incident.external_incident_id)
+        if key in seen_keys:
             skipped_count += 1
             continue
 
         existing = session.scalar(
             select(CrimeIncident).where(
-                CrimeIncident.external_incident_id == incident.external_incident_id
+                CrimeIncident.source_dataset == incident.source_dataset,
+                CrimeIncident.external_incident_id == incident.external_incident_id,
             )
         )
         if existing is not None:
             skipped_count += 1
             continue
 
-        seen_external_ids.add(incident.external_incident_id)
+        seen_keys.add(key)
 
         try:
             with session.begin_nested():

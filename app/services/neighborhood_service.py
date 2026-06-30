@@ -16,6 +16,7 @@ from app.analysis.rate_tests import (
     dispersion_status,
 )
 from app.analysis.temporal import build_temporal_profile
+from app.crime.sources import SOURCE_SPD_CRIME
 from app.models import CrimeIncident
 from app.normalization.geo import haversine_m
 from app.schemas import CrimeIncidentData, PlaceClusterData
@@ -85,11 +86,13 @@ def _beat_incidents(
     offense_category,
     offense_subcategory,
     nibrs_group,
+    source_dataset: str = SOURCE_SPD_CRIME,
 ) -> list[CrimeIncidentData]:
     start_at, end_at = _analysis_datetime_bounds(start, end)
     observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
     stmt = (
         select(CrimeIncident)
+        .where(CrimeIncident.source_dataset == source_dataset)
         .where(CrimeIncident.beat == beat)
         .where(observed >= start_at)
         .where(observed <= end_at)

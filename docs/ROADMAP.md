@@ -83,7 +83,12 @@ the data/ops durability, and the product-breadth items are all closed. No queued
 - [x] **C1 · Temporal analysis** — descriptive hour-of-day + day-of-week incident profiles around a place, with a travel-window highlight, on the Analyze tab. Pure `app/analysis/temporal.py` wired into the analyze path; `offense_start_utc` read as naive Seattle local. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-temporal-analysis*`.
 - [x] **C2 · Incident category breakdown** — shipped: `_category_breakdown` replaces `type_mix`; each subcategory shows place-share vs rest-of-beat share (null when no baseline), top-6 + "Other"; descriptive (no per-category significance — deferred); renders on the Analyze tab for baseline-available and degraded places alike. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-category-breakdown*`.
 - [ ] **C3 · Saved views** — lightweight cross-session persistence to save & revisit an analysis/comparison.
-- [ ] **C4 · Second data source** — integrate another dataset (e.g. SPD 911 calls).
+- [ ] **C4 · Second data source** — integrate another dataset. _Increment 1 shipped: a
+  source-aware crime layer (queries / freshness / backfill watermark all default to SPD
+  reports, so existing analyses are unchanged) plus SPD **Arrest Data** (`9bjs-7a7w`) ingest
+  tagged `source_dataset="seattle_spd_arrests"` — backend only, no UI, demographics not
+  ingested. Remaining: surface arrests as a clearly-labeled, enforcement-framed lens (never
+  merged into reported-incident counts) + a taxonomy crosswalk._
 
 > Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), route corridor-temporal, an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
 

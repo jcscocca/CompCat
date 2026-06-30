@@ -7,6 +7,7 @@ from math import cos, radians
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.crime.sources import SOURCE_SPD_CRIME
 from app.models import CrimeIncident
 from app.schemas import CrimeIncidentData
 from app.services.crime_service import _incident_data
@@ -49,12 +50,14 @@ def incidents_in_bbox(
     offense_category: str | None = None,
     offense_subcategory: str | None = None,
     nibrs_group: str | None = None,
+    source_dataset: str = SOURCE_SPD_CRIME,
 ) -> list[CrimeIncidentData]:
     start_at = datetime.combine(analysis_start_date, time.min, tzinfo=UTC)
     end_at = datetime.combine(analysis_end_date, time.max, tzinfo=UTC)
     observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
     stmt = (
         select(CrimeIncident)
+        .where(CrimeIncident.source_dataset == source_dataset)
         .where(CrimeIncident.latitude.is_not(None))
         .where(CrimeIncident.longitude.is_not(None))
         .where(CrimeIncident.latitude >= box.min_lat)

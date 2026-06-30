@@ -8,6 +8,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.analysis.schemas import AnalysisSiteOption
+from app.crime.sources import SOURCE_SPD_CRIME
 from app.crime.summaries import summarize_place_crime
 from app.models import CrimeIncident, PlaceCluster
 from app.normalization.geo import haversine_m
@@ -184,6 +185,7 @@ def _filtered_incidents(
     offense_category: str | None,
     offense_subcategory: str | None,
     nibrs_group: str | None,
+    source_dataset: str = SOURCE_SPD_CRIME,
 ) -> list[CrimeIncidentData]:
     if not radii_m:
         return []
@@ -192,6 +194,7 @@ def _filtered_incidents(
     observed_at = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
     statement = (
         select(CrimeIncident)
+        .where(CrimeIncident.source_dataset == source_dataset)
         .where(observed_at >= start_at)
         .where(observed_at <= end_at)
         .where(CrimeIncident.latitude.is_not(None))
@@ -275,6 +278,7 @@ def _incident_detail_rows(
                     "place_label": cluster.display_label or "Selected place",
                     "incident_id": incident.id,
                     "external_incident_id": incident.external_incident_id,
+                    "source_dataset": incident.source_dataset,
                     "report_number": incident.report_number,
                     "occurred_at": _utc_json_datetime(incident.offense_start_utc),
                     "reported_at": _utc_json_datetime(incident.report_utc),

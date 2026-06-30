@@ -1,6 +1,6 @@
 SQLAlchemy/Alembic schema for Waypoint's FastAPI backend: 15 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, routing, statistical comparison, and infrastructure.
 
-> Verified against `d30235b` (2026-06-29).
+> Verified against `d30235b` (2026-06-29); arrests foundation adds source_dataset discrimination.
 
 ---
 
@@ -23,7 +23,7 @@ user-scoped table carries `user_id_hash` (a hashed session identity; see §2). S
 
 | Entity | Table | Purpose | Key columns |
 |---|---|---|---|
-| `CrimeIncident` | `crime_incidents` | Imported SPD reported incident. Not user-scoped — shared across all sessions. | `external_incident_id` (unique), `offense_start_utc`, `offense_category`, `offense_subcategory`, `nibrs_group`, `precinct`, `sector`, `beat`, `mcpp`, `latitude`, `longitude`, `source_dataset` |
+| `CrimeIncident` | `crime_incidents` | Imported SPD incident (reported crime or arrest). Not user-scoped — shared across all sessions. Uniqueness is composite `(source_dataset, external_incident_id)`; `source_dataset` (indexed) is `seattle_spd_crime` (reported incidents) or `seattle_spd_arrests`. For arrest rows, `offense_subcategory` carries the NIBRS offense description (source-specific) and `offense_category`/`nibrs_group` are null. | `source_dataset` (indexed), `external_incident_id`, `offense_start_utc`, `offense_category`, `offense_subcategory`, `nibrs_group`, `precinct`, `sector`, `beat`, `mcpp`, `latitude`, `longitude` |
 | `PlaceCrimeSummary` | `place_crime_summaries` | Pre-aggregated incident counts for a `PlaceCluster` at a given radius and date window. Invalidated and regenerated whenever normalization reruns. | `place_cluster_id` → `place_clusters`, `radius_m`, `analysis_start_date`, `analysis_end_date`, `offense_category`, `incident_count`, `nearest_incident_m`, `incidents_per_visit`, `incidents_per_hour_dwell`, `analysis_run_id` |
 
 ### Analysis
@@ -153,6 +153,7 @@ Alembic manages the Postgres production schema; 7 migration scripts live in
 | `0005_crime_filter_idx.py` | Adds indexes on `crime_incidents` for offense filter columns |
 | `0006_analysis_runs.py` | Adds `analysis_runs` table |
 | `0007_geocode_cache.py` | Adds `geocode_cache` table |
+| `0008_crime_source_unique.py` | Replaces the single-column unique on `crime_incidents.external_incident_id` with a composite unique `(source_dataset, external_incident_id)` + indexes `source_dataset`; dialect-branched for SQLite/Postgres |
 
 **Dual bootstrap path** (`app/db.init_db`):
 

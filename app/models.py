@@ -117,9 +117,14 @@ class PlaceCluster(Base):
 
 class CrimeIncident(Base):
     __tablename__ = "crime_incidents"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_dataset", "external_incident_id", name="uq_crime_source_external_id"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    external_incident_id: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
+    external_incident_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_number: Mapped[str | None] = mapped_column(Text, nullable=True)
     offense_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     offense_start_utc: Mapped[datetime | None] = mapped_column(
@@ -143,7 +148,7 @@ class CrimeIncident(Base):
     block_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
-    source_dataset: Mapped[str] = mapped_column(Text, default="seattle_spd_crime")
+    source_dataset: Mapped[str] = mapped_column(Text, default="seattle_spd_crime", index=True)
     snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

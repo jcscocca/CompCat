@@ -1,4 +1,4 @@
-.PHONY: install test lint run migrate demo seed-crime ingest-crime frontend-install frontend-test frontend-build test-all docker-build
+.PHONY: install test lint run migrate demo seed-crime ingest-crime seed-arrests ingest-arrests frontend-install frontend-test frontend-build test-all docker-build
 
 install:
 	python3.11 -m venv .venv
@@ -29,6 +29,17 @@ ingest-crime:
 	fi
 	curl --fail --show-error -s -X POST -H "X-Admin-Token: $$MCA_ADMIN_INGEST_TOKEN" \
 		"http://127.0.0.1:8000/admin/crime/ingest/socrata?limit=5000&offset=0"
+
+seed-arrests:
+	.venv/bin/python scripts/seed_arrests.py
+
+ingest-arrests:
+	@if [ -z "$$MCA_ADMIN_INGEST_TOKEN" ]; then \
+		echo "MCA_ADMIN_INGEST_TOKEN is required"; \
+		exit 1; \
+	fi
+	curl --fail --show-error -s -X POST -H "X-Admin-Token: $$MCA_ADMIN_INGEST_TOKEN" \
+		"http://127.0.0.1:8000/admin/crime/ingest/socrata?source=seattle_spd_arrests&mode=backfill&limit=5000"
 
 frontend-install:
 	cd frontend && npm install

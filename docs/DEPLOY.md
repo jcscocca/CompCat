@@ -93,6 +93,11 @@ done
 > add `RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates`
 > to the `python:3.11-slim` stage of the `Dockerfile` and rebuild.
 
+**SPD Arrest Data (optional).** Arrests load separately via `make ingest-arrests` (or
+`POST /admin/crime/ingest/socrata?source=seattle_spd_arrests&mode=backfill` with the
+`X-Admin-Token` header). They are stored but not yet surfaced in the UI, and the dashboard
+"Data through" freshness pill remains scoped to SPD reported incidents only.
+
 ## 4. Share with testers
 
 Give the five testers `http://<host>:8000`. Nothing else to set up per user — a session

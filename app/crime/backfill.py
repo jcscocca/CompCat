@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.crime.seattle_socrata import SeattleSocrataClient
+from app.crime.sources import SOURCE_SPD_CRIME
 from app.models import CrimeIncident
 from app.services.crime_ingestion_service import ingest_crime_incidents
 
@@ -23,11 +24,15 @@ DEFAULT_MAX_PAGES = 1000
 RETRYABLE_HTTP_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
-def latest_observed_date(session: Session) -> date | None:
-    """The newest observed incident date already stored — the watermark an incremental
-    run starts from so it doesn't re-walk the whole dataset from offset 0."""
+def latest_observed_date(
+    session: Session, source_dataset: str = SOURCE_SPD_CRIME
+) -> date | None:
+    """The newest observed incident date already stored for this source — the watermark an
+    incremental run starts from so it doesn't re-walk the whole dataset from offset 0."""
     observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
-    value = session.scalar(select(func.max(observed)))
+    value = session.scalar(
+        select(func.max(observed)).where(CrimeIncident.source_dataset == source_dataset)
+    )
     if value is None:
         return None
     if hasattr(value, "date"):

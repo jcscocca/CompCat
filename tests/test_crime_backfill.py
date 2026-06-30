@@ -152,3 +152,35 @@ def test_admin_backfill_mode_pages_through_the_dataset(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"inserted_count": 3, "skipped_count": 0, "pages": 2}
+
+
+def test_latest_observed_date_is_source_scoped(tmp_path):
+    from datetime import UTC, date, datetime
+
+    from app.crime.backfill import latest_observed_date
+    from app.db import get_sessionmaker
+    from app.main import create_app
+    from app.models import CrimeIncident
+
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    session.add_all(
+        [
+            CrimeIncident(
+                external_incident_id="rep-1",
+                source_dataset="seattle_spd_crime",
+                offense_start_utc=datetime(2024, 6, 1, tzinfo=UTC),
+            ),
+            CrimeIncident(
+                external_incident_id="arr-1",
+                source_dataset="seattle_spd_arrests",
+                offense_start_utc=datetime(2025, 12, 31, tzinfo=UTC),
+            ),
+        ]
+    )
+    session.commit()
+    assert latest_observed_date(session) == date(2024, 6, 1)
+    assert latest_observed_date(session, source_dataset="seattle_spd_arrests") == date(
+        2025, 12, 31
+    )
+    session.close()
