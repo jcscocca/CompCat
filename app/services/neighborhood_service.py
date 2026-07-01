@@ -17,10 +17,12 @@ from app.analysis.rate_tests import (
     dispersion_status,
 )
 from app.analysis.temporal import build_temporal_profile
+from app.api.dashboard_schemas import AnalysisPoint
 from app.crime.sources import SOURCE_SPD_CRIME
 from app.models import CrimeIncident
 from app.normalization.geo import haversine_m
 from app.schemas import CrimeIncidentData, PlaceClusterData
+from app.services.analysis_points import point_clusters
 from app.services.crime_service import _cluster_data, _incident_data
 from app.services.dashboard_analysis_service import (
     _analysis_datetime_bounds,
@@ -184,7 +186,8 @@ def neighborhood_analysis_for_places(
     *,
     session: Session,
     user_id_hash: str,
-    place_ids: list[str],
+    place_ids: list[str] | None,
+    points: list[AnalysisPoint] | None = None,
     radius_m: int,
     analysis_start_date: date,
     analysis_end_date: date,
@@ -197,7 +200,11 @@ def neighborhood_analysis_for_places(
 ) -> dict[str, Any]:
     _validate_date_range(analysis_start_date, analysis_end_date)
     days = _analysis_days(analysis_start_date, analysis_end_date)
-    clusters = [_cluster_data(r) for r in _selected_clusters(session, user_id_hash, place_ids)]
+    clusters = (
+        point_clusters(points)
+        if points is not None
+        else [_cluster_data(r) for r in _selected_clusters(session, user_id_hash, place_ids or [])]
+    )
     buffered = _filtered_incidents(
         session,
         clusters=clusters,

@@ -12,8 +12,11 @@ import type {
   RouteEndpointInput,
 } from "../types";
 
+type AnalysisPointPayload = { latitude: number; longitude: number; label: string };
+
 type AnalyzePlacesPayload = {
-  place_ids: string[];
+  place_ids?: string[];
+  points?: AnalysisPointPayload[];
   analysis_start_date: string;
   analysis_end_date: string;
   radii_m: number[];
@@ -24,7 +27,8 @@ type AnalyzePlacesPayload = {
 };
 
 type ComparePlacesPayload = {
-  place_ids: string[];
+  place_ids?: string[];
+  points?: AnalysisPointPayload[];
   analysis_start_date: string;
   analysis_end_date: string;
   radius_m: number;

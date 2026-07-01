@@ -162,6 +162,27 @@ describe("AnalyzeTab", () => {
     expect(details.textContent).toMatch(/95% CI/);
   });
 
+  it("copies the share link when Copy link to this view is clicked", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const onCopyLink = vi.fn(() => "http://localhost/?view=abc");
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        onCopyLink={onCopyLink}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy link to this view" }));
+    expect(onCopyLink).toHaveBeenCalled();
+    expect(writeText).toHaveBeenCalledWith("http://localhost/?view=abc");
+  });
+
   it("no longer renders the retired crime-mix chart", () => {
     render(<AnalyzeTab selected={[home]} analysis={analysis} availableRadii={[250]} running={false} neighborhood={null} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.queryByText("Crime mix")).not.toBeInTheDocument();

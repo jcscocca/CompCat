@@ -3,11 +3,17 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.crime.sources import LAYER_REPORTED, LAYERS
 
 DashboardRadiusMeters = Annotated[int, Field(gt=0, le=5000)]
+
+# Seattle-metro bounds (lon W/E, lat S/N) — mirrors config.geocoder_viewbox and
+# frontend SEATTLE_BBOX. A shared-view point must resolve inside Seattle.
+_SEATTLE_WEST, _SEATTLE_EAST = -122.55, -122.10
+_SEATTLE_SOUTH, _SEATTLE_NORTH = 47.43, 47.78
+_MAX_POINTS = 10
 
 
 def _validate_layer(value: str) -> str:
@@ -17,8 +23,22 @@ def _validate_layer(value: str) -> str:
     return value
 
 
+class AnalysisPoint(BaseModel):
+    latitude: float
+    longitude: float
+    label: str = Field(min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def within_seattle(self) -> AnalysisPoint:
+        if not (_SEATTLE_SOUTH <= self.latitude <= _SEATTLE_NORTH
+                and _SEATTLE_WEST <= self.longitude <= _SEATTLE_EAST):
+            raise ValueError("point is outside the Seattle area")
+        return self
+
+
 class DashboardAnalyzeRequest(BaseModel):
-    place_ids: list[str] = Field(min_length=1)
+    place_ids: list[str] | None = Field(default=None, min_length=1)
+    points: list[AnalysisPoint] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
     analysis_start_date: date
     analysis_end_date: date
     radii_m: list[DashboardRadiusMeters] = Field(min_length=1)
@@ -28,6 +48,12 @@ class DashboardAnalyzeRequest(BaseModel):
     # Which incident-context layer to query: "reported" (SPD crime + arrests, unioned) or
     # "calls" (911 calls for service). The two are mutually exclusive by design.
     layer: str = LAYER_REPORTED
+
+    @model_validator(mode="after")
+    def exactly_one_selection(self) -> DashboardAnalyzeRequest:
+        if (self.place_ids is None) == (self.points is None):
+            raise ValueError("provide exactly one of place_ids or points")
+        return self
 
     @field_validator("radii_m")
     @classmethod
@@ -43,7 +69,8 @@ class DashboardAnalyzeRequest(BaseModel):
 
 
 class DashboardCompareRequest(BaseModel):
-    place_ids: list[str] = Field(min_length=2)
+    place_ids: list[str] | None = Field(default=None, min_length=2)
+    points: list[AnalysisPoint] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
     analysis_start_date: date
     analysis_end_date: date
     radius_m: DashboardRadiusMeters
@@ -51,6 +78,12 @@ class DashboardCompareRequest(BaseModel):
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
     layer: str = LAYER_REPORTED
+
+    @model_validator(mode="after")
+    def exactly_one_selection(self) -> DashboardCompareRequest:
+        if (self.place_ids is None) == (self.points is None):
+            raise ValueError("provide exactly one of place_ids or points")
+        return self
 
     @field_validator("layer")
     @classmethod

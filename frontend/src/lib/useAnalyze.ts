@@ -22,6 +22,7 @@ interface AnalyzeDeps {
   analysis: AnalysisSettings;
   refreshWithFallback: (fallbackMessage: string) => Promise<void>;
   setError: (message: string) => void;
+  points?: { latitude: number; longitude: number; label: string }[];
 }
 
 /**
@@ -31,7 +32,7 @@ interface AnalyzeDeps {
  * (`invalidate` bumps them). `applyAssistant` lets the chat agent populate the panes
  * directly without a manual run.
  */
-export function useAnalyze({ selectedIds, analysis, refreshWithFallback, setError }: AnalyzeDeps): AnalyzeController {
+export function useAnalyze({ selectedIds, analysis, refreshWithFallback, setError, points }: AnalyzeDeps): AnalyzeController {
   const [running, setRunning] = useState(false);
   const [incidentDetails, setIncidentDetails] = useState<IncidentDetailsResponse | null>(null);
   const [neighborhood, setNeighborhood] = useState<NeighborhoodAnalysis | null>(null);
@@ -46,7 +47,8 @@ export function useAnalyze({ selectedIds, analysis, refreshWithFallback, setErro
   }
 
   async function runAnalyze() {
-    if (selectedIds.size < 1) return;
+    const usePoints = points && points.length >= 1;
+    if (!usePoints && selectedIds.size < 1) return;
     setError("");
     setRunning(true);
     const version = incidentDetailsVersionRef.current + 1;
@@ -56,7 +58,7 @@ export function useAnalyze({ selectedIds, analysis, refreshWithFallback, setErro
     neighborhoodVersionRef.current = nVersion;
     setNeighborhood(null);
     const payload = {
-      place_ids: Array.from(selectedIds),
+      ...(usePoints ? { points } : { place_ids: Array.from(selectedIds) }),
       analysis_start_date: analysis.startDate,
       analysis_end_date: analysis.endDate,
       radii_m: [analysis.radiusM],

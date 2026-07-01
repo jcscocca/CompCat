@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { createBulkPlaces, createPlace, deletePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
@@ -6,6 +6,7 @@ import { interpretToolResult } from "../lib/assistantBridge";
 import { DRAWER_PEEK } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { defaultTileConfig } from "../lib/mapTiles";
+import { decodeView, encodeView } from "../lib/savedView";
 import { useAnalyze } from "../lib/useAnalyze";
 import { useCompare } from "../lib/useCompare";
 import { useDashboardData } from "../lib/useDashboardData";
@@ -28,18 +29,44 @@ import { RoutesTab } from "./RoutesTab";
 import type { AnalysisSettings, AssistantDashboardState, PlaceCreate, TabKey } from "../types";
 
 export function MapWorkspace() {
-  const [activeTab, setActiveTab] = useState<TabKey>("places");
+  const initialView = useMemo(() => {
+    const param = new URLSearchParams(window.location.search).get("view");
+    return param ? decodeView(param) : null;
+  }, []);
+  const hadViewParam = useMemo(() => Boolean(new URLSearchParams(window.location.search).get("view")), []);
+  const [sharedPoints, setSharedPoints] = useState(initialView?.points ?? null);
+  const [showBadLink, setShowBadLink] = useState(hadViewParam && initialView === null);
+
+  const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "places");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
+    if (initialView) {
+      return {
+        startDate: initialView.startDate,
+        endDate: initialView.endDate,
+        radiusM: initialView.radiusM,
+        offenseCategory: initialView.offenseCategory,
+        layer: initialView.layer,
+      };
+    }
     const window = currentYearAnalysisWindow();
     return { startDate: window.analysis_start_date, endDate: window.analysis_end_date, radiusM: 250, offenseCategory: "", layer: "reported" };
   });
 
   const data = useDashboardData();
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset } = useDrawer();
-  const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError });
-  const compare = useCompare({ selectedIds, analysis, setError: data.setError });
+  const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError, points: sharedPoints ?? undefined });
+  const compare = useCompare({ selectedIds, analysis, setError: data.setError, points: sharedPoints ?? undefined });
   const routes = useRoutes(analysis);
+
+  // A ?view= link seeds tab/analysis/points above; run it once so the shared context
+  // (not just an empty tab) is what the recipient sees on load.
+  useEffect(() => {
+    if (!initialView) return;
+    if (initialView.tab === "compare") void compare.runCompare();
+    else void analyze.runAnalyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Selection and analysis-control changes drop any current Analyze/Compare results (and
   // invalidate in-flight ones) so a stale pane never lingers against a new selection.
@@ -139,10 +166,41 @@ export function MapWorkspace() {
     if (effect.tab) setActiveTab(effect.tab);
   }
 
+  // A shared view has no persisted places to select from, so synthesize a place-shaped
+  // selection from its points. This makes selected.length correct (CompareTab renders, and
+  // canRun enables Run — which recomputes via the points path the hooks already receive).
   const selected = useMemo(
-    () => data.places.filter((place) => selectedIds.has(place.id)),
-    [data.places, selectedIds],
+    () =>
+      sharedPoints
+        ? sharedPoints.map((point, index) => ({
+            id: `shared-${index}`,
+            display_label: point.label,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            visit_count: 0,
+            total_dwell_minutes: null,
+            inferred_place_type: "shared_place",
+            sensitivity_class: "normal",
+          }))
+        : data.places.filter((place) => selectedIds.has(place.id)),
+    [sharedPoints, data.places, selectedIds],
   );
+
+  const buildShareUrl = useCallback((tab: "analyze" | "compare"): string | null => {
+    const points = sharedPoints ?? selected.map((p) => ({
+      latitude: Number((p.latitude ?? 0).toFixed(3)),
+      longitude: Number((p.longitude ?? 0).toFixed(3)),
+      label: p.display_label,
+    }));
+    if (points.length === 0) return null;
+    const encoded = encodeView({
+      tab, points, radiusM: analysis.radiusM,
+      startDate: analysis.startDate, endDate: analysis.endDate,
+      layer: analysis.layer, offenseCategory: analysis.offenseCategory,
+    });
+    return `${window.location.origin}/?view=${encoded}`;
+  }, [sharedPoints, selected, analysis]);
+
   const assistantState: AssistantDashboardState = useMemo(() => ({
     selected_place_ids: Array.from(selectedIds),
     analysis_start_date: analysis.startDate || null,
@@ -218,6 +276,19 @@ export function MapWorkspace() {
           </div>
         ) : null}
 
+        {sharedPoints ? (
+          <div className="mc-banner" role="status">
+            Shared view · reported incident context.{" "}
+            <button type="button" onClick={() => setSharedPoints(null)}>Exit</button>
+          </div>
+        ) : null}
+        {showBadLink ? (
+          <div className="mc-banner mc-banner-warn" role="alert">
+            That shared link couldn't be opened.{" "}
+            <button type="button" onClick={() => setShowBadLink(false)}>Dismiss</button>
+          </div>
+        ) : null}
+
         <BottomSheet
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -266,10 +337,11 @@ export function MapWorkspace() {
               panelWidthPx={drawer.widthPx}
               onChange={handleAnalysisChange}
               onRun={analyze.runAnalyze}
+              onCopyLink={() => buildShareUrl("analyze")}
             />
           ) : null}
           {activeTab === "compare" ? (
-            <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} />
+            <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} onCopyLink={() => buildShareUrl("compare")} />
           ) : null}
           {activeTab === "routes" ? (
             <RoutesTab

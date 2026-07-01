@@ -17,6 +17,7 @@ interface CompareDeps {
   selectedIds: Set<string>;
   analysis: AnalysisSettings;
   setError: (message: string) => void;
+  points?: { latitude: number; longitude: number; label: string }[];
 }
 
 /**
@@ -24,7 +25,7 @@ interface CompareDeps {
  * single radius. A version ref guards against a stale in-flight comparison landing after
  * the selection/controls moved on. `applyAssistant` lets the chat agent populate the pane.
  */
-export function useCompare({ selectedIds, analysis, setError }: CompareDeps): CompareController {
+export function useCompare({ selectedIds, analysis, setError, points }: CompareDeps): CompareController {
   const [running, setRunning] = useState(false);
   const [comparison, setComparison] = useState<Record<string, unknown> | null>(null);
   const versionRef = useRef(0);
@@ -35,14 +36,15 @@ export function useCompare({ selectedIds, analysis, setError }: CompareDeps): Co
   }
 
   async function runCompare() {
-    if (selectedIds.size < 2) return;
+    const usePoints = points && points.length >= 2;
+    if (!usePoints && selectedIds.size < 2) return;
     setError("");
     setRunning(true);
     const version = versionRef.current + 1;
     versionRef.current = version;
     try {
       const result = await comparePlaces({
-        place_ids: Array.from(selectedIds),
+        ...(usePoints ? { points } : { place_ids: Array.from(selectedIds) }),
         analysis_start_date: analysis.startDate,
         analysis_end_date: analysis.endDate,
         radius_m: analysis.radiusM,

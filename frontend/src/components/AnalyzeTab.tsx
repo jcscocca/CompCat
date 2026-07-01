@@ -48,6 +48,7 @@ type Props = {
   panelWidthPx?: number;
   onChange: (patch: Partial<AnalysisSettings>) => void;
   onRun: () => void;
+  onCopyLink?: () => string | null;
 };
 
 const CATEGORIES: { value: string; label: string }[] = [
@@ -431,7 +432,7 @@ function IncidentDetailsCards({ details, noun, isCalls }: { details: IncidentDet
   );
 }
 
-export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun }: Props) {
+export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
   const canRun = selected.length >= 1 && !running;
   const width = panelWidthPx ?? Infinity;
@@ -509,6 +510,19 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
         </div>
       ) : (
         <>
+          {onCopyLink && neighborhood && (
+            <button
+              type="button"
+              className="mc-link-copy"
+              onClick={async () => {
+                const url = onCopyLink();
+                if (url) await navigator.clipboard.writeText(url);
+              }}
+            >
+              Copy link to this view
+            </button>
+          )}
+
           {neighborhood?.places?.map((place) => (
             <VerdictCard key={place.place_id} place={place} windowLabel={windowLabel} noun={noun} />
           ))}

@@ -9,11 +9,13 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.analysis.schemas import AnalysisSiteOption
+from app.api.dashboard_schemas import AnalysisPoint
 from app.crime.sources import SOURCE_SPD_CRIME
 from app.crime.summaries import summarize_place_crime
 from app.models import CrimeIncident, PlaceCluster
 from app.normalization.geo import haversine_m
 from app.schemas import CrimeIncidentData, PlaceClusterData
+from app.services.analysis_points import point_clusters
 from app.services.analysis_runs import create_analysis_run
 from app.services.analysis_service import compare_site_options
 from app.services.crime_service import _cluster_data, _incident_data, _summary_model
@@ -25,7 +27,9 @@ MIN_LONGITUDE_COSINE = 0.01
 def analyze_selected_places(
     session: Session,
     user_id_hash: str,
-    place_ids: list[str],
+    place_ids: list[str] | None,
+    points: list[AnalysisPoint] | None = None,
+    *,
     radii_m: list[int],
     analysis_start_date: date,
     analysis_end_date: date,
@@ -36,7 +40,7 @@ def analyze_selected_places(
     layer: str | None = None,
 ) -> dict[str, int]:
     _validate_date_range(analysis_start_date, analysis_end_date)
-    clusters = [_cluster_data(row) for row in _selected_clusters(session, user_id_hash, place_ids)]
+    clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     incidents = _filtered_incidents(
         session,
         clusters=clusters,
@@ -55,30 +59,37 @@ def analyze_selected_places(
         analysis_start_date=analysis_start_date,
         analysis_end_date=analysis_end_date,
     )
-    run = create_analysis_run(
-        session,
-        user_id_hash=user_id_hash,
-        radii_m=radii_m,
-        analysis_start_date=analysis_start_date,
-        analysis_end_date=analysis_end_date,
-        offense_category=offense_category,
-        offense_subcategory=offense_subcategory,
-        nibrs_group=nibrs_group,
-        layer=layer,
-    )
-    models = [_summary_model(summary) for summary in summaries]
-    for model in models:
-        model.analysis_run_id = run.id
-        model.layer = layer
-    session.add_all(models)
-    session.commit()
+    if points is None:
+        # Points resolve to synthetic, non-persisted clusters (no real place_cluster_id),
+        # so there is nothing valid to attach a PlaceCrimeSummary/AnalysisRun audit row to.
+        # A points-based (shared-view) analyze is a stateless recompute — see
+        # docs/superpowers/specs/2026-06-30-saved-views-design.md.
+        run = create_analysis_run(
+            session,
+            user_id_hash=user_id_hash,
+            radii_m=radii_m,
+            analysis_start_date=analysis_start_date,
+            analysis_end_date=analysis_end_date,
+            offense_category=offense_category,
+            offense_subcategory=offense_subcategory,
+            nibrs_group=nibrs_group,
+            layer=layer,
+        )
+        models = [_summary_model(summary) for summary in summaries]
+        for model in models:
+            model.analysis_run_id = run.id
+            model.layer = layer
+        session.add_all(models)
+        session.commit()
     return {"summary_count": len(summaries)}
 
 
 def compare_selected_places(
     session: Session,
     user_id_hash: str,
-    place_ids: list[str],
+    place_ids: list[str] | None,
+    points: list[AnalysisPoint] | None = None,
+    *,
     radius_m: int,
     analysis_start_date: date,
     analysis_end_date: date,
@@ -87,7 +98,7 @@ def compare_selected_places(
     nibrs_group: str | None,
     sources: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    clusters = _selected_clusters(session, user_id_hash, place_ids)
+    clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     if len(clusters) < 2:
         raise ValueError("Select at least two places.")
     options: list[AnalysisSiteOption] = []
@@ -119,7 +130,9 @@ def compare_selected_places(
 def incident_details_for_places(
     session: Session,
     user_id_hash: str,
-    place_ids: list[str],
+    place_ids: list[str] | None,
+    points: list[AnalysisPoint] | None = None,
+    *,
     radii_m: list[int],
     analysis_start_date: date,
     analysis_end_date: date,
@@ -140,7 +153,7 @@ def incident_details_for_places(
         }
 
     radius_m = radii_m[0]
-    clusters = [_cluster_data(row) for row in _selected_clusters(session, user_id_hash, place_ids)]
+    clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     incidents = _filtered_incidents(
         session,
         clusters=clusters,
@@ -161,6 +174,18 @@ def incident_details_for_places(
         "limit": limit,
         "radius_m": radius_m,
     }
+
+
+def _resolve_clusters(
+    session: Session,
+    user_id_hash: str,
+    place_ids: list[str] | None,
+    points: list[AnalysisPoint] | None,
+) -> list[PlaceClusterData]:
+    if points is not None:
+        return point_clusters(points)
+    rows = _selected_clusters(session, user_id_hash, place_ids or [])
+    return [_cluster_data(row) for row in rows]
 
 
 def _selected_clusters(
