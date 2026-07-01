@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from app.api.dashboard_schemas import DashboardAnalyzeRequest, DashboardCompareRequest
+from app.api.dashboard_schemas import (
+    AnalysisPoint,
+    DashboardAnalyzeRequest,
+    DashboardCompareRequest,
+)
+from app.services.analysis_points import point_clusters
 
 BASE = {"analysis_start_date": "2024-01-01", "analysis_end_date": "2024-01-31"}
 PT = {"latitude": 47.61, "longitude": -122.34, "label": "Pike Place"}
@@ -34,3 +39,14 @@ def test_compare_requires_two_points():
         DashboardCompareRequest(points=[PT], radius_m=250, **BASE)
     ok = DashboardCompareRequest(points=[PT, {**PT, "label": "Second"}], radius_m=250, **BASE)
     assert len(ok.points) == 2
+
+
+def test_point_clusters_map_to_display_coordinates():
+    clusters = point_clusters([AnalysisPoint(latitude=47.61, longitude=-122.34, label="Pike")])
+    assert len(clusters) == 1
+    c = clusters[0]
+    assert (c.display_latitude, c.display_longitude) == (47.61, -122.34)
+    assert (c.centroid_latitude, c.centroid_longitude) == (47.61, -122.34)
+    assert c.display_label == "Pike"
+    assert c.cluster_method == "shared_view"
+    assert c.visit_count == 1
