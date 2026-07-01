@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { createBulkPlaces, createPlace, deletePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
@@ -6,7 +6,7 @@ import { interpretToolResult } from "../lib/assistantBridge";
 import { DRAWER_PEEK } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { defaultTileConfig } from "../lib/mapTiles";
-import { decodeView } from "../lib/savedView";
+import { decodeView, encodeView } from "../lib/savedView";
 import { useAnalyze } from "../lib/useAnalyze";
 import { useCompare } from "../lib/useCompare";
 import { useDashboardData } from "../lib/useDashboardData";
@@ -170,6 +170,22 @@ export function MapWorkspace() {
     () => data.places.filter((place) => selectedIds.has(place.id)),
     [data.places, selectedIds],
   );
+
+  const buildShareUrl = useCallback((tab: "analyze" | "compare"): string | null => {
+    const points = sharedPoints ?? selected.map((p) => ({
+      latitude: Number((p.latitude ?? 0).toFixed(3)),
+      longitude: Number((p.longitude ?? 0).toFixed(3)),
+      label: p.display_label,
+    }));
+    if (points.length === 0) return null;
+    const encoded = encodeView({
+      tab, points, radiusM: analysis.radiusM,
+      startDate: analysis.startDate, endDate: analysis.endDate,
+      layer: analysis.layer, offenseCategory: analysis.offenseCategory,
+    });
+    return `${window.location.origin}/?view=${encoded}`;
+  }, [sharedPoints, selected, analysis]);
+
   const assistantState: AssistantDashboardState = useMemo(() => ({
     selected_place_ids: Array.from(selectedIds),
     analysis_start_date: analysis.startDate || null,
@@ -306,10 +322,11 @@ export function MapWorkspace() {
               panelWidthPx={drawer.widthPx}
               onChange={handleAnalysisChange}
               onRun={analyze.runAnalyze}
+              onCopyLink={() => buildShareUrl("analyze")}
             />
           ) : null}
           {activeTab === "compare" ? (
-            <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} />
+            <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} onCopyLink={() => buildShareUrl("compare")} />
           ) : null}
           {activeTab === "routes" ? (
             <RoutesTab

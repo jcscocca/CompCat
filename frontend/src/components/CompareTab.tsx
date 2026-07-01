@@ -10,6 +10,7 @@ type Props = {
   comparison: Record<string, unknown> | null;
   running: boolean;
   onRun: () => void;
+  onCopyLink?: () => string | null;
 };
 
 const REVISED_CAVEAT =
@@ -86,7 +87,7 @@ function rowInsight(row: BreakdownRow, selected: Place[]) {
   return `${highest.place.display_label} has ${diff} more ${row.label} than ${lowest.place.display_label}.`;
 }
 
-export function CompareTab({ selected, analysis, summary, comparison, running, onRun }: Props) {
+export function CompareTab({ selected, analysis, summary, comparison, running, onRun, onCopyLink }: Props) {
   const overview = (comparison?.overview ?? null) as { summary_text?: string } | null;
   const canRun = selected.length >= 2 && !running;
   const rows = breakdownRows(summary, selected, analysis.radiusM);
@@ -106,6 +107,19 @@ export function CompareTab({ selected, analysis, summary, comparison, running, o
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Compare">
       <div className="mc-panel-head"><h4>Comparing {selected.length} places <b>{analysis.radiusM} m</b></h4></div>
+
+      {onCopyLink && comparison && (
+        <button
+          type="button"
+          className="mc-link-copy"
+          onClick={async () => {
+            const url = onCopyLink();
+            if (url) await navigator.clipboard.writeText(url);
+          }}
+        >
+          Copy link
+        </button>
+      )}
 
       <div className="mc-compare">
         {selected.map((place) => {
