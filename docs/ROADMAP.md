@@ -1,7 +1,7 @@
 # Waypoint — Roadmap
 
-**Last updated:** 2026-06-29 · **Status:** canonical, living document.
-**Verified against:** base commit `d30235b` (feat(frontend): Analyze tab clarity redesign, phase 2, tab 1).
+**Last updated:** 2026-06-30 · **Status:** canonical, living document.
+**Verified against:** base commit `237e603` (Seattle 911 Call Data edition — two-layer incident context, #76).
 
 This is the single source of truth for *where Waypoint is going*. It supersedes the dated
 drafts under `docs/superpowers/` (`2026-06-26-waypoint-next-steps-roadmap.md`,
@@ -82,13 +82,28 @@ the data/ops durability, and the product-breadth items are all closed. No queued
 **New capabilities**
 - [x] **C1 · Temporal analysis** — descriptive hour-of-day + day-of-week incident profiles around a place, with a travel-window highlight, on the Analyze tab. Pure `app/analysis/temporal.py` wired into the analyze path; `offense_start_utc` read as naive Seattle local. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-temporal-analysis*`.
 - [x] **C2 · Incident category breakdown** — shipped: `_category_breakdown` replaces `type_mix`; each subcategory shows place-share vs rest-of-beat share (null when no baseline), top-6 + "Other"; descriptive (no per-category significance — deferred); renders on the Analyze tab for baseline-available and degraded places alike. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-category-breakdown*`.
-- [ ] **C3 · Saved views** — lightweight cross-session persistence to save & revisit an analysis/comparison.
-- [ ] **C4 · Second data source** — integrate another dataset. _Increment 1 shipped: a
+- [x] **C3 · Saved views** — increment 1 shipped (#78): durable, shareable `?view=` links
+  for **Analyze & Compare** that recompute on open and store nothing new server-side. Enabled by
+  making analyze/compare/incidents/neighborhood accept inline `points` (Seattle-bbox-validated,
+  ≤10) as an alternative to identity-bound `place_ids`; the points path is stateless (no
+  `AnalysisRun`/`PlaceCrimeSummary` write). Links carry only generalized (~110 m) coordinates; no
+  account. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-30-saved-views*`. _Increment 2
+  (queued): **Routes saved views** — extend shareable views to the Routes corridor tab._
+- [x] **C4 · Second data source** — shipped across two increments. **Inc 1 (#75):** a
   source-aware crime layer (queries / freshness / backfill watermark all default to SPD
   reports, so existing analyses are unchanged) plus SPD **Arrest Data** (`9bjs-7a7w`) ingest
-  tagged `source_dataset="seattle_spd_arrests"` — backend only, no UI, demographics not
-  ingested. Remaining: surface arrests as a clearly-labeled, enforcement-framed lens (never
-  merged into reported-incident counts) + a taxonomy crosswalk._
+  tagged `source_dataset="seattle_spd_arrests"` — backend only, demographics not ingested.
+  **Inc 2 (#76):** SPD **911 Call Data** (`33kz-ixgy`) as a **two-layer** model — a *Reported
+  incidents* layer (crime + arrests, unioned) vs a *911 calls* layer (calls for service),
+  mutually exclusive, chosen with a global top-bar toggle that every incident-context surface
+  (Analyze / Compare / Routes / Assistant / exports / freshness) follows; `AnalysisRun` /
+  `PlaceCrimeSummary` / `RouteRequest` carry a `layer` column (migrations `0009`/`0010`). Calls
+  are framed everywhere as *requests for service, not confirmed incidents* (LLM prompt +
+  semantic layer + UI, test-pinned), and the safety-refusal guard is untouched / layer-independent.
+  Spec/plan (inc 1): `docs/superpowers/{specs,plans}/2026-06-29-second-source-arrests-foundation*`.
+  _Remaining follow-up: surface arrests as a clearly-labeled, enforcement-framed lens (never
+  merged into reported-incident counts) + a taxonomy crosswalk; `CALLS_DATA_FLOOR` is a fixed
+  date that drifts past 24 months._
 
 > Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), route corridor-temporal, an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
 
