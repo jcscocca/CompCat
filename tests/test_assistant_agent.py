@@ -1026,3 +1026,33 @@ def test_agent_redirects_english_rank_verb_inflections(tmp_path):
             assert client.calls == [], phrasing
     finally:
         session.close()
+
+
+def test_agent_does_not_redirect_english_colloquial_proper_nouns(tmp_path):
+    # H4 follow-up · Finding 4: English colloquial terms (sketchy/shady/dodgy/seedy/scary/
+    # ghetto/frightening) are now context-required — they must NOT trip the guard when they
+    # appear as proper nouns without a place-context word.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Show incidents near Shady Grove Ave",
+        "Ghetto Gastro pop-up nearby",
+        "Dodgy Dogs food truck schedule",
+        "Scary Cherry mural tour dates",
+        "How was crime in the Warsaw Ghetto in 1943?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing  # reached the model, not the redirect
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
