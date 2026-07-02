@@ -20,37 +20,66 @@ from app.assistant.tools import AssistantClarification, AssistantToolError, exec
 from app.config import get_settings
 
 # Reject requests that ask the assistant to score/rank places by safety, danger, or risk —
-# the product invariant forbids it. Arms: (1) an English safety-vocabulary lexicon (including
-# colloquial place-character slang like "sketchy"/"shady"), (2) an English rank/rate/score
-# verb followed (through any run of determiners/possessives) by a place noun, and (3+4) the
-# Spanish mirrors of both. Event/offense descriptors ("violent", "threatening", "menacing")
-# are deliberately excluded — they are legitimate incident context, not place-ranking words.
-# Word-boundary matching keeps legitimate substrings ("safely", "Safeway", "incident rate")
-# and allowed count framing ("which area has the most crime") from false-triggering. The guard
-# runs on BOTH the incoming user text and the model's final answer (see run_assistant_turn).
-_SAFETY_SCORE_PATTERN = re.compile(
+# the product invariant forbids it. The guard is split into three cooperating patterns:
+#   1. _UNAMBIGUOUS_SAFETY_PATTERN — terms that alone signal a safety-ranking ask (safe,
+#      dangerous, seguridad, peligroso, "crime-free", the rank/rate/score verb arms, the
+#      "mal + place-noun" compound, ...). A hit here trips the guard on its own.
+#   2. _AMBIGUOUS_TERM_PATTERN — colloquial/adjectival terms that ALSO have benign senses
+#      ("sketchy" as a proper noun; "seguro" as "I'm sure"; "tranquilo" as "calm"). These
+#      only trip if _PLACE_CONTEXT_PATTERN also matches the same message.
+#   3. _PLACE_CONTEXT_PATTERN — deictics + place nouns in English and Spanish.
+# Event/offense descriptors ("violent", "threatening", "menacing") are deliberately excluded
+# — they are legitimate incident context, not place-ranking words. Word-boundary matching
+# keeps legitimate substrings ("safely", "Safeway", "incident rate") and allowed count
+# framing ("which area has the most crime") from false-triggering. The guard runs on BOTH
+# the incoming user text and the model's final answer (see run_assistant_turn).
+_UNAMBIGUOUS_SAFETY_PATTERN = re.compile(
     r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|hazard(?:ous)?|peril(?:ous)?"
-    r"|risk(?:y|ier|iest)?|sketch(?:y|ier|iest)|shad(?:y|ier|iest)"
-    r"|dodg(?:y|ier|iest)|seed(?:y|ier|iest)|scar(?:y|ier|iest)"
-    r"|frightening|ghetto)\b"
+    r"|risk(?:y|ier|iest)?)\b"
     r"|\bcrime[-\s]free\b"
-    r"|\b(?:rank\w*|rat[ei]\w*|scor[ei]\w*)\s+"
+    r"|\b(?:rank\w*|rat[ei]\w*|scor[ei]\w*)[\s,:;\-—]+"
     r"(?:(?:the|these|those|this|that|them|my|your|our|their|its|his|her|a|an|all|both"
     r"|any|some|each|every)\s+)*"
     r"(?:place|block|area|neighbou?rhood|route|street|spot|option|location)s?\b"
-    r"|\b(?:segur(?:[oa]s?|idad(?:es)?)|insegur(?:[oa]s?|idad(?:es)?)"
+    r"|\b(?:seguridad(?:es)?|inseguridad(?:es)?"
     r"|peligros(?:[oa]s?|idad(?:es)?)|peligro|riesgos[oa]s?|riesgos?"
     r"|arriesgad[oa]s?)\b"
     r"|\blibre\s+de\s+crimen\b"
-    r"|\b(?:clasific|ranke|calific|puntu|puntú)\w*\s+"
+    r"|\b(?:clasific|ranke|calific|puntu|puntú)\w*[\s,:;\-—]+"
     r"(?:(?:el|la|los|las|este|esta|estos|estas|ese|esa|esos|esas|mi|mis|tu|tus|su|sus"
     r"|un|una|unos|unas|todo|toda|todos|todas|cada)\s+)*"
     r"(?:(?:lugar|sector)(?:es)?"
     r"|(?:zona|barrio|[aá]rea|calle|ruta|sitio|cuadra|colonia|vecindario"
     r"|distrito|manzana|avenida)s?"
+    r"|ubicaci[oó]n(?:es)?)\b"
+    r"|\b(?:mal|mala|mal[oa]s)\s+"
+    r"(?:(?:barrio|zona|vecindario|colonia)s?|(?:lugar|sector)(?:es)?)\b"
+    r"|\b(?:(?:barrio|zona|vecindario|colonia)s?|(?:lugar|sector)(?:es)?)\s+mal[oa]s?\b",
+    re.IGNORECASE,
+)
+
+_AMBIGUOUS_TERM_PATTERN = re.compile(
+    r"\b(?:sketch(?:y|ier|iest)|shad(?:y|ier|iest)|dodg(?:y|ier|iest)"
+    r"|seed(?:y|ier|iest)|scar(?:y|ier|iest)|frightening|ghetto"
+    r"|segur[oa]s?|insegur[oa]s?|tranquil[oa]s?|conflictiv[oa]s?"
+    r"|problem[aá]tic[oa]s?|avoid(?:s|ed|ing)?|evit\w*)\b",
+    re.IGNORECASE,
+)
+
+_PLACE_CONTEXT_PATTERN = re.compile(
+    r"\b(?:here|there|around|this|that|these|those|area|block"
+    r"|neighbou?rhood|route|street|spot|option|location|place|corner"
+    r"|downtown|uptown|part\s+of\s+town|side\s+of\s+town)s?\b"
+    r"|\b(?:aqu[ií]|all[ií]|all[aá]|ac[aá])\b"
+    r"|\b(?:(?:lugar|sector)(?:es)?"
+    r"|(?:zona|barrio|[aá]rea|calle|ruta|sitio|cuadra|colonia|vecindario"
+    r"|distrito|manzana|avenida|centro|esquina)s?"
     r"|ubicaci[oó]n(?:es)?)\b",
     re.IGNORECASE,
 )
+
+# Back-compat alias — downstream imports (and the output-guard test) still work.
+_SAFETY_SCORE_PATTERN = _UNAMBIGUOUS_SAFETY_PATTERN
 
 # Single source for the refusal/redirect text, reused by the input- and output-side guards.
 _SAFETY_REDIRECT = (
@@ -133,7 +162,7 @@ async def run_assistant_turn(
         return
     # Output-side invariant guard: a model answer that slipped past the input guard must not
     # stream safety-ranking language; replace it with the standard redirect.
-    if _SAFETY_SCORE_PATTERN.search(message):
+    if _contains_safety_ranking(message):
         message = _SAFETY_REDIRECT
     yield AssistantStreamEvent(event="token", data={"delta": message})
     yield AssistantStreamEvent(event="done", data={})
@@ -149,7 +178,16 @@ def _recent_user_texts(
 
 
 def _asks_for_safety_score(texts: Iterable[str]) -> bool:
-    return any(_SAFETY_SCORE_PATTERN.search(text) for text in texts)
+    return any(_contains_safety_ranking(text) for text in texts)
+
+
+def _contains_safety_ranking(text: str) -> bool:
+    if _UNAMBIGUOUS_SAFETY_PATTERN.search(text):
+        return True
+    return bool(
+        _AMBIGUOUS_TERM_PATTERN.search(text)
+        and _PLACE_CONTEXT_PATTERN.search(text)
+    )
 
 
 def _tool_arguments(

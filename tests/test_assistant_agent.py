@@ -1026,3 +1026,556 @@ def test_agent_redirects_english_rank_verb_inflections(tmp_path):
             assert client.calls == [], phrasing
     finally:
         session.close()
+
+
+def test_agent_does_not_redirect_english_colloquial_proper_nouns(tmp_path):
+    # H4 follow-up · Finding 4: English colloquial terms (sketchy/shady/dodgy/seedy/scary/
+    # ghetto/frightening) are now context-required — they must NOT trip the guard when they
+    # appear as proper nouns without a place-context word.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Show incidents near Shady Grove Ave",
+        "Ghetto Gastro pop-up nearby",
+        "Dodgy Dogs food truck schedule",
+        "Scary Cherry mural tour dates",
+        "How was crime in the Warsaw Ghetto in 1943?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing  # reached the model, not the redirect
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_spanish_epistemic_filler(tmp_path):
+    # H4 follow-up · Finding 3: bare Spanish "seguro"/"segura" as epistemic filler
+    # ("I'm sure"/"are you sure") must reach the model. These are common conversational
+    # forms with no place-context; they are the direct Spanish analog of "safely"/"Safeway"
+    # the English arm already avoids.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Estoy seguro que hubo un incidente anoche",
+        "No estoy seguro de la fecha",
+        "¿Estás seguro que fue anoche?",
+        "Seguro que hay muchos incidentes",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_spanish_colloquial_place_adjectives(tmp_path):
+    # H4 follow-up · Finding 1a: Spanish colloquial place-character adjectives
+    # (tranquilo/a, conflictivo/a, problemático/a) that describe a place must trip the guard
+    # when a place-context word co-occurs. Symmetry with the English colloquial arm.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Es tranquila esta zona?",
+        "¿Este barrio es tranquilo?",
+        "¿Es un barrio conflictivo?",
+        "¿Es una zona conflictiva?",
+        "¿Este barrio es problemático?",
+        "¿Es problemática esta zona?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_spanish_colloquial_filler(tmp_path):
+    # H4 follow-up · Finding 1a allow-list: bare "tranquilo"/"tranquila" as personal state
+    # ("I'm calm") must reach the model — same filler shape as "estoy seguro".
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Estoy tranquilo",
+        "Estoy tranquila",
+        "Mantente tranquilo, por favor",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_spanish_mal_place_compound(tmp_path):
+    # H4 follow-up · Finding 1b: "mal barrio"/"mala zona"/"malos vecindarios" are compound
+    # judgments with the place noun baked in — unambiguous safety-ranking language, must trip.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Es un mal barrio?",
+        "Es una mala zona",
+        "Es un mal vecindario",
+        "Son malos barrios",
+        "Es un mal sector",
+        "Es un mal lugar",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_mal_without_place_noun(tmp_path):
+    # H4 follow-up · Finding 1b allow-list: "mal + non-place-noun" must reach the model
+    # (mala idea = bad idea, mal día = bad day, malos vecinos = bad neighbors — none are
+    # place nouns even though "vecinos" is close to "vecindario").
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Fue una mala idea",
+        "Un mal día",
+        "Tengo malos vecinos",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_mal_place_compound_with_es_plurals(tmp_path):
+    # H4 follow-up · Finding 1b (plural fix): consonant-ending place nouns "sector"/"lugar"
+    # pluralize with -es, not -s. The mal compound must catch "malos sectores"/"malos
+    # lugares" — not just the vowel-ending "-s" plurals.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Son malos sectores",
+        "Son malos lugares",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_avoid_evitar_place_requests(tmp_path):
+    # H4 follow-up · Finding 2: asking which places to avoid ("¿Qué barrios debo evitar?" /
+    # "Which neighborhoods should I avoid?") is asking the assistant to label places unsafe.
+    # Both word orders (object-first and verb-first) trip via the ambiguous+context helper.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Qué barrios debo evitar?",
+        "¿Qué zonas deberíamos evitar?",
+        "evita estos lugares",
+        "Which neighborhoods should I avoid?",
+        "avoid these places",
+        "avoiding the area at night",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_avoid_without_place_context(tmp_path):
+    # H4 follow-up · Finding 2 allow-list: "avoid the pothole" / "evita la lluvia" are not
+    # place-ranking asks — no place-context word appears, so the ambiguous+context check
+    # must NOT trip.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "How do I avoid the pothole?",
+        "evita la lluvia",
+        "avoid gluten in your diet",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_evitar_finite_inflections(tmp_path):
+    # H4 follow-up · Finding 2 (inflection fix): common finite/conditional forms of "evitar"
+    # — conditional (evitaría), indicative (evitamos/evitan), preterite (evitó/evitaron),
+    # voseo imperative (evitá) — are natural "which places to avoid" asks and must trip when
+    # a place-context word co-occurs. The explicit-suffix list missed them.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Qué barrios evitaría?",
+        "¿Qué barrios evitarías?",
+        "¿Qué zonas evitamos?",
+        "¿Qué zonas evitaron?",
+        "¿Qué zonas evitan?",
+        "evitá estos lugares",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_rank_verb_with_punctuation_before_noun(tmp_path):
+    # H4 follow-up · Finding 5: directive-style rank/rate/score with punctuation ("Rank: my
+    # places", "Clasifica: estos barrios", "Score, the neighborhoods") bypasses the H4 arms
+    # because they hard-require \s+ right after the verb. Widen to a bounded punctuation class.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Rank: my places",
+        "Score, the neighborhoods",
+        "Rate — these blocks",
+        "Clasifica: estos barrios",
+        "Puntúa, las rutas",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_h4_phrasings_still_covered_by_helper():
+    # H4 follow-up regression pin: the context-scoping refactor must not regress the H4-era
+    # phrasings the guard already caught. Direct helper-level check (no session / no LLM).
+    from app.assistant.agent import _contains_safety_ranking
+
+    must_trip = [
+        # H4 English safety lexicon
+        "Which place is safest?",
+        "How risky is this area?",
+        "Rank these places by safety.",
+        "Is this a sketchy area?",
+        "Is that block shady?",
+        "Which block is the sketchiest?",
+        # H4 Spanish safety lexicon (still tripping because place-context is present)
+        "¿Qué zona es más segura?",
+        "¿Es peligroso este barrio?",
+        "¿Es inseguro caminar por aquí?",
+        "que lugar es mas seguro",
+        "¿Cuál es la seguridad de esta zona?",
+        # H4 Spanish rank arm + LatAm variants
+        "Clasifica estos barrios",
+        "clasifica estas colonias",
+        # H4 English rank arm + inflections
+        "Rate these blocks",
+        "Ranking my neighborhoods",
+    ]
+    must_pass = [
+        # H4 allow-list — neutral/legit incident-context questions
+        "What is the reported incident rate near place-1?",
+        "Which area has the most crime?",
+        "How many violent crime incidents near here?",
+        "¿Cuántos incidentes en esta zona?",
+        "¿Cuál es la ruta más rápida?",
+    ]
+    for phrasing in must_trip:
+        assert _contains_safety_ranking(phrasing), phrasing
+    for phrasing in must_pass:
+        assert not _contains_safety_ranking(phrasing), phrasing
+
+
+def test_agent_over_refuses_estar_seguro_with_place_word_known_limitation(tmp_path):
+    # KNOWN, ACCEPTED fail-safe over-refusal. Task 2 moved Spanish "seguro"/"tranquilo" into
+    # the ambiguous bundle, so they trip whenever a place-context word co-occurs. Regex cannot
+    # reliably separate epistemic "seguro DE X" (sure about) from physical "seguro EN X" (safe
+    # in a place) — every attempt to strip the epistemic form introduced a place-safety BYPASS
+    # (invariant leak), which is worse than over-refusing. So we ACCEPT that these rare 1st/2nd-
+    # person filler phrasings that ALSO name a place get the redirect. Bare "estoy seguro que…"
+    # WITHOUT a place word still reaches the model — see
+    # test_agent_does_not_redirect_spanish_epistemic_filler.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "No estoy seguro de la ubicación",
+        "¿Estás seguro de que fue en este barrio?",
+        "Estoy tranquilo en esta zona",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_still_redirects_ser_seguro_place_safety(tmp_path):
+    # Final-review fix guard: place-safety with SER must STILL trip — only ESTAR-filler is
+    # excluded. These are genuine "is this place safe?" asks.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Es seguro este barrio?",
+        "¿Es segura esta zona?",
+        "¿Qué tan seguro es este lugar?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_postposed_barrio_malo(tmp_path):
+    # Final-review fix: postposed adjective "barrio malo"/"zona mala" is the same place-label
+    # as the preposed "mal barrio" (Finding 1b) and must trip — a reordering must not bypass.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Es un barrio malo?",
+        "Es una zona mala",
+        "Son barrios malos",
+        "Es un lugar malo",
+        "Es un sector malo",
+        "Son sectores malos",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+
+def test_agent_redirects_estar_third_person_place_safety(tmp_path):
+    # Final-review fix²: Spanish uses ESTAR for a location's safety too — "¿está seguro este
+    # barrio?" = "is this neighborhood safe?" is a genuine place-safety ask. The epistemic-
+    # filler strip must NOT swallow 3rd-person está/están, or these bypass the guard.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿está seguro este barrio?",
+        "¿está segura esta zona?",
+        "¿están seguras estas calles?",
+        "esta zona está segura",
+        "este barrio no está seguro",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_redirects_spanish_centro_esquina_place_context(tmp_path):
+    # Final sign-off gap: Spanish place-context omitted "centro" (downtown) and "esquina"
+    # (corner) though the English equivalents (downtown/corner) are covered. Ambiguous safety
+    # terms co-occurring with centro/esquina must trip, mirroring the English arm.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿es seguro el centro?",
+        "el centro es inseguro",
+        "evita el centro",
+        "¿es segura esta esquina?",
+        "evita esta esquina",
+        "¿es sketchy el centro?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_neutral_centro_question(tmp_path):
+    # Allow-list: centro/esquina are place-context, not safety terms. A neutral count question
+    # naming el centro (no ambiguous safety term) must reach the model.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿cuántos incidentes hubo en el centro?",
+        "muéstrame los incidentes en esta esquina",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
