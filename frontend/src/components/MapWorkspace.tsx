@@ -26,7 +26,7 @@ import { PinDraftPopover } from "./PinDraftPopover";
 import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
 import { RoutesTab } from "./RoutesTab";
-import type { AnalysisSettings, AssistantDashboardState, PlaceCreate, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, PlaceCreate, RouteEndpointInput, TabKey } from "../types";
 
 export function MapWorkspace() {
   const initialView = useMemo(() => {
@@ -38,6 +38,7 @@ export function MapWorkspace() {
     initialView && initialView.tab !== "routes" ? initialView.points : null,
   );
   const [showBadLink, setShowBadLink] = useState(hadViewParam && initialView === null);
+  const initialRoute = initialView?.tab === "routes" ? initialView : null;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "places");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -203,6 +204,42 @@ export function MapWorkspace() {
     return `${window.location.origin}/?view=${encoded}`;
   }, [sharedPoints, selected, analysis]);
 
+  const buildRoutesShareUrl = useCallback(
+    (origin: RouteEndpointInput, destination: RouteEndpointInput, mode: string): string | null => {
+      const resolve = (ep: RouteEndpointInput) => {
+        if ("place_id" in ep) {
+          const place = data.places.find((p) => p.id === ep.place_id);
+          if (!place) return null;
+          return {
+            latitude: Number((place.latitude ?? 0).toFixed(3)),
+            longitude: Number((place.longitude ?? 0).toFixed(3)),
+            label: place.display_label,
+          };
+        }
+        return {
+          latitude: Number(ep.latitude.toFixed(3)),
+          longitude: Number(ep.longitude.toFixed(3)),
+          label: ep.label,
+        };
+      };
+      const o = resolve(origin);
+      const d = resolve(destination);
+      if (!o || !d) return null;
+      const encoded = encodeView({
+        tab: "routes",
+        origin: o,
+        destination: d,
+        mode: (["transit", "walk", "bike", "drive"].includes(mode) ? mode : "transit") as "transit" | "walk" | "bike" | "drive",
+        radiusM: analysis.radiusM,
+        startDate: analysis.startDate,
+        endDate: analysis.endDate,
+        layer: analysis.layer,
+      });
+      return `${window.location.origin}/?view=${encoded}`;
+    },
+    [data.places, analysis],
+  );
+
   const assistantState: AssistantDashboardState = useMemo(() => ({
     selected_place_ids: Array.from(selectedIds),
     analysis_start_date: analysis.startDate || null,
@@ -278,7 +315,7 @@ export function MapWorkspace() {
           </div>
         ) : null}
 
-        {sharedPoints ? (
+        {sharedPoints || initialRoute ? (
           <div className="mc-banner" role="status">
             Shared view · reported incident context.{" "}
             <button type="button" onClick={() => setSharedPoints(null)}>Exit</button>
@@ -354,6 +391,10 @@ export function MapWorkspace() {
               places={data.places}
               geocodeSearch={geocodingProvider.search}
               onRun={routes.runRoute}
+              initialOrigin={initialRoute?.origin}
+              initialDestination={initialRoute?.destination}
+              initialMode={initialRoute?.mode}
+              onCopyLink={buildRoutesShareUrl}
             />
           ) : null}
           {activeTab === "export" ? <ExportTab href={data.exportHref} /> : null}

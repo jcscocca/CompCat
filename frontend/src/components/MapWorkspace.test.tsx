@@ -27,10 +27,11 @@ vi.mock("../api/client", () => ({
   getDashboardFreshness: vi.fn().mockResolvedValue(null),
   getInputModes: vi.fn().mockResolvedValue({ modes: [] }),
   streamAssistantChat: vi.fn(),
+  createRouteAlternatives: vi.fn(),
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, createRouteAlternatives } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { encodeView } from "../lib/savedView";
 import type { DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place } from "../types";
@@ -428,6 +429,33 @@ describe("MapWorkspace", () => {
     // The shared Compare pane renders (synthetic selection ≥ 2) — not the "select two" prompt.
     expect(screen.queryByText(/select at least two places/i)).not.toBeInTheDocument();
     expect(await screen.findByText("More reported incidents at Pike Place.")).toBeInTheDocument();
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("hydrates a routes ?view= link: routes tab active, banner shown, one route run", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(createRouteAlternatives).mockResolvedValue({
+      request: { id: "r", origin: { label: "Home" }, destination: { label: "Office" }, mode: "transit" },
+      alternatives: [],
+      context_summaries: [],
+      statistical_comparison: null,
+    });
+
+    const view = encodeView({
+      tab: "routes",
+      origin: { latitude: 47.62, longitude: -122.33, label: "Home" },
+      destination: { latitude: 47.61, longitude: -122.34, label: "Office" },
+      mode: "transit",
+      radiusM: 500, startDate: "2024-01-01", endDate: "2024-01-31", layer: "reported",
+    });
+    window.history.replaceState({}, "", `/?view=${view}`);
+    render(<MapWorkspace />);
+
+    expect(await screen.findByText(/shared view/i)).toBeInTheDocument();
+    expect(await screen.findByText("Home")).toBeInTheDocument();
+    expect(screen.getByText("Office")).toBeInTheDocument();
+    await waitFor(() => expect(createRouteAlternatives).toHaveBeenCalledTimes(1));
     window.history.replaceState({}, "", "/");
   });
 });
