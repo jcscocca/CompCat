@@ -1292,3 +1292,36 @@ def test_agent_does_not_redirect_avoid_without_place_context(tmp_path):
             assert events[1].data["delta"] == "Here is the reported context.", phrasing
     finally:
         session.close()
+
+
+def test_agent_redirects_evitar_finite_inflections(tmp_path):
+    # H4 follow-up · Finding 2 (inflection fix): common finite/conditional forms of "evitar"
+    # — conditional (evitaría), indicative (evitamos/evitan), preterite (evitó/evitaron),
+    # voseo imperative (evitá) — are natural "which places to avoid" asks and must trip when
+    # a place-context word co-occurs. The explicit-suffix list missed them.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Qué barrios evitaría?",
+        "¿Qué barrios evitarías?",
+        "¿Qué zonas evitamos?",
+        "¿Qué zonas evitaron?",
+        "¿Qué zonas evitan?",
+        "evitá estos lugares",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
