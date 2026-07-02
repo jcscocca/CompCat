@@ -156,9 +156,12 @@ inherit this fix for free.
 
 `_PLACE_CONTEXT_PATTERN` is a Unicode-aware regex with two alternations:
 
-- **English:** `here`, `there`, `around`, `nearby`, `this`, `that`, `these`, `those`, `area`,
-  `block`, `neighborhood`, `neighbourhood`, `route`, `street`, `spot`, `option`, `location`,
-  `place`, `corner`, `downtown`, `uptown`, `part\s+of\s+town`, `side\s+of\s+town`.
+- **English:** `here`, `there`, `around`, `this`, `that`, `these`, `those`, `area`, `block`,
+  `neighborhood`, `neighbourhood`, `route`, `street`, `spot`, `option`, `location`, `place`,
+  `corner`, `downtown`, `uptown`, `part\s+of\s+town`, `side\s+of\s+town`.
+  *`nearby` is deliberately excluded — low-value ("sketchy nearby" is unnatural) and appears
+  heavily in restaurant/business copy near proper nouns ("Ghetto Gastro pop-up nearby"),
+  which would defeat Finding 4's fix.*
 - **Spanish:** `aqu[ií]`, `all[ií]`, `all[aá]`, `ac[aá]`, plus the H4 Spanish place-noun list
   (`zona|barrio|colonia|lugar|sitio|calle|ruta|cuadra|vecindario|sector|distrito|manzana|
   avenida|[aá]rea|ubicaci[oó]n` + plurals + accent-tolerant).
