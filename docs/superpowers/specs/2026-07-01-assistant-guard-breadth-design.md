@@ -42,15 +42,16 @@ than a two-language change warrants) and leaning on the LLM prompt to refuse non
 
 ### 1 · English lexicon broadening
 
-Add high-signal colloquial adjectives that clearly encode a safety judgment and rarely appear
-in benign incident talk:
+Add high-signal colloquial adjectives that describe a *place's* safety character or feel —
+the judgment the invariant forbids — and rarely appear in benign incident talk:
 
-> `sketchy`, `shady`, `dodgy`, `seedy`, `scary`, `menacing`, `threatening`, `frightening`,
-> `ghetto`
+> `sketchy`, `shady`, `dodgy`, `seedy`, `scary`, `frightening`, `ghetto`
 
 **Deliberately excluded** to protect the false-positive boundary (these must still reach the
 model):
-- `violent` / `violence` — "violent crime" is legitimate incident context.
+- `violent` / `violence`, `menacing`, `threatening` — event/offense descriptors, not
+  place-ranking words. "Were there threatening incidents?" / "violent crime" is legitimate
+  incident context.
 - `bad` / `good` / `nice` / `best` / `worst` — too broad; "which route is best" (fastest) is a
   legal query.
 - `secure` / `security`, `rough`, `avoid` — neutral or routing-legitimate meanings.
