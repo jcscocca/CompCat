@@ -73,7 +73,7 @@ _PLACE_CONTEXT_PATTERN = re.compile(
     r"|\b(?:aqu[ií]|all[ií]|all[aá]|ac[aá])\b"
     r"|\b(?:(?:lugar|sector)(?:es)?"
     r"|(?:zona|barrio|[aá]rea|calle|ruta|sitio|cuadra|colonia|vecindario"
-    r"|distrito|manzana|avenida)s?"
+    r"|distrito|manzana|avenida|centro|esquina)s?"
     r"|ubicaci[oó]n(?:es)?)\b",
     re.IGNORECASE,
 )

@@ -1521,3 +1521,61 @@ def test_agent_redirects_estar_third_person_place_safety(tmp_path):
             assert client.calls == [], phrasing
     finally:
         session.close()
+
+
+def test_agent_redirects_spanish_centro_esquina_place_context(tmp_path):
+    # Final sign-off gap: Spanish place-context omitted "centro" (downtown) and "esquina"
+    # (corner) though the English equivalents (downtown/corner) are covered. Ambiguous safety
+    # terms co-occurring with centro/esquina must trip, mirroring the English arm.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿es seguro el centro?",
+        "el centro es inseguro",
+        "evita el centro",
+        "¿es segura esta esquina?",
+        "evita esta esquina",
+        "¿es sketchy el centro?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_neutral_centro_question(tmp_path):
+    # Allow-list: centro/esquina are place-context, not safety terms. A neutral count question
+    # naming el centro (no ambiguous safety term) must reach the model.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿cuántos incidentes hubo en el centro?",
+        "muéstrame los incidentes en esta esquina",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
