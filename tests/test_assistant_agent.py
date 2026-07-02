@@ -1086,3 +1086,62 @@ def test_agent_does_not_redirect_spanish_epistemic_filler(tmp_path):
             assert events[1].data["delta"] == "Here is the reported context.", phrasing
     finally:
         session.close()
+
+
+def test_agent_redirects_spanish_colloquial_place_adjectives(tmp_path):
+    # H4 follow-up · Finding 1a: Spanish colloquial place-character adjectives
+    # (tranquilo/a, conflictivo/a, problemático/a) that describe a place must trip the guard
+    # when a place-context word co-occurs. Symmetry with the English colloquial arm.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "¿Es tranquila esta zona?",
+        "¿Este barrio es tranquilo?",
+        "¿Es un barrio conflictivo?",
+        "¿Es una zona conflictiva?",
+        "¿Este barrio es problemático?",
+        "¿Es problemática esta zona?",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"OK."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert [event.event for event in events] == ["meta", "token", "done"], phrasing
+            assert "reported incident" in events[1].data["delta"], phrasing
+            assert client.calls == [], phrasing
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_spanish_colloquial_filler(tmp_path):
+    # H4 follow-up · Finding 1a allow-list: bare "tranquilo"/"tranquila" as personal state
+    # ("I'm calm") must reach the model — same filler shape as "estoy seguro".
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    phrasings = [
+        "Estoy tranquilo",
+        "Estoy tranquila",
+        "Mantente tranquilo, por favor",
+    ]
+    try:
+        for phrasing in phrasings:
+            client = FakeClient(['{"type":"final","message":"Here is the reported context."}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, phrasing
+            assert events[1].data["delta"] == "Here is the reported context.", phrasing
+    finally:
+        session.close()
