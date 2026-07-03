@@ -443,7 +443,7 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
 
   const isCallsLayer = analysis.layer === "calls";
   const isArrestsLayer = analysis.layer === "arrests";
-  const showCategory = analysis.layer === "reported"; // only reported carries offense categories
+  const showCategory = analysis.layer !== "calls"; // reported + arrests carry offense categories; 911 calls do not
   const subcategoryHeader = isCallsLayer ? "Call type" : isArrestsLayer ? "Charge" : "Subcategory";
   const noun = incidentNoun(analysis.layer);
 
@@ -498,7 +498,8 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
         <p className="mc-layer-note" role="note">
           Arrests are <strong>enforcement activity, not reported incidents</strong>. An arrest is
           logged where the arrest was made — which may differ from where an offense occurred — and
-          most reported crimes never result in one.
+          most reported crimes never result in one. Categories are a <strong>best-effort</strong>{" "}
+          NIBRS crosswalk from the arrest offense.
         </p>
       ) : null}
 

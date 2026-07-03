@@ -489,10 +489,11 @@ describe("AnalyzeTab", () => {
     expect(container.querySelector(".mc-cat-breakdown")!.textContent).not.toMatch(/nearby/);
   });
 
-  it("shows the arrests enforcement note and hides the category filter on the arrests layer", () => {
+  it("shows the category filter and the enforcement note on the arrests layer", () => {
     render(<AnalyzeTab selected={[home]} analysis={{ ...analysis, layer: "arrests" }} availableRadii={[250, 500, 1000]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.getByText(/enforcement activity, not reported incidents/i)).toBeInTheDocument();
-    expect(screen.queryByText(/incident categories/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/incident categories/i)).toBeInTheDocument();          // now shown
+    expect(screen.getByText(/best-effort/i)).toBeInTheDocument();                   // crosswalk caveat
   });
 
   it("shows the category filter and no arrests note on the reported layer", () => {
