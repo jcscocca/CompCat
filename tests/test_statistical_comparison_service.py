@@ -13,6 +13,7 @@ from app.models import CrimeIncident, RouteAlternative, RouteRequest
 from app.schemas import CrimeIncidentData
 from app.services.analysis_service import (
     _monthly_counts,
+    _route_pair_divergence_inputs,
     compare_route_request,
     compare_site_options,
 )
@@ -828,6 +829,169 @@ def test_compare_route_request_tests_divergent_corridors_only(tmp_path):
     assert result["overview"]["decision_class"] == "statistically_lower"
     assert result["overview"]["recommendation_label"] == "Route A"
     assert result["overview"]["summary_text"].startswith("Where these routes differ, Route A")
+
+
+def test_route_pair_divergence_excludes_flank_incidents_on_shared_stretch():
+    # Regression for the count/exposure region mismatch: A and B run parallel ~100 m
+    # apart (well inside the 250 m radius), so the stretch is shared and contributes no
+    # divergent exposure — yet an incident on A's outer flank (~200 m from A, ~300 m
+    # from B) is in A's corridor only and used to enter count_a. Counts must be drawn
+    # from the divergent spans, where the exposure denominator comes from.
+    points_a = [(47.600, -122.340), (47.620, -122.340), (47.620, -122.320)]
+    points_b = [(47.600, -122.34133), (47.620, -122.34133), (47.620, -122.360)]
+    flank = CrimeIncidentData(
+        offense_start_utc=datetime(2024, 1, 10, tzinfo=UTC),
+        latitude=47.610,
+        longitude=-122.3373,
+    )
+    spur_a = CrimeIncidentData(
+        offense_start_utc=datetime(2024, 1, 20, tzinfo=UTC),
+        latitude=47.620,
+        longitude=-122.325,
+    )
+    spur_b = CrimeIncidentData(
+        offense_start_utc=datetime(2024, 2, 5, tzinfo=UTC),
+        latitude=47.620,
+        longitude=-122.355,
+    )
+
+    pair_inputs = _route_pair_divergence_inputs(
+        alternatives=[RouteAlternative(id="alt-a"), RouteAlternative(id="alt-b")],
+        points_by_alternative_id={"alt-a": points_a, "alt-b": points_b},
+        corridor_incidents_by_alternative_id={
+            "alt-a": [flank, spur_a],
+            "alt-b": [spur_b],
+        },
+        radius_m=250,
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 2, 29),
+    )
+
+    assert len(pair_inputs) == 1
+    pair = pair_inputs[0]
+    # The control incident on A's divergent spur counts; the shared-stretch flank
+    # incident does not.
+    assert pair.count_a == 1
+    assert pair.count_b == 1
+    assert pair.period_counts_a == [1, 0]
+    assert pair.period_counts_b == [0, 1]
+    assert pair.exposure_a > 0
+    assert pair.exposure_b > 0
+
+
+def test_compare_route_request_ignores_flank_incidents_when_routes_run_parallel(tmp_path):
+    # A and B run parallel ~150 m apart on the long mid-stretch (shared at 250 m), then
+    # each ends in its own divergent spur. Flank incidents sit east of A along the
+    # parallel stretch — inside A's corridor, outside B's — and must not reach the
+    # divergent test; only the spur incidents (4 vs 40) may.
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    user_hash = "route-flank-user"
+    session.add(
+        RouteRequest(
+            id="rr-flank",
+            user_id_hash=user_hash,
+            origin_label="Origin",
+            origin_latitude=47.600,
+            origin_longitude=-122.340,
+            destination_label="Destination",
+            destination_latitude=47.620,
+            destination_longitude=-122.340,
+            mode="transit",
+            analysis_start_date=date(2024, 1, 1),
+            analysis_end_date=date(2024, 2, 29),
+        )
+    )
+    session.flush()
+    session.add_all(
+        [
+            RouteAlternative(
+                id="alt-east",
+                route_request_id="rr-flank",
+                user_id_hash=user_hash,
+                provider_route_id="prov-east",
+                route_label="Route A",
+                rank=1,
+                mode_mix="transit",
+                summary_geometry="47.600,-122.340;47.620,-122.340;47.620,-122.320",
+            ),
+            RouteAlternative(
+                id="alt-west",
+                route_request_id="rr-flank",
+                user_id_hash=user_hash,
+                provider_route_id="prov-west",
+                route_label="Route B",
+                rank=2,
+                mode_mix="transit",
+                summary_geometry="47.600,-122.342;47.620,-122.342;47.620,-122.362",
+            ),
+        ]
+    )
+    # 12 flank incidents ~200 m east of A's parallel stretch (~350 m from B).
+    session.add_all(
+        [
+            CrimeIncident(
+                id=f"inc-flank-{index}",
+                offense_start_utc=datetime(2024, 1 + (index % 2), 3 + index, tzinfo=UTC),
+                offense_category="PROPERTY",
+                latitude=47.610,
+                longitude=-122.3373,
+            )
+            for index in range(12)
+        ]
+    )
+    # 4 incidents on A's divergent east spur.
+    session.add_all(
+        [
+            CrimeIncident(
+                id=f"inc-spur-a-{index}",
+                offense_start_utc=datetime(2024, 1 + (index % 2), 10 + index, tzinfo=UTC),
+                offense_category="PROPERTY",
+                latitude=47.620,
+                longitude=-122.325,
+            )
+            for index in range(4)
+        ]
+    )
+    # 40 incidents on B's divergent west spur.
+    session.add_all(
+        [
+            CrimeIncident(
+                id=f"inc-spur-b-{index}",
+                offense_start_utc=datetime(
+                    2024, 1 + (index % 2), 1 + (index // 2) % 27, tzinfo=UTC
+                ),
+                offense_category="PROPERTY",
+                latitude=47.620,
+                longitude=-122.357,
+            )
+            for index in range(40)
+        ]
+    )
+    session.commit()
+
+    result = compare_route_request(
+        session=session,
+        user_id_hash=user_hash,
+        request=RouteComparisonRequest(
+            route_request_id="rr-flank",
+            radius_m=250,
+            offense_category="PROPERTY",
+        ),
+    )
+    session.close()
+
+    assert result is not None
+    # Context rows keep whole-corridor counts (flank incidents included for A).
+    options = {option["label"]: option for option in result["overview"]["options"]}
+    assert options["Route A"]["incident_count"] == 16
+    assert options["Route B"]["incident_count"] == 40
+    # The divergent test saw only the spur incidents.
+    pairwise = result["analytical"]["pairwise_results"][0]
+    assert pairwise["incident_count_a"] == 4
+    assert pairwise["incident_count_b"] == 40
+    assert result["overview"]["decision_class"] == "statistically_lower"
+    assert result["overview"]["recommendation_label"] == "Route A"
 
 
 def test_compare_route_request_reports_effectively_identical_corridors(tmp_path):

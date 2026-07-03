@@ -13,6 +13,9 @@ from app.analysis.divergence import (
     divergent_exposure_square_km_days,
     divergent_length_km,
     divergent_share,
+    divergent_spans,
+    route_segment_boxes,
+    within_radius_of_route,
 )
 from app.analysis.exposure import (
     count_incidents_in_place_buffer,
@@ -256,10 +259,17 @@ def _route_pair_divergence_inputs(
             incidents_b = corridor_incidents_by_alternative_id[alternative_b.id]
             # Both membership lists filter the SAME incidents_in_bbox objects, so id()
             # identifies the same record; incidents near both corridors drop out of both.
+            # The rest count only when near a divergent span, so the counts come from
+            # the same region the length-based exposure band measures — otherwise flank
+            # incidents along parallel shared stretches would count with no denominator.
             ids_a = {id(incident) for incident in incidents_a}
             ids_b = {id(incident) for incident in incidents_b}
-            only_a = [incident for incident in incidents_a if id(incident) not in ids_b]
-            only_b = [incident for incident in incidents_b if id(incident) not in ids_a]
+            only_a = _incidents_near_spans(
+                incidents_a, ids_b, divergent_spans(points_a, points_b, radius_m), radius_m
+            )
+            only_b = _incidents_near_spans(
+                incidents_b, ids_a, divergent_spans(points_b, points_a, radius_m), radius_m
+            )
             length_a = divergent_length_km(points_a, points_b, radius_m)
             length_b = divergent_length_km(points_b, points_a, radius_m)
             pair_inputs.append(
@@ -295,6 +305,26 @@ def _route_pair_divergence_inputs(
                 )
             )
     return pair_inputs
+
+
+def _incidents_near_spans(
+    incidents: list[CrimeIncidentData],
+    other_corridor_ids: set[int],
+    spans: list[list[tuple[float, float]]],
+    radius_m: int,
+) -> list[CrimeIncidentData]:
+    span_boxes = [route_segment_boxes(span, radius_m) for span in spans]
+    return [
+        incident
+        for incident in incidents
+        if id(incident) not in other_corridor_ids
+        and any(
+            within_radius_of_route(
+                incident.latitude, incident.longitude, span, radius_m, segment_boxes=boxes
+            )
+            for span, boxes in zip(spans, span_boxes, strict=True)
+        )
+    ]
 
 
 def get_comparison_payload(

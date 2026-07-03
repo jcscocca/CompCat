@@ -92,14 +92,14 @@ def densify_polyline(
     return dense
 
 
-def divergent_length_km(
+def divergent_spans(
     self_points: list[tuple[float, float]],
     other_points: list[tuple[float, float]],
     radius_m: int,
     step_m: float = SAMPLE_STEP_M,
-) -> float:
+) -> list[list[tuple[float, float]]]:
     if len(self_points) < 2 or not other_points:
-        return 0.0
+        return []
     samples = densify_polyline(self_points, step_m)
     segment_boxes = route_segment_boxes(other_points, radius_m)
     outside = [
@@ -108,13 +108,32 @@ def divergent_length_km(
         )
         for latitude, longitude in samples
     ]
-    total_m = 0.0
+    spans: list[list[tuple[float, float]]] = []
+    current: list[tuple[float, float]] = []
     for index in range(len(samples) - 1):
         # A span counts as divergent only when BOTH endpoints clear the radius — the
         # conservative side of the boundary spans next to the shared region.
         if outside[index] and outside[index + 1]:
-            start = samples[index]
-            end = samples[index + 1]
+            if not current:
+                current = [samples[index]]
+            current.append(samples[index + 1])
+        elif current:
+            spans.append(current)
+            current = []
+    if current:
+        spans.append(current)
+    return spans
+
+
+def divergent_length_km(
+    self_points: list[tuple[float, float]],
+    other_points: list[tuple[float, float]],
+    radius_m: int,
+    step_m: float = SAMPLE_STEP_M,
+) -> float:
+    total_m = 0.0
+    for span in divergent_spans(self_points, other_points, radius_m, step_m):
+        for start, end in zip(span, span[1:], strict=False):
             total_m += haversine_m(start[0], start[1], end[0], end[1])
     return total_m / 1000
 

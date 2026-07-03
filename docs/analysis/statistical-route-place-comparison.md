@@ -61,15 +61,25 @@ independent — the same physical incidents would be counted on both sides.
 
 Route comparisons therefore partition incidents per pair of routes:
 
-- within the radius of route A only → counts for A
-- within the radius of route B only → counts for B
-- within the radius of both → excluded from the test entirely
+- within the radius of route A's divergent segments and not within the radius of route B
+  → counts for A
+- within the radius of route B's divergent segments and not within the radius of route A
+  → counts for B
+- within the radius of both routes, or near neither route's divergent segments →
+  excluded from the test entirely
 
 Each side's exposure is its divergent corridor's area multiplied by the analysis days.
 Divergent length is measured by sampling each route's geometry every ~25 meters and
-keeping the spans that are farther than the radius from the other route. The length-based
-exposure area approximates the region the counts are drawn from; the span rule and the
-omitted end-caps slightly under-measure the divergent area on both sides of a pair.
+keeping the spans that are farther than the radius from the other route; the counts are
+restricted to incidents within the radius of those same spans. The length-based exposure
+area approximates the region the counts are drawn from, with two residual imperfections.
+The span rule and the omitted end-caps slightly under-measure the divergent area, which
+slightly inflates both sides' rates. And where a divergent segment runs within two radii
+of the other route, part of its exposure band lies within the radius of both routes —
+incidents there are excluded from the count, so the band over-measures the countable
+region and deflates that side's rate by a bounded amount. Incidents on a route's outer
+flank along a shared stretch — within that route's radius but not the other's — are near
+no divergent segment and are not counted at all.
 
 The shared corridor is traversed either way, so it carries no information for the choice
 between the routes; the whole-corridor counts remain visible as descriptive context, but

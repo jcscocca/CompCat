@@ -7,6 +7,7 @@ from app.analysis.divergence import (
     divergent_exposure_square_km_days,
     divergent_length_km,
     divergent_share,
+    divergent_spans,
     route_segment_boxes,
     within_radius_of_route,
 )
@@ -114,6 +115,56 @@ def test_within_radius_predicate_degenerate_routes():
     assert within_radius_of_route(47.6, -122.34, [], 250) is False
     assert within_radius_of_route(47.6, -122.34, [(47.6, -122.34)], 250) is True
     assert within_radius_of_route(47.6, -122.30, [(47.6, -122.34)], 250) is False
+
+
+def _spans_length_km(spans: list[list[tuple[float, float]]]) -> float:
+    total_m = 0.0
+    for span in spans:
+        for start, end in zip(span, span[1:], strict=False):
+            total_m += haversine_m(start[0], start[1], end[0], end[1])
+    return total_m / 1000
+
+
+def test_divergent_spans_summed_length_equals_divergent_length_exactly():
+    fixtures = [
+        (VERTICAL_2KM, [(47.610, -122.340), (47.620, -122.340)]),
+        ([(47.600, -122.340), (47.630, -122.340)], [(47.610, -122.340), (47.620, -122.340)]),
+        (_jittered_route(-122.340), _jittered_route(-122.336, points=9)),
+    ]
+    for self_points, other_points in fixtures:
+        spans = divergent_spans(self_points, other_points, radius_m=250)
+        assert spans
+        assert _spans_length_km(spans) == divergent_length_km(
+            self_points, other_points, radius_m=250
+        )
+
+
+def test_divergent_spans_identical_polylines_yield_no_spans():
+    assert divergent_spans(VERTICAL_1KM, VERTICAL_1KM, radius_m=250) == []
+
+
+def test_divergent_spans_far_apart_polylines_yield_one_span_of_all_samples():
+    other = [(47.600, -122.300), (47.610, -122.300)]  # ~3 km east
+
+    spans = divergent_spans(VERTICAL_1KM, other, radius_m=250)
+
+    assert len(spans) == 1
+    assert spans[0] == densify_polyline(VERTICAL_1KM)
+
+
+def test_divergent_spans_split_into_one_run_per_divergent_stretch():
+    # Other covers only the middle; self diverges at both ends (diverge/rejoin/diverge).
+    self_points = [(47.600, -122.340), (47.630, -122.340)]
+    other = [(47.610, -122.340), (47.620, -122.340)]
+
+    spans = divergent_spans(self_points, other, radius_m=250)
+
+    assert len(spans) == 2
+
+
+def test_divergent_spans_degenerate_inputs_are_empty():
+    assert divergent_spans([(47.6, -122.34)], VERTICAL_1KM, radius_m=250) == []
+    assert divergent_spans(VERTICAL_1KM, [], radius_m=250) == []
 
 
 def test_divergent_length_matches_bruteforce_min_distance_rule():
