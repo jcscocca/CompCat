@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from app.crime.nibrs_crosswalk import classify_nibrs
 from app.models import utc_now
 from app.parsers.base import parse_datetime
 from app.schemas import CrimeIncidentData
@@ -130,6 +131,8 @@ def crime_incident_from_mapping(row: dict[str, Any]) -> CrimeIncidentData:
 def arrest_from_mapping(row: dict[str, Any]) -> CrimeIncidentData:
     latitude = _float_or_none(_first(row, "latitude", "lat", "y"))
     longitude = _float_or_none(_first(row, "longitude", "lon", "lng", "x"))
+    _arrest_nibrs = _first(row, "nibrs_description")
+    _arrest_category, _arrest_group = classify_nibrs(_arrest_nibrs)
     return CrimeIncidentData(
         external_incident_id=_first(row, "arrest_number"),
         report_number=_first(row, "report_number"),
@@ -139,13 +142,13 @@ def arrest_from_mapping(row: dict[str, Any]) -> CrimeIncidentData:
         ),
         offense_end_utc=None,
         report_utc=parse_datetime(_first(row, "arrest_reported_date_time", "arrest_reported")),
-        offense_category=None,
-        # Best-effort taxonomy: NIBRS offense description goes in offense_subcategory. This
-        # column therefore carries source-specific semantics (arrests vs SPD reports); safe
-        # because reports-only default means arrests are never queried by category here, and
-        # we never filter across sources. A unified crosswalk is a later increment.
-        offense_subcategory=_first(row, "nibrs_description"),
-        nibrs_group=None,
+        # Map the NIBRS offense description to the crime taxonomy (offense_category +
+        # nibrs_group) so arrests are comparable to reported crime by category. The raw
+        # description still populates offense_subcategory (the "Charge" column); an
+        # unrecognized description leaves category/group null (see nibrs_crosswalk).
+        offense_category=_arrest_category,
+        offense_subcategory=_arrest_nibrs,
+        nibrs_group=_arrest_group,
         precinct=_first(row, "precinct"),
         sector=_first(row, "sector"),
         beat=_first(row, "beat"),

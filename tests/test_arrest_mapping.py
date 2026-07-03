@@ -39,8 +39,8 @@ def test_arrest_row_maps_to_incident_fields():
     assert incident.report_utc is not None
     assert incident.report_utc.isoformat() == "2019-05-21T10:40:34+00:00"
     assert incident.offense_subcategory == "All Other Larceny"
-    assert incident.offense_category is None
-    assert incident.nibrs_group is None
+    assert incident.offense_category == "PROPERTY"
+    assert incident.nibrs_group == "A"
     assert incident.beat == "K1"
     assert incident.sector == "KING"
     assert incident.precinct == "West"
