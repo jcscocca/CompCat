@@ -1,7 +1,7 @@
 # Waypoint — Roadmap
 
-**Last updated:** 2026-06-30 · **Status:** canonical, living document.
-**Verified against:** base commit `237e603` (Seattle 911 Call Data edition — two-layer incident context, #76).
+**Last updated:** 2026-07-03 · **Status:** canonical, living document.
+**Verified against:** base commit `5fe1da0` (routes removal — backend excision + migration 0012).
 
 This is the single source of truth for *where Waypoint is going*. It supersedes the dated
 drafts under `docs/superpowers/` (`2026-06-26-waypoint-next-steps-roadmap.md`,
@@ -133,9 +133,10 @@ the data/ops durability, and the product-breadth items are all closed. No queued
 
 > Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
 
-## Phase 2 — Compare-first flagship (to be brainstormed)
-*Placeholder for the address-first product's next chapter — not yet spec'd. With routes removed,
-the flagship experience is comparing candidate addresses.*
+## Phase 5 — Compare-first flagship (pivot phase 2 — to be brainstormed)
+*Placeholder for the address-first product's next chapter — not yet spec'd. This is phase 2 of
+the 2026-07 address-first pivot (the routes removal — see the note at the top): with routes
+removed, the flagship experience is comparing candidate addresses.*
 
 - **Primary scenario:** choosing where to live — compare candidate addresses side by side.
 - **Secondary scenario:** knowing your own area — understand the reported-incident context

@@ -88,12 +88,12 @@ canonical product objects are stop visits, recurring place clusters, and context
 
 ## Statistical comparison
 
-- **Statistical comparison** compares place buffers using exposure-adjusted reported-incident
-  rates, with an `Overview` mode (public summary, decision class, rates, short caveat) and an
-  `Analytical` mode (counts, exposure, rate ratio, confidence interval, p-values, method,
-  overdispersion and minimum-data status, and full caveats). Product language may say "lower
-  reported-incident rate"; it must never call a place safe, unsafe, dangerous, or
-  crime-preventing.
+Statistical comparison compares place buffers using exposure-adjusted reported-incident rates,
+with an `Overview` mode (public summary, decision class, rates, short caveat) and an
+`Analytical` mode (counts, exposure, rate ratio, confidence interval, p-values, method,
+overdispersion and minimum-data status, and full caveats). Product language may say "lower
+reported-incident rate"; it must never call a place safe, unsafe, dangerous, or
+crime-preventing.
 
 ## Privacy posture
 
