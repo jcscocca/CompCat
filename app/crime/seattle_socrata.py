@@ -15,11 +15,28 @@ from app.parsers.base import parse_datetime
 from app.schemas import CrimeIncidentData
 
 CRIME_DATA_FLOOR = date(2018, 1, 1)
+
 # The SPD Call Data set is ~24x the size of the reported-crime set (10.9M rows back to 2009),
-# so it gets a much later floor — roughly a trailing 24 months from the project's current
-# horizon. A fixed calendar floor (not a rolling window) mirrors CRIME_DATA_FLOOR and keeps
-# ingest deterministic; lower it to date(2025, 7, 1) (12 months) if dev volume is too heavy.
-CALLS_DATA_FLOOR = date(2024, 7, 1)
+# so it gets a rolling, much-later floor instead of the full history. Lower CALLS_WINDOW_MONTHS
+# (e.g. to 12) if dev volume is too heavy.
+CALLS_WINDOW_MONTHS = 24
+
+
+def calls_data_floor(today: date | None = None) -> date:
+    """Rolling lower bound for 911-call ingest: the first of the month, CALLS_WINDOW_MONTHS
+    back from ``today`` (defaults to date.today()). Computed per ingest run so the trailing
+    window never drifts. Anchoring to the 1st is leap-safe and the month arithmetic is exact
+    for any window size. ``today`` is injectable for deterministic tests."""
+    ref = today or date.today()
+    months = ref.year * 12 + (ref.month - 1) - CALLS_WINDOW_MONTHS
+    year, month_index = divmod(months, 12)
+    return date(year, month_index + 1, 1)
+
+
+def crime_data_floor(today: date | None = None) -> date:
+    """Fixed lower bound for crime/arrest ingest (full history back to CRIME_DATA_FLOOR).
+    Accepts ``today`` only to share the resolver signature with calls_data_floor; ignores it."""
+    return CRIME_DATA_FLOOR
 
 
 def floor_start_date(start_date: date | None, floor: date = CRIME_DATA_FLOOR) -> date:

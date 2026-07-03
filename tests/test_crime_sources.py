@@ -1,7 +1,8 @@
+from datetime import date
+
 import pytest
 
 from app.crime.seattle_socrata import (
-    CALLS_DATA_FLOOR,
     CRIME_DATA_FLOOR,
     arrest_from_mapping,
     call_from_mapping,
@@ -32,21 +33,21 @@ def test_registry_resolves_known_sources():
     assert crime.dataset_attr == "socrata_dataset_id"
     assert crime.mapper is crime_incident_from_mapping
     assert crime.date_field == "offense_date"
-    assert crime.data_floor == CRIME_DATA_FLOOR
+    assert crime.data_floor(date(2026, 7, 2)) == CRIME_DATA_FLOOR
 
     arrests = get_crime_source(SOURCE_SPD_ARRESTS)
     assert arrests.dataset_attr == "socrata_arrests_dataset_id"
     assert arrests.mapper is arrest_from_mapping
     assert arrests.date_field == "arrest_occurred_date_time"
-    assert arrests.data_floor == CRIME_DATA_FLOOR
+    assert arrests.data_floor(date(2026, 7, 2)) == CRIME_DATA_FLOOR
 
     calls = get_crime_source(SOURCE_SPD_911)
     assert calls.dataset_attr == "socrata_calls_dataset_id"
     assert calls.mapper is call_from_mapping
     assert calls.date_field == "cad_event_original_time_queued"
-    # The call set is far larger, so it ingests from a later floor than reported crime.
-    assert calls.data_floor == CALLS_DATA_FLOOR
-    assert calls.data_floor > CRIME_DATA_FLOOR
+    # The call set is far larger, so it ingests from a later (rolling) floor than crime.
+    assert calls.data_floor(date(2026, 7, 2)) == date(2024, 7, 1)
+    assert calls.data_floor(date(2026, 7, 2)) > CRIME_DATA_FLOOR
 
 
 def test_registry_rejects_unknown_source():

@@ -53,7 +53,7 @@ def ingest_socrata(
         app_token=settings.socrata_app_token,
         mapper=crime_source.mapper,
         date_field=crime_source.date_field,
-        data_floor=crime_source.data_floor,
+        data_floor=crime_source.data_floor(date.today()),
     )
     if mode == "backfill":
         if start_date is None:

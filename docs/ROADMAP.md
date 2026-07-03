@@ -117,9 +117,12 @@ the data/ops durability, and the product-breadth items are all closed. No queued
   on the public (redacted) data an arrest can't be linked back to its crime, so the union was
   never sound there. One-line `LAYERS` change (validation/freshness/queries auto-propagate) +
   framing copy; no DB migration. Spec/plan:
-  `docs/superpowers/{specs,plans}/2026-07-02-arrests-third-layer*`. Still deferred: the
-  arrest↔crime **taxonomy crosswalk** (unify arrest NIBRS descriptions with crime categories),
-  arrest demographics (not ingested), and the `CALLS_DATA_FLOOR` fixed-date drift past 24 months._
+  `docs/superpowers/{specs,plans}/2026-07-02-arrests-third-layer*`. The `CALLS_DATA_FLOOR`
+  fixed-date drift is **fixed**: the 911 floor is now a rolling first-of-month, 24-month window
+  computed per ingest run (`calls_data_floor`, `app/crime/seattle_socrata.py`), so it no longer
+  drifts past 24 months (spec/plan `…/2026-07-02-calls-floor-rolling*`). Still deferred: the
+  arrest↔crime **taxonomy crosswalk** (unify arrest NIBRS descriptions with crime categories)
+  and arrest demographics (not ingested)._
 
 > Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), route corridor-temporal, an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
 
