@@ -6,10 +6,10 @@ from datetime import date
 from typing import Any
 
 from app.crime.seattle_socrata import (
-    CALLS_DATA_FLOOR,
-    CRIME_DATA_FLOOR,
     arrest_from_mapping,
     call_from_mapping,
+    calls_data_floor,
+    crime_data_floor,
     crime_incident_from_mapping,
 )
 from app.schemas import CrimeIncidentData
@@ -25,7 +25,7 @@ class CrimeSource:
     dataset_attr: str  # Settings attribute holding this source's Socrata dataset id
     mapper: Callable[[dict[str, Any]], CrimeIncidentData]
     date_field: str  # Socrata column used for $order / $where windowing
-    data_floor: date  # earliest date this source is ingested from
+    data_floor: Callable[[date | None], date]  # resolves the earliest ingest date for a run
 
 
 CRIME_SOURCES: dict[str, CrimeSource] = {
@@ -34,21 +34,21 @@ CRIME_SOURCES: dict[str, CrimeSource] = {
         dataset_attr="socrata_dataset_id",
         mapper=crime_incident_from_mapping,
         date_field="offense_date",
-        data_floor=CRIME_DATA_FLOOR,
+        data_floor=crime_data_floor,
     ),
     SOURCE_SPD_ARRESTS: CrimeSource(
         key=SOURCE_SPD_ARRESTS,
         dataset_attr="socrata_arrests_dataset_id",
         mapper=arrest_from_mapping,
         date_field="arrest_occurred_date_time",
-        data_floor=CRIME_DATA_FLOOR,
+        data_floor=crime_data_floor,
     ),
     SOURCE_SPD_911: CrimeSource(
         key=SOURCE_SPD_911,
         dataset_attr="socrata_calls_dataset_id",
         mapper=call_from_mapping,
         date_field="cad_event_original_time_queued",
-        data_floor=CALLS_DATA_FLOOR,
+        data_floor=calls_data_floor,
     ),
 }
 

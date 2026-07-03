@@ -1,6 +1,6 @@
 from datetime import date
 
-from app.crime.seattle_socrata import CALLS_DATA_FLOOR, CRIME_DATA_FLOOR, floor_start_date
+from app.crime.seattle_socrata import CRIME_DATA_FLOOR, floor_start_date
 
 
 def test_floor_lifts_pre_2018_dates():
@@ -16,7 +16,8 @@ def test_floor_defaults_none_to_floor():
 
 
 def test_floor_accepts_a_custom_source_floor():
-    # The 911 call source passes its own later floor; dates before it are lifted.
-    assert floor_start_date(date(2023, 1, 1), CALLS_DATA_FLOOR) == CALLS_DATA_FLOOR
-    assert floor_start_date(None, CALLS_DATA_FLOOR) == CALLS_DATA_FLOOR
-    assert floor_start_date(date(2025, 9, 1), CALLS_DATA_FLOOR) == date(2025, 9, 1)
+    # A source can pass its own later floor (e.g. the 911 window); earlier dates are lifted.
+    custom_floor = date(2024, 7, 1)
+    assert floor_start_date(date(2023, 1, 1), custom_floor) == custom_floor
+    assert floor_start_date(None, custom_floor) == custom_floor
+    assert floor_start_date(date(2025, 9, 1), custom_floor) == date(2025, 9, 1)
