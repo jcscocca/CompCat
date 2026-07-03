@@ -86,7 +86,7 @@ def test_build_statistical_comparison_floors_near_empty_candidate():
     # Product-invariant guard: a near-zero-incident option must NOT be declared the
     # "statistically lower" winner on combined count alone — that is a safety ranking on
     # no per-option signal. The per-option MIN_PLACE_COUNT floor (already enforced on the
-    # neighborhood path) must apply to the compare/route path too.
+    # neighborhood path) must apply to every path that feeds this engine.
     result = build_statistical_comparison(
         user_id_hash="user",
         comparison_type="site",
@@ -504,9 +504,10 @@ def test_candidate_selection_alone_does_not_manufacture_a_winner():
     # three options have similar rates with ample data — the empirical-min candidate (A) is the
     # lowest but is not >=20% below either rival (A/B = 16/18 = 0.89, A/C = 16/19 = 0.84, both
     # above the 0.80 floor) — so NO winner is declared despite A being singled out. The verdict
-    # is not_statistically_clear (insufficient evidence), NOT insufficient_data. See
-    # docs/analysis/statistical-route-place-comparison.md (Candidate Selection And Selective
-    # Inference).
+    # is not_statistically_clear (insufficient evidence), NOT insufficient_data. This is the
+    # "candidate selection and selective inference" rationale: picking the empirical minimum
+    # is itself a data-dependent selection, so the material-difference floor guards against
+    # crowning it (the stats engine is documented under docs/architecture/).
     result = build_statistical_comparison(
         user_id_hash="user",
         comparison_type="site",

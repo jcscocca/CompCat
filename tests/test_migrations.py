@@ -1,3 +1,5 @@
+"""Migration-chain and schema guards (revision-id length, table/index creation),
+plus a persistence smoke test of the statistical-comparison models."""
 import json
 from datetime import date
 
@@ -34,17 +36,17 @@ def test_statistical_comparison_models_persist_options_and_pairwise_results(tmp_
 
     comparison = StatisticalComparison(
         user_id_hash="analysis-user",
-        comparison_type="route",
-        geometry_type="route_corridor",
+        comparison_type="site",
+        geometry_type="place_buffer",
         radius_m=500,
         analysis_start_date=date(2024, 1, 1),
         analysis_end_date=date(2024, 1, 31),
         source_dataset="seattle_spd_crime",
         exposure_unit="square_km_days",
         decision_class="statistically_lower",
-        recommendation_option_id="route-a",
-        recommendation_label="Route A",
-        overview_summary_text="Route A has a statistically lower reported-incident rate.",
+        recommendation_option_id="option-a",
+        recommendation_label="Option A",
+        overview_summary_text="Option A has a statistically lower reported-incident rate.",
         overview_caveat_text="This describes reported incidents.",
         full_caveat_text="Results use exposure-adjusted reported incident rates.",
     )
@@ -55,9 +57,9 @@ def test_statistical_comparison_models_persist_options_and_pairwise_results(tmp_
         StatisticalComparisonOption(
             comparison_id=comparison.id,
             user_id_hash="analysis-user",
-            option_id="route-a",
-            option_label="Route A",
-            geometry_type="route_corridor",
+            option_id="option-a",
+            option_label="Option A",
+            geometry_type="place_buffer",
             radius_m=500,
             incident_count=8,
             exposure=30,
@@ -75,12 +77,12 @@ def test_statistical_comparison_models_persist_options_and_pairwise_results(tmp_
         StatisticalPairwiseResult(
             comparison_id=comparison.id,
             user_id_hash="analysis-user",
-            option_a_id="route-a",
-            option_a_label="Route A",
-            option_b_id="route-b",
-            option_b_label="Route B",
-            winner_option_id="route-a",
-            winner_label="Route A",
+            option_a_id="option-a",
+            option_a_label="Option A",
+            option_b_id="option-b",
+            option_b_label="Option B",
+            winner_option_id="option-a",
+            winner_label="Option A",
             decision_class="statistically_lower",
             method="exact_conditional_poisson",
             incident_count_a=8,
