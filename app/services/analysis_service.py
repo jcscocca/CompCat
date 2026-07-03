@@ -317,6 +317,9 @@ def latest_route_comparison_payload(
         select(StatisticalComparison)
         .where(StatisticalComparison.source_route_request_id == route_request_id)
         .where(StatisticalComparison.user_id_hash == user_id_hash)
+        .where(
+            StatisticalComparison.geometry_type == GeometryType.ROUTE_DIVERGENT_CORRIDOR.value
+        )
         .order_by(StatisticalComparison.created_at.desc())
     )
     if comparison is None:
