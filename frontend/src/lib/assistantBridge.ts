@@ -26,7 +26,7 @@ function settingsFrom(used: SettingsUsed | undefined): Partial<AnalysisSettings>
   // offense_category is null for "all reported"; the UI represents that as "".
   if (used.offense_category !== undefined) patch.offenseCategory = used.offense_category ?? "";
   // Reflect the layer the assistant ran against so the global toggle follows it.
-  if (used.layer === "reported" || used.layer === "calls") patch.layer = used.layer;
+  if (used.layer === "reported" || used.layer === "arrests" || used.layer === "calls") patch.layer = used.layer;
   return patch;
 }
 

@@ -119,7 +119,7 @@ export function PlacesTab({
                   ) : null}
                 </div>
                 <div className="right">
-                  {count !== null ? <span className="cnt">{count} {summary?.layer === "calls" ? "calls" : "inc."}</span> : null}
+                  {count !== null ? <span className="cnt">{count} {summary?.layer === "calls" ? "calls" : summary?.layer === "arrests" ? "arr." : "inc."}</span> : null}
                   {low ? <span className="cnt low">Low data</span> : null}
                   <button type="button" className="ico" aria-label={`Remove ${place.display_label}`} onClick={() => onDelete(place.id)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>

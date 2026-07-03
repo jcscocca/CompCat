@@ -59,7 +59,7 @@ class RouteRequestCreate(BaseModel):
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None
     radii_m: list[RouteRadiusMeters] = Field(default_factory=lambda: [250, 500], min_length=1)
-    # Which incident layer to use for corridor context ("reported" or "calls").
+    # Which incident layer to use for corridor context ("reported", "arrests", or "calls").
     layer: str = LAYER_REPORTED
 
     @field_validator("layer")

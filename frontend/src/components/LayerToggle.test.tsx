@@ -19,4 +19,11 @@ describe("LayerToggle", () => {
     fireEvent.click(screen.getByRole("button", { name: "911 calls" }));
     expect(onChange).toHaveBeenCalledWith("calls");
   });
+
+  it("offers reported, arrests, and calls", () => {
+    render(<LayerToggle layer="reported" onChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /reported incidents/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^arrests$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /911 calls/i })).toBeInTheDocument();
+  });
 });

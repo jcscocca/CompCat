@@ -32,7 +32,8 @@ export function DataFreshness({
   if (!entry || !entry.data_through) {
     return null;
   }
-  const noun = layer === "calls" ? "911 calls" : "reported SPD incidents";
+  const noun =
+    layer === "calls" ? "911 calls" : layer === "arrests" ? "SPD arrests" : "reported SPD incidents";
   const detail = [
     `${entry.incident_count.toLocaleString()} ${noun}`,
     entry.earliest ? `from ${formatDate(entry.earliest)}` : null,

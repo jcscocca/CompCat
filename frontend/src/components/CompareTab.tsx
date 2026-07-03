@@ -92,7 +92,7 @@ export function CompareTab({ selected, analysis, summary, comparison, running, o
   const canRun = selected.length >= 2 && !running;
   const rows = breakdownRows(summary, selected, analysis.radiusM);
   const showPersonGuidance =
-    analysis.layer !== "calls" && analysis.offenseCategory !== "" && analysis.offenseCategory !== "PERSON";
+    analysis.layer === "reported" && analysis.offenseCategory !== "" && analysis.offenseCategory !== "PERSON";
   const noun = incidentNoun(analysis.layer);
 
   if (selected.length < 2) {

@@ -19,7 +19,8 @@ class AssistantDashboardState(BaseModel):
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
-    # Active analysis layer ("reported" = SPD crime + arrests, "calls" = 911 calls).
+    # Active analysis layer ("reported" = SPD crime reports, "arrests" = SPD arrest
+    # records (enforcement activity), "calls" = 911 calls for service).
     layer: str = "reported"
 
 

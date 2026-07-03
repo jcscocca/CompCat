@@ -1,7 +1,7 @@
 import type { LayerKey } from "../types";
 
 /** Noun phrases for the active data layer, so result copy reflects what the user is viewing:
- * the reported-incident layer (SPD crime + arrests) vs the 911 calls-for-service layer. */
+ * the reported-incident (SPD crime reports), arrests (enforcement), and 911 calls-for-service layers. */
 export type IncidentNoun = {
   /** e.g. "reported incident" / "911 call" */
   singular: string;
@@ -14,6 +14,9 @@ export type IncidentNoun = {
 export function incidentNoun(layer: LayerKey): IncidentNoun {
   if (layer === "calls") {
     return { singular: "911 call", plural: "911 calls", pluralCap: "911 calls" };
+  }
+  if (layer === "arrests") {
+    return { singular: "arrest", plural: "arrests", pluralCap: "Arrests" };
   }
   return {
     singular: "reported incident",

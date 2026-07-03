@@ -34,6 +34,11 @@ describe("savedView", () => {
     }));
     expect(decodeView(bad)).toBeNull();
   });
+
+  it("preserves the arrests layer through encode/decode", () => {
+    const view = { tab: "analyze" as const, points: [{ latitude: 47.6, longitude: -122.3, label: "P" }], radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31", layer: "arrests" as const, offenseCategory: "" };
+    expect(decodeView(encodeView(view))?.layer).toBe("arrests");
+  });
 });
 
 import { type RoutesSavedView } from "./savedView";

@@ -43,6 +43,25 @@ describe("interpretToolResult", () => {
     expect(effect?.refetchSummary).toBe(true);
   });
 
+  it("reflects the arrests layer from settings_used into effect.settings.layer", () => {
+    const effect = interpretToolResult({
+      tool_name: "analyze_places",
+      result: {
+        place_ids: ["a"],
+        settings_used: {
+          radius_m: 250,
+          analysis_start_date: "2026-01-01",
+          analysis_end_date: "2026-06-30",
+          offense_category: null,
+          layer: "arrests",
+        },
+        neighborhood: { radius_m: 250, places: [], pairwise: [] },
+        incidents: { incidents: [], returned_count: 0, total_count: 0, limit: 100, radius_m: 250 },
+      },
+    });
+    expect(effect?.settings?.layer).toBe("arrests");
+  });
+
   it("maps add_place to an append-selection effect", () => {
     const effect = interpretToolResult({
       tool_name: "add_place",

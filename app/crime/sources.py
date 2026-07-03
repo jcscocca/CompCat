@@ -53,15 +53,20 @@ CRIME_SOURCES: dict[str, CrimeSource] = {
 }
 
 
-# Map analysis (UI) layers onto the underlying source datasets. A layer never blends a 911
-# call with the report it produced — the two layers are mutually exclusive — but within the
-# "reported" layer SPD reports and arrests are unioned (distinct events that may share a
-# report_number; see docs/architecture/data-model.md).
+# Map analysis (UI) layers onto the underlying source datasets. The three layers are
+# mutually exclusive: "reported" is SPD crime reports only; "arrests" is SPD arrest records
+# (enforcement activity — an arrest is logged where the arrest was made, which may differ from
+# where an offense occurred, and most reported crimes never result in one); "calls" is 911
+# calls for service. Arrests are deliberately NOT unioned into "reported" — on the public
+# (redacted) data an arrest can't be linked back to its crime, so unioning double-counts and
+# conflates enforcement geography with incidence. See docs/architecture/data-model.md.
 LAYER_REPORTED = "reported"
+LAYER_ARRESTS = "arrests"
 LAYER_CALLS = "calls"
 
 LAYERS: dict[str, tuple[str, ...]] = {
-    LAYER_REPORTED: (SOURCE_SPD_CRIME, SOURCE_SPD_ARRESTS),
+    LAYER_REPORTED: (SOURCE_SPD_CRIME,),
+    LAYER_ARRESTS: (SOURCE_SPD_ARRESTS,),
     LAYER_CALLS: (SOURCE_SPD_911,),
 }
 

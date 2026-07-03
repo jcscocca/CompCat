@@ -337,7 +337,7 @@ function PairwiseSection({ neighborhood }: { neighborhood: NeighborhoodAnalysis 
   );
 }
 
-function IncidentDetailsTable({ details, noun, isCalls }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun; isCalls: boolean }) {
+function IncidentDetailsTable({ details, noun, showCategory, subcategoryHeader }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun; showCategory: boolean; subcategoryHeader: string }) {
   if (!details) return null;
 
   const isCapped = details.total_count > details.returned_count;
@@ -362,9 +362,9 @@ function IncidentDetailsTable({ details, noun, isCalls }: { details: IncidentDet
                 <tr>
                   <th scope="col">Place</th>
                   <th scope="col">Date/time</th>
-                  {/* 911 calls carry no offense category — show only the call type. */}
-                  {isCalls ? null : <th scope="col">Category</th>}
-                  <th scope="col">{isCalls ? "Call type" : "Subcategory"}</th>
+                  {/* calls and arrests carry no offense category — show only the type/charge column. */}
+                  {showCategory ? <th scope="col">Category</th> : null}
+                  <th scope="col">{subcategoryHeader}</th>
                   <th scope="col">Distance</th>
                   <th scope="col">Block/address</th>
                   <th scope="col">ID</th>
@@ -375,7 +375,7 @@ function IncidentDetailsTable({ details, noun, isCalls }: { details: IncidentDet
                   <tr key={`${incident.place_id}-${incident.incident_id}`}>
                     <td>{incident.place_label}</td>
                     <td>{formatIncidentTime(incident.occurred_at || incident.reported_at)}</td>
-                    {isCalls ? null : <td>{incidentCategoryLabel(incident)}</td>}
+                    {showCategory ? <td>{incidentCategoryLabel(incident)}</td> : null}
                     <td>{incidentSubtypeLabel(incident)}</td>
                     <td>{formatDistanceMeters(incident.distance_m)}</td>
                     <td>{incident.block_address || "Unavailable"}</td>
@@ -391,7 +391,7 @@ function IncidentDetailsTable({ details, noun, isCalls }: { details: IncidentDet
   );
 }
 
-function IncidentDetailsCards({ details, noun, isCalls }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun; isCalls: boolean }) {
+function IncidentDetailsCards({ details, noun, showCategory }: { details: IncidentDetailsResponse | null | undefined; noun: IncidentNoun; showCategory: boolean; subcategoryHeader: string }) {
   if (!details) return null;
 
   const isCapped = details.total_count > details.returned_count;
@@ -418,7 +418,7 @@ function IncidentDetailsCards({ details, noun, isCalls }: { details: IncidentDet
                   <em>{formatDistanceMeters(incident.distance_m)}</em>
                 </div>
                 <div className="mc-icard-tags">
-                  {isCalls ? null : <span>{incidentCategoryLabel(incident)}</span>}
+                  {showCategory ? <span>{incidentCategoryLabel(incident)}</span> : null}
                   <span>{incidentSubtypeLabel(incident)}</span>
                   <span>{formatIncidentTime(incident.occurred_at || incident.reported_at)}</span>
                 </div>
@@ -442,6 +442,9 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
     : "";
 
   const isCallsLayer = analysis.layer === "calls";
+  const isArrestsLayer = analysis.layer === "arrests";
+  const showCategory = analysis.layer === "reported"; // only reported carries offense categories
+  const subcategoryHeader = isCallsLayer ? "Call type" : isArrestsLayer ? "Charge" : "Subcategory";
   const noun = incidentNoun(analysis.layer);
 
   return (
@@ -466,7 +469,7 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
           </div>
         </div>
 
-        {isCallsLayer ? null : (
+        {showCategory ? (
           <div className="mc-field">
             <label id="category-label">Incident categories</label>
             <div className="mc-chips" role="group" aria-labelledby="category-label">
@@ -477,7 +480,7 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
               ))}
             </div>
           </div>
-        )}
+        ) : null}
 
         <div className="mc-querybar-run">
           <span className="note">{selected.length} place{selected.length === 1 ? "" : "s"} · {analysis.radiusM} m</span>
@@ -491,11 +494,11 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
           event can generate several calls, many are proactive officer activity, and a call does
           not mean a crime occurred. Counts below are call volume, not reported crime.
         </p>
-      ) : analysis.offenseCategory !== "" ? (
+      ) : isArrestsLayer ? (
         <p className="mc-layer-note" role="note">
-          Filtering by category shows <strong>reported crimes</strong> only — arrests carry no
-          offense category, so they’re excluded while a category is selected. Choose “All reported”
-          to include arrests.
+          Arrests are <strong>enforcement activity, not reported incidents</strong>. An arrest is
+          logged where the arrest was made — which may differ from where an offense occurred — and
+          most reported crimes never result in one.
         </p>
       ) : null}
 
@@ -533,15 +536,15 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
             <details className="mc-incident-reveal">
               <summary>See the {incidentDetails.total_count} {countNoun(noun, incidentDetails.total_count)}</summary>
               {incidentLayout === "table" ? (
-                <IncidentDetailsTable details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
+                <IncidentDetailsTable details={incidentDetails} noun={noun} showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
               ) : (
-                <IncidentDetailsCards details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
+                <IncidentDetailsCards details={incidentDetails} noun={noun} showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
               )}
             </details>
           ) : incidentLayout === "table" ? (
-            <IncidentDetailsTable details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
+            <IncidentDetailsTable details={incidentDetails} noun={noun} showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
           ) : (
-            <IncidentDetailsCards details={incidentDetails} noun={noun} isCalls={isCallsLayer} />
+            <IncidentDetailsCards details={incidentDetails} noun={noun} showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
           )}
 
           <MethodsAppendix />

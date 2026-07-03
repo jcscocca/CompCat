@@ -8,6 +8,7 @@ from app.crime.seattle_socrata import (
     crime_incident_from_mapping,
 )
 from app.crime.sources import (
+    LAYER_ARRESTS,
     LAYER_CALLS,
     LAYER_REPORTED,
     SOURCE_SPD_911,
@@ -54,14 +55,22 @@ def test_registry_rejects_unknown_source():
 
 
 def test_layers_map_to_underlying_sources():
-    assert sources_for_layer(LAYER_REPORTED) == (SOURCE_SPD_CRIME, SOURCE_SPD_ARRESTS)
+    assert sources_for_layer(LAYER_REPORTED) == (SOURCE_SPD_CRIME,)
+    assert sources_for_layer(LAYER_ARRESTS) == (SOURCE_SPD_ARRESTS,)
     assert sources_for_layer(LAYER_CALLS) == (SOURCE_SPD_911,)
 
 
-def test_layers_are_disjoint_so_a_call_is_never_blended_with_its_report():
-    reported = set(sources_for_layer(LAYER_REPORTED))
-    calls = set(sources_for_layer(LAYER_CALLS))
-    assert reported.isdisjoint(calls)
+def test_layers_are_pairwise_disjoint():
+    # Reported (crime reports), arrests (enforcement), and calls (911) are distinct,
+    # non-overlapping source sets — an arrest is never counted as a reported incident.
+    sets = [
+        set(sources_for_layer(LAYER_REPORTED)),
+        set(sources_for_layer(LAYER_ARRESTS)),
+        set(sources_for_layer(LAYER_CALLS)),
+    ]
+    for i in range(len(sets)):
+        for j in range(i + 1, len(sets)):
+            assert sets[i].isdisjoint(sets[j])
 
 
 def test_unknown_layer_rejected():

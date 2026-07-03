@@ -150,7 +150,7 @@ def test_dashboard_analyze_filters_candidates_before_summarizing(tmp_path):
 
 def _seed_layered_incident(client: TestClient, *, source: str, external_id: str) -> None:
     """Add one incident for ``source`` at the Downtown place so layer queries can tell the
-    reported (crime+arrests) layer apart from the 911 calls layer."""
+    reported (crime), arrests, and 911 calls layers apart."""
     session = get_sessionmaker()()
     session.add(
         CrimeIncident(
@@ -168,7 +168,7 @@ def _seed_layered_incident(client: TestClient, *, source: str, external_id: str)
     session.close()
 
 
-def test_dashboard_incidents_reported_layer_unions_crime_and_arrests(tmp_path):
+def test_dashboard_incidents_layers_are_disjoint(tmp_path):
     client = _client_with_places_and_crime(tmp_path)
     # incident-a (crime) is already at the Downtown place; add an arrest and a 911 call there.
     _seed_layered_incident(client, source="seattle_spd_arrests", external_id="arr-1")
@@ -181,17 +181,20 @@ def test_dashboard_incidents_reported_layer_unions_crime_and_arrests(tmp_path):
         "radii_m": [250],
     }
 
-    reported = client.post("/dashboard/incidents", json={**body, "layer": "reported"}).json()
-    calls = client.post("/dashboard/incidents", json={**body, "layer": "calls"}).json()
-    default = client.post("/dashboard/incidents", json=body).json()
+    def ids(layer: str) -> set[str]:
+        resp = client.post("/dashboard/incidents", json={**body, "layer": layer})
+        assert resp.status_code == 200, resp.text
+        return {row["incident_id"] for row in resp.json()["incidents"]}
 
-    # reported = crime (incident-a) + arrest (arr-1); the 911 call is excluded.
-    reported_ids = {row["incident_id"] for row in reported["incidents"]}
-    assert reported_ids == {"incident-a", "arr-1"}
-    # calls layer sees only the 911 row.
-    assert {row["incident_id"] for row in calls["incidents"]} == {"call-1"}
-    # No layer specified defaults to the reported layer.
-    assert {row["incident_id"] for row in default["incidents"]} == reported_ids
+    # reported = crime only — the arrest is no longer unioned in.
+    assert ids("reported") == {"incident-a"}
+    # arrests layer = arrests only.
+    assert ids("arrests") == {"arr-1"}
+    # calls layer = 911 only.
+    assert ids("calls") == {"call-1"}
+    # No layer specified still defaults to reported (crime only).
+    default = client.post("/dashboard/incidents", json=body).json()
+    assert {row["incident_id"] for row in default["incidents"]} == {"incident-a"}
 
 
 def test_dashboard_summary_reports_the_analyzed_layer(tmp_path):

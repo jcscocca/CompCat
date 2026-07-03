@@ -97,20 +97,6 @@ describe("AnalyzeTab", () => {
     expect(screen.getByText(/requests for service/i)).toBeInTheDocument();
   });
 
-  it("warns that arrests drop out when filtering the reported layer by category", () => {
-    render(
-      <AnalyzeTab
-        selected={[home]}
-        analysis={{ ...analysis, layer: "reported", offenseCategory: "PROPERTY" }}
-        availableRadii={[250]}
-        running={false}
-        onChange={vi.fn()}
-        onRun={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/arrests carry no offense category/i)).toBeInTheDocument();
-  });
-
   it("disables run when nothing is selected", () => {
     render(<AnalyzeTab selected={[]} analysis={analysis} availableRadii={[250]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.getByRole("button", { name: /run analysis/i })).toBeDisabled();
@@ -501,5 +487,17 @@ describe("AnalyzeTab", () => {
     expect(rows[0].textContent).toMatch(/71%\s*here/);
     // Degraded → no beat baseline → no "nearby" anywhere in the breakdown.
     expect(container.querySelector(".mc-cat-breakdown")!.textContent).not.toMatch(/nearby/);
+  });
+
+  it("shows the arrests enforcement note and hides the category filter on the arrests layer", () => {
+    render(<AnalyzeTab selected={[home]} analysis={{ ...analysis, layer: "arrests" }} availableRadii={[250, 500, 1000]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
+    expect(screen.getByText(/enforcement activity, not reported incidents/i)).toBeInTheDocument();
+    expect(screen.queryByText(/incident categories/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the category filter and no arrests note on the reported layer", () => {
+    render(<AnalyzeTab selected={[home]} analysis={{ ...analysis, layer: "reported" }} availableRadii={[250, 500, 1000]} running={false} onChange={vi.fn()} onRun={vi.fn()} />);
+    expect(screen.queryByText(/enforcement activity, not reported incidents/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/incident categories/i)).toBeInTheDocument();
   });
 });

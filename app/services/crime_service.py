@@ -100,9 +100,10 @@ def dashboard_freshness_by_layer(
     *,
     now: Callable[[], float] = monotonic,
 ) -> dict[str, dict[str, object]]:
-    """Coverage/freshness for each analysis layer (``reported`` = SPD crime + arrests unioned,
-    ``calls`` = 911), so the freshness pill reflects the layer the user is viewing rather than
-    always describing reported crime. Cached per layer like the single-source variant."""
+    """Coverage/freshness for each analysis layer (``reported`` = SPD crime reports,
+    ``arrests`` = SPD arrests, ``calls`` = 911), so the freshness pill reflects the layer the
+    user is viewing rather than always describing reported crime. Cached per layer like the
+    single-source variant."""
     result: dict[str, dict[str, object]] = {}
     for layer, sources in LAYERS.items():
         cache_key = f"layer:{layer}"

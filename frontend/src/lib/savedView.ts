@@ -83,7 +83,7 @@ function decodeRoutesView(wire: {
     radiusM: Number(wire.r),
     startDate: String(wire.s),
     endDate: String(wire.e),
-    layer: wire.ly === "calls" ? "calls" : "reported",
+    layer: wire.ly === "calls" ? "calls" : wire.ly === "arrests" ? "arrests" : "reported",
   };
 }
 
@@ -103,7 +103,7 @@ export function decodeView(param: string): SavedView | null {
       radiusM: Number(wire.r),
       startDate: String(wire.s),
       endDate: String(wire.e),
-      layer: wire.ly === "calls" ? "calls" : "reported",
+      layer: wire.ly === "calls" ? "calls" : wire.ly === "arrests" ? "arrests" : "reported",
       offenseCategory: wire.c ?? "",
     };
   } catch {

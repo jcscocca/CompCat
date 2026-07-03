@@ -188,3 +188,15 @@ def test_semantic_context_reports_missing_places_selection_dates_and_radius(tmp_
     assert "No complete analysis date range is selected." in packet.missing_context
     assert "No analysis radius is selected." in packet.missing_context
 
+
+def test_policy_caveats_frame_the_three_layers_including_arrests():
+    from app.assistant.semantic_layer import POLICY_CAVEATS
+
+    text = " ".join(POLICY_CAVEATS).lower()
+    # Reported is crime reports only (arrests are no longer unioned into it).
+    assert "crime + arrests" not in text
+    # Each layer is named and arrests are framed as enforcement, not incidents.
+    assert "arrests" in text
+    assert "enforcement" in text
+    assert "911 calls" in text or "calls for service" in text
+

@@ -16,6 +16,12 @@ const loaded: DashboardFreshness = {
     earliest: "2008-01-01",
     last_ingested_at: "2026-06-23T04:00:00Z",
   },
+  arrests: {
+    incident_count: 3210,
+    data_through: "2026-06-20",
+    earliest: "2008-01-01",
+    last_ingested_at: "2026-06-23T04:00:00Z",
+  },
   calls: {
     incident_count: 678,
     data_through: "2026-06-21",
@@ -42,7 +48,7 @@ describe("DataFreshness", () => {
   });
 
   it("renders nothing when the active layer has no data", () => {
-    render(<DataFreshness freshness={{ reported: empty, calls: empty }} layer="reported" />);
+    render(<DataFreshness freshness={{ reported: empty, arrests: empty, calls: empty }} layer="reported" />);
     expect(screen.queryByText(/data through/i)).not.toBeInTheDocument();
   });
 });

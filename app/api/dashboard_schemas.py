@@ -45,8 +45,9 @@ class DashboardAnalyzeRequest(BaseModel):
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
-    # Which incident-context layer to query: "reported" (SPD crime + arrests, unioned) or
-    # "calls" (911 calls for service). The two are mutually exclusive by design.
+    # Which incident-context layer to query: "reported" (SPD crime reports), "arrests" (SPD
+    # arrest records — enforcement activity, kept separate from reported incidents), or
+    # "calls" (911 calls for service). The layers are mutually exclusive by design.
     layer: str = LAYER_REPORTED
 
     @model_validator(mode="after")

@@ -50,6 +50,8 @@ def test_freshness_reports_count_range_and_last_ingested(tmp_path):
     assert reported["last_ingested_at"] is not None
     # The calls layer is empty here.
     assert body["calls"]["incident_count"] == 0
+    # The arrests layer is empty here too (seeded rows are reported crime).
+    assert body["arrests"]["incident_count"] == 0
 
 
 def test_freshness_empty_dataset_returns_nulls(tmp_path):
@@ -63,7 +65,7 @@ def test_freshness_empty_dataset_returns_nulls(tmp_path):
         "earliest": None,
         "last_ingested_at": None,
     }
-    assert response.json() == {"reported": empty, "calls": empty}
+    assert response.json() == {"reported": empty, "arrests": empty, "calls": empty}
 
 
 def test_freshness_requires_a_public_session(tmp_path):
@@ -88,42 +90,29 @@ def test_mapping_stamps_ingested_at_not_the_old_2024_hardcode():
     assert snapshot_at.year >= 2025  # ingested-at (now), not 2024-01-01
 
 
-def test_freshness_defaults_to_reports_and_ignores_arrests(tmp_path):
-    from datetime import UTC, datetime
-
-    from app.db import get_sessionmaker
-    from app.main import create_app
-    from app.models import CrimeIncident
-    from app.services.crime_service import crime_data_freshness, reset_freshness_cache
-
-    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
-    reset_freshness_cache()
+def test_freshness_arrests_layer_is_separate_from_reported(tmp_path):
+    client = _client(tmp_path)
+    client.post("/sessions")
     session = get_sessionmaker()()
     session.add_all(
         [
             CrimeIncident(
-                external_incident_id="rep-old",
-                source_dataset="seattle_spd_crime",
-                offense_start_utc=datetime(2024, 6, 1, tzinfo=UTC),
-                latitude=47.6,
-                longitude=-122.33,
+                id="c1", source_dataset="seattle_spd_crime",
+                offense_start_utc=datetime(2024, 1, 5, tzinfo=UTC),
+                offense_category="PROPERTY", latitude=47.6, longitude=-122.3,
             ),
             CrimeIncident(
-                external_incident_id="arr-new",
-                source_dataset="seattle_spd_arrests",
-                offense_start_utc=datetime(2025, 12, 31, tzinfo=UTC),
-                latitude=47.6,
-                longitude=-122.33,
+                id="a1", source_dataset="seattle_spd_arrests",
+                offense_start_utc=datetime(2024, 1, 6, tzinfo=UTC),
+                latitude=47.6, longitude=-122.3,
             ),
         ]
     )
     session.commit()
-
-    reports = crime_data_freshness(session)
-    assert reports["incident_count"] == 1
-    assert reports["data_through"] == "2024-06-01"  # arrests' later date excluded
-
-    arrests = crime_data_freshness(session, source_dataset="seattle_spd_arrests")
-    assert arrests["incident_count"] == 1
-    assert arrests["data_through"] == "2025-12-31"
     session.close()
+
+    body = client.get("/dashboard/freshness").json()
+    assert set(body) >= {"reported", "arrests", "calls"}
+    assert body["reported"]["incident_count"] == 1   # crime only (arrest not unioned in)
+    assert body["arrests"]["incident_count"] == 1     # arrests only
+    assert body["calls"]["incident_count"] == 0

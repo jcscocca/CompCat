@@ -162,9 +162,10 @@ export type GeocodeResult = {
   source: string;
 };
 
-/** Which incident-context layer the dashboard queries. "reported" unions SPD crime +
- * arrests; "calls" is 911 calls for service. The two are mutually exclusive. */
-export type LayerKey = "reported" | "calls";
+/** Which incident-context layer the dashboard queries. "reported" is SPD crime reports;
+ * "arrests" is SPD arrest records (enforcement activity); "calls" is 911 calls for service.
+ * The three are mutually exclusive. */
+export type LayerKey = "reported" | "arrests" | "calls";
 
 export type AnalysisSettings = {
   startDate: string;

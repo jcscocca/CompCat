@@ -21,9 +21,12 @@ POLICY_CAVEATS = [
     ),
     (
         "The active layer (active_filters.layer) decides what the counts mean: 'reported' is "
-        "SPD crime + arrests; 'calls' is 911 calls for service — requests, not confirmed "
-        "incidents (one event can generate several calls, and many are proactive officer "
-        "activity). Describe results using the active layer's terms."
+        "SPD crime reports; 'arrests' is SPD arrest records — enforcement activity, not "
+        "reported incidents (an arrest is logged where the arrest was made, which may differ "
+        "from where an offense occurred, and most reported crimes never result in one); "
+        "'calls' is 911 calls for service — requests, not confirmed incidents (one event can "
+        "generate several calls, and many are proactive officer activity). Describe results "
+        "using the active layer's terms."
     ),
 ]
 
@@ -46,7 +49,8 @@ AVAILABLE_TOOLS = [
         "name": "analyze_places",
         "description": (
             "Resolve place names (or use the current selection), run the analysis for the "
-            "active layer (reported incidents, or 911 calls when layer is 'calls'), and return "
+            "active layer (reported incidents; arrests when layer is 'arrests'; 911 calls when "
+            "layer is 'calls'), and return "
             "the neighborhood-vs-beat verdicts and incident details. Pass names as 'queries'."
         ),
     },
@@ -54,8 +58,8 @@ AVAILABLE_TOOLS = [
         "name": "compare_places",
         "description": (
             "Resolve two or more place names (or use the selection), run the analysis, and "
-            "compare their context for the active layer (reported incidents or 911 calls). "
-            "Pass names as 'queries'."
+            "compare their context for the active layer (reported incidents, arrests, or 911 "
+            "calls). Pass names as 'queries'."
         ),
     },
     {

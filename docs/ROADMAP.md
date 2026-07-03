@@ -108,9 +108,18 @@ the data/ops durability, and the product-breadth items are all closed. No queued
   are framed everywhere as *requests for service, not confirmed incidents* (LLM prompt +
   semantic layer + UI, test-pinned), and the safety-refusal guard is untouched / layer-independent.
   Spec/plan (inc 1): `docs/superpowers/{specs,plans}/2026-06-29-second-source-arrests-foundation*`.
-  _Remaining follow-up: surface arrests as a clearly-labeled, enforcement-framed lens (never
-  merged into reported-incident counts) + a taxonomy crosswalk; `CALLS_DATA_FLOOR` is a fixed
-  date that drifts past 24 months._
+  _Arrests enforcement-lens **shipped** as a de-merged third layer: `reported` is now SPD
+  crime reports only, and arrests are a disjoint, clearly-labeled `arrests` layer (Reported /
+  Arrests / Calls) framed everywhere as *enforcement activity, not reported incidents*
+  (assistant prompt + caveats, toggle, Analyze note + "Charge" column, freshness/copy). This
+  fixes the prior reported-layer double-count (a crime report and its resulting arrest — which
+  may share a `report_number` — were both counted) and the enforcement-vs-incidence conflation;
+  on the public (redacted) data an arrest can't be linked back to its crime, so the union was
+  never sound there. One-line `LAYERS` change (validation/freshness/queries auto-propagate) +
+  framing copy; no DB migration. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-02-arrests-third-layer*`. Still deferred: the
+  arrest↔crime **taxonomy crosswalk** (unify arrest NIBRS descriptions with crime categories),
+  arrest demographics (not ingested), and the `CALLS_DATA_FLOOR` fixed-date drift past 24 months._
 
 > Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), route corridor-temporal, an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
 

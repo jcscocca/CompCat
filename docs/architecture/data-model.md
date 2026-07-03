@@ -23,18 +23,27 @@ user-scoped table carries `user_id_hash` (a hashed session identity; see §2). S
 
 | Entity | Table | Purpose | Key columns |
 |---|---|---|---|
-| `CrimeIncident` | `crime_incidents` | Imported SPD incident-context record (reported crime, arrest, or 911 call). Not user-scoped — shared across all sessions. Uniqueness is composite `(source_dataset, external_incident_id)`; `source_dataset` (indexed) is `seattle_spd_crime` (reported incidents), `seattle_spd_arrests`, or `seattle_spd_911` (calls for service). `offense_subcategory` is overloaded per source: offense parent group (crime), NIBRS offense description (arrests), or final call type (911). For arrest and 911 rows `offense_category`/`nibrs_group` are null. 911 rows use `cad_event_number` as `external_incident_id`, which collapses the dataset's per-responding-unit rows to one row per call; redacted dispatch coordinates ("REDACTED") map to null lat/long. | `source_dataset` (indexed), `external_incident_id`, `offense_start_utc`, `offense_category`, `offense_subcategory`, `nibrs_group`, `precinct`, `sector`, `beat`, `mcpp`, `latitude`, `longitude` |
-| `PlaceCrimeSummary` | `place_crime_summaries` | Pre-aggregated incident counts for a `PlaceCluster` at a given radius and date window. Invalidated and regenerated whenever normalization reruns. `layer` records which analysis layer produced it (`reported`/`calls`; null = legacy, read as `reported`) so the summary totals, PlacesTab counts, and exports label themselves correctly. | `place_cluster_id` → `place_clusters`, `radius_m`, `analysis_start_date`, `analysis_end_date`, `offense_category`, `incident_count`, `nearest_incident_m`, `incidents_per_visit`, `incidents_per_hour_dwell`, `analysis_run_id`, `layer` |
+| `CrimeIncident` | `crime_incidents` | Imported SPD incident-context record (reported crime, arrest, or 911 call). Not user-scoped — shared across all sessions. Uniqueness is composite `(source_dataset, external_incident_id)`; `source_dataset` (indexed) is `seattle_spd_crime` (reported incidents), `seattle_spd_arrests` (enforcement activity), or `seattle_spd_911` (calls for service). `offense_subcategory` is overloaded per source: offense parent group (crime), NIBRS offense description (arrests), or final call type (911). For arrest and 911 rows `offense_category`/`nibrs_group` are null. 911 rows use `cad_event_number` as `external_incident_id`, which collapses the dataset's per-responding-unit rows to one row per call; redacted dispatch coordinates ("REDACTED") map to null lat/long. | `source_dataset` (indexed), `external_incident_id`, `offense_start_utc`, `offense_category`, `offense_subcategory`, `nibrs_group`, `precinct`, `sector`, `beat`, `mcpp`, `latitude`, `longitude` |
+| `PlaceCrimeSummary` | `place_crime_summaries` | Pre-aggregated incident counts for a `PlaceCluster` at a given radius and date window. Invalidated and regenerated whenever normalization reruns. `layer` records which analysis layer produced it (`reported`/`arrests`/`calls`; null = legacy, read as `reported`) so the summary totals, PlacesTab counts, and exports label themselves correctly. | `place_cluster_id` → `place_clusters`, `radius_m`, `analysis_start_date`, `analysis_end_date`, `offense_category`, `incident_count`, `nearest_incident_m`, `incidents_per_visit`, `incidents_per_hour_dwell`, `analysis_run_id`, `layer` |
 
-**Sources, layers, and the `report_number` linkage.** The three `source_dataset` values are grouped
-into two mutually-exclusive analysis *layers* (`app/crime/sources.py::LAYERS`): a **reported** layer
-unioning `seattle_spd_crime` + `seattle_spd_arrests`, and a **calls** layer of `seattle_spd_911`
-alone. The layers are kept disjoint so a 911 call is never counted together with the report it
-produced. Within the reported layer, crime and arrests are a *union*, not a dedup-join: `report_number`
-links them (both populate it) but is many-to-many in both directions — one report yields many NIBRS
-offense rows and may yield several arrests — and the two formats differ (crime `YYYY-NNNNNN` vs arrest
-`YYYY` + 10-digit zero-padded sequence), so it is a *linkage* key for annotation, not a deduplication
-key. A crime offense and an arrest are distinct events, so unioning them does not double-count.
+**Sources, layers, and the `report_number` linkage.** Each `source_dataset` value maps one-to-one onto
+its own analysis *layer* (`app/crime/sources.py::LAYERS`), giving three disjoint, mutually-exclusive
+layers:
+
+- **reported** = `seattle_spd_crime` only — SPD crime reports.
+- **arrests** = `seattle_spd_arrests` only — SPD arrest records. Enforcement activity, logged where the
+  arrest was made (which may differ from where an offense occurred, and most reported crimes never
+  produce one). **No longer folded into `reported`.**
+- **calls** = `seattle_spd_911` only — 911 calls for service.
+
+Keeping the layers disjoint prevents double-counting: a crime report and its resulting arrest can share
+a `report_number`, so the earlier reported-layer union of `seattle_spd_crime` + `seattle_spd_arrests`
+counted the same event twice (and conflated enforcement geography with where the offense occurred).
+`report_number` remains a *linkage* key for annotation, not a deduplication key — it is many-to-many in
+both directions (one report yields many NIBRS offense rows and may yield several arrests) and the two
+formats differ (crime `YYYY-NNNNNN` vs arrest `YYYY` + 10-digit zero-padded sequence). On the public
+(redacted) data an arrest generally can't be linked back to its crime at all, which is why the layers
+are kept separate rather than joined.
 
 ### Analysis
 
