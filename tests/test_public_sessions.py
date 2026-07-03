@@ -101,9 +101,6 @@ def test_public_read_routes_reject_demo_header_without_session(tmp_path):
         "/places",
         "/dashboard/summary",
         "/exports/tableau/place-summary.csv",
-        "/exports/tableau/route-alternatives.csv",
-        "/exports/tableau/route-segments.csv",
-        "/exports/tableau/route-context.csv",
     ):
         response = client.get(path, headers=headers)
 

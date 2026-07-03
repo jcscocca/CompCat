@@ -11,8 +11,6 @@ from app.schemas import new_id
 
 class GeometryType(StrEnum):
     PLACE_BUFFER = "place_buffer"
-    ROUTE_CORRIDOR = "route_corridor"
-    ROUTE_DIVERGENT_CORRIDOR = "route_divergent_corridor"
 
 
 class DecisionClass(StrEnum):
@@ -73,28 +71,6 @@ class SiteComparisonRequest(BaseModel):
         if len(radii) > 1:
             raise ValueError("Site comparison options must use the same radius.")
         return self
-
-
-class RouteComparisonRequest(BaseModel):
-    route_request_id: str
-    radius_m: int = Field(gt=0, le=5000)
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
-    sources: list[str] | None = None
-
-
-class PairDivergenceInput(BaseModel):
-    option_a_id: str
-    option_b_id: str
-    count_a: int
-    count_b: int
-    exposure_a: float
-    exposure_b: float
-    period_counts_a: list[int]
-    period_counts_b: list[int]
-    divergent_share_a: float
-    divergent_share_b: float
 
 
 class AnalysisOptionResult(BaseModel):

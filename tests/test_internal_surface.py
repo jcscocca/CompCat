@@ -14,12 +14,7 @@ PUBLIC_PATHS = {
     "/dashboard/freshness",
     "/assistant/chat",
     "/exports/tableau/place-summary.csv",
-    "/exports/tableau/route-alternatives.csv",
-    "/exports/tableau/route-segments.csv",
-    "/exports/tableau/route-context.csv",
     "/places/{place_id}",
-    "/routes/alternatives",
-    "/routes/requests/{request_id}/comparison",
 }
 
 # After internal-gating, none of these may appear in the public OpenAPI schema.

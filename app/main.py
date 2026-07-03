@@ -18,8 +18,6 @@ from app.api.routes_input_modes import router as input_modes_router
 from app.api.routes_places import router as places_router
 from app.api.routes_public_dashboard import router as public_dashboard_router
 from app.api.routes_public_places import router as public_places_router
-from app.api.routes_public_routes import router as public_routes_router
-from app.api.routes_routes import router as routes_router
 from app.api.routes_sessions import router as sessions_router
 from app.api.routes_uploads import router as uploads_router
 from app.config import get_settings
@@ -59,11 +57,9 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(input_modes_router)
     app.include_router(places_router)
     app.include_router(public_places_router)
-    app.include_router(public_routes_router)
     app.include_router(uploads_router)
     app.include_router(crime_router)
     app.include_router(admin_crime_router)
-    app.include_router(routes_router)
     app.include_router(dashboard_router)
     app.include_router(public_dashboard_router)
     app.include_router(assistant_router)

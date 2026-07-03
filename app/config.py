@@ -60,10 +60,6 @@ class Settings(BaseSettings):
     geocoder_viewbox: str = "-122.55,47.78,-122.10,47.43"
     geocoder_bounded: bool = True
 
-    routing_provider: str = "mock"
-    opentripplanner_base_url: str = ""
-    opentripplanner_timeout_s: float = 10.0
-
     @property
     def effective_session_cookie_secure(self) -> bool:
         if self.session_cookie_secure is not None:

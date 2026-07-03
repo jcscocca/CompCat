@@ -192,123 +192,12 @@ class AnalysisRun(Base):
     )
 
 
-class RouteRequest(Base):
-    __tablename__ = "route_requests"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
-    origin_label: Mapped[str] = mapped_column(Text)
-    origin_latitude: Mapped[float] = mapped_column(Float)
-    origin_longitude: Mapped[float] = mapped_column(Float)
-    origin_display_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    origin_display_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    origin_location_type: Mapped[str] = mapped_column(Text, default="unknown")
-    destination_label: Mapped[str] = mapped_column(Text)
-    destination_latitude: Mapped[float] = mapped_column(Float)
-    destination_longitude: Mapped[float] = mapped_column(Float)
-    destination_display_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    destination_display_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    destination_location_type: Mapped[str] = mapped_column(Text, default="unknown")
-    mode: Mapped[str] = mapped_column(Text)
-    departure_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    departure_time: Mapped[str | None] = mapped_column(Text, nullable=True)
-    time_window: Mapped[str | None] = mapped_column(Text, nullable=True)
-    preferences_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    privacy_level: Mapped[str] = mapped_column(Text, default="generalized")
-    provider: Mapped[str] = mapped_column(Text, default="mock")
-    status: Mapped[str] = mapped_column(Text, default="ready")
-    analysis_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    analysis_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    radii_m_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Incident layer the route corridor context was computed for ("reported"/"calls"; null =
-    # legacy, read as "reported").
-    layer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-
-
-class RouteAlternative(Base):
-    __tablename__ = "route_alternatives"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    route_request_id: Mapped[str] = mapped_column(ForeignKey("route_requests.id"), index=True)
-    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
-    provider_route_id: Mapped[str] = mapped_column(Text)
-    route_label: Mapped[str] = mapped_column(Text)
-    rank: Mapped[int] = mapped_column(Integer)
-    duration_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
-    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
-    transfer_count: Mapped[int] = mapped_column(Integer, default=0)
-    walking_distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
-    mode_mix: Mapped[str] = mapped_column(Text)
-    summary_geometry: Mapped[str | None] = mapped_column(Text, nullable=True)
-    provider: Mapped[str] = mapped_column(Text, default="mock")
-    provider_metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-
-
-class RouteSegment(Base):
-    __tablename__ = "route_segments"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    route_alternative_id: Mapped[str] = mapped_column(
-        ForeignKey("route_alternatives.id"),
-        index=True,
-    )
-    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
-    sequence: Mapped[int] = mapped_column(Integer)
-    segment_type: Mapped[str] = mapped_column(Text)
-    mode: Mapped[str] = mapped_column(Text)
-    start_label: Mapped[str] = mapped_column(Text)
-    start_latitude: Mapped[float] = mapped_column(Float)
-    start_longitude: Mapped[float] = mapped_column(Float)
-    end_label: Mapped[str] = mapped_column(Text)
-    end_latitude: Mapped[float] = mapped_column(Float)
-    end_longitude: Mapped[float] = mapped_column(Float)
-    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
-    duration_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
-    geometry: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-
-
-class RouteContextSummary(Base):
-    __tablename__ = "route_context_summaries"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
-    route_alternative_id: Mapped[str] = mapped_column(
-        ForeignKey("route_alternatives.id"),
-        index=True,
-    )
-    route_segment_id: Mapped[str | None] = mapped_column(
-        ForeignKey("route_segments.id"),
-        nullable=True,
-        index=True,
-    )
-    context_label: Mapped[str] = mapped_column(Text)
-    context_type: Mapped[str] = mapped_column(Text)
-    radius_m: Mapped[int] = mapped_column(Integer)
-    analysis_start_date: Mapped[date] = mapped_column(Date)
-    analysis_end_date: Mapped[date] = mapped_column(Date)
-    offense_category: Mapped[str | None] = mapped_column(Text, nullable=True)
-    offense_subcategory: Mapped[str | None] = mapped_column(Text, nullable=True)
-    nibrs_group: Mapped[str | None] = mapped_column(Text, nullable=True)
-    incident_count: Mapped[int] = mapped_column(Integer)
-    nearest_incident_m: Mapped[float | None] = mapped_column(Float, nullable=True)
-    incidents_per_route: Mapped[float | None] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-
-
 class StatisticalComparison(Base):
     __tablename__ = "statistical_comparisons"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     user_id_hash: Mapped[str] = mapped_column(Text, index=True)
     comparison_type: Mapped[str] = mapped_column(Text)
-    source_route_request_id: Mapped[str | None] = mapped_column(
-        ForeignKey("route_requests.id"),
-        nullable=True,
-        index=True,
-    )
     geometry_type: Mapped[str] = mapped_column(Text)
     radius_m: Mapped[int] = mapped_column(Integer)
     analysis_start_date: Mapped[date] = mapped_column(Date)

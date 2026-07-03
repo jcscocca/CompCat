@@ -5,11 +5,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.analysis.schemas import RouteComparisonRequest, SiteComparisonRequest
+from app.analysis.schemas import SiteComparisonRequest
 from app.api.deps import current_user_hash
 from app.db import get_session
 from app.services.analysis_service import (
-    compare_route_request,
     compare_site_options,
     get_comparison_payload,
 )
@@ -36,25 +35,6 @@ def compare_sites(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/internal/analysis/routes/compare", include_in_schema=False)
-def compare_routes(
-    request: RouteComparisonRequest,
-    user_id_hash: Annotated[str, Depends(current_user_hash)],
-    session: Annotated[Session, Depends(get_session)],
-) -> dict[str, object]:
-    try:
-        payload = compare_route_request(
-            session=session,
-            user_id_hash=user_id_hash,
-            request=request,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if payload is None:
-        raise HTTPException(status_code=404, detail="Route request not found or not analyzable")
-    return payload
 
 
 @router.get("/internal/analysis/comparisons/{comparison_id}", include_in_schema=False)

@@ -8,33 +8,18 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.analysis.comparison import build_route_divergent_comparison, build_statistical_comparison
-from app.analysis.divergence import (
-    divergent_exposure_square_km_days,
-    divergent_length_km,
-    divergent_share,
-    divergent_spans,
-    route_segment_boxes,
-    within_radius_of_route,
-)
+from app.analysis.comparison import build_statistical_comparison
 from app.analysis.exposure import (
     count_incidents_in_place_buffer,
-    count_incidents_in_route_corridor,
-    parse_route_geometry,
     place_exposure_square_km_days,
-    route_corridor_exposure_square_km_days,
 )
 from app.analysis.schemas import (
     AnalysisOptionResult,
     AnalysisSiteOption,
     GeometryType,
-    PairDivergenceInput,
-    RouteComparisonRequest,
     StatisticalComparisonResult,
 )
 from app.models import (
-    RouteAlternative,
-    RouteRequest,
     StatisticalComparison,
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
@@ -135,198 +120,6 @@ def compare_site_options(
     )
 
 
-def compare_route_request(
-    *,
-    session: Session,
-    user_id_hash: str,
-    request: RouteComparisonRequest,
-) -> dict[str, Any] | None:
-    route_request = session.get(RouteRequest, request.route_request_id)
-    if route_request is None or route_request.user_id_hash != user_id_hash:
-        return None
-    if route_request.analysis_start_date is None or route_request.analysis_end_date is None:
-        return None
-
-    alternatives = list(
-        session.scalars(
-            select(RouteAlternative)
-            .where(RouteAlternative.route_request_id == route_request.id)
-            .where(RouteAlternative.user_id_hash == user_id_hash)
-            .order_by(RouteAlternative.rank)
-        )
-    )
-    route_points = [
-        point
-        for alternative in alternatives
-        for point in parse_route_geometry(alternative.summary_geometry)
-    ]
-    if route_points:
-        incidents = incidents_in_bbox(
-            session,
-            box=bounding_box_for_points(route_points, request.radius_m),
-            analysis_start_date=route_request.analysis_start_date,
-            analysis_end_date=route_request.analysis_end_date,
-            offense_category=request.offense_category,
-            offense_subcategory=request.offense_subcategory,
-            nibrs_group=request.nibrs_group,
-            sources=request.sources,
-        )
-    else:
-        incidents = []
-    option_results: list[AnalysisOptionResult] = []
-    geometry_metadata_by_option_id: dict[str, dict[str, Any]] = {}
-    points_by_alternative_id: dict[str, list[tuple[float, float]]] = {}
-    corridor_incidents_by_alternative_id: dict[str, list[CrimeIncidentData]] = {}
-
-    for alternative in alternatives:
-        points_by_alternative_id[alternative.id] = parse_route_geometry(
-            alternative.summary_geometry
-        )
-        matching_incidents = count_incidents_in_route_corridor(
-            incidents=incidents,
-            geometry=alternative.summary_geometry,
-            radius_m=request.radius_m,
-            analysis_start_date=route_request.analysis_start_date,
-            analysis_end_date=route_request.analysis_end_date,
-            offense_category=request.offense_category,
-            offense_subcategory=request.offense_subcategory,
-            nibrs_group=request.nibrs_group,
-        )
-        corridor_incidents_by_alternative_id[alternative.id] = matching_incidents
-        exposure = route_corridor_exposure_square_km_days(
-            geometry=alternative.summary_geometry,
-            radius_m=request.radius_m,
-            analysis_start_date=route_request.analysis_start_date,
-            analysis_end_date=route_request.analysis_end_date,
-        )
-        option_results.append(
-            _option_result(
-                option_id=alternative.id,
-                option_label=alternative.route_label,
-                geometry_type=GeometryType.ROUTE_CORRIDOR,
-                radius_m=request.radius_m,
-                incident_count=len(matching_incidents),
-                exposure=exposure,
-            )
-        )
-        geometry_metadata_by_option_id[alternative.id] = {
-            "summary_geometry": alternative.summary_geometry,
-            "radius_m": request.radius_m,
-        }
-
-    pair_inputs = _route_pair_divergence_inputs(
-        alternatives=alternatives,
-        points_by_alternative_id=points_by_alternative_id,
-        corridor_incidents_by_alternative_id=corridor_incidents_by_alternative_id,
-        radius_m=request.radius_m,
-        analysis_start_date=route_request.analysis_start_date,
-        analysis_end_date=route_request.analysis_end_date,
-    )
-    comparison = build_route_divergent_comparison(
-        user_id_hash=user_id_hash,
-        radius_m=request.radius_m,
-        analysis_start_date=route_request.analysis_start_date,
-        analysis_end_date=route_request.analysis_end_date,
-        offense_category=request.offense_category,
-        offense_subcategory=request.offense_subcategory,
-        nibrs_group=request.nibrs_group,
-        options=option_results,
-        pair_inputs=pair_inputs,
-    )
-    return _persist_and_payload(
-        session,
-        comparison,
-        source_route_request_id=route_request.id,
-        geometry_metadata_by_option_id=geometry_metadata_by_option_id,
-    )
-
-
-def _route_pair_divergence_inputs(
-    *,
-    alternatives: list[RouteAlternative],
-    points_by_alternative_id: dict[str, list[tuple[float, float]]],
-    corridor_incidents_by_alternative_id: dict[str, list[CrimeIncidentData]],
-    radius_m: int,
-    analysis_start_date: date,
-    analysis_end_date: date,
-) -> list[PairDivergenceInput]:
-    pair_inputs: list[PairDivergenceInput] = []
-    for index_a, alternative_a in enumerate(alternatives):
-        for alternative_b in alternatives[index_a + 1 :]:
-            points_a = points_by_alternative_id[alternative_a.id]
-            points_b = points_by_alternative_id[alternative_b.id]
-            incidents_a = corridor_incidents_by_alternative_id[alternative_a.id]
-            incidents_b = corridor_incidents_by_alternative_id[alternative_b.id]
-            # Both membership lists filter the SAME incidents_in_bbox objects, so id()
-            # identifies the same record; incidents near both corridors drop out of both.
-            # The rest count only when near a divergent span, so the counts come from
-            # the same region the length-based exposure band measures — otherwise flank
-            # incidents along parallel shared stretches would count with no denominator.
-            ids_a = {id(incident) for incident in incidents_a}
-            ids_b = {id(incident) for incident in incidents_b}
-            only_a = _incidents_near_spans(
-                incidents_a, ids_b, divergent_spans(points_a, points_b, radius_m), radius_m
-            )
-            only_b = _incidents_near_spans(
-                incidents_b, ids_a, divergent_spans(points_b, points_a, radius_m), radius_m
-            )
-            length_a = divergent_length_km(points_a, points_b, radius_m)
-            length_b = divergent_length_km(points_b, points_a, radius_m)
-            pair_inputs.append(
-                PairDivergenceInput(
-                    option_a_id=alternative_a.id,
-                    option_b_id=alternative_b.id,
-                    count_a=len(only_a),
-                    count_b=len(only_b),
-                    exposure_a=divergent_exposure_square_km_days(
-                        length_km=length_a,
-                        radius_m=radius_m,
-                        analysis_start_date=analysis_start_date,
-                        analysis_end_date=analysis_end_date,
-                    ),
-                    exposure_b=divergent_exposure_square_km_days(
-                        length_km=length_b,
-                        radius_m=radius_m,
-                        analysis_start_date=analysis_start_date,
-                        analysis_end_date=analysis_end_date,
-                    ),
-                    period_counts_a=_monthly_counts(
-                        incidents=only_a,
-                        analysis_start_date=analysis_start_date,
-                        analysis_end_date=analysis_end_date,
-                    ),
-                    period_counts_b=_monthly_counts(
-                        incidents=only_b,
-                        analysis_start_date=analysis_start_date,
-                        analysis_end_date=analysis_end_date,
-                    ),
-                    divergent_share_a=divergent_share(points_a, length_a),
-                    divergent_share_b=divergent_share(points_b, length_b),
-                )
-            )
-    return pair_inputs
-
-
-def _incidents_near_spans(
-    incidents: list[CrimeIncidentData],
-    other_corridor_ids: set[int],
-    spans: list[list[tuple[float, float]]],
-    radius_m: int,
-) -> list[CrimeIncidentData]:
-    span_boxes = [route_segment_boxes(span, radius_m) for span in spans]
-    return [
-        incident
-        for incident in incidents
-        if id(incident) not in other_corridor_ids
-        and any(
-            within_radius_of_route(
-                incident.latitude, incident.longitude, span, radius_m, segment_boxes=boxes
-            )
-            for span, boxes in zip(spans, span_boxes, strict=True)
-        )
-    ]
-
-
 def get_comparison_payload(
     session: Session,
     comparison_id: str,
@@ -338,36 +131,15 @@ def get_comparison_payload(
     return _comparison_model_payload(session, comparison)
 
 
-def latest_route_comparison_payload(
-    session: Session,
-    route_request_id: str,
-    user_id_hash: str,
-) -> dict[str, Any] | None:
-    comparison = session.scalar(
-        select(StatisticalComparison)
-        .where(StatisticalComparison.source_route_request_id == route_request_id)
-        .where(StatisticalComparison.user_id_hash == user_id_hash)
-        .where(
-            StatisticalComparison.geometry_type == GeometryType.ROUTE_DIVERGENT_CORRIDOR.value
-        )
-        .order_by(StatisticalComparison.created_at.desc())
-    )
-    if comparison is None:
-        return None
-    return _comparison_model_payload(session, comparison)
-
-
 def _persist_and_payload(
     session: Session,
     comparison: StatisticalComparisonResult,
-    source_route_request_id: str | None = None,
     geometry_metadata_by_option_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     comparison_model = StatisticalComparison(
         id=comparison.id,
         user_id_hash=comparison.user_id_hash,
         comparison_type=comparison.comparison_type,
-        source_route_request_id=source_route_request_id,
         geometry_type=comparison.geometry_type.value,
         radius_m=comparison.radius_m,
         analysis_start_date=comparison.analysis_start_date,
