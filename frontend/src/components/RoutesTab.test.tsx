@@ -167,4 +167,74 @@ describe("RoutesTab", () => {
     expect(within(fromField).getByText("Pike Place Market, Seattle")).toBeInTheDocument();
     expect(within(fromField).getByRole("button", { name: "Change" })).toBeInTheDocument();
   });
+
+  it("seeds From/To/mode from initial props and runs once on mount", () => {
+    const onRun = vi.fn();
+    render(
+      <RoutesTab
+        analysis={analysis}
+        running={false}
+        result={null}
+        places={places}
+        geocodeSearch={vi.fn()}
+        onRun={onRun}
+        initialOrigin={{ latitude: 47.62, longitude: -122.33, label: "Shared Home" }}
+        initialDestination={{ latitude: 47.61, longitude: -122.34, label: "Shared Office" }}
+        initialMode="bike"
+      />,
+    );
+    expect(onRun).toHaveBeenCalledTimes(1);
+    expect(onRun).toHaveBeenCalledWith(
+      { latitude: 47.62, longitude: -122.33, label: "Shared Home" },
+      { latitude: 47.61, longitude: -122.34, label: "Shared Office" },
+      "bike",
+    );
+    expect(screen.getByText("Shared Home")).toBeInTheDocument();
+    expect(screen.getByText("Shared Office")).toBeInTheDocument();
+  });
+
+  it("copies a share link built from the current endpoints when a result is present", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const onCopyLink = vi.fn().mockReturnValue("http://x/?view=ROUTESTOKEN");
+    render(
+      <RoutesTab
+        analysis={analysis}
+        running={false}
+        result={twoAlt}
+        places={places}
+        geocodeSearch={vi.fn()}
+        onRun={vi.fn()}
+        onCopyLink={onCopyLink}
+        initialOrigin={{ latitude: 47.62, longitude: -122.33, label: "Shared Home" }}
+        initialDestination={{ latitude: 47.61, longitude: -122.34, label: "Shared Office" }}
+        initialMode="transit"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /copy link to this view/i }));
+    expect(onCopyLink).toHaveBeenCalledWith(
+      { latitude: 47.62, longitude: -122.33, label: "Shared Home" },
+      { latitude: 47.61, longitude: -122.34, label: "Shared Office" },
+      "transit",
+    );
+    await Promise.resolve();
+    expect(writeText).toHaveBeenCalledWith("http://x/?view=ROUTESTOKEN");
+  });
+
+  it("hides the copy-link button until a result exists", () => {
+    render(
+      <RoutesTab
+        analysis={analysis}
+        running={false}
+        result={null}
+        places={places}
+        geocodeSearch={vi.fn()}
+        onRun={vi.fn()}
+        onCopyLink={vi.fn()}
+        initialOrigin={{ latitude: 47.62, longitude: -122.33, label: "Shared Home" }}
+        initialDestination={{ latitude: 47.61, longitude: -122.34, label: "Shared Office" }}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /copy link to this view/i })).not.toBeInTheDocument();
+  });
 });

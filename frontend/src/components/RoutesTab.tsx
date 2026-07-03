@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { incidentNoun } from "../lib/layerCopy";
 import { useAddressSearch, SEARCH_EMPTY_MSG, SEARCH_ERROR_MSG } from "../lib/useAddressSearch";
 import type { AnalysisSettings, GeocodeResult, Place, RouteComparison, RouteEndpointInput } from "../types";
@@ -10,6 +10,10 @@ const MODES: { value: string; label: string }[] = [
   { value: "drive", label: "Drive" },
 ];
 
+function endpointKey(input: RouteEndpointInput): string {
+  return "place_id" in input ? `place:${input.place_id}` : `geo:${input.latitude},${input.longitude}`;
+}
+
 type EndpointOption = { key: string; label: string; input: RouteEndpointInput; geoResult?: GeocodeResult };
 
 type Props = {
@@ -20,6 +24,10 @@ type Props = {
   places: Place[];
   geocodeSearch: (query: string, signal?: AbortSignal) => Promise<GeocodeResult[]>;
   onRun: (origin: RouteEndpointInput, destination: RouteEndpointInput, mode: string) => void;
+  initialOrigin?: RouteEndpointInput;
+  initialDestination?: RouteEndpointInput;
+  initialMode?: string;
+  onCopyLink?: (origin: RouteEndpointInput, destination: RouteEndpointInput, mode: string) => string | null;
 };
 
 function corridorContext(result: RouteComparison, alternativeId: string, radiusM: number) {
@@ -91,7 +99,7 @@ function EndpointChooser({
   );
 }
 
-export function RoutesTab({ analysis, running, result, error, places, geocodeSearch, onRun }: Props) {
+export function RoutesTab({ analysis, running, result, error, places, geocodeSearch, onRun, initialOrigin, initialDestination, initialMode, onCopyLink }: Props) {
   const { query, setQuery, status: searchStatus, results: geoResults, recent, runSearch, rememberPlace } =
     useAddressSearch(geocodeSearch);
 
@@ -102,9 +110,9 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
         ? SEARCH_EMPTY_MSG
         : "";
 
-  const [originKey, setOriginKey] = useState("");
-  const [destinationKey, setDestinationKey] = useState("");
-  const [mode, setMode] = useState("transit");
+  const [originKey, setOriginKey] = useState(initialOrigin ? endpointKey(initialOrigin) : "");
+  const [destinationKey, setDestinationKey] = useState(initialDestination ? endpointKey(initialDestination) : "");
+  const [mode, setMode] = useState(initialMode ?? "transit");
 
   const options: EndpointOption[] = useMemo(() => {
     const placeOptions = places.map((p) => ({
@@ -136,13 +144,34 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
       .filter((o) => !existingKeys.has(o.key))
       .filter((o) => geoResults.length === 0 || o.key === originKey || o.key === destinationKey);
 
-    return [...placeOptions, ...geoOptions, ...recentOptions];
-  }, [places, geoResults, recent, originKey, destinationKey]);
+    const seededOptions: EndpointOption[] = [];
+    for (const ep of [initialOrigin, initialDestination]) {
+      if (ep && "latitude" in ep) {
+        seededOptions.push({ key: endpointKey(ep), label: ep.label, input: ep, geoResult: undefined });
+      }
+    }
+
+    const seen = new Set<string>();
+    return [...seededOptions, ...placeOptions, ...geoOptions, ...recentOptions].filter((o) => {
+      if (seen.has(o.key)) return false;
+      seen.add(o.key);
+      return true;
+    });
+  }, [places, geoResults, recent, originKey, destinationKey, initialOrigin, initialDestination]);
 
   const recommendedId = result?.statistical_comparison?.overview.recommendation_option_id ?? null;
   const originOption = options.find((o) => o.key === originKey) ?? null;
   const destinationOption = options.find((o) => o.key === destinationKey) ?? null;
   const canRun = originOption !== null && destinationOption !== null && !running;
+  const didInitialRun = useRef(false);
+  useEffect(() => {
+    if (didInitialRun.current) return;
+    if (initialOrigin && initialDestination) {
+      didInitialRun.current = true;
+      onRun(initialOrigin, initialDestination, initialMode ?? "transit");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Label corridor context by the layer the route was actually run for (not the live toggle,
   // which may have changed since), falling back to the current setting before a run lands.
   const noun = incidentNoun(result?.request.layer ?? analysis.layer);
@@ -199,6 +228,19 @@ export function RoutesTab({ analysis, running, result, error, places, geocodeSea
           </button>
         </div>
       </div>
+
+      {onCopyLink && originOption && destinationOption && result ? (
+        <button
+          type="button"
+          className="mc-link-copy"
+          onClick={async () => {
+            const url = onCopyLink(originOption.input, destinationOption.input, mode);
+            if (url) await navigator.clipboard.writeText(url);
+          }}
+        >
+          Copy link to this view
+        </button>
+      ) : null}
 
       {error ? <p className="mc-inline-error" role="alert">{error}</p> : null}
 

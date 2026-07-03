@@ -88,7 +88,14 @@ the data/ops durability, and the product-breadth items are all closed. No queued
   ≤10) as an alternative to identity-bound `place_ids`; the points path is stateless (no
   `AnalysisRun`/`PlaceCrimeSummary` write). Links carry only generalized (~110 m) coordinates; no
   account. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-30-saved-views*`. _Increment 2
-  (queued): **Routes saved views** — extend shareable views to the Routes corridor tab._
+  shipped: **Routes saved views** — the shareable `?view=` link now covers the Routes corridor
+  tab. A routes view carries generalized (~110 m) origin/destination coordinates + mode + settings
+  and recomputes the corridor comparison once on open. Frontend-only (the routes backend already
+  accepts inline coordinate endpoints); saved-place endpoints are resolved to generalized
+  coordinates so no `place_id` enters the link. Unlike inc 1's stateless points path, a shared
+  routes view recomputes via `/routes/alternatives` and persists a `RouteRequest` under the
+  opener's session — accepted, since that is normal Routes usage. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-02-routes-saved-views*`._
 - [x] **C4 · Second data source** — shipped across two increments. **Inc 1 (#75):** a
   source-aware crime layer (queries / freshness / backfill watermark all default to SPD
   reports, so existing analyses are unchanged) plus SPD **Arrest Data** (`9bjs-7a7w`) ingest
