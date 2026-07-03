@@ -128,6 +128,14 @@ the data/ops durability, and the product-breadth items are all closed. No queued
   (`calls_data_floor`, `app/crime/seattle_socrata.py`), so it no longer drifts past 24 months
   (spec/plan `…/2026-07-02-calls-floor-rolling*`). Still deferred: arrest demographics (not
   ingested)._
+- [x] **C5 · Routes verdict on divergent corridors** — the route statistical comparison now
+  tests only the segments where alternatives differ: per-pair disjoint incident counts
+  (shared-corridor incidents drop out of both sides) over divergent-corridor exposure,
+  through the unchanged rate-test/BH/floors machinery. Fixes the structurally guaranteed
+  "not statistically clear" verdict on mostly-overlapping alternatives and restores the
+  rate test's independence assumption; time-shifted duplicate itineraries now report
+  "essentially the same corridor". Whole-corridor counts remain as descriptive context.
+  Spec/plan: `docs/superpowers/{specs,plans}/2026-07-03-route-divergent-comparison*`.
 
 > Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), route corridor-temporal, an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
 

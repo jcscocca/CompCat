@@ -4,8 +4,9 @@
 
 The app can say that one route or site has a statistically lower reported-incident rate
 than another route or site for the selected date range, geography, radius, offense filter,
-and method. This claim is scoped to the public SPD incident records and the exact analysis
-inputs used for the comparison.
+and method. For routes, the claim is further scoped to the divergent corridors — the
+segments where the compared routes actually differ. This claim is scoped to the public SPD
+incident records and the exact analysis inputs used for the comparison.
 
 The app cannot say that a route is safe, unsafe, dangerous, risk-free, or that a route prevents crime.
 
@@ -20,14 +21,23 @@ the amount of area and time included in that option's analysis.
 ## Exposure
 
 Place exposure is the selected place buffer area in square kilometers multiplied by the
-number of analysis days. Route exposure is the selected route corridor area in square
-kilometers multiplied by the number of analysis days.
+number of analysis days.
 
-For route comparisons, the corridor area is calculated as:
+Route *context* (the per-option rows shown alongside a comparison) uses the whole
+corridor's area:
 
 ```text
 route_corridor_area_square_km = (route_length_km * 2 * radius_km) + pi * radius_km^2
 ```
+
+The route *statistical test* instead uses each side's divergent-corridor area:
+
+```text
+divergent_corridor_area_square_km = divergent_length_km * 2 * radius_km
+```
+
+There is no end-cap term because divergent runs border the shared corridor, so the caps
+largely fall inside area that is already shared.
 
 The exposure unit for both place and route comparisons is square-kilometer-days.
 
@@ -37,6 +47,39 @@ An incident is included only when it has coordinates, falls within the selected 
 matches the selected offense filters, and falls inside the selected place buffer or route
 corridor. Incidents outside the selected geography, dates, or offense filters are excluded
 from the count and rate calculation.
+
+## Route Comparisons Test Divergent Corridors
+
+![Two routes share most of their corridor; incidents in the shared corridor drop out of
+the test and only the divergent corridors are compared](img/route-divergence-corridors.svg)
+
+Route alternatives between the same origin and destination share most of their corridor.
+An incident in the shared corridor would land in both routes' counts, which drags the
+rate ratio toward 1.0 and lets the shared stretch mask a real difference on the segments
+that actually differ. It also violates the rate test's assumption that the two counts are
+independent — the same physical incidents would be counted on both sides.
+
+Route comparisons therefore partition incidents per pair of routes:
+
+- within the radius of route A only → counts for A
+- within the radius of route B only → counts for B
+- within the radius of both → excluded from the test entirely
+
+Each side's exposure is its divergent corridor's area multiplied by the analysis days.
+Divergent length is measured by sampling each route's geometry every ~25 meters and
+keeping the spans that are farther than the radius from the other route. The length-based
+exposure area approximates the region the counts are drawn from; the span rule and the
+omitted end-caps slightly under-measure the divergent area on both sides of a pair.
+
+The shared corridor is traversed either way, so it carries no information for the choice
+between the routes; the whole-corridor counts remain visible as descriptive context, but
+they are not tested. When both routes' divergent share is under 2% the options are
+reported as following essentially the same corridor, and no test is run.
+
+A known limitation of the same kind remains on the site path: two *place* buffers that
+overlap also double-count the incidents in their intersection. Site comparisons are
+usually between well-separated places, so the effect is second-order there; a future
+change may apply the same disjoint-region treatment.
 
 ## Statistical Test
 
@@ -53,7 +96,10 @@ when it passes the conservative threshold against every relevant alternative.
 ### Candidate Selection And Selective Inference
 
 The compared option that is tested is chosen from the data: the app selects the option with
-the lowest observed exposure-adjusted rate and tests it against each of the others. The
+the lowest observed exposure-adjusted rate and tests it against each of the others. For
+route comparisons the selection rate is the aggregate divergent-corridor rate — the
+option's summed disjoint counts over its summed divergent exposure across all of its
+pairs — not the whole-corridor context rate shown in the option rows. The
 Benjamini-Hochberg step corrects for the multiplicity of those pairwise comparisons, but it
 does not add a penalty for the act of selecting the lowest-rate option in the first place.
 Considered alone, that selection biases the result toward finding a "lower" option (a
@@ -95,6 +141,9 @@ periods — is the way to obtain a firmer dispersion estimate.
 - positive exposure for every compared option
 - combined incident count of at least 10
 - no unhandled model warning
+
+For route comparisons, the counts and exposures above are the divergent-corridor values —
+the floors apply to the segments being tested, not to the whole corridors.
 
 ## Dashboard Modes
 
