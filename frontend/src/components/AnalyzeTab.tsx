@@ -362,7 +362,7 @@ function IncidentDetailsTable({ details, noun, showCategory, subcategoryHeader }
                 <tr>
                   <th scope="col">Place</th>
                   <th scope="col">Date/time</th>
-                  {/* calls and arrests carry no offense category — show only the type/charge column. */}
+                  {/* 911 calls carry no offense category — arrests carry a crosswalked one. */}
                   {showCategory ? <th scope="col">Category</th> : null}
                   <th scope="col">{subcategoryHeader}</th>
                   <th scope="col">Distance</th>
