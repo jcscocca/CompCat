@@ -6,7 +6,7 @@
 #   pwsh -File scripts\start-waypoint.ps1            # start the current checkout
 #   pwsh -File scripts\start-waypoint.ps1 -Update    # pull from origin first; rebuild only if it changed
 #
-# To stop everything when you're done: `docker compose stop` + `docker stop otp`,
+# To stop everything when you're done: `docker compose stop`,
 # and close llama-swap from Task Manager (or just reboot — nothing comes back).
 param([switch]$Update)
 $ErrorActionPreference = 'Stop'
@@ -54,18 +54,7 @@ if (-not (Test-Docker)) {
 if (-not (Wait-Docker)) { throw 'Docker engine did not become ready within 120s.' }
 Write-Host 'Docker: ready'
 
-# 2. OTP routing on :8090 (start the existing container, or create it from the prebuilt graph).
-$otpExists = (docker ps -a --format '{{.Names}}' | Select-String -Quiet '^otp$')
-if ($otpExists) {
-    docker start otp | Out-Null
-} else {
-    docker run -d --name otp --restart no -p 8090:8080 `
-        -e 'JAVA_TOOL_OPTIONS=-Xmx8g' -v 'C:\otp:/var/opentripplanner' `
-        docker.io/opentripplanner/opentripplanner:2.7.0 --load --serve | Out-Null
-}
-Write-Host 'OTP: up on :8090'
-
-# 3. App + Postgres on :8000 (api runs migrations on boot). Rebuild only if -Update pulled changes.
+# 2. App + Postgres on :8000 (api runs migrations on boot). Rebuild only if -Update pulled changes.
 Push-Location $repo
 try {
     if ($doBuild) { docker compose --env-file $envFile up -d --build | Out-Null }
@@ -73,7 +62,7 @@ try {
 } finally { Pop-Location }
 if ($doBuild) { Write-Host 'App + db: up on :8000 (rebuilt)' } else { Write-Host 'App + db: up on :8000' }
 
-# 4. Analyst gateway (llama-swap) on :8080 - launch hidden if not already serving.
+# 3. Analyst gateway (llama-swap) on :8080 - launch hidden if not already serving.
 if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue) {
     Write-Host 'Analyst: already on :8080'
 } else {
@@ -89,7 +78,7 @@ if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCont
     Write-Host 'Analyst: launched on :8080 (loads the model on first request)'
 }
 
-# 5. Print the LAN URL for the Mac's browser.
+# 4. Print the LAN URL for the Mac's browser.
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
     Where-Object { $_.InterfaceAlias -notlike '*vEthernet*' -and $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
     Select-Object -First 1).IPAddress

@@ -19,7 +19,7 @@ The harness is two stdlib-only Python processes run side-by-side on the deploy h
 
 1. **Deploy up** — bring the stack up on the ThinkPad the usual way:
    `pwsh -File scripts\start-waypoint.ps1`. This starts Postgres, the api (migrations run on
-   boot), OTP, and llama-swap.
+   boot), and llama-swap.
 2. **Data ingested** — crime / calls / arrests data must already be loaded, or the dashboard
    queries return empty and the soak proves nothing. See `docs/DEPLOY.md`.
 3. **Enable `pg_stat_statements` (one-time)** — the `db` service in `docker-compose.yml` sets
