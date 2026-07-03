@@ -1,3 +1,4 @@
+import math
 from datetime import date
 
 from app.analysis.divergence import (
@@ -6,7 +7,10 @@ from app.analysis.divergence import (
     divergent_exposure_square_km_days,
     divergent_length_km,
     divergent_share,
+    route_segment_boxes,
+    within_radius_of_route,
 )
+from app.analysis.exposure import point_to_route_distance_m
 from app.normalization.geo import haversine_m
 
 VERTICAL_1KM = [(47.600, -122.340), (47.610, -122.340)]
@@ -82,3 +86,50 @@ def test_divergent_exposure_is_length_times_width_times_days():
     )
 
     assert result == 2.0 * 2 * 0.25 * 30
+
+
+def _jittered_route(base_lon: float, points: int = 11) -> list[tuple[float, float]]:
+    return [
+        (47.600 + 0.002 * index, base_lon + 0.001 * math.sin(index * 1.7))
+        for index in range(points)
+    ]
+
+
+def test_within_radius_predicate_matches_exact_distance_on_grid():
+    route = _jittered_route(-122.340)
+    boxes = route_segment_boxes(route, radius_m=250)
+    for lat_step in range(13):
+        for lon_step in range(13):
+            latitude = 47.598 + 0.002 * lat_step
+            longitude = -122.346 + 0.001 * lon_step
+            expected = point_to_route_distance_m(latitude, longitude, route) <= 250
+            assert within_radius_of_route(latitude, longitude, route, 250) == expected
+            assert (
+                within_radius_of_route(latitude, longitude, route, 250, segment_boxes=boxes)
+                == expected
+            )
+
+
+def test_within_radius_predicate_degenerate_routes():
+    assert within_radius_of_route(47.6, -122.34, [], 250) is False
+    assert within_radius_of_route(47.6, -122.34, [(47.6, -122.34)], 250) is True
+    assert within_radius_of_route(47.6, -122.30, [(47.6, -122.34)], 250) is False
+
+
+def test_divergent_length_matches_bruteforce_min_distance_rule():
+    self_points = _jittered_route(-122.340)
+    other_points = _jittered_route(-122.336, points=9)
+
+    samples = densify_polyline(self_points)
+    outside = [
+        point_to_route_distance_m(latitude, longitude, other_points) > 250
+        for latitude, longitude in samples
+    ]
+    brute_m = 0.0
+    for index in range(len(samples) - 1):
+        if outside[index] and outside[index + 1]:
+            start = samples[index]
+            end = samples[index + 1]
+            brute_m += haversine_m(start[0], start[1], end[0], end[1])
+
+    assert divergent_length_km(self_points, other_points, radius_m=250) == brute_m / 1000
