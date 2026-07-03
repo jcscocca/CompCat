@@ -20,10 +20,9 @@ export interface AddressSearch {
 }
 
 /**
- * Shared address-search state machine for the geocode box used by both the Places map
- * search (PlaceSearch) and the Routes endpoint search (RoutesTab). Owns the query, the
- * trimmed geocode call, and the loading/done/empty/error status; callers render the input and
- * the results however they need (a clickable list for Places, endpoint options for Routes).
+ * Shared address-search state machine for the geocode box used by the Places map search
+ * (PlaceSearch). Owns the query, the trimmed geocode call, and the loading/done/empty/error
+ * status; callers render the input and the results however they need (a clickable list).
  *
  * Type-ahead: a useEffect on query debounces the search ~300 ms after the last keystroke,
  * aborting any in-flight stale request. runSearch() bypasses the debounce for immediate

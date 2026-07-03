@@ -6,14 +6,6 @@ const NOTES = [
   "This export does not claim safety, risk, or recommended places.",
 ];
 
-// The route CSV endpoints are static, public, session-gated paths (no IDs), so they can be
-// linked directly. They are header-only until a route comparison has been run this session.
-const ROUTE_EXPORTS = [
-  { label: "Route alternatives CSV", href: "/exports/tableau/route-alternatives.csv" },
-  { label: "Route segments CSV", href: "/exports/tableau/route-segments.csv" },
-  { label: "Route corridor context CSV", href: "/exports/tableau/route-context.csv" },
-];
-
 function DownloadIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M8 11l4 4 4-4M5 21h14" /></svg>
@@ -21,7 +13,7 @@ function DownloadIcon() {
 }
 
 export function ExportTab({ href }: Props) {
-  const links = [{ label: "Place summary CSV", href }, ...ROUTE_EXPORTS];
+  const links = [{ label: "Place summary CSV", href }];
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Export">
       <div className="mc-panel-head"><h4>Export session</h4></div>

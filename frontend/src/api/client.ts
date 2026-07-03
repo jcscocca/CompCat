@@ -8,8 +8,6 @@ import type {
   NeighborhoodAnalysis,
   Place,
   PlaceCreate,
-  RouteComparison,
-  RouteEndpointInput,
 } from "../types";
 
 type AnalysisPointPayload = { latitude: number; longitude: number; label: string };
@@ -112,18 +110,6 @@ export function deletePersonalData(): Promise<{ place_clusters: number }> {
 
 export function getInputModes(): Promise<{ modes: { id: string }[] }> {
   return request("/input-modes");
-}
-
-export function createRouteAlternatives(payload: {
-  origin: RouteEndpointInput;
-  destination: RouteEndpointInput;
-  mode: string;
-  analysis_start_date: string;
-  analysis_end_date: string;
-  radii_m: number[];
-  layer?: string;
-}): Promise<RouteComparison> {
-  return request("/routes/alternatives", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function analyzePlaces(

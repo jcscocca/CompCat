@@ -96,51 +96,7 @@ export type PlaceCreate = {
   sensitivity_class?: string;
 };
 
-export type TabKey = "places" | "analyze" | "compare" | "routes" | "export";
-
-export type RouteAlternative = {
-  id: string;
-  route_label: string;
-  rank: number;
-  duration_minutes: number | null;
-  distance_m: number | null;
-  transfer_count: number;
-  walking_distance_m: number | null;
-  mode_mix: string;
-  summary_geometry: string | null;
-};
-
-export type RouteContextSummaryItem = {
-  route_alternative_id: string;
-  route_segment_id?: string | null;
-  context_label?: string | null;
-  radius_m: number;
-  incident_count: number;
-  nearest_incident_m: number | null;
-  offense_category: string | null;
-  offense_subcategory: string | null;
-};
-
-export type RouteComparison = {
-  request: { id: string; origin: { label: string }; destination: { label: string }; mode: string; layer?: LayerKey };
-  alternatives: RouteAlternative[];
-  context_summaries: RouteContextSummaryItem[];
-  statistical_comparison: {
-    overview: {
-      decision_class: string;
-      recommendation_option_id: string | null;
-      recommendation_label: string | null;
-      summary_text: string;
-      caveat_text: string;
-    };
-  } | null;
-};
-
-export type RouteLine = { id: string; points: [number, number][]; recommended: boolean };
-
-export type RouteEndpointInput =
-  | { place_id: string }
-  | { latitude: number; longitude: number; label: string };
+export type TabKey = "places" | "analyze" | "compare" | "export";
 
 export type DrawerState = { collapsed: boolean; widthPx: number };
 

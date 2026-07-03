@@ -7,8 +7,8 @@ const LAYERS: { value: LayerKey; label: string }[] = [
 ];
 
 /**
- * Global data-layer switch. Lives in the workspace chrome (not a single tab) so Analyze,
- * Compare, and Routes all read and set one shared layer. "reported" is SPD crime reports;
+ * Global data-layer switch. Lives in the workspace chrome (not a single tab) so Analyze
+ * and Compare all read and set one shared layer. "reported" is SPD crime reports;
  * "arrests" is SPD arrest records (enforcement activity); "calls" is 911 calls for service.
  */
 export function LayerToggle({ layer, onChange }: { layer: LayerKey; onChange: (layer: LayerKey) => void }) {

@@ -12,7 +12,6 @@ import { useCompare } from "../lib/useCompare";
 import { useDashboardData } from "../lib/useDashboardData";
 import { useDrawer } from "../lib/useDrawer";
 import { usePinDraft } from "../lib/usePinDraft";
-import { useRoutes } from "../lib/useRoutes";
 import { AnalyzeTab } from "./AnalyzeTab";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
@@ -25,8 +24,7 @@ import { MapLegend } from "./MapLegend";
 import { PinDraftPopover } from "./PinDraftPopover";
 import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
-import { RoutesTab } from "./RoutesTab";
-import type { AnalysisSettings, AssistantDashboardState, PlaceCreate, RouteEndpointInput, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, PlaceCreate, TabKey } from "../types";
 
 export function MapWorkspace() {
   const initialView = useMemo(() => {
@@ -34,11 +32,8 @@ export function MapWorkspace() {
     return param ? decodeView(param) : null;
   }, []);
   const hadViewParam = useMemo(() => Boolean(new URLSearchParams(window.location.search).get("view")), []);
-  const [sharedPoints, setSharedPoints] = useState(
-    initialView && initialView.tab !== "routes" ? initialView.points : null,
-  );
+  const [sharedPoints, setSharedPoints] = useState(initialView ? initialView.points : null);
   const [showBadLink, setShowBadLink] = useState(hadViewParam && initialView === null);
-  const initialRoute = initialView?.tab === "routes" ? initialView : null;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "places");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -48,7 +43,7 @@ export function MapWorkspace() {
         startDate: initialView.startDate,
         endDate: initialView.endDate,
         radiusM: initialView.radiusM,
-        offenseCategory: initialView.tab === "routes" ? "" : initialView.offenseCategory,
+        offenseCategory: initialView.offenseCategory,
         layer: initialView.layer,
       };
     }
@@ -60,7 +55,6 @@ export function MapWorkspace() {
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset } = useDrawer();
   const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError, points: sharedPoints ?? undefined });
   const compare = useCompare({ selectedIds, analysis, setError: data.setError, points: sharedPoints ?? undefined });
-  const routes = useRoutes(analysis);
 
   // A ?view= link seeds tab/analysis/points above; run it once so the shared context
   // (not just an empty tab) is what the recipient sees on load.
@@ -204,42 +198,6 @@ export function MapWorkspace() {
     return `${window.location.origin}/?view=${encoded}`;
   }, [sharedPoints, selected, analysis]);
 
-  const buildRoutesShareUrl = useCallback(
-    (origin: RouteEndpointInput, destination: RouteEndpointInput, mode: string): string | null => {
-      const resolve = (ep: RouteEndpointInput) => {
-        if ("place_id" in ep) {
-          const place = data.places.find((p) => p.id === ep.place_id);
-          if (!place) return null;
-          return {
-            latitude: Number((place.latitude ?? 0).toFixed(3)),
-            longitude: Number((place.longitude ?? 0).toFixed(3)),
-            label: place.display_label,
-          };
-        }
-        return {
-          latitude: Number(ep.latitude.toFixed(3)),
-          longitude: Number(ep.longitude.toFixed(3)),
-          label: ep.label,
-        };
-      };
-      const o = resolve(origin);
-      const d = resolve(destination);
-      if (!o || !d) return null;
-      const encoded = encodeView({
-        tab: "routes",
-        origin: o,
-        destination: d,
-        mode: (["transit", "walk", "bike", "drive"].includes(mode) ? mode : "transit") as "transit" | "walk" | "bike" | "drive",
-        radiusM: analysis.radiusM,
-        startDate: analysis.startDate,
-        endDate: analysis.endDate,
-        layer: analysis.layer,
-      });
-      return `${window.location.origin}/?view=${encoded}`;
-    },
-    [data.places, analysis],
-  );
-
   const assistantState: AssistantDashboardState = useMemo(() => ({
     selected_place_ids: Array.from(selectedIds),
     analysis_start_date: analysis.startDate || null,
@@ -268,7 +226,6 @@ export function MapWorkspace() {
           tileConfig={defaultTileConfig}
           onMapClick={pinDraft.handleMapClick}
           onMarkerClick={handleToggleSelect}
-          routeLines={routes.routeLines}
         />
 
         <header className="mc-topbar">
@@ -315,7 +272,7 @@ export function MapWorkspace() {
           </div>
         ) : null}
 
-        {sharedPoints || initialRoute ? (
+        {sharedPoints ? (
           <div className="mc-banner" role="status">
             Shared view · reported incident context.{" "}
             <button type="button" onClick={() => setSharedPoints(null)}>Exit</button>
@@ -381,21 +338,6 @@ export function MapWorkspace() {
           ) : null}
           {activeTab === "compare" ? (
             <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} onCopyLink={() => buildShareUrl("compare")} />
-          ) : null}
-          {activeTab === "routes" ? (
-            <RoutesTab
-              analysis={analysis}
-              running={routes.running}
-              result={routes.result}
-              error={routes.error}
-              places={data.places}
-              geocodeSearch={geocodingProvider.search}
-              onRun={routes.runRoute}
-              initialOrigin={initialRoute?.origin}
-              initialDestination={initialRoute?.destination}
-              initialMode={initialRoute?.mode}
-              onCopyLink={buildRoutesShareUrl}
-            />
           ) : null}
           {activeTab === "export" ? <ExportTab href={data.exportHref} /> : null}
         </BottomSheet>

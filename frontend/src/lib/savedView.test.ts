@@ -41,37 +41,20 @@ describe("savedView", () => {
   });
 });
 
-import { type RoutesSavedView } from "./savedView";
-
-describe("savedView routes variant", () => {
-  const view: RoutesSavedView = {
-    tab: "routes",
-    origin: { latitude: 47.62, longitude: -122.33, label: "Home" },
-    destination: { latitude: 47.61, longitude: -122.34, label: "Office" },
-    mode: "transit",
-    radiusM: 500,
-    startDate: "2024-01-01",
-    endDate: "2024-01-31",
-    layer: "calls",
-  };
-
-  it("round-trips a routes view", () => {
-    expect(decodeView(encodeView(view))).toEqual(view);
-  });
-
-  it("rejects an endpoint outside the Seattle bbox", () => {
-    const bad = { ...view, destination: { latitude: 40.0, longitude: -74.0, label: "NYC" } };
-    expect(decodeView(encodeView(bad))).toBeNull();
-  });
-
-  it("rejects an unknown mode", () => {
-    const encoded = encodeView({ ...view, mode: "teleport" as unknown as RoutesSavedView["mode"] });
-    expect(decodeView(encoded)).toBeNull();
-  });
-
-  it("rejects a routes view missing an endpoint", () => {
-    const wire = { v: 1, t: "routes", o: { y: 47.62, x: -122.33, l: "Home" }, m: "transit", r: 500, s: "a", e: "b", ly: "reported" };
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(wire)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    expect(decodeView(encoded)).toBeNull();
+describe("legacy routes links", () => {
+  it("decodes a v1 routes-tab link to null instead of a view", () => {
+    const wire = {
+      v: 1,
+      t: "routes",
+      o: { y: 47.62, x: -122.33, l: "Home" },
+      d: { y: 47.61, x: -122.34, l: "Office" },
+      m: "transit",
+      r: 500,
+      s: "2024-01-01",
+      e: "2024-01-31",
+      ly: "calls",
+    };
+    const param = btoa(JSON.stringify(wire)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(decodeView(param)).toBeNull();
   });
 });
