@@ -15,7 +15,7 @@ def test_activity_metrics():
         {"state": "active", "wait_event_type": "", "query_age": "2.0", "state_age": "2.0"},
         {"state": "active", "wait_event_type": "Lock", "query_age": "9.0", "state_age": "9.0"},
         {"state": "idle", "wait_event_type": "", "query_age": "", "state_age": "30.0"},
-        {"state": "idle in transaction", "wait_event_type": "", "query_age": "", "state_age": "45.0"},
+        {"state": "idle in transaction", "wait_event_type": "", "query_age": "", "state_age": "45.0"},  # noqa: E501
     ]
     m = ob.activity_metrics(rows)
     assert m["total"] == 4

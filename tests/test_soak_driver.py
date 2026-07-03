@@ -53,15 +53,17 @@ def test_build_body_validates_against_real_schemas():
     DashboardCompareRequest.model_validate(sd.build_body("compare", rng, place_ids))
 
 
+def _rec(ts, lat, ok):
+    return sd.RequestRecord(ts=ts, vu=0, endpoint="analyze",
+                            status=200 if ok else 500, latency_ms=lat, ok=ok)
+
+
 def test_summarize_rollup_and_drift():
     # first-hour rows ~100ms, last-hour rows ~300ms → drift ≈ 3x on /analyze.
-    rows = []
     base = 1_000_000.0
-    for i in range(600):
-        rows.append(sd.RequestRecord(ts=base + i, vu=0, endpoint="analyze", status=200, latency_ms=100.0, ok=True))
-    for i in range(600):
-        rows.append(sd.RequestRecord(ts=base + 7200 + i, vu=0, endpoint="analyze", status=200, latency_ms=300.0, ok=True))
-    rows.append(sd.RequestRecord(ts=base + 10, vu=1, endpoint="analyze", status=500, latency_ms=5.0, ok=False))
+    rows = [_rec(base + i, 100.0, True) for i in range(600)]
+    rows += [_rec(base + 7200 + i, 300.0, True) for i in range(600)]
+    rows.append(_rec(base + 10, 5.0, False))
     summary = sd.summarize(rows, budgets={"analyze": 150.0})
     ep = summary["endpoints"]["analyze"]
     assert ep["count"] == 1201
