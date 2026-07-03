@@ -61,6 +61,42 @@ python scripts/soak/pg_observer.py --interval 15 --duration 2h --out soak-out
 python scripts/soak/soak_driver.py --users 25 --ramp 60 --think-time 0.2 --duration 2h --out soak-out
 ```
 
+## Windows / ThinkPad host
+
+The deploy host is Windows (PowerShell). The `make` targets and the `.venv/bin/python` paths
+above are Unix — they do not apply here. The soak scripts are **stdlib-only**, so run them with
+any host `python` 3.x (no venv, no `pip install`) from the repo root — the app itself still runs
+in Docker; only these two scripts run on the host:
+
+```powershell
+# terminal 1 — Postgres observer
+python scripts\soak\pg_observer.py --interval 15 --duration 2h --out soak-out
+# terminal 2 — load driver
+python scripts\soak\soak_driver.py --users 25 --ramp 60 --duration 2h --out soak-out
+```
+
+Windows-specific prep, in order:
+
+1. **Update the checkout** so `scripts\soak\` and the `pg_stat_statements` compose change are
+   present: `pwsh -File scripts\start-waypoint.ps1 -Update` (then `git log --oneline -1` should
+   show the soak-harness commit or later).
+2. **Enable `pg_stat_statements`** (a preload lib — needs a db restart; `-Update` may already
+   have recreated the db, so verify and only recreate if needed):
+   ```powershell
+   docker compose --env-file .env.deploy up -d --force-recreate db
+   docker compose --env-file .env.deploy exec -T db psql -U mca -d mca -c "select 1 from pg_stat_statements limit 1"
+   ```
+   The observer exits fast with instructions if this isn't ready, so it won't burn a long run.
+3. **Confirm a host Python 3** is on `PATH`: `python --version`.
+4. **Keep the machine awake for the whole run** — a suspend/sleep mid-run kills both processes:
+   `powercfg /change standby-timeout-ac 0` (and the monitor/disk timeouts if it's on battery),
+   or use a keep-awake utility. Restore your settings afterward.
+
+**Smoke first.** Before the 2h run, do a 3-minute dry run with the exact command and
+`--duration 3m --out soak-smoke`, then check `soak-smoke\summary.json` shows errors ≈ 0 and
+`soak-smoke\pg_summary.json` has `top_statements` populated. If both look right, launch the 2h
+run; if not, you've spent 3 minutes instead of 120.
+
 ## Outputs
 
 All under `--out` (default `soak-out/`):

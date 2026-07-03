@@ -13,3 +13,11 @@ def test_runbook_documents_prereqs_and_commands():
     for needle in ("pg_stat_statements", "--force-recreate db",
                    "soak_driver.py", "pg_observer.py", "make soak-load", "make soak-observe"):
         assert needle in doc, f"runbook missing: {needle}"
+
+
+def test_runbook_documents_windows_host():
+    # The deploy host is Windows; make/.venv are Unix, so the raw `python scripts\soak\...`
+    # invocation and the keep-awake note must be documented.
+    doc = (_ROOT / "docs" / "soak-testing.md").read_text()
+    for needle in ("Windows", "powercfg", "python scripts\\soak\\pg_observer.py"):
+        assert needle in doc, f"runbook missing Windows guidance: {needle}"
