@@ -25,7 +25,7 @@ def upgrade() -> None:
     # because no runtime uses it: dev/test build the schema from create_all (composite-only,
     # coexistence-safe) and prod is Postgres (the else branch drops the old unique and adds the
     # real composite constraint, matching the model). The SQLite migration chain is exercised
-    # only by test_route_models_migration.py, which checks table/column/index shape, not
+    # only by test_migrations.py, which checks table/column/index shape, not
     # uniqueness; cross-source coexistence on a *migrated* schema is proven on Postgres in
     # tests/test_postgres_smoke.py.
     if op.get_bind().dialect.name == "sqlite":
