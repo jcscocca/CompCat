@@ -147,6 +147,29 @@ export function MapWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookupPoint]);
 
+  async function handleSaveLookup() {
+    if (!lookupPoint) return;
+    data.setError("");
+    try {
+      const created = await createPlace({
+        display_label: lookupPoint.label,
+        latitude: lookupPoint.latitude,
+        longitude: lookupPoint.longitude,
+        visit_count: 1,
+        sensitivity_class: "normal",
+      });
+      // Set the selection directly (NOT selectPlaceIds) so the analysis context is NOT
+      // invalidated — the saved place shares the looked-up coordinates, so the verdict on
+      // screen stays valid. Then drop the ephemeral lookup + its draft marker.
+      setSelectedIds(new Set([created.id]));
+      setLookupPoint(null);
+      pinDraft.setDraft(null);
+      await data.refreshWithFallback("Saved, but dashboard totals could not refresh.");
+    } catch {
+      data.setError("Unable to save place. Try again.");
+    }
+  }
+
   function handleToggleSelect(id: string) {
     invalidateAnalysisContext();
     setLookupPoint(null);
@@ -376,6 +399,7 @@ export function MapWorkspace() {
               onRun={analyze.runAnalyze}
               onCopyLink={() => buildShareUrl("analyze")}
               onCompareWith={() => setActiveTab("compare")}
+              onSave={lookupPoint ? handleSaveLookup : undefined}
             />
           ) : null}
           {activeTab === "compare" ? (

@@ -187,6 +187,24 @@ describe("AnalyzeTab", () => {
     expect(onCompareWith).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a save button that calls onSave", () => {
+    const onSave = vi.fn();
+    render(
+      <AnalyzeTab
+        selected={[]}
+        analysis={{ startDate: "2026-01-01", endDate: "2026-06-30", radiusM: 250, offenseCategory: "", layer: "reported" }}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={{ radius_m: 250, analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30", offense_category: null, places: [], pairwise: [] }}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to my places/i }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
   it("no longer renders the retired crime-mix chart", () => {
     render(<AnalyzeTab selected={[home]} analysis={analysis} availableRadii={[250]} running={false} neighborhood={null} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.queryByText("Crime mix")).not.toBeInTheDocument();

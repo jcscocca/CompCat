@@ -502,4 +502,33 @@ describe("MapWorkspace", () => {
     const list = screen.getByRole("list", { name: /addresses to compare/i });
     expect(within(list).getByText("123 Main St")).toBeInTheDocument();
   });
+
+  it("saves a looked-up address to places on request", async () => {
+    const saved: Place = { ...home, id: "s1", display_label: "123 Main St", latitude: 47.61, longitude: -122.34 };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValueOnce(makeSummary()).mockResolvedValue(makeSummary([saved]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(createPlace).mockResolvedValue(saved);
+    geocodeSearch.mockResolvedValue([{ label: "123 Main St", latitude: 47.61, longitude: -122.34, source: "test" }]);
+
+    render(<MapWorkspace />);
+    await screen.findByRole("heading", { name: /look up an address/i });
+    fireEvent.change(screen.getByLabelText(/search an address/i), { target: { value: "123 Main" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(await screen.findByText("123 Main St"));
+
+    fireEvent.click(await screen.findByRole("button", { name: /save to my places/i }));
+
+    await waitFor(() => {
+      expect(createPlace).toHaveBeenCalledWith({
+        display_label: "123 Main St",
+        latitude: 47.61,
+        longitude: -122.34,
+        visit_count: 1,
+        sensitivity_class: "normal",
+      });
+    });
+  });
 });

@@ -50,6 +50,7 @@ type Props = {
   onRun: () => void;
   onCopyLink?: () => string | null;
   onCompareWith?: () => void;
+  onSave?: () => void;
 };
 
 const CATEGORIES: { value: string; label: string }[] = [
@@ -433,7 +434,7 @@ function IncidentDetailsCards({ details, noun, showCategory }: { details: Incide
   );
 }
 
-export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith }: Props) {
+export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
   const canRun = selected.length >= 1 && !running;
   const width = panelWidthPx ?? Infinity;
@@ -531,6 +532,12 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
           {onCompareWith && neighborhood && (
             <button type="button" className="mc-link-copy mc-compare-bridge" onClick={onCompareWith}>
               + Compare with another address
+            </button>
+          )}
+
+          {onSave && neighborhood && (
+            <button type="button" className="mc-link-copy mc-compare-bridge" onClick={onSave}>
+              Save to my places
             </button>
           )}
 
