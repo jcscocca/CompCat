@@ -3,7 +3,12 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from app.analysis.schemas import DecisionClass, DispersionResult, RateTestResult
+from app.analysis.schemas import (
+    DecisionClass,
+    DispersionResult,
+    RateInterval,
+    RateTestResult,
+)
 
 ALPHA = 0.05
 DISPERSION_THRESHOLD = 1.2
@@ -90,6 +95,50 @@ def compare_incident_rates(
         used_continuity_correction=used_correction,
         caveat_text=" ".join(caveats),
         exact_p_value=exact_p_value,
+    )
+
+
+def rate_confidence_interval(
+    *,
+    count: int,
+    exposure: float,
+    overdispersion_phi: float | None = None,
+) -> RateInterval:
+    """Quasi-Poisson Wald interval on a single exposure-adjusted rate.
+
+    The single-rate analogue of ``compare_incident_rates``: same phi-aware Wald log SE
+    (here ``sqrt(phi / count)``), same continuity convention, so a per-address interval and
+    the pairwise verdict share one variance model. Empirically justified over negative
+    binomial in docs/analysis/overdispersion-and-rate-intervals.md.
+    """
+    if not _is_nonnegative_integer(count):
+        raise ValueError("Incident counts must be nonnegative integers.")
+    if not math.isfinite(exposure) or exposure <= 0:
+        raise ValueError("Exposure values must be finite and positive.")
+    if overdispersion_phi is not None and (
+        not math.isfinite(overdispersion_phi) or overdispersion_phi < 0
+    ):
+        raise ValueError("Overdispersion phi must be finite and nonnegative.")
+
+    used_correction = count == 0
+    safe_count = count + 0.5 if used_correction else count
+    phi = overdispersion_phi or 1.0
+    se_log_rate = math.sqrt(phi / safe_count)
+    log_center = math.log(safe_count / exposure)
+    method = (
+        "quasi_poisson_rate_interval"
+        if overdispersion_phi is not None and overdispersion_phi > DISPERSION_THRESHOLD
+        else "poisson_rate_interval"
+    )
+    return RateInterval(
+        count=count,
+        exposure=exposure,
+        rate=count / exposure,
+        ci_lower=math.exp(log_center - Z_975 * se_log_rate),
+        ci_upper=math.exp(log_center + Z_975 * se_log_rate),
+        overdispersion_phi=overdispersion_phi,
+        used_continuity_correction=used_correction,
+        method=method,
     )
 
 
