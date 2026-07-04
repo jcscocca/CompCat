@@ -61,10 +61,12 @@ export function decodeView(param: string): SavedView | null {
     if (!Array.isArray(wire.pts) || wire.pts.length === 0) return null;
     const points = wire.pts.map((p: unknown) => readWirePoint(p));
     if (points.some((p: ViewPoint | null) => p === null)) return null;
+    const radiusM = Number(wire.r);
+    if (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 5000) return null;
     return {
       tab: wire.t,
       points: points as ViewPoint[],
-      radiusM: Number(wire.r),
+      radiusM,
       startDate: String(wire.s),
       endDate: String(wire.e),
       layer: wire.ly === "calls" ? "calls" : wire.ly === "arrests" ? "arrests" : "reported",

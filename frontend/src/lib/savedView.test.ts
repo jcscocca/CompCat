@@ -35,6 +35,18 @@ describe("savedView", () => {
     expect(decodeView(bad)).toBeNull();
   });
 
+  it("returns null when the radius is not a valid in-range number", () => {
+    const withRadius = (r: unknown) =>
+      btoa(JSON.stringify({
+        v: 1, t: "analyze", pts: [{ y: 47.6, x: -122.3, l: "P" }],
+        r, s: "2024-01-01", e: "2024-01-31", ly: "reported", c: null,
+      }));
+    expect(decodeView(withRadius("abc"))).toBeNull(); // NaN would poison the number line
+    expect(decodeView(withRadius(0))).toBeNull(); // non-positive
+    expect(decodeView(withRadius(99999))).toBeNull(); // beyond the 5000 m cap
+    expect(decodeView(withRadius(250))?.radiusM).toBe(250); // a valid radius still decodes
+  });
+
   it("preserves the arrests layer through encode/decode", () => {
     const view = { tab: "analyze" as const, points: [{ latitude: 47.6, longitude: -122.3, label: "P" }], radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31", layer: "arrests" as const, offenseCategory: "" };
     expect(decodeView(encodeView(view))?.layer).toBe("arrests");

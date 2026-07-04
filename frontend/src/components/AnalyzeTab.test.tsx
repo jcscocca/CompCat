@@ -291,7 +291,7 @@ describe("AnalyzeTab", () => {
     const table = screen.getByRole("table");
     expect(screen.getByText("Reported incidents near selected places")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Place" })).toBeInTheDocument();
-    expect(within(table).getByText("2026-01-02 10:00 UTC")).toBeInTheDocument();
+    expect(within(table).getByText("2026-01-02 10:00 Seattle time")).toBeInTheDocument();
     expect(within(table).getByText("Property")).toBeInTheDocument();
     expect(within(table).getByText("Theft")).toBeInTheDocument();
     expect(within(table).getByText("42 m")).toBeInTheDocument();

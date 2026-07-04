@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { createBulkPlaces, createPlace, deletePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
@@ -139,13 +139,20 @@ export function MapWorkspace() {
     setActiveTab("analyze");
   }
 
-  // Auto-run analysis for a just-looked-up address (mirrors the shared-view auto-run) so the
-  // user sees its context without a second click. Guarded on lookupPoint; the analyze hook has
-  // already re-rendered with the new points by the time this effect fires.
+  // A points-subject (a just-looked-up address or a shared-view set) has no manual "Run" button,
+  // so re-run its analysis whenever it is set OR the analysis controls change. Without the
+  // controls dependency, flipping the layer/radius/date clears the pane (invalidateAnalysisContext)
+  // and leaves it blank with nothing to re-trigger the run. Skips the initial mount — the lookup
+  // is set post-mount, and the shared-view effect above owns the first run.
+  const analysisMountRef = useRef(true);
   useEffect(() => {
-    if (lookupPoint) void analyze.runAnalyze();
+    if (analysisMountRef.current) {
+      analysisMountRef.current = false;
+      return;
+    }
+    if (lookupPoint || sharedPoints) void analyze.runAnalyze();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lookupPoint]);
+  }, [analysis, lookupPoint, sharedPoints]);
 
   async function handleSaveLookup() {
     if (!lookupPoint) return;

@@ -485,6 +485,34 @@ describe("MapWorkspace", () => {
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
+  it("re-runs a looked-up address's analysis when the layer changes", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    geocodeSearch.mockResolvedValue([{ label: "123 Main St", latitude: 47.61, longitude: -122.34, source: "test" }]);
+
+    render(<MapWorkspace />);
+    await screen.findByRole("heading", { name: /look up an address/i });
+    fireEvent.change(screen.getByLabelText(/search an address/i), { target: { value: "123 Main" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(await screen.findByText("123 Main St"));
+
+    await waitFor(() => {
+      expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({ layer: "reported" }));
+    });
+
+    // Flipping the layer must re-run the same looked-up points, not strand the pane blank.
+    fireEvent.click(screen.getByRole("button", { name: "911 calls" }));
+    await waitFor(() => {
+      expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({
+        points: [{ latitude: 47.61, longitude: -122.34, label: "123 Main St" }],
+        layer: "calls",
+      }));
+    });
+  });
+
   it("bridges a looked-up address into the Compare tab as the anchor", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());

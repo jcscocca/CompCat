@@ -96,7 +96,10 @@ function formatIncidentTime(value: string | null) {
     String(parsed.getUTCHours()).padStart(2, "0"),
     String(parsed.getUTCMinutes()).padStart(2, "0"),
   ].join(":");
-  return `${date} ${time} UTC`;
+  // The SPD `offense_start_utc` field actually holds Seattle local wall-clock time (a known
+  // column misnomer), and the getUTC* reads above pull those exact digits back out. Label it
+  // "Seattle time" — calling it UTC misstated every incident time by 7-8 hours.
+  return `${date} ${time} Seattle time`;
 }
 
 function formatDistanceMeters(value: number) {
