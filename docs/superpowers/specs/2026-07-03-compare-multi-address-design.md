@@ -20,8 +20,13 @@ proved out for shared views.
 
 ## Goal
 
-Give the Compare tab an editable, ephemeral **compare set** — add an address via search,
-remove a row, re-run — driving the slice-A verdict, without touching saved Places.
+Two parts, one PR, built in order:
+- **Part 1 (first):** give the Compare tab an editable, ephemeral **compare set** — add an
+  address via search, remove a row, re-run — driving the slice-A verdict, without touching
+  saved Places.
+- **Part 2 (after Part 1):** add an **honest rate-ratio interval plot** to the verdict — the
+  payload-ready, frontend-only visualization that gives the "how big is the gap / is it real"
+  intuition the two-bell-curves idea was reaching for, without its statistical trap.
 
 ## Design decisions (settled in brainstorm)
 
@@ -106,6 +111,48 @@ purely from that payload, so nothing is lost by dropping the `place_ids` path fr
 - **Seeded set, then selection changes:** re-seeds only if the user hasn't manually edited
   (the "user-edited" flag); otherwise the user's set stands.
 
+## Part 2 — rate-ratio interval plot (bundled in this PR, built after Part 1)
+
+An honest visualization of the comparison, added to the verdict area. It gives the "magnitude
++ is-the-gap-real" intuition without the overlapping-bell-curve fallacy — two 95% CIs
+overlapping is **not** the same as "no significant difference" (overlap ≈ p 0.006, not 0.05,
+and it misleads hardest at the high incident counts this tool sees), and the payload has no
+per-address spread to draw a bell from, only the ratio's CI. (A design exploration weighed
+five idioms; the rate-ratio interval plot won on honesty + payload-feasibility. Overlapping
+bell curves were rejected as statistically dishonest here.)
+
+**What it shows.** For each non-lowest address, a dot at its rate **relative to the lowest
+address** ("× the lowest") with its 95% interval as a horizontal bar, on a shared axis with a
+dashed reference line at 1× (= same rate as the lowest). Interval entirely clear of the line
+→ clearly higher; interval crossing the line → not distinguishable. The lowest address is the
+reference at 1×.
+
+**Payload mapping — all fields exist today; frontend-only, no backend.** Each non-lowest
+address's pairwise-vs-candidate row carries `rate_ratio` and `ci_lower`/`ci_upper`. The
+engine's candidate is the lowest-rate address, so `rate_ratio` = lowest/other ≤ 1; the plot
+shows the **inverse** so higher-rate addresses read ≥ 1×: `multiple = 1/rate_ratio`, interval
+inverts-and-swaps to `[1/ci_upper, 1/ci_lower]`. This derivation lives in the pure
+`compareVerdict.ts` (extended to expose, per row, the plotted `multipleOfLowest` + its
+interval bounds), so it is unit-tested.
+
+**Two honesty rules baked in (both flagged by the design exploration):**
+1. **Orientation to the real payload.** Code to the actual ≤ 1 `rate_ratio` and invert as
+   above — do not assume a ≥ 1 ratio. The effect-size floor (0.80 on the ratio) sits at 1.25×
+   on the displayed multiple axis.
+2. **Raw bar, corrected label.** The bar is the raw 95% interval; the "clearly higher /
+   similar" color+label is the Benjamini–Hochberg-corrected `decision_class`, which can
+   disagree with the raw bar at scale. The **label/color is authoritative**; a one-line
+   footnote discloses this so the disagreement is not hidden.
+
+**Placement & states.** A distinct panel in the verdict area (below the ranked list). Clear
+case: intervals right of the line. No-clear / inconclusive: intervals straddle the line, no
+address highlighted — the chart refuses to manufacture a winner, matching the words. One row
+at 2 addresses; nine rows on the shared axis at 10 — legible.
+
+**Invariant.** Neutral palette only (no red/green safety coding); it visualizes
+reported-incident *rate* comparison, never a safety judgement. Slice A's guard-test
+banned-word scan extends to cover the plot's labels.
+
 ## Testing
 
 - `useCompareSet.test.ts` (pure): add / remove / seed-from-selected / seed-from-points; the
@@ -115,15 +162,25 @@ purely from that payload, so nothing is lost by dropping the `place_ids` path fr
 - `CompareTab.test.tsx` (extended): renders the editor + rows; remove drops a row; the "N of
   10" count; the stale/re-run affordance; < 2 gating; slice-A verdict still renders for a set
   of ≥ 2. Invariant guard from slice A stays green (verdict copy unchanged).
+- `compareVerdict.test.ts` (extended, Part 2): the `multipleOfLowest` + interval derivation —
+  the `1/rate_ratio` inversion and the `[1/ci_upper, 1/ci_lower]` swap; the effect-floor
+  mapping (0.80 → 1.25×); a case where the raw interval clears 1× but the corrected
+  `decision_class` says "similar" (so the plot's label stays authoritative).
+- `CompareRatioPlot.test.tsx` (Part 2): dot/interval positions for a clear case and a
+  no-clear (straddling) case; the raw-bar/corrected-label footnote present; the invariant
+  banned-word scan over the plot's labels; legible row-per-address at N=2 and N=10.
 - `make test-all` green.
 
 ## File structure
 
-- **Create:** `frontend/src/lib/useCompareSet.ts` (+ `.test.ts`),
+- **Create (Part 1):** `frontend/src/lib/useCompareSet.ts` (+ `.test.ts`),
   `frontend/src/components/CompareAddressInput.tsx` (+ `.test.tsx`).
+- **Create (Part 2):** `frontend/src/components/CompareRatioPlot.tsx` (+ `.test.tsx`).
 - **Modify:** `frontend/src/components/CompareTab.tsx` (+ its test), `frontend/src/lib/useCompare.ts`
   (feed the editable points), `frontend/src/components/MapWorkspace.tsx` (own/seed the set,
-  wire it), and the Compare CSS block for the editor rows/input.
+  wire it), `frontend/src/lib/compareVerdict.ts` (+ its test — expose per-row plotted
+  `multipleOfLowest` + interval bounds for Part 2), and the Compare CSS block (editor rows/input
+  + the plot).
 - **No backend / `app/` change.** No new endpoint, schema, or migration.
 
 ## Out of scope (deferred / tracked)
@@ -135,10 +192,20 @@ purely from that payload, so nothing is lost by dropping the `place_ids` path fr
 - **Persisting a compare address to Places** (a "save this candidate" affordance) — possible
   later; the ephemeral default stands.
 - **Auto-run on edit** (vs the explicit re-run chosen here).
+- **Overlapping bell curves** — rejected: statistically dishonest for this model (no
+  per-address spread in the payload; overlap ≠ non-significance; symmetric Gaussian is the
+  wrong shape for a Poisson rate). The rate-ratio interval plot (Part 2) delivers the same
+  intuition honestly.
+- **Per-address "rate ± margin of error" number-line** — the most intuitive cousin, but it
+  needs the backend to emit a per-address Poisson rate CI; deferred to a fast-follow.
 - **Slice C** (comparison-first landing).
 
 ## Sequencing
 
-Single PR from the `compare-multi-address` worktree, gated on `make test-all`. TDD-first on
-`useCompareSet` (the editable-set logic), then `CompareAddressInput`, then the `CompareTab`
-integration and wiring, then a ROADMAP slice-B tick.
+**One PR**, from the `compare-multi-address` worktree, gated on `make test-all`, built in two
+ordered parts:
+- **Part 1 (first):** TDD `useCompareSet` (the editable-set logic), then `CompareAddressInput`,
+  then the `CompareTab` integration + wiring.
+- **Part 2 (after Part 1 lands green):** extend `compareVerdict.ts` (the plotted multiple +
+  inverted interval) TDD-first, then `CompareRatioPlot`, then mount it in the verdict.
+- Finish with the ROADMAP slice-B tick.
