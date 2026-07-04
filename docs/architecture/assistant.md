@@ -89,7 +89,7 @@ The agent influences the right-hand dashboard pane by emitting `tool` SSE events
 
 `build_semantic_context` assembles a `SemanticContextPacket` from live database state before the planning call. It includes: dashboard totals (saved place count, available radii), metadata for the currently selected places (label, coordinates, visit statistics, sensitivity class), the most recent `PlaceCrimeSummary` rows for those places, the user's active filters, the `AVAILABLE_TOOLS` list, and `POLICY_CAVEATS` (invariant statements injected directly into the model's context, e.g. "Do not label places as safe or unsafe."). A `missing_context` list flags gaps (no saved places, no selection, no date range, no radius) that the model is expected to mention or work around.
 
-The active **layer** flows through the assistant the same way the other dashboard filters do: `AssistantDashboardState.layer` → `active_filters.layer` in the packet → backfilled into `analyze_places`/`compare_places` arguments by `_tool_arguments` → mapped to `source_dataset`s via `sources_for_layer` and passed to the analysis services. So the assistant analyzes the reported layer (crime + arrests) or the 911 calls layer per the user's selection; a `POLICY_CAVEATS` entry and the system prompt tell it 911 calls are requests for service, not confirmed incidents. The `settings_used` echo carries `layer` so the frontend bridge moves the global toggle to match.
+The active **layer** flows through the assistant the same way the other dashboard filters do: `AssistantDashboardState.layer` → `active_filters.layer` in the packet → backfilled into `analyze_places`/`compare_places` arguments by `_tool_arguments` → mapped to `source_dataset`s via `sources_for_layer` and passed to the analysis services. So the assistant analyzes the reported layer (SPD crime reports), the arrests layer (enforcement activity), or the 911 calls layer per the user's selection; `POLICY_CAVEATS` entries and the system prompt frame arrests as enforcement activity (not reported incidents) and 911 calls as requests for service (not confirmed incidents). The `settings_used` echo carries `layer` so the frontend bridge moves the global toggle to match.
 
 **`app/assistant/summaries.py`**
 
@@ -132,26 +132,60 @@ The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_a
 
 **Mechanism**
 
-`_SAFETY_SCORE_PATTERN` is a compiled regex in `app/assistant/agent.py`:
+The deterministic guard in `app/assistant/agent.py` runs on **both** the incoming user text
+and the model's final answer, via `_contains_safety_ranking`. It is built from three
+cooperating compiled patterns rather than one:
 
-```python
-_SAFETY_SCORE_PATTERN = re.compile(
-    r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|risk(?:y|ier|iest)?)\b"
-    r"|\b(?:rank|rate|score)\b\s+(?:these|those|them|the\s+)?"
-    r"(?:place|block|area|neighbou?rhood|route|street|spot|option|location)s?\b",
-    re.IGNORECASE,
-)
-```
+- `_UNAMBIGUOUS_SAFETY_PATTERN` — terms that on their own signal a safety-ranking ask
+  (`safe`/`unsafe`/`dangerous`/`risky`, `crime-free`, the `rank`/`rate`/`score` verb arms
+  followed by a place noun through an optional determiner run, the `mal + place-noun`
+  compound, and a Spanish mirror of each arm — `seguridad`/`peligroso`/`riesgo`,
+  `clasificar`/`calificar` + place noun, `barrio malo`, etc.). A hit here trips the guard on
+  its own.
+- `_AMBIGUOUS_TERM_PATTERN` — colloquial/adjectival terms that also have benign senses
+  (`sketchy`/`shady`/`dodgy`/`ghetto`; Spanish `seguro` as "I'm sure", `tranquilo` as
+  "calm"; `avoid`/`evitar`). These trip **only** when...
+- `_PLACE_CONTEXT_PATTERN` — deictics + place nouns in English and Spanish — also matches the
+  same message.
 
-`_asks_for_safety_score` searches this pattern against the last eight user messages (matching the window sent to the model). If any message matches, the turn is short-circuited before the LLM is called: a pre-written redirect is streamed telling the user to reframe the request as reported-incident counts or exposure-adjusted rates.
+`_asks_for_safety_score` runs `_contains_safety_ranking` against the last eight user messages
+(matching the window sent to the model); on a hit the turn is short-circuited before the LLM
+is called and a pre-written redirect (`_SAFETY_REDIRECT`) is streamed, telling the user to
+reframe as reported-incident counts or exposure-adjusted rates.
 
-A second, softer layer appears in the system prompt (`PLANNING_SYSTEM_PROMPT` in `app/assistant/prompts.py`): explicit instructions to the model not to use safety/danger/risk language and to redirect to neutral framings.
+**Output-side guard.** The same `_contains_safety_ranking` predicate is applied to the model's
+final answer before it is emitted. If a generated answer trips it, the answer is suppressed and
+the redirect is streamed instead — so a paraphrase that slips past the input guard and provokes
+banned-lexicon output is still caught on the way out.
 
-**Known limitation**
+A third, softer layer is the system prompt (`PLANNING_SYSTEM_PROMPT` in
+`app/assistant/prompts.py`): explicit instructions to the model not to use safety/danger/risk
+language and to redirect to neutral framings.
 
-The pre-LLM guard matches keywords with word-boundary anchors, which prevents false triggers on substrings like "safely" or "Safeway". However, it can be bypassed by paraphrasing (e.g., "which location would you feel more comfortable visiting?") or by requests that omit the flagged vocabulary. The guard is breadth-limited by its lexicon; it is not a semantic classifier. The system prompt provides a second line of defence, but a sufficiently unusual paraphrase could reach the model without triggering either layer.
+Word-boundary anchors keep legitimate substrings (`safely`, `Safeway`, `incident rate`) and
+allowed count framing (`which area has the most crime`) from false-triggering, and the
+ambiguous-term gating avoids proper-noun false positives (`Shady Grove Ave`, `Warsaw Ghetto`).
 
-**Verified gap (as of `d30235b`):** the optional noun-determiner clause `(?:these|those|them|the\s+)?` attaches the trailing `\s+` only to `the`, so object-first requests like *"rank these places"* or *"score these areas"* slip past the pre-LLM guard (only *"rank the places"* is caught). One-line fix, tracked as the top Phase 1 item in [`../ROADMAP.md`](../ROADMAP.md).
+**Known limitations**
+
+The guard is a lexical/contextual matcher, not a semantic classifier, so it is bounded by its
+lexicon on both ends:
+
+- **Output-side ranking prose that avoids the lexicon is not caught.** Because the input and
+  output guards share the one predicate, phrasings that rank or label a place without the
+  banned word-stems — *"this is a bad area to live"*, *"the worst of the three"*, *"a
+  high-crime area"*, *"I wouldn't recommend living here"* — pass both. The system prompt is the
+  only backstop for these.
+- **The `type:"final"` free-text path is the soft underbelly.** Deterministic tool summaries
+  (`summaries.py`) are invariant-safe by construction; only the model's free-text answer can
+  carry unvetted prose. Routing more of the answer through the deterministic path (LLM
+  classify-only) is the durable hardening direction.
+- **Non-English/Spanish and obfuscation.** Other languages (non-Latin scripts especially) and
+  homoglyph/letter-spacing tricks are out of the current lexicon.
+- **The presence-claim prong of the invariant has no code enforcement.** The guard covers
+  "score/rank/label by safety"; it does not detect a claim that the user *was present at* an
+  incident. That prong currently relies on the system prompt and on the app never having
+  per-incident presence data to assert.
 
 ---
 

@@ -84,11 +84,14 @@ which are unauthenticated or session-creating.
 
 The `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, and
 `/dashboard/neighborhood` request bodies accept an optional `layer` field (`"reported"`
-default, or `"calls"`). It selects the incident-context layer: `"reported"` unions the SPD
-crime + arrests datasets, `"calls"` queries SPD 911 calls for service. The route maps the
-layer to its `source_dataset`s via `app/crime/sources.py::sources_for_layer`; an unknown
-value is a 422. The layers are mutually exclusive (a 911 call is never counted with the
-report it produced). `/dashboard/analyze` records the layer on the `AnalysisRun` and the
+default, `"arrests"`, or `"calls"`). It selects the incident-context layer: `"reported"`
+queries SPD crime reports only, `"arrests"` queries SPD arrest records (enforcement activity),
+and `"calls"` queries SPD 911 calls for service. The route maps the layer to its
+`source_dataset`s via `app/crime/sources.py::sources_for_layer`; an unknown value is a 422.
+The layers are mutually exclusive and disjoint — arrests are a separate layer, not unioned
+into `"reported"` (on the public redacted data an arrest can't be linked back to its crime
+report, so counting both would double-count), and a 911 call is never counted with the report
+it produced. `/dashboard/analyze` records the layer on the `AnalysisRun` and the
 `PlaceCrimeSummary` rows it persists, so `/dashboard/summary` echoes a `layer` field.
 `/dashboard/freshness` returns coverage keyed by layer (`{"reported": {...}, "calls": {...}}`)
 so the UI pill reflects the active layer.
