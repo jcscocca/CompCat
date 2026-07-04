@@ -9,6 +9,7 @@ import type {
   Place,
   TemporalProfile,
 } from "../types";
+import { formatIncidentAddress } from "../lib/addressLabel";
 import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { countNoun, incidentNoun, type IncidentNoun } from "../lib/layerCopy";
 import { decisionHeadline } from "../lib/verdictCopy";
@@ -380,7 +381,7 @@ function IncidentDetailsTable({ details, noun, showCategory, subcategoryHeader }
                     {showCategory ? <td>{incidentCategoryLabel(incident)}</td> : null}
                     <td>{incidentSubtypeLabel(incident)}</td>
                     <td>{formatDistanceMeters(incident.distance_m)}</td>
-                    <td>{incident.block_address || "Unavailable"}</td>
+                    <td>{formatIncidentAddress(incident.block_address)}</td>
                     <td>{incidentIdentifier(incident)}</td>
                   </tr>
                 ))}
@@ -424,7 +425,7 @@ function IncidentDetailsCards({ details, noun, showCategory }: { details: Incide
                   <span>{incidentSubtypeLabel(incident)}</span>
                   <span>{formatIncidentTime(incident.occurred_at || incident.reported_at)}</span>
                 </div>
-                <p className="mc-icard-addr"><span>{incident.block_address || "Unavailable"}</span> · <span>{incidentIdentifier(incident)}</span></p>
+                <p className="mc-icard-addr"><span>{formatIncidentAddress(incident.block_address)}</span> · <span>{incidentIdentifier(incident)}</span></p>
               </article>
             ))}
           </div>

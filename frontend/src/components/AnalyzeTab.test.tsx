@@ -295,7 +295,7 @@ describe("AnalyzeTab", () => {
     expect(within(table).getByText("Property")).toBeInTheDocument();
     expect(within(table).getByText("Theft")).toBeInTheDocument();
     expect(within(table).getByText("42 m")).toBeInTheDocument();
-    expect(within(table).getByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(within(table).getByText("100 block of Main St")).toBeInTheDocument();
     expect(within(table).getByText("R-100")).toBeInTheDocument();
   });
 
@@ -344,7 +344,7 @@ describe("AnalyzeTab", () => {
     render(<AnalyzeTab selected={[home]} analysis={analysis} availableRadii={[250]} running={false} panelWidthPx={380} incidentDetails={oneIncident} onChange={vi.fn()} onRun={vi.fn()} />);
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText(/See the 1 reported incident\b/i));
-    expect(screen.getByText("100 BLOCK MAIN ST", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("100 block of Main St", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("42 m")).toBeInTheDocument();
   });
 

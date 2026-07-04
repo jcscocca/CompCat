@@ -289,7 +289,7 @@ describe("MapWorkspace", () => {
         layer: "reported",
       });
     });
-    expect(await screen.findByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
   it("fetches neighborhood analysis after analysis succeeds", async () => {
@@ -326,7 +326,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
 
-    expect(await screen.findByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
@@ -402,7 +402,7 @@ describe("MapWorkspace", () => {
     await screen.findByText("Alpha");
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
   it("hydrates a shared view from ?view= and runs the points path", async () => {
@@ -482,7 +482,7 @@ describe("MapWorkspace", () => {
       }));
     });
     expect(createPlace).not.toHaveBeenCalled();
-    expect(await screen.findByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
   it("bridges a looked-up address into the Compare tab as the anchor", async () => {
@@ -523,7 +523,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(await screen.findByText("123 Main St"));
 
     // The lookup's analysis has rendered before we save.
-    expect(await screen.findByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /save to my places/i }));
 
     await waitFor(() => {
@@ -538,7 +538,7 @@ describe("MapWorkspace", () => {
     // Saving selects the new place directly (not via the invalidating path), so the verdict
     // computed for the same coordinates stays on screen — a revert to selectPlaceIds would
     // clear this and fail the assertion.
-    expect(screen.getByText("100 BLOCK MAIN ST")).toBeInTheDocument();
+    expect(screen.getByText("100 block of Main St")).toBeInTheDocument();
   });
 
   it("clears an active lookup when the assistant drives a new pane", async () => {
