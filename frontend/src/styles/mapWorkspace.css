@@ -502,3 +502,7 @@ input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
 .mc-plot-row.similar .bar{background:rgba(150,150,150,.35);}
 .mc-plot-row .val{font-family:var(--f-mono,ui-monospace);font-size:11px;color:var(--dim);text-align:right;white-space:nowrap;}
 .mc-plot-foot{font-size:10.5px;line-height:1.5;color:var(--faint);margin:0;}
+.mc-lookup-head{padding:2px 2px 12px;}
+.mc-lookup-head h4{margin:0 0 5px;font-size:15px;color:var(--text);}
+.mc-lookup-head p{margin:0;font-size:13px;color:var(--dim);line-height:1.5;}
+.mc-lookup-manual{margin-top:14px;}
