@@ -147,6 +147,17 @@ removed, the flagship experience is comparing candidate addresses.*
 
 Each of these needs its own `docs/superpowers/` brainstorm → spec → plan before implementation.
 
+**Decomposition (2026-07-03):** worked as three slices, A→B→C, so the compare experience is
+strong before it becomes the front door.
+- [ ] **Slice A — richer side-by-side verdicts** — specced & built: rebuild the Compare tab
+  on the statistical richness the `/dashboard/compare` payload already returns (hybrid
+  callout + ranked lowest-first list + per-pair analytics), frontend-only. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-03-compare-first-flagship*`.
+- [ ] **Slice B — multi-address compare UX** — a Compare-owned add/remove-address control
+  and N-way selection independent of the Places tab. Not yet specced.
+- [ ] **Slice C — comparison-first landing** — lead the app with the compare flow. Not yet
+  specced.
+
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.

@@ -33,7 +33,7 @@ import { MapWorkspace } from "./MapWorkspace";
 import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { encodeView } from "../lib/savedView";
-import type { DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place } from "../types";
+import type { DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
 
 const home: Place = {
   id: "p1", display_label: "Home", latitude: 47.61, longitude: -122.33, visit_count: 5,
@@ -88,6 +88,18 @@ function makeNeighborhoodAnalysis(): NeighborhoodAnalysis {
     offense_category: null,
     places: [],
     pairwise: [],
+  };
+}
+
+function makeSiteComparison(aLabel: string, bLabel: string): SiteComparison {
+  const opt = (id: string, label: string, count: number, rate: number) => ({ id, label, geometry_type: "place_buffer", radius_m: 250, incident_count: count, exposure: 1, exposure_unit: "square_km_days", incident_rate: rate });
+  const options = [opt("a", aLabel, 12, 3.9), opt("b", bLabel, 44, 14.3)];
+  return {
+    id: "c1", comparison_type: "site", geometry_type: "place_buffer", radius_m: 250,
+    analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-24",
+    offense_category: null, offense_subcategory: null, nibrs_group: null, created_at: "2026-07-03",
+    overview: { label: "Overview", decision_class: "statistically_lower", recommendation_option_id: "a", recommendation_label: aLabel, summary_text: "", caveat_text: "cav", options },
+    analytical: { label: "Analytical", source_dataset: "seattle_spd_crime", exposure_unit: "square_km_days", full_caveat_text: "full cav", options, pairwise_results: [{ id: "a-b", option_a_id: "a", option_a_label: aLabel, option_b_id: "b", option_b_label: bLabel, winner_option_id: "a", winner_label: aLabel, decision_class: "statistically_lower", method: "quasipoisson", incident_count_a: 12, incident_count_b: 44, exposure_a: 1, exposure_b: 1, exposure_unit: "square_km_days", rate_a: 3.9, rate_b: 14.3, rate_ratio: 3.7, ci_lower: 2.0, ci_upper: 6.8, p_value: 0.001, adjusted_p_value: 0.004, overdispersion_phi: 1.1, overdispersion_status: "ok", minimum_data_status: "met", caveat_text: "" }] },
   };
 }
 
@@ -337,7 +349,7 @@ describe("MapWorkspace", () => {
               analysis_end_date: "2026-06-30",
               offense_category: null,
             },
-            comparison: { overview: { summary_text: "More reported incidents at Alpha." } },
+            comparison: makeSiteComparison("Alpha", "Bravo"),
           },
         },
       });
@@ -355,7 +367,7 @@ describe("MapWorkspace", () => {
 
     // Only resolves if the bridge replaced the selection (so CompareTab has 2 places),
     // set the comparison, and switched to the Compare tab.
-    expect(await screen.findByText("More reported incidents at Alpha.")).toBeInTheDocument();
+    expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
   });
 
   it("opens the Analyze tab with incidents when the assistant returns analyze_places", async () => {
@@ -409,7 +421,7 @@ describe("MapWorkspace", () => {
   it("hydrates a shared Compare view and renders its comparison instead of the select-two prompt", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
-    vi.mocked(comparePlaces).mockResolvedValue({ overview: { summary_text: "More reported incidents at Pike Place." } });
+    vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Pike Place", "Second Site"));
 
     const view = encodeView({
       tab: "compare",
@@ -427,7 +439,7 @@ describe("MapWorkspace", () => {
       expect.objectContaining({ points: expect.any(Array) })));
     // The shared Compare pane renders (synthetic selection ≥ 2) — not the "select two" prompt.
     expect(screen.queryByText(/select at least two places/i)).not.toBeInTheDocument();
-    expect(await screen.findByText("More reported incidents at Pike Place.")).toBeInTheDocument();
+    expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
     window.history.replaceState({}, "", "/");
   });
 });

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useCompare } from "./useCompare";
 
-vi.mock("../api/client", () => ({ comparePlaces: vi.fn().mockResolvedValue({ ok: true }) }));
+vi.mock("../api/client", () => ({ comparePlaces: vi.fn().mockResolvedValue({} as unknown) }));
 import { comparePlaces } from "../api/client";
 
 const analysis = { startDate: "2024-01-01", endDate: "2024-01-31", radiusM: 250, offenseCategory: "", layer: "reported" as const };

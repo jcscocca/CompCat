@@ -337,7 +337,7 @@ export function MapWorkspace() {
             />
           ) : null}
           {activeTab === "compare" ? (
-            <CompareTab selected={selected} analysis={analysis} summary={data.summary} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} onCopyLink={() => buildShareUrl("compare")} />
+            <CompareTab selected={selected} analysis={analysis} comparison={compare.comparison} running={compare.running} onRun={compare.runCompare} onCopyLink={() => buildShareUrl("compare")} />
           ) : null}
           {activeTab === "export" ? <ExportTab href={data.exportHref} /> : null}
         </BottomSheet>

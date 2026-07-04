@@ -1,16 +1,16 @@
 import { useRef, useState } from "react";
 
 import { comparePlaces } from "../api/client";
-import type { AnalysisSettings } from "../types";
+import type { AnalysisSettings, SiteComparison } from "../types";
 
 export interface CompareController {
   running: boolean;
-  comparison: Record<string, unknown> | null;
+  comparison: SiteComparison | null;
   runCompare: () => Promise<void>;
   /** Drop in-flight + current comparison (selection or analysis controls changed). */
   invalidate: () => void;
   /** Apply an analyst-provided comparison directly (no re-fetch). */
-  applyAssistant: (comparison: Record<string, unknown> | null) => void;
+  applyAssistant: (comparison: SiteComparison | null) => void;
 }
 
 interface CompareDeps {
@@ -27,7 +27,7 @@ interface CompareDeps {
  */
 export function useCompare({ selectedIds, analysis, setError, points }: CompareDeps): CompareController {
   const [running, setRunning] = useState(false);
-  const [comparison, setComparison] = useState<Record<string, unknown> | null>(null);
+  const [comparison, setComparison] = useState<SiteComparison | null>(null);
   const versionRef = useRef(0);
 
   function invalidate() {
@@ -59,7 +59,7 @@ export function useCompare({ selectedIds, analysis, setError, points }: CompareD
     }
   }
 
-  function applyAssistant(next: Record<string, unknown> | null) {
+  function applyAssistant(next: SiteComparison | null) {
     setComparison(next);
   }
 

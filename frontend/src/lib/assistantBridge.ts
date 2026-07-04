@@ -4,6 +4,7 @@ import type {
   IncidentDetailsResponse,
   LayerKey,
   NeighborhoodAnalysis,
+  SiteComparison,
 } from "../types";
 
 // Mirrors the backend `_settings_used` echo (app/assistant/tools.py): only the fields the
@@ -40,7 +41,7 @@ export function interpretToolResult(data: {
       return {
         selection: { mode: "replace", ids: Array.isArray(result.place_ids) ? (result.place_ids as string[]) : [] },
         settings: settingsFrom(result.settings_used as SettingsUsed),
-        comparison: (result.comparison as Record<string, unknown>) ?? null,
+        comparison: (result.comparison as SiteComparison) ?? null,
         refetchSummary: true,
         tab: "compare",
       };

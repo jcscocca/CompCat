@@ -8,6 +8,7 @@ import type {
   NeighborhoodAnalysis,
   Place,
   PlaceCreate,
+  SiteComparison,
 } from "../types";
 
 type AnalysisPointPayload = { latitude: number; longitude: number; label: string };
@@ -132,7 +133,7 @@ export function getIncidentDetails(
 
 export function comparePlaces(
   payload: ComparePlacesPayload,
-): Promise<Record<string, unknown>> {
+): Promise<SiteComparison> {
   return request("/dashboard/compare", {
     method: "POST",
     body: JSON.stringify(payload),
