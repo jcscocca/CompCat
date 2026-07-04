@@ -41,6 +41,8 @@ export function MapWorkspace() {
   const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "places");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lookupPoint, setLookupPoint] = useState<ComparePoint | null>(null);
+  // Latches once the user leaves the landing for manual place management; the landing does
+  // not return for the rest of the session (a lookup resets it).
   const [manualEntry, setManualEntry] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
     if (initialView) {
@@ -245,6 +247,9 @@ export function MapWorkspace() {
     layer: analysis.layer,
   }), [analysis, selectedIds]);
 
+  // Landing shows only on a truly fresh places-tab session: no saved data, no lookup/shared
+  // subject, not dismissed into manual mode, and no in-progress draft (so a search preview or
+  // dropped pin reaches PlacesTab instead of being hidden behind the landing).
   const showLanding =
     data.places.length === 0 && !lookupPoint && !sharedPoints && !manualEntry && activeTab === "places" && !pinDraft.draft;
 
