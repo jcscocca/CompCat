@@ -164,6 +164,13 @@ strong before it becomes the front door.
   tab, plus a one-click compare bridge that carries the looked-up address in as the anchor and
   an optional "Save to my places". Frontend-only; invariant untouched. Spec/plan:
   `docs/superpowers/{specs,plans}/2026-07-03-compare-single-address-entry*`.
+- [x] **Per-address rate interval (backend)** — every compared address now carries its own
+  quasi-Poisson rate confidence interval (`rate_confidence_interval`), surfaced on the
+  `/dashboard/compare` options payload (persisted via migration `0013`). Empirically chosen
+  over negative binomial — the mean–variance relationship in real SPD data is linear, not
+  quadratic: `docs/analysis/overdispersion-and-rate-intervals.md`. The intuitive
+  "rate ± margin of error" number-line viz (`CompareRateNumberLine`) ships alongside it,
+  reading each address's absolute rate with its 95% interval on one shared axis.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

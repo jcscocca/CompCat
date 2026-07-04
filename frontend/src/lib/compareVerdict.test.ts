@@ -132,3 +132,27 @@ describe("toCompareVerdict — plot interval (Part 2)", () => {
     expect(zed.plotCiHigh).toBeCloseTo(1 / (0.43 * 0.6), 4);
   });
 });
+
+describe("toCompareVerdict — absolute rate interval (number line)", () => {
+  it("carries each option's absolute rate CI onto its row", () => {
+    const c = comparison("not_statistically_clear",
+      [
+        { ...opt("a", "Pike", 12, 3.9), rate_ci_lower: 2.7, rate_ci_upper: 5.6 },
+        { ...opt("b", "Bell", 31, 10.1), rate_ci_lower: 7.9, rate_ci_upper: 12.9 },
+      ],
+      [pair("a", "b", "not_statistically_clear", null, 2.6)], null);
+    const m = toCompareVerdict(c);
+    const pike = m.rows.find((r) => r.label === "Pike")!;
+    expect(pike.rateCiLow).toBeCloseTo(2.7, 5);
+    expect(pike.rateCiHigh).toBeCloseTo(5.6, 5);
+  });
+
+  it("leaves the rate CI null when the payload omits it", () => {
+    const c = comparison("not_statistically_clear",
+      [opt("a", "Pike", 12, 3.9), opt("b", "Bell", 31, 10.1)],
+      [pair("a", "b", "not_statistically_clear", null, 2.6)], null);
+    const m = toCompareVerdict(c);
+    expect(m.rows[0].rateCiLow).toBeNull();
+    expect(m.rows[0].rateCiHigh).toBeNull();
+  });
+});

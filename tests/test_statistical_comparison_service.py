@@ -82,6 +82,59 @@ def test_build_statistical_comparison_recommends_candidate_only_when_all_pairs_p
     assert result.pairwise_results[0].overdispersion_status == "poisson_ok"
 
 
+def test_build_statistical_comparison_attaches_per_option_rate_interval():
+    result = build_statistical_comparison(
+        user_id_hash="user",
+        comparison_type="site",
+        geometry_type=GeometryType.PLACE_BUFFER,
+        radius_m=500,
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        offense_category="PROPERTY",
+        offense_subcategory=None,
+        nibrs_group=None,
+        options=[
+            AnalysisOptionResult(
+                option_id="a",
+                option_label="Place A",
+                geometry_type=GeometryType.PLACE_BUFFER,
+                radius_m=500,
+                incident_count=8,
+                exposure=30.0,
+                exposure_unit="square_km_days",
+                incident_rate=8 / 30.0,
+            ),
+            AnalysisOptionResult(
+                option_id="b",
+                option_label="Place B",
+                geometry_type=GeometryType.PLACE_BUFFER,
+                radius_m=500,
+                incident_count=28,
+                exposure=30.0,
+                exposure_unit="square_km_days",
+                incident_rate=28 / 30.0,
+            ),
+        ],
+        period_counts_by_option_id={
+            "a": [2, 2, 2, 2],
+            "b": [7, 7, 7, 7],
+        },
+    )
+
+    options = {option.option_id: option for option in result.options}
+    for option in result.options:
+        assert option.rate_ci_lower is not None
+        assert option.rate_ci_upper is not None
+        assert option.rate_ci_lower < option.incident_rate < option.rate_ci_upper
+        assert option.rate_ci_method in {
+            "poisson_rate_interval",
+            "quasi_poisson_rate_interval",
+        }
+    # The higher-count address gets a tighter *relative* interval.
+    a, b = options["a"], options["b"]
+    assert (b.rate_ci_upper / b.rate_ci_lower) < (a.rate_ci_upper / a.rate_ci_lower)
+
+
 def test_build_statistical_comparison_floors_near_empty_candidate():
     # Product-invariant guard: a near-zero-incident option must NOT be declared the
     # "statistically lower" winner on combined count alone — that is a safety ranking on
@@ -467,6 +520,17 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
         "wald_log_rate_ratio",
         "quasi_poisson_log_rate_ratio",
     }
+    # Each address carries its own persisted rate interval (survives the DB round-trip).
+    analytical_options = result["analytical"]["options"]
+    assert len(analytical_options) == 2
+    for option in analytical_options:
+        assert option["rate_ci_lower"] is not None
+        assert option["rate_ci_upper"] is not None
+        assert option["rate_ci_lower"] < option["incident_rate"] < option["rate_ci_upper"]
+        assert option["rate_ci_method"] in {
+            "poisson_rate_interval",
+            "quasi_poisson_rate_interval",
+        }
     assert result["id"]
     session.close()
 

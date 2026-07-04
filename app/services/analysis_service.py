@@ -170,6 +170,9 @@ def _persist_and_payload(
                 exposure=option.exposure,
                 exposure_unit=option.exposure_unit,
                 incident_rate=option.incident_rate,
+                rate_ci_lower=option.rate_ci_lower,
+                rate_ci_upper=option.rate_ci_upper,
+                rate_ci_method=option.rate_ci_method,
                 geometry_metadata_json=_geometry_metadata_json(
                     geometry_metadata_by_option_id,
                     option.option_id,
@@ -279,6 +282,9 @@ def _option_payload(option: StatisticalComparisonOption) -> dict[str, Any]:
         "exposure": option.exposure,
         "exposure_unit": option.exposure_unit,
         "incident_rate": option.incident_rate,
+        "rate_ci_lower": option.rate_ci_lower,
+        "rate_ci_upper": option.rate_ci_upper,
+        "rate_ci_method": option.rate_ci_method,
         "geometry_metadata": _json_dict(option.geometry_metadata_json),
     }
 

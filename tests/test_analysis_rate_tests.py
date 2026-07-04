@@ -9,6 +9,7 @@ from app.analysis.rate_tests import (
     classify_pairwise_result,
     compare_incident_rates,
     dispersion_status,
+    rate_confidence_interval,
 )
 
 
@@ -229,3 +230,60 @@ def test_classify_returns_model_warning_when_data_is_sufficient():
     )
 
     assert result == DecisionClass.MODEL_WARNING
+
+
+def test_rate_confidence_interval_brackets_the_rate_with_wald_log_method():
+    result = rate_confidence_interval(count=10, exposure=100.0)
+
+    assert result.rate == 10 / 100.0
+    assert result.method == "poisson_rate_interval"
+    assert result.used_continuity_correction is False
+    assert result.ci_lower < result.rate < result.ci_upper
+    # exp(log(0.1) +/- 1.96 * sqrt(1/10)) — single-rate analogue of the pairwise SE.
+    assert round(result.ci_lower, 4) == 0.0538
+    assert round(result.ci_upper, 4) == 0.1859
+
+
+def test_rate_confidence_interval_widens_with_overdispersion():
+    poisson = rate_confidence_interval(count=20, exposure=100.0, overdispersion_phi=1.0)
+    overdispersed = rate_confidence_interval(count=20, exposure=100.0, overdispersion_phi=4.0)
+
+    assert poisson.method == "poisson_rate_interval"
+    assert overdispersed.method == "quasi_poisson_rate_interval"
+    assert overdispersed.ci_lower < poisson.ci_lower
+    assert overdispersed.ci_upper > poisson.ci_upper
+
+
+def test_rate_confidence_interval_zero_count_uses_continuity_correction():
+    result = rate_confidence_interval(count=0, exposure=50.0)
+
+    assert result.rate == 0.0
+    assert result.used_continuity_correction is True
+    # A zero-count address still gets an honest positive upper bound, not a false zero interval.
+    assert result.ci_lower > 0.0
+    assert result.ci_upper > result.ci_lower
+
+
+def test_rate_confidence_interval_tightens_relative_interval_as_count_grows():
+    sparse = rate_confidence_interval(count=5, exposure=100.0)
+    dense = rate_confidence_interval(count=200, exposure=100.0)
+
+    assert dense.ci_upper / dense.ci_lower < sparse.ci_upper / sparse.ci_lower
+
+
+@pytest.mark.parametrize("count", [-1, 1.5, True])
+def test_rate_confidence_interval_rejects_invalid_counts(count):
+    with pytest.raises(ValueError, match="Incident counts must be nonnegative integers"):
+        rate_confidence_interval(count=count, exposure=100.0)
+
+
+@pytest.mark.parametrize("exposure", [0.0, -1.0, math.nan, math.inf])
+def test_rate_confidence_interval_rejects_non_positive_or_non_finite_exposure(exposure):
+    with pytest.raises(ValueError, match="Exposure values must be finite and positive"):
+        rate_confidence_interval(count=10, exposure=exposure)
+
+
+@pytest.mark.parametrize("phi", [-1.0, math.inf, math.nan])
+def test_rate_confidence_interval_rejects_invalid_overdispersion_phi(phi):
+    with pytest.raises(ValueError, match="Overdispersion phi must be finite and nonnegative"):
+        rate_confidence_interval(count=10, exposure=100.0, overdispersion_phi=phi)

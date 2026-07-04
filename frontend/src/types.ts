@@ -228,6 +228,9 @@ export type SiteComparisonOption = {
   exposure: number;
   exposure_unit: string;
   incident_rate: number;
+  rate_ci_lower?: number | null;
+  rate_ci_upper?: number | null;
+  rate_ci_method?: string | null;
 };
 
 export type SitePairwiseResult = {

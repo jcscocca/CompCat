@@ -152,6 +152,7 @@ def test_statistical_alembic_migration_creates_comparison_tables(tmp_path, monke
         column["name"] for column in inspector.get_columns("statistical_comparison_options")
     }
     assert "geometry_metadata_json" in option_columns
+    assert {"rate_ci_lower", "rate_ci_upper", "rate_ci_method"}.issubset(option_columns)
 
     option_fks = inspector.get_foreign_keys("statistical_comparison_options")
     pairwise_fks = inspector.get_foreign_keys("statistical_pairwise_results")

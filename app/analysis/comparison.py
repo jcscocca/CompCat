@@ -11,6 +11,7 @@ from app.analysis.rate_tests import (
     classify_pairwise_result,
     compare_incident_rates,
     dispersion_status,
+    rate_confidence_interval,
 )
 from app.analysis.schemas import (
     AnalysisOptionResult,
@@ -168,8 +169,38 @@ def build_statistical_comparison(
         overview_summary_text=_overview_summary(overall_decision, recommendation_label),
         overview_caveat_text=_overview_caveat(overall_decision),
         full_caveat_text=_full_caveat(pairwise_results),
-        options=options,
+        options=[
+            _option_with_rate_interval(
+                option,
+                period_counts_by_option_id.get(option.option_id, []),
+            )
+            for option in options
+        ],
         pairwise_results=pairwise_results,
+    )
+
+
+def _option_with_rate_interval(
+    option: AnalysisOptionResult,
+    period_counts: list[int],
+) -> AnalysisOptionResult:
+    # Each address carries its own quasi-Poisson rate interval, using its own monthly
+    # dispersion — the single-rate analogue of the pairwise SE, so the interval and the
+    # verdict share one variance model. Zero/negative exposure can't yield a rate interval.
+    if option.exposure <= 0:
+        return option
+    dispersion = dispersion_status(period_counts)
+    interval = rate_confidence_interval(
+        count=option.incident_count,
+        exposure=option.exposure,
+        overdispersion_phi=dispersion.phi,
+    )
+    return option.model_copy(
+        update={
+            "rate_ci_lower": interval.ci_lower,
+            "rate_ci_upper": interval.ci_upper,
+            "rate_ci_method": interval.method,
+        },
     )
 
 

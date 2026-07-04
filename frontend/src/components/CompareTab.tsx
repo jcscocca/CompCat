@@ -6,6 +6,7 @@ import { MAX_COMPARE_POINTS } from "../lib/useCompareSet";
 import type { AnalysisSettings, SiteComparison } from "../types";
 import { CompareAddressInput } from "./CompareAddressInput";
 import { CompareRankedList } from "./CompareRankedList";
+import { CompareRateNumberLine } from "./CompareRateNumberLine";
 import { CompareRatioPlot } from "./CompareRatioPlot";
 import { CompareVerdict } from "./CompareVerdict";
 import { MethodsAppendix } from "./MethodsAppendix";
@@ -64,6 +65,7 @@ export function CompareTab({ set, provider, onAddPoint, onRemovePoint, analysis,
           <CompareVerdict callout={verdict.callout} noun={noun} />
           <p className="mc-ranked-title">Ranked by {noun.singular} rate — lowest first</p>
           <CompareRankedList rows={verdict.rows} noun={noun} />
+          <CompareRateNumberLine rows={verdict.rows} noun={noun} />
           <CompareRatioPlot rows={verdict.rows} />
         </>
       ) : set.length >= 2 ? (

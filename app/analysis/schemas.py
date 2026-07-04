@@ -46,6 +46,18 @@ class RateTestResult:
     exact_p_value: float | None = None
 
 
+@dataclass(frozen=True)
+class RateInterval:
+    count: int
+    exposure: float
+    rate: float
+    ci_lower: float
+    ci_upper: float
+    overdispersion_phi: float | None
+    used_continuity_correction: bool
+    method: str
+
+
 class AnalysisSiteOption(BaseModel):
     id: str = Field(default_factory=new_id)
     label: str
@@ -82,6 +94,9 @@ class AnalysisOptionResult(BaseModel):
     exposure: float
     exposure_unit: str
     incident_rate: float
+    rate_ci_lower: float | None = None
+    rate_ci_upper: float | None = None
+    rate_ci_method: str | None = None
 
 
 class PairwiseComparisonResult(BaseModel):
