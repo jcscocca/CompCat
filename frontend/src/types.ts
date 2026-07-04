@@ -212,3 +212,82 @@ export type NeighborhoodAnalysis = {
   places: NeighborhoodPlace[];
   pairwise: NeighborhoodPair[];
 };
+
+export type SiteDecisionClass =
+  | "statistically_lower"
+  | "not_statistically_clear"
+  | "insufficient_data"
+  | "model_warning";
+
+export type SiteComparisonOption = {
+  id: string;
+  label: string;
+  geometry_type: string;
+  radius_m: number;
+  incident_count: number;
+  exposure: number;
+  exposure_unit: string;
+  incident_rate: number;
+};
+
+export type SitePairwiseResult = {
+  id: string;
+  option_a_id: string;
+  option_a_label: string;
+  option_b_id: string;
+  option_b_label: string;
+  winner_option_id: string | null;
+  winner_label: string | null;
+  decision_class: SiteDecisionClass;
+  method: string;
+  incident_count_a: number;
+  incident_count_b: number;
+  exposure_a: number;
+  exposure_b: number;
+  exposure_unit: string;
+  rate_a: number;
+  rate_b: number;
+  rate_ratio: number;
+  ci_lower: number;
+  ci_upper: number;
+  p_value: number;
+  adjusted_p_value: number;
+  overdispersion_phi: number | null;
+  overdispersion_status: string;
+  minimum_data_status: string;
+  caveat_text: string;
+};
+
+export type SiteComparisonOverview = {
+  label: string;
+  decision_class: SiteDecisionClass;
+  recommendation_option_id: string | null;
+  recommendation_label: string | null;
+  summary_text: string;
+  caveat_text: string;
+  options: SiteComparisonOption[];
+};
+
+export type SiteComparisonAnalytical = {
+  label: string;
+  source_dataset: string;
+  exposure_unit: string;
+  full_caveat_text: string;
+  options: SiteComparisonOption[];
+  pairwise_results: SitePairwiseResult[];
+};
+
+export type SiteComparison = {
+  id: string;
+  comparison_type: string;
+  geometry_type: string;
+  radius_m: number;
+  analysis_start_date: string;
+  analysis_end_date: string;
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  nibrs_group: string | null;
+  created_at: string;
+  overview: SiteComparisonOverview;
+  analytical: SiteComparisonAnalytical;
+};
