@@ -2,10 +2,17 @@ import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { formatIncidentAddress, titleCase } from "../lib/addressLabel";
 import { circlePolygonCoords } from "../lib/geodesy";
 import { incidentCountForPlace } from "../lib/incidentSummaries";
-import { buildMapStyle, cartoRasterStyle, fallbackMapStyle, TILES_URL } from "../lib/mapStyle";
+import {
+  BEATS_SOURCE,
+  EMPTY_FC,
+  incidentCardElement,
+  INCIDENTS_SOURCE,
+  registerDataLayers,
+  RINGS_SOURCE,
+} from "../lib/mapLayers";
+import { buildMapStyle, cartoRasterStyle, fallbackMapStyle, type MapTheme, TILES_URL } from "../lib/mapStyle";
 import type { IncidentFeatureCollection } from "../lib/useIncidentPoints";
 import type { BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
 
@@ -34,7 +41,7 @@ function escapeHtml(value: string): string {
 export function iconHtml(kind: MarkerKind, opts: { count?: number | null; label?: string }): string {
   if (kind === "selected") {
     const label = opts.label ? escapeHtml(opts.label) : "";
-    return `<span class="mc-pin-halo"></span>${teardrop("#CD6A45", DOT)}<span class="mc-pin-tag">${label}</span>`;
+    return `<span class="mc-pin-halo"></span>${teardrop("var(--accent)", DOT)}<span class="mc-pin-tag">${label}</span>`;
   }
   if (kind === "analyzed") {
     return `${teardrop("#3A3F46", DOT)}<span class="mc-pin-badge"><b>${opts.count ?? 0}</b><i>inc.</i></span>`;
@@ -93,135 +100,6 @@ export function ringsGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
-const RINGS_SOURCE = "mc-rings";
-
-// Added once on "load". A future setStyle() (slice 3 dark mode) wipes these layers
-// and "load" does NOT re-fire — re-adding needs style.load/transformStyle.
-function addRingLayers(map: maplibregl.Map): void {
-  map.addSource(RINGS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-  map.addLayer({
-    id: "mc-ring-fill",
-    type: "fill",
-    source: RINGS_SOURCE,
-    paint: {
-      "fill-color": ["match", ["get", "kind"], "analyzed", "#CD6A45", "#74858E"],
-      "fill-opacity": ["match", ["get", "kind"], "analyzed", 0.15, 0.12],
-    },
-  });
-  map.addLayer({
-    id: "mc-ring-line",
-    type: "line",
-    source: RINGS_SOURCE,
-    filter: ["==", ["get", "kind"], "analyzed"],
-    paint: { "line-color": "#CD6A45", "line-width": 1.5 },
-  });
-  map.addLayer({
-    id: "mc-ring-line-dashed",
-    type: "line",
-    source: RINGS_SOURCE,
-    filter: ["==", ["get", "kind"], "low"],
-    paint: { "line-color": "#74858E", "line-width": 1.5, "line-dasharray": [2, 2] },
-  });
-}
-
-const BEATS_SOURCE = "mc-beats";
-const INCIDENTS_SOURCE = "mc-incidents";
-const EMPTY_FC: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
-const CLUSTER_MAX_ZOOM = 13; // clusters below, individual dots at z14+ (spec: initial threshold)
-
-function addBeatLayers(map: maplibregl.Map): void {
-  map.addSource(BEATS_SOURCE, { type: "geojson", data: EMPTY_FC });
-  map.addLayer({
-    id: "mc-beat-highlight",
-    type: "fill",
-    source: BEATS_SOURCE,
-    filter: ["in", ["get", "beat"], ["literal", []]],
-    paint: { "fill-color": "#74858E", "fill-opacity": 0.08 },
-  });
-  map.addLayer({
-    id: "mc-beat-line",
-    type: "line",
-    source: BEATS_SOURCE,
-    paint: { "line-color": "#74858E", "line-width": 1, "line-opacity": 0.5 },
-  });
-  map.addLayer({
-    id: "mc-beat-label",
-    type: "symbol",
-    source: BEATS_SOURCE,
-    minzoom: 12,
-    layout: {
-      "text-field": ["get", "beat"],
-      "text-font": ["Noto Sans Regular"],
-      "text-size": 11,
-    },
-    paint: { "text-color": "#74858E", "text-opacity": 0.75, "text-halo-color": "#FFFFFF", "text-halo-width": 1 },
-  });
-}
-
-function addIncidentLayers(map: maplibregl.Map): void {
-  map.addSource(INCIDENTS_SOURCE, {
-    type: "geojson",
-    data: EMPTY_FC,
-    cluster: true,
-    clusterMaxZoom: CLUSTER_MAX_ZOOM,
-    clusterRadius: 40,
-  });
-  // One calm neutral for clusters and dots — never severity colors (product invariant).
-  map.addLayer({
-    id: "mc-incident-cluster",
-    type: "circle",
-    source: INCIDENTS_SOURCE,
-    filter: ["has", "point_count"],
-    paint: {
-      "circle-color": "#3A3F46",
-      "circle-opacity": 0.85,
-      "circle-radius": ["step", ["get", "point_count"], 12, 25, 16, 100, 22],
-      "circle-stroke-color": "#FFFFFF",
-      "circle-stroke-width": 1.5,
-    },
-  });
-  map.addLayer({
-    id: "mc-incident-cluster-count",
-    type: "symbol",
-    source: INCIDENTS_SOURCE,
-    filter: ["has", "point_count"],
-    layout: {
-      "text-field": ["get", "point_count_abbreviated"],
-      "text-font": ["Noto Sans Medium"],
-      "text-size": 11,
-    },
-    paint: { "text-color": "#FFFFFF" },
-  });
-  map.addLayer({
-    id: "mc-incident-dot",
-    type: "circle",
-    source: INCIDENTS_SOURCE,
-    filter: ["!", ["has", "point_count"]],
-    paint: {
-      "circle-color": "#3A3F46",
-      "circle-opacity": 0.85,
-      "circle-radius": 4.5,
-      "circle-stroke-color": "#FFFFFF",
-      "circle-stroke-width": 1,
-    },
-  });
-}
-
-function incidentCardElement(props: Record<string, unknown>): HTMLElement {
-  // textContent only — properties come from SPD strings; never parse them as HTML.
-  const card = document.createElement("div");
-  card.className = "mc-incident-card";
-  const title = document.createElement("strong");
-  const rawTitle = props.offense_subcategory ?? props.offense_category;
-  title.textContent = rawTitle ? titleCase(String(rawTitle)) : "Incident";
-  const when = document.createElement("div");
-  when.textContent = props.occurred_at ? String(props.occurred_at).slice(0, 10) : "date not recorded";
-  const where = document.createElement("div");
-  where.textContent = formatIncidentAddress(props.block_address as string | null | undefined);
-  card.append(title, when, where);
-  return card;
-}
-
 let pmtilesProtocolRegistered = false;
 function ensurePmtilesProtocol(): void {
   if (!pmtilesProtocolRegistered) {
@@ -241,6 +119,7 @@ type Props = {
   beats: BeatFeatureCollection | null;
   highlightBeats: string[];
   incidentPoints: IncidentFeatureCollection | null;
+  theme: MapTheme;
   onViewportChange?: (bounds: MapBounds) => void;
   onMapClick: (latlng: LatLng) => void;
   onMarkerClick: (placeId: string) => void;
@@ -257,6 +136,7 @@ export function MapCanvas({
   beats,
   highlightBeats,
   incidentPoints,
+  theme,
   onViewportChange,
   onMapClick,
   onMarkerClick,
@@ -267,7 +147,10 @@ export function MapCanvas({
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
   const onViewportChangeRef = useRef(onViewportChange);
+  const themeRef = useRef(theme);
+  const tilesMissingRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
+  const [styleEpoch, setStyleEpoch] = useState(0);
   const [tilesMissing, setTilesMissing] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
 
@@ -286,12 +169,14 @@ export function MapCanvas({
         ? true
         : await fetch(TILES_URL, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
       if (cancelled || !containerRef.current) return;
+      tilesMissingRef.current = !useCarto && !available;
       setTilesMissing(!useCarto && !available);
+      themeRef.current = theme;
       const style = useCarto
         ? cartoRasterStyle()
         : available
-          ? buildMapStyle("light", window.location.origin)
-          : fallbackMapStyle("light");
+          ? buildMapStyle(theme, window.location.origin)
+          : fallbackMapStyle(theme);
       let map: maplibregl.Map;
       try {
         map = new maplibregl.Map({
@@ -309,12 +194,11 @@ export function MapCanvas({
       map.on("click", (event) => {
         onMapClickRef.current({ lat: event.lngLat.lat, lng: event.lngLat.lng });
       });
-      map.on("load", () => {
-        addBeatLayers(map);
-        addRingLayers(map);
-        addIncidentLayers(map);
-        setMapReady(true);
+      map.on("style.load", () => {
+        registerDataLayers(map);
+        setStyleEpoch((n) => n + 1);
       });
+      map.on("load", () => setMapReady(true));
       const emitViewport = () => {
         const b = map.getBounds();
         onViewportChangeRef.current?.({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
@@ -356,6 +240,14 @@ export function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapReady || themeRef.current === theme) return;
+    themeRef.current = theme;
+    if (import.meta.env.VITE_MAP_BASEMAP === "carto") return; // escape hatch stays light-only
+    map.setStyle(tilesMissingRef.current ? fallbackMapStyle(theme) : buildMapStyle(theme, window.location.origin));
+  }, [theme, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     // Markers only need the Map instance, but they share the rings' mapReady gate so a
     // single state drives both effects; accepted trade-off — pins wait for style load.
     if (!map || !mapReady) return;
@@ -389,7 +281,7 @@ export function MapCanvas({
     if (draft) {
       const el = document.createElement("div");
       el.className = "mc-pin-icon mc-pin-draft";
-      el.innerHTML = teardrop("#B5512F", DOT);
+      el.innerHTML = teardrop("var(--accent-deep)", DOT);
       markersRef.current.push(
         new maplibregl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([draft.longitude, draft.latitude])
@@ -403,7 +295,7 @@ export function MapCanvas({
     if (!map || !mapReady) return;
     const source = map.getSource(RINGS_SOURCE) as maplibregl.GeoJSONSource | undefined;
     source?.setData(ringsGeoJSON(places, selectedIds, summary, radiusM));
-  }, [places, selectedIds, summary, radiusM, mapReady]);
+  }, [places, selectedIds, summary, radiusM, mapReady, styleEpoch]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -411,13 +303,13 @@ export function MapCanvas({
     (map.getSource(BEATS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
       beats as unknown as GeoJSON.FeatureCollection,
     );
-  }, [beats, mapReady]);
+  }, [beats, mapReady, styleEpoch]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     map.setFilter("mc-beat-highlight", ["in", ["get", "beat"], ["literal", highlightBeats]]);
-  }, [highlightBeats, mapReady]);
+  }, [highlightBeats, mapReady, styleEpoch]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -425,7 +317,7 @@ export function MapCanvas({
     (map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
       incidentPoints ?? EMPTY_FC,
     );
-  }, [incidentPoints, mapReady]);
+  }, [incidentPoints, mapReady, styleEpoch]);
 
   useEffect(() => {
     const map = mapRef.current;

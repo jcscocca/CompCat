@@ -8,12 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("maplibre-gl", () => {
   class MockMap {
     static last: MockMap | null = null;
+    static lastOptions: Record<string, unknown> | null = null;
     handlers: Record<string, Array<(arg?: unknown) => void>> = {};
     sources = new Map<string, { options?: Record<string, unknown>; setData: ReturnType<typeof vi.fn> }>();
     layers: Array<Record<string, unknown>> = [];
     layerHandlers: Record<string, Array<(arg?: unknown) => void>> = {};
-    constructor() {
+    constructor(options?: Record<string, unknown>) {
       MockMap.last = this;
+      MockMap.lastOptions = options ?? null;
     }
     on(event: string, layerOrCb: unknown, maybeCb?: (arg?: unknown) => void) {
       if (typeof layerOrCb === "string" && maybeCb) {
@@ -22,9 +24,14 @@ vi.mock("maplibre-gl", () => {
       }
       const cb = layerOrCb as (arg?: unknown) => void;
       (this.handlers[event] ??= []).push(cb);
-      if (event === "load") cb();
+      if (event === "load" || event === "style.load") cb();
       return this;
     }
+    setStyle = vi.fn(function (this: MockMap) {
+      this.sources.clear();
+      this.layers = [];
+      for (const cb of this.handlers["style.load"] ?? []) cb();
+    });
     once(event: string, cb: (arg?: unknown) => void) {
       return this.on(event, cb);
     }
@@ -120,8 +127,12 @@ type MockMapInstance = {
   fireMoveEnd: () => void;
   sources: Map<string, { options?: Record<string, unknown>; setData: ReturnType<typeof vi.fn> }>;
   layers: Array<Record<string, unknown>>;
+  setStyle: ReturnType<typeof vi.fn>;
 };
-const MockedMap = maplibregl.Map as unknown as { last: MockMapInstance | null };
+const MockedMap = maplibregl.Map as unknown as {
+  last: MockMapInstance | null;
+  lastOptions: { style: { sources: { protomaps: { url: string } } } } | null;
+};
 const MockPopup = (maplibregl as unknown as { Popup: { last: unknown } }).Popup;
 
 const place: Place = {
@@ -164,6 +175,7 @@ const noop = () => {};
 
 beforeEach(() => {
   MockedMap.last = null;
+  MockedMap.lastOptions = null;
   (MockPopup as { last: unknown }).last = null;
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 });
@@ -177,7 +189,7 @@ function renderCanvas(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
   return render(
     <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
       summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
-      incidentPoints={null} onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} {...over} />,
+      incidentPoints={null} theme="light" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} {...over} />,
   );
 }
 
@@ -268,7 +280,7 @@ describe("MapCanvas", () => {
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set(["p1"])} draft={null} addPinMode={false}
         summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
-        incidentPoints={null} onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
+        incidentPoints={null} theme="light" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
     await waitFor(() => {
       const el = document.body.querySelector(".mc-pin-icon") as HTMLElement;
@@ -335,5 +347,31 @@ describe("beat + incident layers", () => {
     onViewportChange.mockClear();
     MockedMap.last!.fireMoveEnd();
     expect(onViewportChange).toHaveBeenCalledWith({ west: -122.4, south: 47.55, east: -122.25, north: 47.65 });
+  });
+});
+
+describe("themed map", () => {
+  it("re-registers data layers and re-feeds data after a theme swap", async () => {
+    const view = renderCanvas({ incidentPoints: POINTS_FC, beats: BEATS_FC, theme: "light" });
+    await waitFor(() => expect(MockedMap.last!.sources.get("mc-incidents")).toBeTruthy());
+    view.rerender(
+      <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
+        summary={null} radiusM={250} flyTo={null} beats={BEATS_FC} highlightBeats={[]}
+        incidentPoints={POINTS_FC} theme="dark" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
+    );
+    await waitFor(() => {
+      expect(MockedMap.last!.setStyle).toHaveBeenCalledTimes(1);
+      const incidents = MockedMap.last!.sources.get("mc-incidents");
+      expect(incidents).toBeTruthy();
+      expect(incidents!.setData).toHaveBeenCalledWith(POINTS_FC);
+      const beats = MockedMap.last!.sources.get("mc-beats");
+      expect(beats!.setData).toHaveBeenCalledWith(BEATS_FC);
+    });
+  });
+
+  it("passes the theme to the style builder", async () => {
+    renderCanvas({ theme: "dark" });
+    await waitFor(() => expect(MockedMap.lastOptions).not.toBeNull());
+    expect(MockedMap.lastOptions!.style.sources.protomaps.url).toContain("pmtiles://");
   });
 });

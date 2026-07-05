@@ -325,6 +325,7 @@ export function MapWorkspace() {
           beats={beats}
           highlightBeats={highlightBeats}
           incidentPoints={incidentLayer.geojson}
+          theme="light"
           onViewportChange={setViewport}
           onMapClick={pinDraft.handleMapClick}
           onMarkerClick={handleToggleSelect}
