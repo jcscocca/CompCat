@@ -29,7 +29,8 @@ TOOLS_DIR = REPO / ".tools"
 TILES_OUT = REPO / "app" / "data" / "tiles" / "seattle.pmtiles"
 ASSETS_OUT = REPO / "frontend" / "public" / "basemaps-assets"
 BUILDS_URL = "https://build.protomaps.com"
-ASSETS_TARBALL = "https://github.com/protomaps/basemaps-assets/archive/refs/heads/main.tar.gz"
+ASSETS_COMMIT = "028c18f713baecad011301ff7a69acc39bcc2ae7"
+ASSETS_TARBALL = f"https://github.com/protomaps/basemaps-assets/archive/{ASSETS_COMMIT}.tar.gz"
 
 
 def release_asset_name(system: str, machine: str) -> str:
@@ -60,7 +61,7 @@ def latest_build_name(listing_json: str) -> str:
 
 def _download(url: str) -> bytes:
     print(f"  fetching {url}")
-    with urllib.request.urlopen(url) as resp:  # noqa: S310 - fixed https hosts
+    with urllib.request.urlopen(url, timeout=90) as resp:  # noqa: S310 - fixed https hosts
         return resp.read()
 
 
@@ -94,7 +95,13 @@ def fetch_tiles(build: str | None, force: bool) -> None:
     TILES_OUT.parent.mkdir(parents=True, exist_ok=True)
     cmd = extract_command(cli, build_name, str(TILES_OUT))
     print("  " + " ".join(cmd))
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(
+            f"pmtiles extract failed for build {build_name} (exit {e.returncode}); "
+            f"check the build name at {BUILDS_URL}"
+        ) from e
     print(f"tiles written: {TILES_OUT} ({TILES_OUT.stat().st_size / 1e6:.0f} MB)")
 
 
@@ -103,12 +110,16 @@ def fetch_assets(force: bool) -> None:
         print(f"basemap assets already present: {ASSETS_OUT} (use --force to refetch)")
         return
     blob = _download(ASSETS_TARBALL)
+    dest_root = ASSETS_OUT.resolve()
     with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
         for member in tf.getmembers():
-            parts = Path(member.name).parts  # basemaps-assets-main/fonts/...
+            parts = Path(member.name).parts  # basemaps-assets-<sha>/fonts/...
             if len(parts) < 2 or parts[1] not in {"fonts", "sprites"}:
                 continue
             member.name = str(Path(*parts[1:]))
+            target = (dest_root / member.name).resolve()
+            if not target.is_relative_to(dest_root) or member.issym() or member.islnk():
+                continue
             tf.extract(member, ASSETS_OUT)
     print(f"assets written: {ASSETS_OUT}")
 
