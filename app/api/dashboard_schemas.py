@@ -36,6 +36,43 @@ class AnalysisPoint(BaseModel):
         return self
 
 
+class MapBounds(BaseModel):
+    """A map viewport; must intersect the Seattle area the data covers."""
+
+    west: float
+    south: float
+    east: float
+    north: float
+
+    @model_validator(mode="after")
+    def must_intersect_seattle(self) -> MapBounds:
+        if self.west >= self.east or self.south >= self.north:
+            raise ValueError("bounds are empty or inverted")
+        if (
+            self.east < _SEATTLE_WEST
+            or self.west > _SEATTLE_EAST
+            or self.north < _SEATTLE_SOUTH
+            or self.south > _SEATTLE_NORTH
+        ):
+            raise ValueError("bounds are outside the Seattle area")
+        return self
+
+
+class DashboardIncidentPointsRequest(BaseModel):
+    bounds: MapBounds
+    analysis_start_date: date
+    analysis_end_date: date
+    offense_category: str | None = None
+    offense_subcategory: str | None = None
+    nibrs_group: str | None = None
+    layer: str = LAYER_REPORTED
+
+    @model_validator(mode="after")
+    def layer_must_be_known(self) -> DashboardIncidentPointsRequest:
+        _validate_layer(self.layer)
+        return self
+
+
 class DashboardAnalyzeRequest(BaseModel):
     place_ids: list[str] | None = Field(default=None, min_length=1)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
