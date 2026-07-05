@@ -1664,3 +1664,61 @@ def test_agent_does_not_redirect_presence_adjacent_neutral_phrasings(tmp_path):
             assert events[1].data["delta"] == neutral_answer, text  # streamed unchanged
     finally:
         session.close()
+
+
+def test_agent_redirects_non_lexicon_ranking_prose_in_model_answer(tmp_path):
+    # Output-side guard: place-ranking / livability prose that carries no banned safety word
+    # (so _contains_safety_ranking misses it) must still be replaced, not streamed.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    answers = [
+        "This is a bad area to live.",
+        "Capitol Hill is the worst of the three.",
+        "This block is a high-crime area.",
+        "I wouldn't recommend living here.",
+        "It's a rough neighborhood.",
+    ]
+    try:
+        for answer in answers:
+            client = FakeClient([f'{{"type":"final","message":{json.dumps(answer)}}}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content="Tell me about place-1.")],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            delta = events[1].data["delta"]
+            assert "reported incident" in delta, answer  # replaced with the standard redirect
+            assert delta != answer, answer  # the ranking prose did not leak
+            assert len(client.calls) == 1, answer  # model was called (input guard didn't fire)
+    finally:
+        session.close()
+
+
+def test_agent_does_not_redirect_neutral_count_framing_in_model_answer(tmp_path):
+    # The output ranking-prose guard must not catch legitimate neutral answers: incident-count
+    # comparisons, temporal framing, and "place to..." phrases that aren't about living there.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    neutral_answers = [
+        "This area has more reported incidents than the others.",
+        "August had the most reported thefts near this place.",
+        "There are 4 reported incidents within 250 m of place-1.",
+        "This is a good place to start if you want the incident breakdown.",
+    ]
+    try:
+        for answer in neutral_answers:
+            client = FakeClient([f'{{"type":"final","message":{json.dumps(answer)}}}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content="Summarize place-1.")],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert events[1].data["delta"] == answer, answer  # streamed unchanged
+    finally:
+        session.close()
