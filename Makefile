@@ -1,4 +1,4 @@
-.PHONY: install test lint run migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe
+.PHONY: install test lint run migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe
 
 install:
 	python3.11 -m venv .venv
@@ -51,6 +51,9 @@ ingest-calls:
 	fi
 	curl --fail --show-error -s -X POST -H "X-Admin-Token: $$MCA_ADMIN_INGEST_TOKEN" \
 		"http://127.0.0.1:8000/admin/crime/ingest/socrata?source=seattle_spd_911&mode=backfill&limit=5000"
+
+fetch-tiles:
+	.venv/bin/python scripts/fetch_tiles.py
 
 frontend-install:
 	cd frontend && npm install
