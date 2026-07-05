@@ -99,6 +99,33 @@ done
 Give the five testers `http://<host>:8000`. Nothing else to set up per user — a session
 is created automatically on first load.
 
+## Basemap tiles (self-hosted)
+
+The map renders from a self-hosted Seattle vector-tile extract so no third-party tile
+server ever sees where users look. `scripts/start-waypoint.ps1` fetches it automatically
+on first run; to fetch or refresh manually:
+
+    python scripts/fetch_tiles.py            # or: make fetch-tiles (Mac/dev)
+    python scripts/fetch_tiles.py --force    # refresh to the latest Protomaps build
+
+Artifacts (all gitignored): `app/data/tiles/seattle.pmtiles` (~100 MB, volume-mounted
+into the api container read-only) and `frontend/public/basemaps-assets/` (fonts/sprites,
+baked into the frontend build). If the file is missing the app still runs — the map shows
+a flat background with a "run make fetch-tiles" notice.
+
+Notes:
+- Point `MCA_TILES_DIR` (default `app/data/tiles`) at a dedicated directory only — the
+  whole directory is served at `/tiles/`.
+- If the fetch fails with `CERTIFICATE_VERIFY_FAILED`, the invoking Python has no usable
+  CA bundle. On the Mac/dev side, run it through the project venv (`make fetch-tiles` uses
+  `.venv/bin/python`, where certifi is available) with
+  `SSL_CERT_FILE="$(.venv/bin/python -c 'import certifi; print(certifi.where())')"`. On the
+  Windows deploy host, `pip install certifi` for the system Python and set
+  `$env:SSL_CERT_FILE = python -c "import certifi; print(certifi.where())"` in PowerShell
+  before running the script — or fix the system certificate store.
+- The `.pmtiles` file is served with ETag/Last-Modified but no `Cache-Control`; if a
+  reverse proxy is ever added, long-lived caching for `/tiles/` is a cheap win.
+
 ## Notes / hardening
 
 - **HTTPS:** for an internal HTTP trial, `MCA_SESSION_COOKIE_SECURE=false` is fine

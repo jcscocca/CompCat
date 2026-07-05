@@ -16,7 +16,8 @@ export default defineConfig({
       "/dashboard": backendTarget,
       "/exports": backendTarget,
       "/input-modes": backendTarget,
-      "/assistant": backendTarget
+      "/assistant": backendTarget,
+      "/tiles": backendTarget
     }
   },
   build: {

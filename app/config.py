@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     session_secret: str = DEFAULT_SESSION_SECRET
     session_cookie_secure: bool | None = None
     static_dashboard_dir: str = "app/static/dashboard"
+    tiles_dir: str = "app/data/tiles"
     public_enable_personal_uploads: bool = False
     admin_ingest_token: str | None = None
     minimum_stop_duration_minutes: int = 10

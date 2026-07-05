@@ -1,6 +1,6 @@
 # Waypoint — Roadmap
 
-**Last updated:** 2026-07-03 · **Status:** canonical, living document.
+**Last updated:** 2026-07-04 · **Status:** canonical, living document.
 **Verified against:** base commit `5fe1da0` (routes removal — backend excision + migration 0012).
 
 This is the single source of truth for *where Waypoint is going*. It supersedes the dated
@@ -171,6 +171,24 @@ strong before it becomes the front door.
   quadratic: `docs/analysis/overdispersion-and-rate-intervals.md`. The intuitive
   "rate ± margin of error" number-line viz (`CompareRateNumberLine`) ships alongside it,
   reading each address's absolute rate with its 95% interval on one shared axis.
+
+## Phase 6 — Map & UI overhaul (2026-07-04)
+*Three slices; spec: `docs/superpowers/specs/2026-07-04-map-ui-overhaul-design.md`. Driven by
+three user goals: visible geography + beat transparency, incidents on the map, and a
+thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
+
+- [x] **Slice 1 — Map foundation:** maplibre-gl over a self-hosted Seattle PMTiles vector
+  basemap (privacy: no third-party tile server sees viewports), light/dark civic style
+  builders, 206-range `/tiles` + `/basemaps-assets` serving, hardened `fetch_tiles.py`
+  (`make fetch-tiles`), Leaflet removed, deploy wired (compose ro volume + ps1 fetch).
+  Plan: `docs/superpowers/plans/2026-07-04-map-foundation.md`.
+- [ ] **Slice 2 — Transparency layers:** `/dashboard/beats` GeoJSON + `/dashboard/incident-points`
+  (bbox-gated, 5,000-row cap, arrests −1/−1 sentinel excluded, `unmappable_count`); beat
+  outlines with assigned-beat highlight; clustered→individual incident dots (no heatmap —
+  invariant); redacted-locations disclosure chip.
+- [ ] **Slice 3 — Shell overhaul:** Evolved Workspace layout (search pill absorbs pin-drop,
+  Analyst dock, theme toggle), Civic Clear tokens + night mode, self-hosted webfonts
+  (drop the Google Fonts requests — the app's last external call).
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

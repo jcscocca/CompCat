@@ -11,3 +11,5 @@ app/static/dashboard
 *.sqlite3
 *.pyc
 __pycache__
+app/data/tiles
+.tools
