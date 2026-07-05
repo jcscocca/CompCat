@@ -188,7 +188,7 @@ export function MapCanvas({
           container: containerRef.current,
           style,
           center: SEATTLE,
-          // MapLibre zoom is 512px-tile-based; 11 here ≈ the old Leaflet (256px) zoom 12.
+          // MapLibre zoom is 512px-tile-based; 11 here ≈ the old 256px-tile zoom 12.
           zoom: 11,
           attributionControl: {},
         });
@@ -267,7 +267,7 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyTo) return;
-    // Floor 14 ≈ the old Leaflet flyTo floor of 15 (512px- vs 256px-tile zoom offset).
+    // Floor 14 ≈ the old flyTo floor of 15 (512px- vs 256px-tile zoom offset).
     map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: Math.max(map.getZoom(), 14) });
   }, [flyTo, mapReady]);
 

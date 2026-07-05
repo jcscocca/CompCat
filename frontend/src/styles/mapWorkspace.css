@@ -297,7 +297,6 @@
 .mc-modal-tab.on{color:#fff;background:#B5512F;border-color:#B5512F;}
 .mc-iconbtn{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px;border:1px solid #e1ded5;background:#fff;cursor:pointer;color:#3A3F46;}
 
-.mc-pins .leaflet-marker-icon{background:transparent;border:0;}
 .mc-empty{position:absolute;left:50%;top:42%;z-index:36;transform:translate(-50%,-50%);text-align:center;
   background:rgba(255,255,255,.94);border:1px solid rgba(20,24,28,.08);border-radius:14px;padding:18px 22px;
   box-shadow:0 14px 30px -16px rgba(18,22,26,.42);max-width:320px;}
@@ -313,7 +312,6 @@
 .mc-snaps button.on{color:var(--clay);}
 .mc-snaps button.on b{background:var(--clay);width:20px;}
 
-.leaflet-container.mc-map{height:100%;width:100%;background:var(--paper);font-family:var(--f-ui);}
 .mc-map.is-adding{cursor:crosshair;}
 .mc-map.is-adding .maplibregl-canvas-container.maplibregl-interactive{cursor:crosshair;}
 .mc-pin-icon{background:transparent;border:0;overflow:visible;}
@@ -391,7 +389,6 @@ input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
 
 .mc-topbar,.mc-controls,.mc-legend,.mc-assistant,.mc-empty,.mc-error{z-index:1100;}
 .mc-workspace-panel{z-index:1200;}
-.mc-frame .leaflet-bottom.leaflet-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
 .mc-frame .maplibregl-ctrl-bottom-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
 .mc-empty{top:34%;}
 
@@ -421,7 +418,6 @@ input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
   .mc-workspace-panel.is-collapsed .mc-tab svg{width:17px;height:17px;}
   .mc-workspace-panel.is-collapsed .mc-tab.is-active::after{left:8px;right:auto;top:10px;bottom:10px;width:3px;height:auto;}
   .mc-workspace-panel.is-collapsed .mc-tab .pill{position:absolute;right:4px;top:4px;font-size:10px;padding:0 5px;}
-  .mc-frame .leaflet-bottom.leaflet-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
   .mc-panel{padding:14px 18px;}
   .mc-querybar{margin:-14px -18px 16px;}
   .mc-panel-head{align-items:flex-start;gap:10px;}
