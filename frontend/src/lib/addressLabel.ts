@@ -31,6 +31,15 @@ function formatIntersection(a: string, b: string): string {
   return `${streets[0]} & ${streets[1]}`;
 }
 
+export function titleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function formatIncidentAddress(raw: string | null | undefined): string {
   if (raw == null) return "Unavailable";
   const text = raw.trim();

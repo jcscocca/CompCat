@@ -4,7 +4,8 @@ from dataclasses import asdict
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.analysis.beat_baselines import (
@@ -16,6 +17,7 @@ from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardCompareRequest,
     DashboardIncidentDetailsRequest,
+    DashboardIncidentPointsRequest,
     GeocodeResultSchema,
 )
 from app.api.deps import required_public_user_hash
@@ -23,6 +25,7 @@ from app.config import get_settings
 from app.crime.sources import sources_for_layer
 from app.db import get_session
 from app.geocoding.providers import GeocodeProvider, GeocoderUpstreamError, build_provider
+from app.services.beat_geometry_service import beats_geojson_payloads
 from app.services.crime_service import dashboard_freshness_by_layer
 from app.services.dashboard_analysis_service import (
     analyze_selected_places,
@@ -30,6 +33,7 @@ from app.services.dashboard_analysis_service import (
     incident_details_for_places,
 )
 from app.services.geocoding_service import search_addresses
+from app.services.incident_points_service import incident_points
 from app.services.neighborhood_service import neighborhood_analysis_for_places
 
 router = APIRouter()
@@ -95,6 +99,27 @@ def dashboard_incidents(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/dashboard/incident-points")
+def dashboard_incident_points(
+    request: DashboardIncidentPointsRequest,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, object]:
+    try:
+        return incident_points(
+            session,
+            bounds=request.bounds,
+            analysis_start_date=request.analysis_start_date,
+            analysis_end_date=request.analysis_end_date,
+            layer=request.layer,
+            offense_category=request.offense_category,
+            offense_subcategory=request.offense_subcategory,
+            nibrs_group=request.nibrs_group,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/dashboard/compare")
 def compare_dashboard_places(
     request: DashboardCompareRequest,
@@ -154,6 +179,23 @@ def dashboard_freshness(
     # session gate just keeps it on the authenticated public tier like its siblings. The
     # frontend pill shows the entry for the active layer.
     return dashboard_freshness_by_layer(session)
+
+
+@router.get("/dashboard/beats")
+def dashboard_beats(
+    request: Request,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+) -> Response:
+    """SPD beat polygons for the map's outline layer (static bundled data)."""
+    # Negotiation is hand-rolled: global GZipMiddleware would wrap the /assistant/chat SSE
+    # StreamingResponse and break its incremental flush, and per-request middleware
+    # compression would defeat the once-cached gzip bytes.
+    raw, gzipped = beats_geojson_payloads()
+    headers = {"Cache-Control": "public, max-age=3600", "Vary": "Accept-Encoding"}
+    if "gzip" in request.headers.get("accept-encoding", "").lower():
+        headers["Content-Encoding"] = "gzip"
+        return Response(content=gzipped, media_type="application/geo+json", headers=headers)
+    return Response(content=raw, media_type="application/geo+json", headers=headers)
 
 
 def get_geocode_provider() -> GeocodeProvider:

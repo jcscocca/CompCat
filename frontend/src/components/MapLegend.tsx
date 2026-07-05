@@ -26,6 +26,18 @@ export function MapLegend() {
         </span>
         <span>Low data<small>needs review</small></span>
       </div>
+      <div className="mc-leg-row">
+        <span className="g">
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#3A3F46", border: "1px solid #fff", display: "block" }} />
+        </span>
+        <span>Reported incident</span>
+      </div>
+      <div className="mc-leg-row">
+        <span className="g">
+          <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#3A3F46", border: "1.5px solid #fff", display: "grid", placeItems: "center", color: "#fff", fontSize: 10, fontWeight: 700 }}>5</span>
+        </span>
+        <span>Incident cluster<small>count</small></span>
+      </div>
     </div>
   );
 }

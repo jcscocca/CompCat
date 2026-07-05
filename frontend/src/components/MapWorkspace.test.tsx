@@ -22,7 +22,11 @@ vi.mock("../api/client", () => ({
   createPlace: vi.fn(),
   createSession: vi.fn(),
   deletePlace: vi.fn(),
+  getBeatPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getIncidentDetails: vi.fn(),
+  getIncidentPoints: vi.fn().mockResolvedValue({
+    points: [], returned_count: 0, total_count: 0, unmappable_citywide_count: 0, limit: 5000,
+  }),
   getNeighborhoodAnalysis: vi.fn(),
   getDashboardSummary: vi.fn(),
   getDashboardFreshness: vi.fn().mockResolvedValue(null),

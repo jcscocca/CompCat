@@ -182,13 +182,25 @@ thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
   builders, 206-range `/tiles` + `/basemaps-assets` serving, hardened `fetch_tiles.py`
   (`make fetch-tiles`), Leaflet removed, deploy wired (compose ro volume + ps1 fetch).
   Plan: `docs/superpowers/plans/2026-07-04-map-foundation.md`.
-- [ ] **Slice 2 — Transparency layers:** `/dashboard/beats` GeoJSON + `/dashboard/incident-points`
-  (bbox-gated, 5,000-row cap, arrests −1/−1 sentinel excluded, `unmappable_count`); beat
-  outlines with assigned-beat highlight; clustered→individual incident dots (no heatmap —
-  invariant); redacted-locations disclosure chip.
+- [x] **Slice 2 — Transparency layers:** `/dashboard/beats` (slimmed `{beat}`-only GeoJSON,
+  gzip-negotiated + `Vary`, cached) + `/dashboard/incident-points` (bbox-gated + Seattle-clamped,
+  5,000-row cap, arrests −1/−1 sentinel excluded structurally, `unmappable_citywide_count`); beat
+  outlines with static labels (≥z12) + assigned-beat highlight from the neighborhood payload;
+  clustered→individual incident dots at z14 (no heatmap, one neutral palette — invariant); XSS-safe
+  click card with canonical incident formatting; debounced+abortable viewport hook; redacted-locations
+  disclosure chip. Live-verified end-to-end. Plan:
+  `docs/superpowers/plans/2026-07-04-transparency-layers.md`.
 - [ ] **Slice 3 — Shell overhaul:** Evolved Workspace layout (search pill absorbs pin-drop,
   Analyst dock, theme toggle), Civic Clear tokens + night mode, self-hosted webfonts
-  (drop the Google Fonts requests — the app's last external call).
+  (drop the Google Fonts requests — the app's last external call). _Carry-ins from slice 2:_
+  (a) the night-mode `setStyle()` wipes the beat/incident/ring layers and `"load"` won't
+  re-fire — re-register via `style.load`/`transformStyle` (noted at `MapCanvas.tsx` above
+  `addRingLayers`); (b) if that re-registration lands, extract `addBeatLayers`/`addIncidentLayers`/
+  `incidentCardElement` out of the now-451-line `MapCanvas.tsx` into a `mapLayers.ts` module.
+- [ ] **Deferred (slice 2, non-blocking):** `/dashboard/incident-points` filters + sorts on the
+  unindexed `coalesce(offense_start_utc, report_utc)` expression; a Postgres expression index is
+  the mitigation when incident volume grows (needs a migration — out of scope for the no-migration
+  slices). Bounded today by the 5,000-row cap + Seattle bbox clamp.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

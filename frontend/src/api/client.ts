@@ -2,9 +2,12 @@ import type {
   AssistantDashboardState,
   AssistantMessage,
   AssistantStreamEvent,
+  BeatFeatureCollection,
   DashboardFreshness,
   DashboardSummary,
   IncidentDetailsResponse,
+  IncidentPointsResponse,
+  MapBounds,
   NeighborhoodAnalysis,
   Place,
   PlaceCreate,
@@ -39,6 +42,14 @@ type ComparePlacesPayload = {
 
 type IncidentDetailsPayload = AnalyzePlacesPayload & {
   limit?: number;
+};
+
+export type IncidentPointsPayload = {
+  bounds: MapBounds;
+  analysis_start_date: string;
+  analysis_end_date: string;
+  offense_category?: string | null;
+  layer?: string;
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -128,6 +139,21 @@ export function getIncidentDetails(
   return request("/dashboard/incidents", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function getBeatPolygons(): Promise<BeatFeatureCollection> {
+  return request<BeatFeatureCollection>("/dashboard/beats");
+}
+
+export function getIncidentPoints(
+  payload: IncidentPointsPayload,
+  signal?: AbortSignal,
+): Promise<IncidentPointsResponse> {
+  return request<IncidentPointsResponse>("/dashboard/incident-points", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
   });
 }
 
