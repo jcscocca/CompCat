@@ -52,9 +52,12 @@ try {
 } finally { Pop-Location }
 
 # 0.5 Self-hosted basemap tiles: fetch once if missing (kept out of git; ~100 MB).
+#     Gates on both artifacts: the docker build bakes basemaps-assets (fonts/sprites) into
+#     the image, so a missing assets dir would ship a glyphless map on the next rebuild.
+#     fetch_tiles.py skips whatever already exists, so re-running is idempotent.
 #     A failure here is non-fatal — the app runs with a flat-background map fallback.
 $tiles = Join-Path $repo 'app\data\tiles\seattle.pmtiles'
-if (-not (Test-Path $tiles)) {
+if (-not (Test-Path $tiles) -or -not (Test-Path (Join-Path $repo 'frontend\public\basemaps-assets'))) {
     Write-Host 'Basemap tiles missing; fetching (one-time, ~100 MB)...'
     python (Join-Path $repo 'scripts\fetch_tiles.py')
     if ($LASTEXITCODE -ne 0) { Write-Host 'WARNING: tile fetch failed; map will use the fallback background.' }

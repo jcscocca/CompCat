@@ -116,9 +116,13 @@ a flat background with a "run make fetch-tiles" notice.
 Notes:
 - Point `MCA_TILES_DIR` (default `app/data/tiles`) at a dedicated directory only — the
   whole directory is served at `/tiles/`.
-- If the fetch fails with `CERTIFICATE_VERIFY_FAILED`, the host Python has no usable CA
-  bundle; run it as `SSL_CERT_FILE=$(python -c 'import certifi; print(certifi.where())') python scripts/fetch_tiles.py`
-  (certifi ships in the project venv) or fix the system certificates.
+- If the fetch fails with `CERTIFICATE_VERIFY_FAILED`, the invoking Python has no usable
+  CA bundle. On the Mac/dev side, run it through the project venv (`make fetch-tiles` uses
+  `.venv/bin/python`, where certifi is available) with
+  `SSL_CERT_FILE="$(.venv/bin/python -c 'import certifi; print(certifi.where())')"`. On the
+  Windows deploy host, `pip install certifi` for the system Python and set
+  `$env:SSL_CERT_FILE = python -c "import certifi; print(certifi.where())"` in PowerShell
+  before running the script — or fix the system certificate store.
 - The `.pmtiles` file is served with ETag/Last-Modified but no `Cache-Control`; if a
   reverse proxy is ever added, long-lived caching for `/tiles/` is a cheap win.
 
