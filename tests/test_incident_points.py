@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.api.dashboard_schemas import DashboardIncidentPointsRequest, MapBounds
 from app.db import configure_database, get_sessionmaker, init_db
+from app.main import create_app
 from app.models import CrimeIncident
 from app.services.incident_points_service import INCIDENT_POINTS_LIMIT, incident_points
 
@@ -156,3 +158,57 @@ def test_reversed_dates_raise_value_error(tmp_path) -> None:
 
 def test_default_limit_is_5000() -> None:
     assert INCIDENT_POINTS_LIMIT == 5000
+
+
+def _client_with_incidents(tmp_path) -> TestClient:
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'api.sqlite3'}")
+    client = TestClient(app)
+    session = get_sessionmaker()()
+    session.add_all([_incident(1), _incident(2, latitude=None, longitude=None)])
+    session.commit()
+    session.close()
+    return client
+
+
+_API_PAYLOAD = {
+    "bounds": BOUNDS,
+    "analysis_start_date": "2025-01-01",
+    "analysis_end_date": "2025-10-31",
+    "layer": "reported",
+}
+
+
+def test_incident_points_requires_session(tmp_path) -> None:
+    client = _client_with_incidents(tmp_path)
+    assert client.post("/dashboard/incident-points", json=_API_PAYLOAD).status_code == 401
+
+
+def test_incident_points_endpoint_returns_points_and_counts(tmp_path) -> None:
+    client = _client_with_incidents(tmp_path)
+    client.post("/sessions")
+    response = client.post("/dashboard/incident-points", json=_API_PAYLOAD)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["returned_count"] == 1
+    assert body["unmappable_citywide_count"] == 1
+    assert body["limit"] == 5000
+    assert body["points"][0]["block_address"] == "1XX BLOCK OF PINE ST"
+
+
+def test_incident_points_rejects_non_seattle_bbox_as_422(tmp_path) -> None:
+    client = _client_with_incidents(tmp_path)
+    client.post("/sessions")
+    boston = {"west": -71.1, "south": 42.3, "east": -71.0, "north": 42.4}
+    payload = dict(_API_PAYLOAD, bounds=boston)
+    response = client.post("/dashboard/incident-points", json=payload)
+    assert response.status_code == 422
+    assert "outside the Seattle area" in response.text
+
+
+def test_incident_points_reversed_dates_are_400(tmp_path) -> None:
+    client = _client_with_incidents(tmp_path)
+    client.post("/sessions")
+    payload = dict(_API_PAYLOAD, analysis_start_date="2025-10-31", analysis_end_date="2025-01-01")
+    response = client.post("/dashboard/incident-points", json=payload)
+    assert response.status_code == 400
+    assert "analysis_start_date" in response.text

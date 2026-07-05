@@ -17,6 +17,7 @@ from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardCompareRequest,
     DashboardIncidentDetailsRequest,
+    DashboardIncidentPointsRequest,
     GeocodeResultSchema,
 )
 from app.api.deps import required_public_user_hash
@@ -32,6 +33,7 @@ from app.services.dashboard_analysis_service import (
     incident_details_for_places,
 )
 from app.services.geocoding_service import search_addresses
+from app.services.incident_points_service import incident_points
 from app.services.neighborhood_service import neighborhood_analysis_for_places
 
 router = APIRouter()
@@ -92,6 +94,27 @@ def dashboard_incidents(
             nibrs_group=request.nibrs_group,
             limit=request.limit,
             sources=sources_for_layer(request.layer),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/dashboard/incident-points")
+def dashboard_incident_points(
+    request: DashboardIncidentPointsRequest,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, object]:
+    try:
+        return incident_points(
+            session,
+            bounds=request.bounds,
+            analysis_start_date=request.analysis_start_date,
+            analysis_end_date=request.analysis_end_date,
+            layer=request.layer,
+            offense_category=request.offense_category,
+            offense_subcategory=request.offense_subcategory,
+            nibrs_group=request.nibrs_group,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
