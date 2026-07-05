@@ -5,7 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { circlePolygonCoords } from "../lib/geodesy";
 import { incidentCountForPlace } from "../lib/incidentSummaries";
 import { buildMapStyle, cartoRasterStyle, fallbackMapStyle, TILES_URL } from "../lib/mapStyle";
-import type { DashboardSummary, DraftPin, LatLng, Place } from "../types";
+import type { IncidentFeatureCollection } from "../lib/useIncidentPoints";
+import type { BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
 
 const SEATTLE: [number, number] = [-122.3321, 47.6062]; // [lng, lat]
 
@@ -122,6 +123,103 @@ function addRingLayers(map: maplibregl.Map): void {
   });
 }
 
+const BEATS_SOURCE = "mc-beats";
+const INCIDENTS_SOURCE = "mc-incidents";
+const EMPTY_FC: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
+const CLUSTER_MAX_ZOOM = 13; // clusters below, individual dots at z14+ (spec: initial threshold)
+
+function addBeatLayers(map: maplibregl.Map): void {
+  map.addSource(BEATS_SOURCE, { type: "geojson", data: EMPTY_FC });
+  map.addLayer({
+    id: "mc-beat-highlight",
+    type: "fill",
+    source: BEATS_SOURCE,
+    filter: ["in", ["get", "beat"], ["literal", []]],
+    paint: { "fill-color": "#74858E", "fill-opacity": 0.08 },
+  });
+  map.addLayer({
+    id: "mc-beat-line",
+    type: "line",
+    source: BEATS_SOURCE,
+    paint: { "line-color": "#74858E", "line-width": 1, "line-opacity": 0.5 },
+  });
+  map.addLayer({
+    id: "mc-beat-label",
+    type: "symbol",
+    source: BEATS_SOURCE,
+    minzoom: 12,
+    layout: {
+      "text-field": ["get", "beat"],
+      "text-font": ["Noto Sans Regular"],
+      "text-size": 11,
+    },
+    paint: { "text-color": "#74858E", "text-opacity": 0.75, "text-halo-color": "#FFFFFF", "text-halo-width": 1 },
+  });
+}
+
+function addIncidentLayers(map: maplibregl.Map): void {
+  map.addSource(INCIDENTS_SOURCE, {
+    type: "geojson",
+    data: EMPTY_FC,
+    cluster: true,
+    clusterMaxZoom: CLUSTER_MAX_ZOOM,
+    clusterRadius: 40,
+  });
+  // One calm neutral for clusters and dots — never severity colors (product invariant).
+  map.addLayer({
+    id: "mc-incident-cluster",
+    type: "circle",
+    source: INCIDENTS_SOURCE,
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-color": "#3A3F46",
+      "circle-opacity": 0.85,
+      "circle-radius": ["step", ["get", "point_count"], 12, 25, 16, 100, 22],
+      "circle-stroke-color": "#FFFFFF",
+      "circle-stroke-width": 1.5,
+    },
+  });
+  map.addLayer({
+    id: "mc-incident-cluster-count",
+    type: "symbol",
+    source: INCIDENTS_SOURCE,
+    filter: ["has", "point_count"],
+    layout: {
+      "text-field": ["get", "point_count_abbreviated"],
+      "text-font": ["Noto Sans Medium"],
+      "text-size": 11,
+    },
+    paint: { "text-color": "#FFFFFF" },
+  });
+  map.addLayer({
+    id: "mc-incident-dot",
+    type: "circle",
+    source: INCIDENTS_SOURCE,
+    filter: ["!", ["has", "point_count"]],
+    paint: {
+      "circle-color": "#3A3F46",
+      "circle-opacity": 0.85,
+      "circle-radius": 4.5,
+      "circle-stroke-color": "#FFFFFF",
+      "circle-stroke-width": 1,
+    },
+  });
+}
+
+function incidentCardElement(props: Record<string, unknown>): HTMLElement {
+  // textContent only — properties come from SPD strings; never parse them as HTML.
+  const card = document.createElement("div");
+  card.className = "mc-incident-card";
+  const title = document.createElement("strong");
+  title.textContent = String(props.offense_subcategory ?? props.offense_category ?? "Incident");
+  const when = document.createElement("div");
+  when.textContent = props.occurred_at ? String(props.occurred_at).slice(0, 10) : "date not recorded";
+  const where = document.createElement("div");
+  where.textContent = String(props.block_address ?? "");
+  card.append(title, when, where);
+  return card;
+}
+
 let pmtilesProtocolRegistered = false;
 function ensurePmtilesProtocol(): void {
   if (!pmtilesProtocolRegistered) {
@@ -138,6 +236,10 @@ type Props = {
   summary: DashboardSummary | null;
   radiusM: number;
   flyTo: LatLng | null;
+  beats?: BeatFeatureCollection | null;
+  highlightBeats?: string[];
+  incidentPoints?: IncidentFeatureCollection | null;
+  onViewportChange?: (bounds: MapBounds) => void;
   onMapClick: (latlng: LatLng) => void;
   onMarkerClick: (placeId: string) => void;
 };
@@ -150,6 +252,10 @@ export function MapCanvas({
   summary,
   radiusM,
   flyTo,
+  beats = null,
+  highlightBeats = [],
+  incidentPoints = null,
+  onViewportChange,
   onMapClick,
   onMarkerClick,
 }: Props) {
@@ -158,6 +264,7 @@ export function MapCanvas({
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
+  const onViewportChangeRef = useRef(onViewportChange);
   const [mapReady, setMapReady] = useState(false);
   const [tilesMissing, setTilesMissing] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
@@ -165,6 +272,7 @@ export function MapCanvas({
   useLayoutEffect(() => {
     onMapClickRef.current = onMapClick;
     onMarkerClickRef.current = onMarkerClick;
+    onViewportChangeRef.current = onViewportChange;
   });
 
   useEffect(() => {
@@ -200,9 +308,38 @@ export function MapCanvas({
         onMapClickRef.current({ lat: event.lngLat.lat, lng: event.lngLat.lng });
       });
       map.on("load", () => {
+        addBeatLayers(map);
         addRingLayers(map);
+        addIncidentLayers(map);
         setMapReady(true);
       });
+      const emitViewport = () => {
+        const b = map.getBounds();
+        onViewportChangeRef.current?.({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+      };
+      map.on("moveend", emitViewport);
+      map.on("load", emitViewport);
+      map.on("click", "mc-incident-dot", (event) => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+        new maplibregl.Popup({ offset: 10 })
+          .setLngLat(event.lngLat)
+          .setDOMContent(incidentCardElement(feature.properties ?? {}))
+          .addTo(map);
+      });
+      map.on("click", "mc-incident-cluster", (event) => {
+        const feature = event.features?.[0];
+        const clusterId = feature?.properties?.cluster_id;
+        const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+        if (clusterId === undefined || !source) return;
+        source.getClusterExpansionZoom(clusterId).then((zoom) => {
+          map.easeTo({ center: (feature!.geometry as GeoJSON.Point).coordinates as [number, number], zoom });
+        });
+      });
+      for (const hoverable of ["mc-incident-dot", "mc-incident-cluster"]) {
+        map.on("mouseenter", hoverable, () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", hoverable, () => { map.getCanvas().style.cursor = ""; });
+      }
       mapRef.current = map;
     }
     init();
@@ -265,6 +402,28 @@ export function MapCanvas({
     const source = map.getSource(RINGS_SOURCE) as maplibregl.GeoJSONSource | undefined;
     source?.setData(ringsGeoJSON(places, selectedIds, summary, radiusM));
   }, [places, selectedIds, summary, radiusM, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !beats) return;
+    (map.getSource(BEATS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
+      beats as unknown as GeoJSON.FeatureCollection,
+    );
+  }, [beats, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.setFilter("mc-beat-highlight", ["in", ["get", "beat"], ["literal", highlightBeats]]);
+  }, [highlightBeats, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    (map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
+      incidentPoints ?? EMPTY_FC,
+    );
+  }, [incidentPoints, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;

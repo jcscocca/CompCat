@@ -32,6 +32,9 @@
   padding:8px 14px;border-radius:8px;background:rgba(27,30,34,0.88);color:#F3F1EB;
   font-size:12.5px;box-shadow:0 8px 20px -10px rgba(0,0,0,.5);}
 .mc-map-fallback code{font-family:var(--f-mono);font-size:11.5px;}
+.mc-incident-card{font-family:var(--f-ui);font-size:12.5px;color:#1B1E22;min-width:180px;display:grid;gap:2px;}
+.mc-incident-card strong{font-size:13px;}
+.maplibregl-popup-content{border-radius:10px;box-shadow:0 10px 26px -12px rgba(0,0,0,.4);padding:10px 12px;}
 .mc-basemap{position:absolute;inset:0;width:100%;height:100%;}
 .mc-grain{position:absolute;inset:0;opacity:0.05;mix-blend-mode:multiply;pointer-events:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}

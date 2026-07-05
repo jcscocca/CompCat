@@ -9,11 +9,18 @@ vi.mock("maplibre-gl", () => {
   class MockMap {
     static last: MockMap | null = null;
     handlers: Record<string, Array<(arg?: unknown) => void>> = {};
-    sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
+    sources = new Map<string, { options?: Record<string, unknown>; setData: ReturnType<typeof vi.fn> }>();
+    layers: Array<Record<string, unknown>> = [];
+    layerHandlers: Record<string, Array<(arg?: unknown) => void>> = {};
     constructor() {
       MockMap.last = this;
     }
-    on(event: string, cb: (arg?: unknown) => void) {
+    on(event: string, layerOrCb: unknown, maybeCb?: (arg?: unknown) => void) {
+      if (typeof layerOrCb === "string" && maybeCb) {
+        (this.layerHandlers[`${event}:${layerOrCb}`] ??= []).push(maybeCb);
+        return this;
+      }
+      const cb = layerOrCb as (arg?: unknown) => void;
       (this.handlers[event] ??= []).push(cb);
       if (event === "load") cb();
       return this;
@@ -21,21 +28,42 @@ vi.mock("maplibre-gl", () => {
     once(event: string, cb: (arg?: unknown) => void) {
       return this.on(event, cb);
     }
-    addSource(id: string) {
-      this.sources.set(id, { setData: vi.fn() });
+    addSource(id: string, options: Record<string, unknown>) {
+      this.sources.set(id, { options, setData: vi.fn() });
     }
     getSource(id: string) {
       return this.sources.get(id);
     }
-    addLayer() {}
+    addLayer(layer: Record<string, unknown>) {
+      this.layers.push(layer);
+    }
+    setFilter(id: string, filter: unknown) {
+      const layer = this.layers.find((entry) => entry.id === id);
+      if (layer) layer.filter = filter;
+    }
     addControl() {}
     getZoom() {
       return 12;
     }
     flyTo = vi.fn();
+    easeTo = vi.fn();
     remove() {}
     fireClick(lat: number, lng: number) {
       for (const cb of this.handlers.click ?? []) cb({ lngLat: { lat, lng } });
+    }
+    fireLayerClick(layerId: string, feature: Record<string, unknown>, lngLat = { lng: -122.33, lat: 47.61 }) {
+      for (const cb of this.layerHandlers[`click:${layerId}`] ?? []) {
+        cb({ features: [feature], lngLat });
+      }
+    }
+    getBounds() {
+      return { getWest: () => -122.4, getSouth: () => 47.55, getEast: () => -122.25, getNorth: () => 47.65 };
+    }
+    getCanvas() {
+      return { style: {} } as HTMLCanvasElement;
+    }
+    fireMoveEnd() {
+      for (const cb of this.handlers.moveend ?? []) cb();
     }
   }
   class MockMarker {
@@ -55,7 +83,28 @@ vi.mock("maplibre-gl", () => {
       this.element.remove();
     }
   }
-  return { default: { Map: MockMap, Marker: MockMarker, addProtocol: vi.fn() } };
+  class MockPopup {
+    static last: MockPopup | null = null;
+    content: HTMLElement | null = null;
+    constructor() {
+      MockPopup.last = this;
+    }
+    setLngLat() {
+      return this;
+    }
+    setDOMContent(el: HTMLElement) {
+      this.content = el;
+      return this;
+    }
+    addTo() {
+      document.body.appendChild(this.content!);
+      return this;
+    }
+    remove() {
+      this.content?.remove();
+    }
+  }
+  return { default: { Map: MockMap, Marker: MockMarker, Popup: MockPopup, addProtocol: vi.fn() } };
 });
 
 vi.mock("pmtiles", () => ({ Protocol: class { tile = vi.fn(); } }));
@@ -67,9 +116,13 @@ import type { DashboardSummary, Place } from "../types";
 
 type MockMapInstance = {
   fireClick: (lat: number, lng: number) => void;
-  sources: Map<string, { setData: ReturnType<typeof vi.fn> }>;
+  fireLayerClick: (layerId: string, feature: Record<string, unknown>, lngLat?: { lng: number; lat: number }) => void;
+  fireMoveEnd: () => void;
+  sources: Map<string, { options?: Record<string, unknown>; setData: ReturnType<typeof vi.fn> }>;
+  layers: Array<Record<string, unknown>>;
 };
 const MockedMap = maplibregl.Map as unknown as { last: MockMapInstance | null };
+const MockPopup = (maplibregl as unknown as { Popup: { last: unknown } }).Popup;
 
 const place: Place = {
   id: "p1",
@@ -111,6 +164,7 @@ const noop = () => {};
 
 beforeEach(() => {
   MockedMap.last = null;
+  (MockPopup as { last: unknown }).last = null;
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 });
 afterEach(() => {
@@ -122,7 +176,8 @@ afterEach(() => {
 function renderCanvas(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
   return render(
     <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
-      summary={null} radiusM={250} flyTo={null} onMapClick={noop} onMarkerClick={noop} {...over} />,
+      summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
+      incidentPoints={null} onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} {...over} />,
   );
 }
 
@@ -212,11 +267,73 @@ describe("MapCanvas", () => {
     expect((document.body.querySelector(".mc-pin-icon") as HTMLElement).innerHTML).not.toContain("mc-pin-tag");
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set(["p1"])} draft={null} addPinMode={false}
-        summary={null} radiusM={250} flyTo={null} onMapClick={noop} onMarkerClick={noop} />,
+        summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
+        incidentPoints={null} onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
     await waitFor(() => {
       const el = document.body.querySelector(".mc-pin-icon") as HTMLElement;
       expect(el.innerHTML).toContain("mc-pin-tag");
     });
+  });
+});
+
+const BEATS_FC = {
+  type: "FeatureCollection" as const,
+  features: [
+    { type: "Feature" as const, properties: { beat: "M3" }, geometry: { type: "Polygon" as const, coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
+  ],
+};
+
+const POINTS_FC = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      properties: { id: "inc-1", offense_category: "PROPERTY", offense_subcategory: "THEFT", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST" },
+      geometry: { type: "Point" as const, coordinates: [-122.33, 47.61] as [number, number] },
+    },
+  ],
+};
+
+describe("beat + incident layers", () => {
+  it("feeds beat polygons into the mc-beats source and highlights analyzed beats", async () => {
+    renderCanvas({ beats: BEATS_FC, highlightBeats: ["M3"] });
+    await waitFor(() => {
+      const source = MockedMap.last!.sources.get("mc-beats");
+      expect(source!.setData).toHaveBeenCalledWith(BEATS_FC);
+    });
+    const highlight = MockedMap.last!.layers.find((l) => l.id === "mc-beat-highlight");
+    expect(highlight?.filter).toEqual(["in", ["get", "beat"], ["literal", ["M3"]]]);
+  });
+
+  it("creates the incident source clustered and feeds it points", async () => {
+    renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => {
+      const source = MockedMap.last!.sources.get("mc-incidents");
+      expect(source!.options).toMatchObject({ cluster: true, clusterMaxZoom: 13 });
+      expect(source!.setData).toHaveBeenCalledWith(POINTS_FC);
+    });
+  });
+
+  it("opens an XSS-safe popup card on dot click", async () => {
+    renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-dot", {
+      properties: { id: "inc-1", offense_subcategory: '<img src=x onerror="a">', offense_category: "PROPERTY", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST" },
+    });
+    const card = document.body.querySelector(".mc-incident-card");
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain('<img src=x onerror="a">'); // rendered as TEXT
+    expect(card!.querySelector("img")).toBeNull(); // never parsed as HTML
+    expect(card!.textContent).toContain("1XX BLOCK OF PINE ST");
+  });
+
+  it("emits viewport bounds on moveend and once after load", async () => {
+    const onViewportChange = vi.fn();
+    renderCanvas({ onViewportChange });
+    await waitFor(() => expect(onViewportChange).toHaveBeenCalled());
+    onViewportChange.mockClear();
+    MockedMap.last!.fireMoveEnd();
+    expect(onViewportChange).toHaveBeenCalledWith({ west: -122.4, south: 47.55, east: -122.25, north: 47.65 });
   });
 });

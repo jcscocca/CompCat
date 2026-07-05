@@ -51,6 +51,7 @@ describe("useIncidentPoints", () => {
       { initialProps: { bounds: null as MapBounds | null } },
     );
     expect(fetchPoints).not.toHaveBeenCalled();
+    expect(result.current.geojson).toEqual({ type: "FeatureCollection", features: [] });
     rerender({ bounds: BOUNDS });
     expect(fetchPoints).not.toHaveBeenCalled(); // still inside debounce window
     await act(async () => {
@@ -121,5 +122,25 @@ describe("useIncidentPoints", () => {
     });
     expect(result.current.unmappableCitywideCount).toBe(9);
     expect(result.current.error).toBeNull();
+  });
+
+  it("keeps the prior geojson and surfaces the message when a later fetch fails", async () => {
+    const { result, rerender } = renderHook(
+      ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
+      { initialProps: { bounds: BOUNDS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.geojson.features).toHaveLength(1);
+    const priorGeojson = result.current.geojson;
+
+    fetchPoints.mockRejectedValueOnce(new Error("boom"));
+    rerender({ bounds: { ...BOUNDS, north: 47.7 } });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.error).toBe("boom");
+    expect(result.current.geojson).toBe(priorGeojson);
   });
 });
