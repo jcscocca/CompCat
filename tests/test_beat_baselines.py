@@ -1,10 +1,12 @@
 import sqlite3
+from math import cos, pi, radians
 from pathlib import Path
 
 import pytest
 
 from app.analysis.beat_baselines import (
     NON_GEOGRAPHIC_BEATS,
+    buffer_beat_overlap_km2,
     load_beat_areas,
     missing_beat_areas,
     neighborhood_decision,
@@ -12,6 +14,64 @@ from app.analysis.beat_baselines import (
 )
 
 DEV_DB = Path(__file__).resolve().parent.parent / "dev-output" / "mobility.sqlite3"
+
+_SEATTLE_LAT, _SEATTLE_LON = 47.61, -122.34
+
+
+def _metric_square(clon: float, clat: float, half_m: float):
+    """A square beat polygon of half-side ``half_m`` metres centred at ``(clon, clat)``, built
+    with the same metre↔degree conversion the overlap sampler uses."""
+    dlat = half_m / 111_320.0
+    dlon = half_m / (111_320.0 * cos(radians(clat)))
+    ring = [
+        (clon - dlon, clat - dlat),
+        (clon + dlon, clat - dlat),
+        (clon + dlon, clat + dlat),
+        (clon - dlon, clat + dlat),
+        (clon - dlon, clat - dlat),
+    ]
+    return [[ring]]
+
+
+def _circle_km2(radius_m: float) -> float:
+    return pi * radius_m * radius_m / 1_000_000.0
+
+
+def test_buffer_beat_overlap_full_when_buffer_inside_beat():
+    beat = _metric_square(_SEATTLE_LON, _SEATTLE_LAT, half_m=1000)
+    overlap = buffer_beat_overlap_km2(
+        lon=_SEATTLE_LON, lat=_SEATTLE_LAT, radius_m=250, beat_polygons_for_beat=beat
+    )
+    assert overlap == pytest.approx(_circle_km2(250))  # every sample inside -> exact full circle
+
+
+def test_buffer_beat_overlap_half_when_centre_on_beat_edge():
+    # Buffer centred on the east edge of a large beat: the west half is inside, east half out.
+    east_edge_lon = _SEATTLE_LON + 1000 / (111_320.0 * cos(radians(_SEATTLE_LAT)))
+    beat = _metric_square(_SEATTLE_LON, _SEATTLE_LAT, half_m=1000)
+    overlap = buffer_beat_overlap_km2(
+        lon=east_edge_lon, lat=_SEATTLE_LAT, radius_m=250, beat_polygons_for_beat=beat
+    )
+    assert overlap == pytest.approx(0.5 * _circle_km2(250), abs=0.04 * _circle_km2(250))
+
+
+def test_buffer_beat_overlap_quarter_when_centre_on_beat_corner():
+    corner_lon = _SEATTLE_LON + 1000 / (111_320.0 * cos(radians(_SEATTLE_LAT)))
+    corner_lat = _SEATTLE_LAT + 1000 / 111_320.0
+    beat = _metric_square(_SEATTLE_LON, _SEATTLE_LAT, half_m=1000)
+    overlap = buffer_beat_overlap_km2(
+        lon=corner_lon, lat=corner_lat, radius_m=250, beat_polygons_for_beat=beat
+    )
+    assert overlap == pytest.approx(0.25 * _circle_km2(250), abs=0.05 * _circle_km2(250))
+
+
+def test_buffer_beat_overlap_zero_when_buffer_outside_beat():
+    beat = _metric_square(_SEATTLE_LON, _SEATTLE_LAT, half_m=1000)
+    far_lon = _SEATTLE_LON + 5000 / (111_320.0 * cos(radians(_SEATTLE_LAT)))
+    overlap = buffer_beat_overlap_km2(
+        lon=far_lon, lat=_SEATTLE_LAT, radius_m=250, beat_polygons_for_beat=beat
+    )
+    assert overlap == 0.0  # no sample inside
 
 
 def _write_csv(tmp_path, rows):

@@ -10,7 +10,12 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.analysis.beat_baselines import BeatPolygons, assign_beat, place_vs_beat
+from app.analysis.beat_baselines import (
+    BeatPolygons,
+    assign_beat,
+    buffer_beat_overlap_km2,
+    place_vs_beat,
+)
 from app.analysis.rate_tests import (
     benjamini_hochberg,
     compare_incident_rates,
@@ -255,8 +260,17 @@ def neighborhood_analysis_for_places(
             > radius_m
         ]
         place_exposure = _place_exposure_km2_days(radius_m, days)
-        buffer_km2 = pi * radius_m * radius_m / 1_000_000.0
-        rest_area = area - buffer_km2
+        # Carve only the part of the buffer that actually lies inside the beat out of the
+        # rest-of-beat area. Subtracting the whole circle (as before) understates the rest area
+        # for any place whose buffer spills past a beat boundary, inflating the rest-of-beat rate
+        # and biasing the place's rate ratio low. The place's own rate stays a full-buffer density.
+        overlap_km2 = buffer_beat_overlap_km2(
+            lon=cluster.display_longitude,
+            lat=cluster.display_latitude,
+            radius_m=radius_m,
+            beat_polygons_for_beat=beat_polygons[beat],
+        )
+        rest_area = area - overlap_km2
         if rest_area <= 0 or not rest_incidents:
             raw.append(
                 {

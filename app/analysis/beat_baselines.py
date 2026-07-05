@@ -4,7 +4,7 @@ import csv
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import isfinite
+from math import cos, isfinite, pi, radians
 from pathlib import Path
 
 from app.analysis.rate_tests import (
@@ -114,6 +114,57 @@ def assign_beat(lon: float, lat: float, beat_polygons: BeatPolygons) -> str | No
         if any(_point_in_polygon(lon, lat, rings) for rings in polygons):
             return beat
     return None
+
+
+# Odd so a sample lands exactly at the buffer centre; ~1300 in-circle samples ⇒ ≈3% area error,
+# far tighter than the up-to-100% error of assuming the whole buffer sits inside the beat.
+_OVERLAP_SAMPLES_PER_AXIS = 41
+
+
+def buffer_beat_overlap_km2(
+    *,
+    lon: float,
+    lat: float,
+    radius_m: float,
+    beat_polygons_for_beat: list[list[list[tuple[float, float]]]],
+    samples_per_axis: int = _OVERLAP_SAMPLES_PER_AXIS,
+) -> float:
+    """Estimate the area (km²) of the intersection of a metric buffer circle — centred at
+    ``(lon, lat)`` with radius ``radius_m`` — and one beat's polygon(s).
+
+    ``overlap = π·r² × (fraction of the disk's grid samples that fall inside the beat)``, via a
+    deterministic uniform grid over the buffer's bounding box (so a place always yields the same
+    overlap), reusing the ray-casting point-in-polygon test. When the whole buffer is inside the
+    beat the fraction is 1 and this returns the full circle area; near a beat edge it returns
+    only the part actually inside — the correct quantity to carve out of the beat when forming
+    the rest-of-beat baseline (else a boundary place's rest area is understated and its rate
+    ratio biased low). Distances are converted to degrees with a local flat-earth approximation,
+    which is well within the sampling error at a beat's scale.
+    """
+    circle_km2 = pi * radius_m * radius_m / 1_000_000.0
+    meters_per_deg_lat = 111_320.0
+    meters_per_deg_lon = 111_320.0 * cos(radians(lat))
+    if meters_per_deg_lon <= 0 or samples_per_axis < 2:  # not reachable for Seattle; guard anyway
+        return circle_km2
+    step = (2 * radius_m) / (samples_per_axis - 1)
+    radius_sq = radius_m * radius_m
+    in_circle = 0
+    in_beat = 0
+    for i in range(samples_per_axis):
+        dy = -radius_m + i * step
+        for j in range(samples_per_axis):
+            dx = -radius_m + j * step
+            if dx * dx + dy * dy > radius_sq:
+                continue
+            in_circle += 1
+            sample_lon = lon + dx / meters_per_deg_lon
+            sample_lat = lat + dy / meters_per_deg_lat
+            if any(_point_in_polygon(sample_lon, sample_lat, rings)
+                   for rings in beat_polygons_for_beat):
+                in_beat += 1
+    if in_circle == 0:
+        return circle_km2
+    return circle_km2 * (in_beat / in_circle)
 
 
 def missing_beat_areas(

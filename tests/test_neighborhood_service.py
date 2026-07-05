@@ -1,5 +1,9 @@
 from datetime import date
+from math import pi
 
+import pytest
+
+from app.analysis.beat_baselines import buffer_beat_overlap_km2
 from app.services.neighborhood_service import neighborhood_analysis_for_places
 from tests.helpers_dashboard import (
     session_with_places_and_beat_crime,
@@ -239,3 +243,38 @@ def test_pairwise_decides_on_combined_overdispersion_phi():
     assert pair["ci_lower"] == expected.ci_lower  # decided on the combined-dispersion phi
     assert pair["ci_upper"] == expected.ci_upper
     assert pair["ci_upper"] > poisson.ci_upper  # phi > 1 widened it vs plain Poisson
+
+
+def test_rest_of_beat_area_carves_only_the_in_beat_buffer_overlap(tmp_path):
+    # A place whose buffer pokes outside its beat must have only the in-beat part of the buffer
+    # carved out of the rest-of-beat area — not the whole circle (which understates the rest
+    # area and biases the rate ratio low). Pin beat_rate to the overlap-based rest area.
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place_lat, place_lon = 47.60945, -122.33595
+    # A small beat square so the 250 m buffer extends past its edges (the boundary case).
+    beat_polygons = square_beat_polygons("M3", place_lat, place_lon, half=0.0018)
+    start, end = date(2026, 1, 1), date(2026, 6, 30)
+
+    result = neighborhood_analysis_for_places(
+        session=session,
+        user_id_hash=user_hash,
+        place_ids=[place_id],
+        radius_m=250,
+        analysis_start_date=start,
+        analysis_end_date=end,
+        offense_category=None,
+        offense_subcategory=None,
+        nibrs_group=None,
+        area_lookup={"M3": 1.0},
+        beat_polygons=beat_polygons,
+    )
+
+    place = result["places"][0]
+    assert place["baseline_available"] is True
+    overlap = buffer_beat_overlap_km2(
+        lon=place_lon, lat=place_lat, radius_m=250, beat_polygons_for_beat=beat_polygons["M3"]
+    )
+    assert 0.0 < overlap < pi * 250 * 250 / 1_000_000.0  # a partial buffer, not the whole circle
+    days = (end - start).days + 1
+    expected_beat_rate = place["beat_incident_count"] / ((1.0 - overlap) * days)
+    assert place["beat_rate"] == pytest.approx(expected_beat_rate, rel=1e-9)
