@@ -1,6 +1,6 @@
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { circlePolygonCoords } from "../lib/geodesy";
 import { incidentCountForPlace } from "../lib/incidentSummaries";
@@ -93,6 +93,8 @@ export function ringsGeoJSON(
 
 const RINGS_SOURCE = "mc-rings";
 
+// Added once on "load". A future setStyle() (slice 3 dark mode) wipes these layers
+// and "load" does NOT re-fire — re-adding needs style.load/transformStyle.
 function addRingLayers(map: maplibregl.Map): void {
   map.addSource(RINGS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   map.addLayer({
@@ -158,9 +160,12 @@ export function MapCanvas({
   const onMarkerClickRef = useRef(onMarkerClick);
   const [mapReady, setMapReady] = useState(false);
   const [tilesMissing, setTilesMissing] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
 
-  onMapClickRef.current = onMapClick;
-  onMarkerClickRef.current = onMarkerClick;
+  useLayoutEffect(() => {
+    onMapClickRef.current = onMapClick;
+    onMarkerClickRef.current = onMarkerClick;
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -177,13 +182,20 @@ export function MapCanvas({
         : available
           ? buildMapStyle("light", window.location.origin)
           : fallbackMapStyle("light");
-      const map = new maplibregl.Map({
-        container: containerRef.current,
-        style,
-        center: SEATTLE,
-        zoom: 12,
-        attributionControl: { compact: true },
-      });
+      let map: maplibregl.Map;
+      try {
+        map = new maplibregl.Map({
+          container: containerRef.current,
+          style,
+          center: SEATTLE,
+          // MapLibre zoom is 512px-tile-based; 11 here ≈ the old Leaflet (256px) zoom 12.
+          zoom: 11,
+          attributionControl: {},
+        });
+      } catch {
+        setMapFailed(true);
+        return;
+      }
       map.on("click", (event) => {
         onMapClickRef.current({ lat: event.lngLat.lat, lng: event.lngLat.lng });
       });
@@ -215,8 +227,16 @@ export function MapCanvas({
       const el = document.createElement("div");
       el.className = "mc-pin-icon";
       el.innerHTML = iconHtml(kind, { count, label: place.display_label });
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", place.display_label);
       el.addEventListener("click", (event) => {
         event.stopPropagation();
+        onMarkerClickRef.current(place.id);
+      });
+      el.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        if (event.key === " ") event.preventDefault();
         onMarkerClickRef.current(place.id);
       });
       markersRef.current.push(
@@ -247,13 +267,18 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyTo) return;
-    map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: Math.max(map.getZoom(), 15) });
+    // Floor 14 ≈ the old Leaflet flyTo floor of 15 (512px- vs 256px-tile zoom offset).
+    map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: Math.max(map.getZoom(), 14) });
   }, [flyTo, mapReady]);
 
   return (
     <div className={`mc-map${addPinMode ? " is-adding" : ""}`}>
       <div ref={containerRef} className="mc-map-canvas" />
-      {tilesMissing ? (
+      {mapFailed ? (
+        <div className="mc-map-fallback" role="status">
+          Map failed to initialize in this browser. Pins and analysis still work in the panel.
+        </div>
+      ) : tilesMissing ? (
         <div className="mc-map-fallback" role="status">
           Basemap tiles unavailable — run <code>make fetch-tiles</code>. Pins and analysis still work.
         </div>

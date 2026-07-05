@@ -315,6 +315,7 @@
 
 .leaflet-container.mc-map{height:100%;width:100%;background:var(--paper);font-family:var(--f-ui);}
 .mc-map.is-adding{cursor:crosshair;}
+.mc-map.is-adding .maplibregl-canvas-container.maplibregl-interactive{cursor:crosshair;}
 .mc-pin-icon{background:transparent;border:0;overflow:visible;}
 .mc-pin-icon svg{display:block;filter:drop-shadow(0 6px 7px rgba(20,24,28,.28));animation:pindrop .5s cubic-bezier(.2,.9,.25,1.1) both;transform-origin:bottom center;}
 .mc-pin-badge{position:absolute;left:100%;top:0;transform:translate(-8px,-55%);display:inline-flex;align-items:baseline;gap:4px;background:#fff;border:1px solid rgba(20,24,28,.09);border-radius:999px;padding:4px 9px;box-shadow:0 8px 18px -10px rgba(18,22,26,.45);white-space:nowrap;}
@@ -391,6 +392,7 @@ input.mc-inp:focus{outline:2px solid var(--clay-soft);outline-offset:1px;}
 .mc-topbar,.mc-controls,.mc-legend,.mc-assistant,.mc-empty,.mc-error{z-index:1100;}
 .mc-workspace-panel{z-index:1200;}
 .mc-frame .leaflet-bottom.leaflet-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
+.mc-frame .maplibregl-ctrl-bottom-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
 .mc-empty{top:34%;}
 
 @media (max-width:760px){

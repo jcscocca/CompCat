@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // document.body so testing-library queries can see them.
 vi.mock("maplibre-gl", () => {
   class MockMap {
+    static last: MockMap | null = null;
     handlers: Record<string, Array<(arg?: unknown) => void>> = {};
+    sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
+    constructor() {
+      MockMap.last = this;
+    }
     on(event: string, cb: (arg?: unknown) => void) {
       (this.handlers[event] ??= []).push(cb);
       if (event === "load") cb();
@@ -16,9 +21,11 @@ vi.mock("maplibre-gl", () => {
     once(event: string, cb: (arg?: unknown) => void) {
       return this.on(event, cb);
     }
-    addSource() {}
-    getSource() {
-      return { setData: vi.fn() };
+    addSource(id: string) {
+      this.sources.set(id, { setData: vi.fn() });
+    }
+    getSource(id: string) {
+      return this.sources.get(id);
     }
     addLayer() {}
     addControl() {}
@@ -53,8 +60,16 @@ vi.mock("maplibre-gl", () => {
 
 vi.mock("pmtiles", () => ({ Protocol: class { tile = vi.fn(); } }));
 
+import maplibregl from "maplibre-gl";
+
 import { MapCanvas, iconHtml, markerKindFor, ringsGeoJSON } from "./MapCanvas";
 import type { DashboardSummary, Place } from "../types";
+
+type MockMapInstance = {
+  fireClick: (lat: number, lng: number) => void;
+  sources: Map<string, { setData: ReturnType<typeof vi.fn> }>;
+};
+const MockedMap = maplibregl.Map as unknown as { last: MockMapInstance | null };
 
 const place: Place = {
   id: "p1",
@@ -95,6 +110,7 @@ function summaryWithCount(): DashboardSummary {
 const noop = () => {};
 
 beforeEach(() => {
+  MockedMap.last = null;
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 });
 afterEach(() => {
@@ -169,5 +185,38 @@ describe("MapCanvas", () => {
   it("skips places without coordinates", async () => {
     renderCanvas({ places: [{ ...place, latitude: null, longitude: null }] });
     await waitFor(() => expect(document.body.querySelectorAll(".mc-pin-icon")).toHaveLength(0));
+  });
+
+  it("reports map background clicks through onMapClick", async () => {
+    const onMapClick = vi.fn();
+    renderCanvas({ onMapClick });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireClick(47.6, -122.3);
+    expect(onMapClick).toHaveBeenCalledWith({ lat: 47.6, lng: -122.3 });
+  });
+
+  it("pushes ring polygons into the mc-rings source", async () => {
+    renderCanvas({ summary: summaryWithCount() });
+    await waitFor(() =>
+      expect(MockedMap.last?.sources.get("mc-rings")?.setData).toHaveBeenCalled(),
+    );
+    const setData = MockedMap.last!.sources.get("mc-rings")!.setData;
+    const data = setData.mock.calls.at(-1)?.[0] as ReturnType<typeof ringsGeoJSON>;
+    expect(data.features).toHaveLength(1);
+    expect(data.features[0].properties.kind).toBe("analyzed");
+  });
+
+  it("recreates markers when the selection changes", async () => {
+    const view = renderCanvas();
+    await waitFor(() => expect(document.body.querySelectorAll(".mc-pin-icon")).toHaveLength(1));
+    expect((document.body.querySelector(".mc-pin-icon") as HTMLElement).innerHTML).not.toContain("mc-pin-tag");
+    view.rerender(
+      <MapCanvas places={[place]} selectedIds={new Set(["p1"])} draft={null} addPinMode={false}
+        summary={null} radiusM={250} flyTo={null} onMapClick={noop} onMarkerClick={noop} />,
+    );
+    await waitFor(() => {
+      const el = document.body.querySelector(".mc-pin-icon") as HTMLElement;
+      expect(el.innerHTML).toContain("mc-pin-tag");
+    });
   });
 });
