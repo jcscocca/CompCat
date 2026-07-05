@@ -166,26 +166,34 @@ Word-boundary anchors keep legitimate substrings (`safely`, `Safeway`, `incident
 allowed count framing (`which area has the most crime`) from false-triggering, and the
 ambiguous-term gating avoids proper-noun false positives (`Shady Grove Ave`, `Warsaw Ghetto`).
 
+**Additional output-side guards.** Two further patterns run **only** on the model's answer
+(never on user input, where the terms are too common to gate on):
+
+- `_PRESENCE_CLAIM_PATTERN` / `_claims_user_presence` — enforces the invariant's third prong
+  (never claim the user was present at an incident): a first/second-person subject tied to a
+  victimization word, or a presence/witness word followed by an incident noun, is replaced with
+  `_PRESENCE_REDIRECT`. Also runs on input to short-circuit "was I present at…" asks.
+- `_OUTPUT_RANKING_PROSE_PATTERN` / `_output_ranks_places` — catches place-ranking / livability
+  prose that carries no banned safety word and so slips `_contains_safety_ranking`: *"a bad area
+  to live"*, *"the worst of the three"*, *"a high-crime area"*, *"I wouldn't recommend living
+  here"*, *"a rough neighborhood"*. Anchored to place nouns / living context so neutral count
+  framing (*"the most reported thefts"*, *"more incidents than the others"*, *"the worst month
+  for theft"*) passes untouched.
+
 **Known limitations**
 
 The guard is a lexical/contextual matcher, not a semantic classifier, so it is bounded by its
-lexicon on both ends:
+lexicon:
 
-- **Output-side ranking prose that avoids the lexicon is not caught.** Because the input and
-  output guards share the one predicate, phrasings that rank or label a place without the
-  banned word-stems — *"this is a bad area to live"*, *"the worst of the three"*, *"a
-  high-crime area"*, *"I wouldn't recommend living here"* — pass both. The system prompt is the
-  only backstop for these.
-- **The `type:"final"` free-text path is the soft underbelly.** Deterministic tool summaries
-  (`summaries.py`) are invariant-safe by construction; only the model's free-text answer can
-  carry unvetted prose. Routing more of the answer through the deterministic path (LLM
-  classify-only) is the durable hardening direction.
+- **Output ranking prose is caught for the common phrasings, not exhaustively.** The space of
+  "rank/label a place without a banned word" is open-ended; `_OUTPUT_RANKING_PROSE_PATTERN`
+  raises the floor but a sufficiently novel phrasing can still slip. The durable structural fix
+  is to stop the model authoring user-facing prose at all — make the LLM strictly classify and
+  serve every answer from the deterministic `summaries.py` path — which is a larger change
+  (it removes the model's free-text `type:"final"` answers) gated on a product decision and
+  live-model routing validation.
 - **Non-English/Spanish and obfuscation.** Other languages (non-Latin scripts especially) and
   homoglyph/letter-spacing tricks are out of the current lexicon.
-- **The presence-claim prong of the invariant has no code enforcement.** The guard covers
-  "score/rank/label by safety"; it does not detect a claim that the user *was present at* an
-  incident. That prong currently relies on the system prompt and on the app never having
-  per-incident presence data to assert.
 
 ---
 
