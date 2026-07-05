@@ -4,7 +4,7 @@
 
 **Goal:** Make the geography and the data visible: beat outlines (with the analyzed place's beat highlighted), zoom-dependent clustered incident dots with a click card, and an honest disclosure of location-redacted incidents.
 
-**Architecture:** Two new public session-gated endpoints — `GET /dashboard/beats` (slimmed, cached GeoJSON from the bundled 2018 file) and `POST /dashboard/incident-points` (bbox-clamped, filter-aware, capped at 5,000 points + `unmappable_count`). Frontend adds three MapLibre layer groups to the existing `load`-handler pattern (beats under rings under incident clusters/dots), a debounced+abortable viewport fetch hook mirroring `useAddressSearch`, and a disclosure chip. No DB migrations; no changes to analysis/statistics paths.
+**Architecture:** Two new public session-gated endpoints — `GET /dashboard/beats` (slimmed, cached GeoJSON from the bundled 2018 file) and `POST /dashboard/incident-points` (bbox-clamped, filter-aware, capped at 5,000 points + `unmappable_citywide_count`). Frontend adds three MapLibre layer groups to the existing `load`-handler pattern (beats under rings under incident clusters/dots), a debounced+abortable viewport fetch hook mirroring `useAddressSearch`, and a disclosure chip. No DB migrations; no changes to analysis/statistics paths.
 
 **Tech Stack:** FastAPI/SQLAlchemy (existing patterns: `incidents_in_bbox`, `AnalysisPoint` Seattle-bbox validation, `lru_cache` beat helpers), maplibre-gl GeoJSON sources with `cluster: true`, `maplibregl.Popup` (DOM content, XSS-safe).
 
@@ -394,7 +394,7 @@ def test_points_filtered_by_bbox_dates_and_layer(tmp_path) -> None:
     result = incident_points(session, bounds=MapBounds(**BOUNDS), layer="reported", **DATES)
     assert result["returned_count"] == 1
     assert result["total_count"] == 1
-    assert result["unmappable_count"] == 1
+    assert result["unmappable_citywide_count"] == 1
     point = result["points"][0]
     assert point["id"] == "inc-1"
     assert point["latitude"] == 47.610
@@ -461,7 +461,7 @@ Expected: schema tests pass; new tests FAIL — `ModuleNotFoundError: app.servic
 """Viewport incident points for the map's dot layer.
 
 Coordinates are clamped to the Seattle bounds before querying, which structurally
-excludes the arrests unknown-location sentinel (-1.0/-1.0). ``unmappable_count``
+excludes the arrests unknown-location sentinel (-1.0/-1.0). ``unmappable_citywide_count``
 counts rows matching the same non-spatial filters whose location was redacted at
 the source (NULL coordinates) — they exist only in beat-level statistics.
 """
@@ -534,7 +534,7 @@ def incident_points(
         )
 
     total_count = session.scalar(spatial(non_spatial(select(func.count()).select_from(CrimeIncident)))) or 0
-    unmappable_count = (
+    unmappable_citywide_count = (
         session.scalar(
             non_spatial(select(func.count()).select_from(CrimeIncident)).where(
                 CrimeIncident.latitude.is_(None)
@@ -579,7 +579,7 @@ def incident_points(
         "points": points,
         "returned_count": len(points),
         "total_count": total_count,
-        "unmappable_count": unmappable_count,
+        "unmappable_citywide_count": unmappable_citywide_count,
         "limit": limit,
     }
 ```
@@ -642,7 +642,7 @@ def test_incident_points_endpoint_returns_points_and_counts(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["returned_count"] == 1
-    assert body["unmappable_count"] == 1
+    assert body["unmappable_citywide_count"] == 1
     assert body["limit"] == 5000
     assert body["points"][0]["block_address"] == "1XX BLOCK OF PINE ST"
 
@@ -733,7 +733,7 @@ export type IncidentPointsResponse = {
   points: IncidentPoint[];
   returned_count: number;
   total_count: number;
-  unmappable_count: number;
+  unmappable_citywide_count: number;
   limit: number;
 };
 
@@ -783,7 +783,7 @@ In `frontend/src/components/MapWorkspace.test.tsx` (the `vi.mock("../api/client"
 ```ts
   getBeatPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getIncidentPoints: vi.fn().mockResolvedValue({
-    points: [], returned_count: 0, total_count: 0, unmappable_count: 0, limit: 5000,
+    points: [], returned_count: 0, total_count: 0, unmappable_citywide_count: 0, limit: 5000,
   }),
 ```
 
@@ -842,7 +842,7 @@ function response(over: Partial<IncidentPointsResponse> = {}): IncidentPointsRes
         source_dataset: "seattle_spd_crime",
       },
     ],
-    returned_count: 1, total_count: 1, unmappable_count: 2, limit: 5000,
+    returned_count: 1, total_count: 1, unmappable_citywide_count: 2, limit: 5000,
     ...over,
   };
 }
@@ -919,7 +919,7 @@ describe("useIncidentPoints", () => {
             signal?.addEventListener("abort", rejectFirst);
           }),
       )
-      .mockResolvedValueOnce(response({ unmappable_count: 9 }));
+      .mockResolvedValueOnce(response({ unmappable_citywide_count: 9 }));
     const { result, rerender } = renderHook(
       ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
       { initialProps: { bounds: BOUNDS } },
@@ -1029,7 +1029,7 @@ export function useIncidentPoints({
           setCounts({
             returned: response.returned_count,
             total: response.total_count,
-            unmappable: response.unmappable_count,
+            unmappable: response.unmappable_citywide_count,
             limit: response.limit,
           });
           setError(null);
@@ -1614,6 +1614,6 @@ git add -A && git commit -m "feat(map): transparency layers — live-verificatio
 
 ## Self-review checklist
 
-- Spec coverage: beats endpoint (T1-2 ✓ gzip+cache+gating), incident-points endpoint (T3-5 ✓ bbox required + Seattle-validated, 5,000 named-constant cap, sentinel excluded structurally + pinned by test, `unmappable_count`), beat outlines + hover→static labels + analyzed-beat highlight (T8-9 ✓, deviation recorded), clusters→dots at z14 (T8 ✓ `CLUSTER_MAX_ZOOM = 13`), click card (T8 ✓ XSS-safe DOM), layer/date/category-following fetch (T7/T9 ✓ via `analysis`), debounce+abort (T7 ✓), disclosure chip (T9 ✓ incl. truncation honesty beyond spec), no heatmap / one neutral color (T8 ✓), tier guard (T2/T5 ✓), no migrations ✓.
+- Spec coverage: beats endpoint (T1-2 ✓ gzip+cache+gating), incident-points endpoint (T3-5 ✓ bbox required + Seattle-validated, 5,000 named-constant cap, sentinel excluded structurally + pinned by test, `unmappable_citywide_count`), beat outlines + hover→static labels + analyzed-beat highlight (T8-9 ✓, deviation recorded), clusters→dots at z14 (T8 ✓ `CLUSTER_MAX_ZOOM = 13`), click card (T8 ✓ XSS-safe DOM), layer/date/category-following fetch (T7/T9 ✓ via `analysis`), debounce+abort (T7 ✓), disclosure chip (T9 ✓ incl. truncation honesty beyond spec), no heatmap / one neutral color (T8 ✓), tier guard (T2/T5 ✓), no migrations ✓.
 - Placeholder scan: none — every step has full code; the two "check the real name/signature" notes are verification instructions with fallbacks, not gaps.
 - Type consistency: `MapBounds` (py + ts same field names), `IncidentFeatureCollection` produced by T7 = consumed by T8, `incident_points` service signature = T5 route call, mock `addSource(id, options)` shape = T8 assertions, chip props = T9 wiring.
