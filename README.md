@@ -33,7 +33,7 @@ safe or unsafe, or claim anyone was present when an incident happened.
 ## The dashboard
 
 The dashboard is the primary way to use Waypoint. It is a single-page React app built around a
-full-screen Leaflet map of Seattle, with a resizable side drawer organized into four tabs.
+full-screen MapLibre map of Seattle, with a resizable side drawer organized into four tabs.
 
 - **Places** — add places four ways: search by name/address (OpenStreetMap Nominatim geocoding),
   click **Add pin** and drop a point on the map, enter latitude/longitude manually, or paste a
@@ -46,7 +46,9 @@ full-screen Leaflet map of Seattle, with a resizable side drawer organized into 
   offense types side by side at one radius.
 - **Export** — download the Tableau-ready place-summary CSV for the current session.
 
-The map uses CARTO Positron basemap tiles (OpenStreetMap data). Address search is served by the
+The map renders from a self-hosted Seattle vector-tile extract (Protomaps/OpenStreetMap data), so
+no third-party tile server ever sees where users look; if the tile artifact is missing the map
+falls back to a flat background. Address search is served by the
 backend proxy `GET /dashboard/geocode` (session-required), which caches results and rate-limits
 the upstream. Production must set `MCA_GEOCODER_CONTACT_EMAIL` (an identifiable contact is
 required by Nominatim's usage policy). The browser never calls the geocoder directly.

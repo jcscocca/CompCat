@@ -62,6 +62,8 @@ services:
       MCA_GEOCODER_MIN_INTERVAL_S: "${MCA_GEOCODER_MIN_INTERVAL_S:-1.0}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ./app/data/tiles:/app/app/data/tiles:ro
     ports:
       - "8000:8000"
     restart: "no"

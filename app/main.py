@@ -34,6 +34,16 @@ def mount_dashboard(app: FastAPI) -> None:
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="dashboard-assets")
 
+    # Map glyphs/sprites: vite copies frontend/public/basemaps-assets/ into the build,
+    # but only /assets is mounted above — the map style requests these at /basemaps-assets/.
+    basemap_assets_dir = static_dir / "basemaps-assets"
+    if basemap_assets_dir.exists():
+        app.mount(
+            "/basemaps-assets",
+            StaticFiles(directory=basemap_assets_dir),
+            name="basemap-assets",
+        )
+
     @app.get("/", include_in_schema=False)
     def dashboard_index() -> FileResponse:
         return FileResponse(index_file)
@@ -65,6 +75,14 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(assistant_router)
     app.include_router(exports_router)
     app.include_router(analysis_router)
+    # Self-hosted basemap tiles (see docs/superpowers/specs/2026-07-04-map-ui-overhaul-design.md).
+    # check_dir=False: the artifact is fetched out-of-band (make fetch-tiles); missing file
+    # is a plain 404 and the frontend falls back to a flat basemap.
+    app.mount(
+        "/tiles",
+        StaticFiles(directory=get_settings().tiles_dir, check_dir=False),
+        name="tiles",
+    )
     mount_dashboard(app)
     return app
 
