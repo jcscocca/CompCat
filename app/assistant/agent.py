@@ -116,6 +116,27 @@ _PRESENCE_REDIRECT = (
     "at or involvement in a specific incident — it only knows the places you've saved, not where "
     "you have been. I can show the reported incidents near a place instead."
 )
+
+# Output-ONLY guard for place-ranking / livability prose that carries no banned safety word and
+# so slips _contains_safety_ranking (e.g. "a bad area to live", "the worst of the three", "a
+# high-crime area", "I wouldn't recommend living here"). A small local model can produce these
+# even though the system prompt forbids them, and this is the last line before the answer
+# streams. It is applied ONLY to the model's answer, never to user input — the terms ("bad",
+# "worst", "place to live") are far too common in legitimate questions to gate input on, and are
+# anchored to a place noun / living context here so neutral count framing ("the most reported
+# thefts", "more incidents than the others", "the worst month for theft") passes untouched.
+_OUTPUT_RANKING_PROSE_PATTERN = re.compile(
+    r"\b(?:bad|worse|worst|rough(?:er|est)?|lousy|terrible|nasty|seedier|seediest)\b"
+    r"[^.?!]{0,30}?"
+    r"\b(?:area|neighbou?rhood|block|part\s+of\s+town|side\s+of\s+town|place|spot|zone)s?\b"
+    r"|\b(?:area|neighbou?rhood|block|place|spot|zone)s?\b[^.?!]{0,20}?"
+    r"\bto\s+(?:live|move|relocate|settle|stay|avoid)\b"
+    r"|\bhigh(?:er|est)?[-\s]crime\b"
+    r"|\brecommend(?:ed|ing|s)?\b[^.?!]{0,20}?\b(?:living|moving|relocat\w+|settling|staying)\b"
+    r"|\b(?:worst|best)\b\s+(?:one\s+)?(?:of|among)\s+"
+    r"(?:the|these|those|them|all|your)\b",
+    re.IGNORECASE,
+)
 SELECTION_TOOLS = (
     "run_place_analysis",
     "compare_places",
@@ -194,9 +215,9 @@ async def run_assistant_turn(
         yield AssistantStreamEvent(event="error", data={"message": str(exc)})
         return
     # Output-side invariant guard: a model answer that slipped past the input guard must not
-    # stream safety-ranking language or claim the user was present at an incident; replace it
-    # with the matching redirect.
-    if _contains_safety_ranking(message):
+    # stream safety-ranking language, place-ranking/livability prose, or a claim that the user
+    # was present at an incident; replace it with the matching redirect.
+    if _contains_safety_ranking(message) or _output_ranks_places(message):
         message = _SAFETY_REDIRECT
     elif _claims_user_presence(message):
         message = _PRESENCE_REDIRECT
@@ -232,6 +253,10 @@ def _requests_presence_claim(texts: Iterable[str]) -> bool:
 
 def _claims_user_presence(text: str) -> bool:
     return bool(_PRESENCE_CLAIM_PATTERN.search(text))
+
+
+def _output_ranks_places(text: str) -> bool:
+    return bool(_OUTPUT_RANKING_PROSE_PATTERN.search(text))
 
 
 def _tool_arguments(
