@@ -5,7 +5,6 @@ import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { DRAWER_PEEK } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
-import { defaultTileConfig } from "../lib/mapTiles";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useAnalyze } from "../lib/useAnalyze";
 import { useCompare } from "../lib/useCompare";
@@ -304,7 +303,6 @@ export function MapWorkspace() {
           summary={data.summary}
           radiusM={analysis.radiusM}
           flyTo={pinDraft.flyTo}
-          tileConfig={defaultTileConfig}
           onMapClick={pinDraft.handleMapClick}
           onMarkerClick={handleToggleSelect}
         />

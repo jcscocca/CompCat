@@ -24,15 +24,20 @@ describe("buildMapStyle", () => {
     const style = buildMapStyle("dark", origin);
     expect(style.glyphs).toBe(`${origin}/basemaps-assets/fonts/{fontstack}/{range}.pbf`);
     expect(String(style.sprite)).toBe(`${origin}/basemaps-assets/sprites/v4/dark`);
+    // Only these exact external hrefs are permitted (attribution links). A
+    // substring test would wrongly pass api.protomaps.com or ?ref=protomaps.com.
+    const ATTRIBUTION_ALLOWLIST = new Set([
+      "https://www.openstreetmap.org/copyright",
+      "https://protomaps.com",
+    ]);
     const urls = JSON.stringify(style).match(URL_PATTERN) ?? [];
     expect(urls.length).toBeGreaterThan(0);
     for (const url of urls) {
       // pmtiles:// wraps a same-origin http URL; unwrap before the origin check.
       const target = url.replace(/^pmtiles:\/\//, "");
-      const allowed =
-        target.startsWith(`${origin}/`) ||
-        // Attribution links are the only allowed external URLs.
-        /openstreetmap\.org|protomaps\.com/.test(url);
+      // Trailing "\" is the JSON-escape artifact of the href's closing quote.
+      const href = url.replace(/\\+$/, "");
+      const allowed = target.startsWith(`${origin}/`) || ATTRIBUTION_ALLOWLIST.has(href);
       expect(allowed, `unexpected external URL: ${url}`).toBe(true);
     }
   });
