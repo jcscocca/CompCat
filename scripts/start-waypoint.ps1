@@ -3,12 +3,15 @@
 # Run this when you want Waypoint; nothing here auto-starts on its own (containers
 # use restart: "no"). It's idempotent: anything already running is left alone.
 #
-#   pwsh -File scripts\start-waypoint.ps1            # start the current checkout
-#   pwsh -File scripts\start-waypoint.ps1 -Update    # pull from origin first; rebuild only if it changed
+# It ALWAYS pulls the latest from origin first (this checkout is pull-only - do dev on
+# the Mac), and rebuilds only if HEAD actually moved. If the tree is dirty or origin is
+# unreachable it warns and starts the current checkout rather than failing to come up.
+#
+#   pwsh -File scripts\start-waypoint.ps1     # pull latest, rebuild if it changed, then start
 #
 # To stop everything when you're done: `docker compose stop`,
 # and close llama-swap from Task Manager (or just reboot — nothing comes back).
-param([switch]$Update)
+param([switch]$Update)  # accepted for backwards compatibility; pulling is now always on
 $ErrorActionPreference = 'Stop'
 $repo    = Split-Path -Parent $PSScriptRoot
 $envFile = Join-Path $repo '.env.deploy'
@@ -23,27 +26,30 @@ function Wait-Docker([int]$timeoutSec = 120) {
 
 Write-Host '== Waypoint bring-up =='
 
-# 0. Optional (-Update): pull latest from origin, and rebuild only if HEAD actually moved.
-#    This checkout should be pull-only (do dev on the Mac); refuse if it's dirty.
-if ($Update) {
-    Push-Location $repo
-    try {
-        if (git status --porcelain --untracked-files=no) {
-            throw 'Working tree has local changes - resolve them first (this checkout should be pull-only).'
-        }
+# 0. Always pull latest from origin, and rebuild only if HEAD actually moved. This checkout is
+#    pull-only (do dev on the Mac). If the tree is dirty or origin is unreachable, warn and start
+#    the current checkout rather than blocking the app from coming up.
+Push-Location $repo
+try {
+    if (git status --porcelain --untracked-files=no) {
+        Write-Host 'WARNING: working tree has local changes; skipping pull, starting the current checkout.'
+    } else {
         $before = (git rev-parse HEAD).Trim()
         Write-Host 'Pulling latest from origin...'
         git pull --ff-only
-        if ($LASTEXITCODE -ne 0) { throw 'git pull --ff-only failed (diverged or offline?); run without -Update to start the current checkout.' }
-        $after = (git rev-parse HEAD).Trim()
-        if ($before -ne $after) {
-            Write-Host ('Updated {0} -> {1}; will rebuild.' -f $before.Substring(0,7), $after.Substring(0,7))
-            $doBuild = $true
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host 'WARNING: git pull --ff-only failed (diverged or offline?); starting the current checkout.'
         } else {
-            Write-Host 'Already up to date; no rebuild needed.'
+            $after = (git rev-parse HEAD).Trim()
+            if ($before -ne $after) {
+                Write-Host ('Updated {0} -> {1}; will rebuild.' -f $before.Substring(0,7), $after.Substring(0,7))
+                $doBuild = $true
+            } else {
+                Write-Host 'Already up to date; no rebuild needed.'
+            }
         }
-    } finally { Pop-Location }
-}
+    }
+} finally { Pop-Location }
 
 # 1. Docker engine. Docker Desktop starts at login, but the engine takes a moment;
 #    if it isn't up at all, nudge Docker Desktop, then wait for readiness.
@@ -54,7 +60,7 @@ if (-not (Test-Docker)) {
 if (-not (Wait-Docker)) { throw 'Docker engine did not become ready within 120s.' }
 Write-Host 'Docker: ready'
 
-# 2. App + Postgres on :8000 (api runs migrations on boot). Rebuild only if -Update pulled changes.
+# 2. App + Postgres on :8000 (api runs migrations on boot). Rebuild only if the pull moved HEAD.
 Push-Location $repo
 try {
     if ($doBuild) { docker compose --env-file $envFile up -d --build | Out-Null }
