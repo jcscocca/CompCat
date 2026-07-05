@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { createBulkPlaces, createPlace, deletePlace } from "../api/client";
+import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { DRAWER_PEEK } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useAnalyze } from "../lib/useAnalyze";
+import { useIncidentPoints } from "../lib/useIncidentPoints";
 import { useCompare } from "../lib/useCompare";
 import { useCompareSet } from "../lib/useCompareSet";
 import { useDashboardData } from "../lib/useDashboardData";
@@ -23,10 +24,11 @@ import { LayerToggle } from "./LayerToggle";
 import { MapCanvas } from "./MapCanvas";
 import { MapLegend } from "./MapLegend";
 import { PinDraftPopover } from "./PinDraftPopover";
+import { IncidentDisclosure } from "./IncidentDisclosure";
 import { PlaceSearch } from "./PlaceSearch";
 import { PlacesTab } from "./PlacesTab";
 import type { ComparePoint } from "../lib/useCompareSet";
-import type { AnalysisSettings, AssistantDashboardState, GeocodeResult, PlaceCreate, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, BeatFeatureCollection, GeocodeResult, MapBounds, PlaceCreate, TabKey } from "../types";
 
 export function MapWorkspace() {
   const initialView = useMemo(() => {
@@ -56,6 +58,14 @@ export function MapWorkspace() {
     const window = currentYearAnalysisWindow();
     return { startDate: window.analysis_start_date, endDate: window.analysis_end_date, radiusM: 250, offenseCategory: "", layer: "reported" };
   });
+  const [beats, setBeats] = useState<BeatFeatureCollection | null>(null);
+  const [viewport, setViewport] = useState<MapBounds | null>(null);
+
+  useEffect(() => {
+    getBeatPolygons().then(setBeats).catch(() => setBeats(null)); // outline layer is optional chrome
+  }, []);
+
+  const incidentLayer = useIncidentPoints({ bounds: viewport, analysis });
 
   const data = useDashboardData();
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset } = useDrawer();
@@ -94,6 +104,15 @@ export function MapWorkspace() {
 
   const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError, points: sharedPoints ?? (lookupPoint ? [lookupPoint] : undefined) });
   const compare = useCompare({ selectedIds, analysis, setError: data.setError, points: compareSet.points });
+
+  // analyzed-beat highlight from the neighborhood payload
+  const highlightBeats = useMemo(
+    () =>
+      (analyze.neighborhood?.places ?? [])
+        .map((place) => place.beat)
+        .filter((beat): beat is string => Boolean(beat)),
+    [analyze.neighborhood],
+  );
 
   // A ?view= link seeds tab/analysis/points above; run it once so the shared context
   // (not just an empty tab) is what the recipient sees on load.
@@ -303,6 +322,10 @@ export function MapWorkspace() {
           summary={data.summary}
           radiusM={analysis.radiusM}
           flyTo={pinDraft.flyTo}
+          beats={beats}
+          highlightBeats={highlightBeats}
+          incidentPoints={incidentLayer.geojson}
+          onViewportChange={setViewport}
           onMapClick={pinDraft.handleMapClick}
           onMarkerClick={handleToggleSelect}
         />
@@ -339,6 +362,12 @@ export function MapWorkspace() {
         </div>
 
         <MapLegend />
+        <IncidentDisclosure
+          returnedCount={incidentLayer.returnedCount}
+          totalCount={incidentLayer.totalCount}
+          unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
+          limit={incidentLayer.limit}
+        />
 
         <AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} />
 

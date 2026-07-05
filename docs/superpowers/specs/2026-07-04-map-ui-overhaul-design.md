@@ -67,22 +67,36 @@ Three user-named problems with the current app:
   app remains fully functional. The Carto raster fallback stays behind a dev flag until the
   artifact pipeline is proven, then is deleted.
 
-## Slice 2 — Transparency layers
+## Slice 2 — Transparency layers ✅ SHIPPED
 
 **Goal:** see the beat you're being compared against; see the incidents being counted.
+
+**Shipped deviations from the draft below (verified during build):**
+- Beat GeoJSON properties slim to **`{beat}` only** — the bundled 2018 file carries no
+  precinct/sector (those are attributes of the ArcGIS layer we don't bundle).
+- Beat labels are **static symbol labels at zoom ≥ 12**, not hover-only — simpler and works
+  on touch.
+- The response field is **`unmappable_citywide_count`** (renamed from `unmappable_count`):
+  it is citywide while the shown/`total_count` is viewport-scoped, so the name and the chip
+  copy both carry "citywide" to avoid implying the redacted incidents are "in this view".
+- `POST /dashboard/incident-points` (not GET — it carries a bounds/filter body).
+- The disclosure chip sits **bottom-center** (the draft's bottom-left is the Analyst panel);
+  it wraps within the viewport on narrow screens rather than overflowing.
 
 Two new **public, session-gated, read-only** endpoints (same tier/gating as the rest of
 `/dashboard/*`; `tests/test_internal_surface.py`-style coverage):
 
-- `GET /dashboard/beats` — beat polygons as GeoJSON, properties slimmed to
-  beat/precinct/sector, gzipped, TTL-cached in-process. No DB touch (reads the bundled file).
-- `GET /dashboard/incident-points` — bbox **required** (Seattle-validated), plus the
-  existing date/category/layer filters. Returns capped points
-  `{id, lat, lon, category, subcategory, date, block_address}` — hard cap 5,000 rows
-  (a named constant, following the existing payload-cap pattern), excludes null coords and
-  the arrests −1/−1 sentinel.
-  Response includes `unmappable_count`: rows matching the same non-spatial filters whose
-  location is redacted (drives the disclosure chip).
+- `GET /dashboard/beats` — beat polygons as GeoJSON, properties slimmed to **`{beat}`**,
+  gzip content-negotiated (`Vary: Accept-Encoding`, `Cache-Control`), cached in-process.
+  No DB touch (reads the bundled file).
+- `POST /dashboard/incident-points` — bounds **required** (Seattle-intersect-validated) +
+  Seattle-clamped, plus the existing date/category/layer filters. Returns capped points
+  `{id, latitude, longitude, offense_category, offense_subcategory, occurred_at, block_address, source_dataset}`
+  — hard cap 5,000 rows (`INCIDENT_POINTS_LIMIT`, most-recent-first), excludes null coords and
+  the arrests −1/−1 sentinel (structurally, via the Seattle clamp).
+  Response includes `unmappable_citywide_count`: rows matching the same non-spatial filters
+  whose location is redacted (drives the disclosure chip), plus `returned_count`/`total_count`
+  for truncation disclosure.
 
 Frontend map layers:
 

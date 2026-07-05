@@ -34,7 +34,7 @@ from app.services.dashboard_analysis_service import (
     _analysis_datetime_bounds,
     _filtered_incidents,
     _selected_clusters,
-    _validate_date_range,
+    validate_date_range,
 )
 
 
@@ -204,7 +204,7 @@ def neighborhood_analysis_for_places(
     beat_polygons: BeatPolygons,
     sources: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    _validate_date_range(analysis_start_date, analysis_end_date)
+    validate_date_range(analysis_start_date, analysis_end_date)
     days = _analysis_days(analysis_start_date, analysis_end_date)
     clusters = (
         point_clusters(points)

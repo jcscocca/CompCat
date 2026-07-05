@@ -49,6 +49,41 @@ export type IncidentDetailsResponse = {
   radius_m: number;
 };
 
+export type MapBounds = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
+
+export type IncidentPoint = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  occurred_at: string | null;
+  block_address: string | null;
+  source_dataset: string;
+};
+
+export type IncidentPointsResponse = {
+  points: IncidentPoint[];
+  returned_count: number;
+  total_count: number;
+  unmappable_citywide_count: number;
+  limit: number;
+};
+
+export type BeatFeatureCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: { beat: string };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+};
+
 export type DashboardSummary = {
   /** The layer the persisted totals were computed for (server always sends it; optional so
    * fixtures predating it still type-check). Absent is treated as "reported". */

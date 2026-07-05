@@ -13,6 +13,9 @@ DashboardRadiusMeters = Annotated[int, Field(gt=0, le=5000)]
 # frontend SEATTLE_BBOX. A shared-view point must resolve inside Seattle.
 _SEATTLE_WEST, _SEATTLE_EAST = -122.55, -122.10
 _SEATTLE_SOUTH, _SEATTLE_NORTH = 47.43, 47.78
+# Public aliases so services can clamp to the same bounds without a private-member import.
+SEATTLE_WEST, SEATTLE_EAST = _SEATTLE_WEST, _SEATTLE_EAST
+SEATTLE_SOUTH, SEATTLE_NORTH = _SEATTLE_SOUTH, _SEATTLE_NORTH
 _MAX_POINTS = 10
 
 
@@ -34,6 +37,43 @@ class AnalysisPoint(BaseModel):
                 and _SEATTLE_WEST <= self.longitude <= _SEATTLE_EAST):
             raise ValueError("point is outside the Seattle area")
         return self
+
+
+class MapBounds(BaseModel):
+    """A map viewport; must intersect the Seattle area the data covers."""
+
+    west: float
+    south: float
+    east: float
+    north: float
+
+    @model_validator(mode="after")
+    def must_intersect_seattle(self) -> MapBounds:
+        if self.west >= self.east or self.south >= self.north:
+            raise ValueError("bounds are empty or inverted")
+        if (
+            self.east < _SEATTLE_WEST
+            or self.west > _SEATTLE_EAST
+            or self.north < _SEATTLE_SOUTH
+            or self.south > _SEATTLE_NORTH
+        ):
+            raise ValueError("bounds are outside the Seattle area")
+        return self
+
+
+class DashboardIncidentPointsRequest(BaseModel):
+    bounds: MapBounds
+    analysis_start_date: date
+    analysis_end_date: date
+    offense_category: str | None = None
+    offense_subcategory: str | None = None
+    nibrs_group: str | None = None
+    layer: str = LAYER_REPORTED
+
+    @field_validator("layer")
+    @classmethod
+    def layer_must_be_known(cls, value: str) -> str:
+        return _validate_layer(value)
 
 
 class DashboardAnalyzeRequest(BaseModel):

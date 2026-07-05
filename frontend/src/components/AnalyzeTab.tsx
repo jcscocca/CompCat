@@ -9,7 +9,7 @@ import type {
   Place,
   TemporalProfile,
 } from "../types";
-import { formatIncidentAddress } from "../lib/addressLabel";
+import { formatIncidentAddress, titleCase } from "../lib/addressLabel";
 import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { countNoun, incidentNoun, type IncidentNoun } from "../lib/layerCopy";
 import { decisionHeadline } from "../lib/verdictCopy";
@@ -60,15 +60,6 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: "PERSON", label: "Person" },
   { value: "SOCIETY", label: "Society" },
 ];
-
-function titleCase(value: string) {
-  return value
-    .toLowerCase()
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 function incidentCategoryLabel(incident: IncidentDetail) {
   return incident.offense_category ? titleCase(incident.offense_category) : "Uncategorized";

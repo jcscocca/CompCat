@@ -39,7 +39,7 @@ def analyze_selected_places(
     sources: Sequence[str] | None = None,
     layer: str | None = None,
 ) -> dict[str, int]:
-    _validate_date_range(analysis_start_date, analysis_end_date)
+    validate_date_range(analysis_start_date, analysis_end_date)
     clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     incidents = _filtered_incidents(
         session,
@@ -142,7 +142,7 @@ def incident_details_for_places(
     limit: int,
     sources: Sequence[str] | None = None,
 ) -> dict[str, object]:
-    _validate_date_range(analysis_start_date, analysis_end_date)
+    validate_date_range(analysis_start_date, analysis_end_date)
     if not radii_m:
         return {
             "incidents": [],
@@ -345,6 +345,6 @@ def _utc_json_datetime(value: datetime | None) -> str | None:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _validate_date_range(analysis_start_date: date, analysis_end_date: date) -> None:
+def validate_date_range(analysis_start_date: date, analysis_end_date: date) -> None:
     if analysis_end_date < analysis_start_date:
         raise ValueError("analysis_end_date must be on or after analysis_start_date.")
