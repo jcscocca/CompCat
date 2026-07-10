@@ -33,6 +33,14 @@ cause has two independent halves:
 
 ## Components
 
+> **Plan-time discovery (2026-07-10):** components 2 and 3 below were found already
+> implemented and tested (shipped with #62): the echo exists as `settings_used`
+> (`app/assistant/tools.py::_settings_used`) — not the `params_used` name this spec
+> proposed — and the frontend bridge (`assistantBridge.ts::settingsFrom` →
+> `effect.settings`, applied without invalidation in `MapWorkspace`) already lifts
+> radius/dates/category/layer into the controls. Only component 1 (the planner prompt)
+> required implementation; components 2–3 got regression pins instead of new code.
+
 ### 1. Planner prompt: the knob block (`app/assistant/prompts.py`)
 
 Append to `PLANNING_SYSTEM_PROMPT`, alongside the existing queries/deictic rules:

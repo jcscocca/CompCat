@@ -231,6 +231,20 @@ def test_planning_prompt_routes_deictic_references_to_selection():
     assert "not place names" in text
 
 
+def test_planning_prompt_documents_adjustable_knobs():
+    """"Increase radius to 500" failed live: the planner was never told the tools'
+    argument fields, and pydantic drops unknown names (e.g. a guessed "radius")."""
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert '"radii_m"' in text
+    assert '"radius_m"' in text
+    assert "analysis_start_date" in text
+    assert "available_radii_m" in text
+    assert "only the changed" in text
+    assert "stating the parameter" in text
+
+
 class _FakeProvider:
     def __init__(self, hits):
         self._hits = hits
