@@ -46,7 +46,7 @@ if (-not $dataThrough -or ([datetime]$dataThrough -lt (Get-Date).AddDays(-$Fresh
     $start = (Get-Date).AddMonths(-24).ToString("yyyy-MM-dd")
     $end = (Get-Date).ToString("yyyy-MM-dd")
     Invoke-RestMethod -Method Post -Headers @{ "X-Admin-Token" = $token } `
-        -Uri "http://localhost:$Port/admin/crime/ingest/socrata?limit=50000&offset=0&start_date=$start&end_date=$end"
+        -Uri "http://localhost:$Port/admin/crime/ingest/socrata?limit=5000&offset=0&start_date=$start&end_date=$end"
 } else {
     Write-Host "Data through $dataThrough — fresh enough."
 }
