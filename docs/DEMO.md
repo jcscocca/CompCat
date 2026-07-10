@@ -7,7 +7,9 @@ down when done. Design: `docs/superpowers/specs/2026-07-10-demo-on-demand-design
 
 - A **second, isolated compose project** (`waypoint-demo`) on the deploy machine: own
   Postgres volume, own port (8001), demo secrets, personal uploads OFF, rate limiting ON.
-  The personal instance and its data are not reachable through the demo.
+  The personal instance and its data are not reachable through the demo. The demo's
+  Postgres is not host-published — it is reachable only inside the compose network (the
+  personal instance keeps host 5432).
 - An **ephemeral Cloudflare quick tunnel** (`https://<random>.trycloudflare.com`) — no
   account or domain; the URL changes every session and dies with the tunnel process.
 - The **Analyst runs on Groq** (free tier) via `MCA_LLM_API_KEY`; if the key is absent or

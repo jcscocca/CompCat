@@ -7,5 +7,9 @@
 # See docs/DEMO.md. The -p prefix gives the demo its own db volume for free.
 services:
   api:
-    ports:
+    ports: !override
       - "8001:8000"
+  db:
+    # Demo Postgres stays compose-network-internal: nothing on the host needs it, and
+    # the personal instance already binds host 5432.
+    ports: !reset []
