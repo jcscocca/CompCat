@@ -36,9 +36,11 @@ while ($true) {
 $ws = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $null = Invoke-RestMethod -Uri "http://localhost:$Port/sessions" -Method Post -WebSession $ws
 $freshness = Invoke-RestMethod -Uri "http://localhost:$Port/dashboard/freshness" -WebSession $ws
-$dataThrough = [datetime]$freshness.reported.data_through
-if ($dataThrough -lt (Get-Date).AddDays(-$FreshnessMaxAgeDays)) {
-    Write-Host "Data through $dataThrough is older than $FreshnessMaxAgeDays days — ingesting recent SPD data..."
+# On a fresh demo DB data_through is null — [datetime]$null would throw, so treat
+# missing as maximally stale (first-run ingest).
+$dataThrough = $freshness.reported.data_through
+if (-not $dataThrough -or ([datetime]$dataThrough -lt (Get-Date).AddDays(-$FreshnessMaxAgeDays))) {
+    Write-Host "Data through [$dataThrough] is missing or older than $FreshnessMaxAgeDays days — ingesting recent SPD data..."
     $envLines = Get-Content ".env.demo" | Where-Object { $_ -match "^MCA_ADMIN_INGEST_TOKEN=" }
     $token = ($envLines -split "=", 2)[1]
     $start = (Get-Date).AddMonths(-24).ToString("yyyy-MM-dd")
