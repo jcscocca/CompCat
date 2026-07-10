@@ -1,11 +1,14 @@
 # Start the Waypoint demo-on-demand instance and expose it via an ephemeral
-# Cloudflare quick tunnel. Run from the repo root on the ThinkPad.
+# Cloudflare quick tunnel. Works from any directory (it cd's to the repo root).
 #   powershell -ExecutionPolicy Bypass -File scripts/demo/start-demo.ps1
 param(
     [int]$Port = 8001,
     [int]$FreshnessMaxAgeDays = 14
 )
 $ErrorActionPreference = "Stop"
+# Resolve everything against the repo root no matter where the script is invoked from
+# (.env.demo, the compose -f paths, and Get-Content below are all repo-relative).
+Set-Location (Join-Path $PSScriptRoot "..\..")
 
 if (-not (Test-Path ".env.demo")) {
     Write-Error "Missing .env.demo — copy .env.demo.example and fill in real values."
