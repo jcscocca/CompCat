@@ -211,11 +211,15 @@ repo-first because publishing history is the irreversible step. Spec:
 `docs/superpowers/specs/2026-07-09-public-capstone-design.md`; each slice gets its own
 spec → plan → PR.*
 
-- [ ] **Slice 1 — Repo goes public:** full-history audit (secrets + the user's personal
-  addresses in fixtures/seeds/docs/logs; `git filter-repo` redaction contingency), MIT
-  license, GitHub rename → `waypoint`, README rebuilt as the front door (invariant up top,
-  screenshots, quickstart), Socrata seed-data terms check, public CI green + badge,
-  CONTRIBUTING expectations note.
+- [x] **Slice 1 — Repo goes public:** full-history audit shipped clean — secrets, personal
+  data, GitHub surface (PR/issue/review text), and dangling objects all clear; **no history
+  rewrite needed** (the `git filter-repo` contingency went unused). Discovery: the repo had
+  been public since 2026-06-22 already — the audit became confirmation, not precondition. MIT
+  license + metadata, GitHub rename → `waypoint`, README front door (badges, invariant
+  callout, light/night screenshots), CONTRIBUTING note, example LAN IPs genericized, City of
+  Seattle open-data terms verified sufficient (2026-07-10), 14 stale merged branches pruned.
+  Audit report kept private outside the repo. Plan:
+  `docs/superpowers/plans/2026-07-10-repo-public.md`.
 - [ ] **Slice 2 — Hosted live demo:** small VPS + existing compose stack + domain/TLS;
   fictional/landmark seed places; **rate limiter (the phase's one substantial new backend
   surface)**; assistant on a hosted OpenAI-compatible API (existing offline state as
