@@ -227,6 +227,10 @@ spec → plan → PR.*
   global cap and the long-open free-sessions cap**)**; `MCA_LLM_API_KEY` auth patch;
   Analyst on Groq free tier (offline state as fallback); refresh-on-start instead of an
   ingest cron. Spec: `docs/superpowers/specs/2026-07-10-demo-on-demand-design.md`.
+- [ ] **Follow-up — Analyst knob control (from slice-2 live testing):** the Analyst can
+  adjust radius / dates / category / layer conversationally ("increase radius to 500")
+  and re-run; changes sync the dashboard controls so they stick across turns. Spec:
+  `docs/superpowers/specs/2026-07-10-analyst-knob-control-design.md`.
 - [ ] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
   baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
   de-merge, privacy posture) as long-form pieces linked from the README.
