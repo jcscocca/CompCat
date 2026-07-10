@@ -46,6 +46,23 @@ class Settings(BaseSettings):
     llm_fallback_model: str = ""
     llm_fallback_disable_thinking: bool = False
 
+    # Bearer token for hosted OpenAI-compatible endpoints (e.g. Groq). Empty = no
+    # Authorization header (the LAN llama-swap path). Fallback inherits the primary
+    # key unless overridden.
+    llm_api_key: str = ""
+    llm_fallback_api_key: str = ""
+
+    # Demo/public rate limiting (see docs/superpowers/specs/2026-07-10-demo-on-demand-design.md).
+    # All enforcement is OFF unless rate_limit_enabled — dev and tests are unaffected.
+    rate_limit_enabled: bool = False
+    # Trust CF-Connecting-IP for client identity (set true only behind cloudflared;
+    # otherwise the header is attacker-controlled).
+    trust_proxy_headers: bool = False
+    rate_limit_sessions_per_hour: int = 10
+    rate_limit_assistant_per_hour: int = 20
+    rate_limit_assistant_global_per_day: int = 100
+    rate_limit_burst_per_minute: int = 120
+
     geocoder_provider: str = "nominatim"
     geocoder_base_url: str = "https://nominatim.openstreetmap.org/search"
     geocoder_user_agent: str = "Waypoint/0.1"
@@ -66,6 +83,10 @@ class Settings(BaseSettings):
         if self.session_cookie_secure is not None:
             return self.session_cookie_secure
         return self.environment.lower() in {"prod", "production"}
+
+    @property
+    def effective_llm_fallback_api_key(self) -> str:
+        return self.llm_fallback_api_key or self.llm_api_key
 
     @model_validator(mode="after")
     def require_production_secret_overrides(self) -> Settings:
