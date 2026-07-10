@@ -35,7 +35,7 @@ exactly the step not to rush) and write-up-first (risks stalling on prose); both
 | Decision | Choice | Rationale |
 |---|---|---|
 | License | **MIT** | Conventional, zero-friction for a portfolio repo. |
-| Public name | **`waypoint`** (GitHub rename from `crime-commute-safety-tool`) | The old name both contradicts the product invariant ("Safety Tool") and undersells the product. GitHub redirects the old URL. |
+| Public name | **`waypoint`** (GitHub rename from `crime-map-tool`; the repo has already been renamed once from `crime-commute-safety-tool`) | The working names describe the data, not the product, and the original contradicted the invariant ("Safety Tool"). GitHub redirects old URLs. |
 | Demo assistant | **Hosted OpenAI-compatible API** via the existing `MCA_LLM_BASE_URL`/`MCA_LLM_MODEL`, with the built-in "analyst offline" state as fallback | The assistant (decision-tree router + deterministic guard) is a differentiator; a demo where the flagship AI feature is permanently offline undercuts the showcase. Cost is dollars/month at demo traffic once rate-limited. No code change — it's config. |
 | Demo hosting | **Small VPS running the existing compose stack**, domain + TLS in front | The stack is already proven single-host (healthchecks, backups, Postgres image); no replatforming. |
 | History contingency | If the audit finds secrets or personal data, **rewrite history (`git filter-repo`) to redact those blobs**, then publish | Accepted up front: "real history minus redactions" beats a squashed mirror; a clean-copy mirror remains the fallback only if rewrite proves impractical. |
