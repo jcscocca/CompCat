@@ -420,6 +420,37 @@ def test_neighborhood_tool_arguments_are_backfilled_from_dashboard_state():
     assert args["radii_m"] == [250]
 
 
+def test_model_radius_override_beats_dashboard_backfill_compare():
+    from app.assistant.agent import _tool_arguments
+
+    state = AssistantDashboardState(
+        selected_place_ids=["p1", "p2"],
+        analysis_start_date=date(2026, 1, 1),
+        analysis_end_date=date(2026, 7, 1),
+        radii_m=[250],
+        layer="reported",
+    )
+    args = _tool_arguments("compare_places", state, {"radius_m": 500})
+    assert args["radius_m"] == 500
+    assert args["place_ids"] == ["p1", "p2"]
+    assert args["analysis_start_date"] == "2026-01-01"
+
+
+def test_model_radius_override_beats_dashboard_backfill_analyze():
+    from app.assistant.agent import _tool_arguments
+
+    state = AssistantDashboardState(
+        selected_place_ids=["p1"],
+        analysis_start_date=date(2026, 1, 1),
+        analysis_end_date=date(2026, 7, 1),
+        radii_m=[250],
+        layer="reported",
+    )
+    args = _tool_arguments("analyze_places", state, {"radii_m": [500]})
+    assert args["radii_m"] == [500]
+    assert args["layer"] == "reported"
+
+
 def test_agent_clarifies_underspecified_request(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
     # compare with only one resolvable place -> AssistantClarification -> clarify token, NOT error.

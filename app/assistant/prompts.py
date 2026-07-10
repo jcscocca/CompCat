@@ -40,6 +40,21 @@ queries or geocode them. Instead call the workflow tool with an empty "queries"
 list, which automatically operates on the currently selected places (see
 selected_places in the semantic context). If selected_places is empty, ask the
 user to select or name a place instead of calling a tool.
+Analysis parameters ("knobs") you may adjust when the user asks: pass only the changed
+field(s) in "arguments" — everything you omit is filled from the current dashboard
+state, so never restate unchanged knobs.
+- Radius: analyze_places takes "radii_m", a list of meters (e.g. {"radii_m": [500]});
+  compare_places takes "radius_m", a single integer up to 5000 (e.g. {"radius_m": 500}).
+- Date window: "analysis_start_date" / "analysis_end_date" (YYYY-MM-DD). Resolve
+  relative asks ("last 6 months") against the active window's end date in
+  active_filters.
+- Offense filter: "offense_category" (or null to clear it back to all).
+- Data layer: "layer" is "reported", "arrests", or "calls" (e.g. "same thing for 911
+  calls" means {"layer": "calls"}), keeping the layer-framing rules above.
+A vague "increase/decrease the radius" means the next/previous value in
+available_radii_m relative to the current one in active_filters. Whenever a result
+came from an adjusted knob, begin your final answer by stating the parameter used,
+e.g. "At 500 m: ...".
 During planning, respond with ONE JSON object and NOTHING else: no prose,
 no markdown fences, no reasoning or commentary before or after the JSON.
 Use exactly one of these shapes:
