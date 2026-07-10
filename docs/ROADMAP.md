@@ -220,10 +220,13 @@ spec → plan → PR.*
   Seattle open-data terms verified sufficient (2026-07-10), 14 stale merged branches pruned.
   Audit report kept private outside the repo. Plan:
   `docs/superpowers/plans/2026-07-10-repo-public.md`.
-- [ ] **Slice 2 — Hosted live demo:** small VPS + existing compose stack + domain/TLS;
-  fictional/landmark seed places; **rate limiter (the phase's one substantial new backend
-  surface)**; assistant on a hosted OpenAI-compatible API (existing offline state as
-  fallback); ingest cron hitting the admin endpoint for freshness.
+- [ ] **Slice 2 — Demo-on-demand (revised 2026-07-10):** ThinkPad + ephemeral Cloudflare
+  quick tunnel (VPS/domain/durable link deferred to a future "for-real" launch); isolated
+  second compose project (own env/volume/port — the personal instance is never exposed);
+  **rate limiter (the phase's one substantial new backend surface**, incl. the Groq-quota
+  global cap and the long-open free-sessions cap**)**; `MCA_LLM_API_KEY` auth patch;
+  Analyst on Groq free tier (offline state as fallback); refresh-on-start instead of an
+  ingest cron. Spec: `docs/superpowers/specs/2026-07-10-demo-on-demand-design.md`.
 - [ ] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
   baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
   de-merge, privacy posture) as long-form pieces linked from the README.
