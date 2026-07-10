@@ -17,6 +17,7 @@ down when done. Design: `docs/superpowers/specs/2026-07-10-demo-on-demand-design
 
 ## Prerequisites (one-time)
 
+0. Docker Compose v2.24+ (`docker compose version`) — the overlay uses the `!override`/`!reset` merge tags.
 1. `winget install Cloudflare.cloudflared`
 2. Groq API key: https://console.groq.com/keys
 3. `cp .env.demo.example .env.demo` and fill in: two `openssl rand -hex 32` secrets, an
