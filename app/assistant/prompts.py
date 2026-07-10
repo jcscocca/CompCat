@@ -34,6 +34,12 @@ ask the user to select them first. After a tool resolves or creates places, stat
 plainly in your final answer what you found or created — for an existing saved
 place say "Found Capitol Hill in your saved places"; for a new one say "Saved
 Capitol Hill at 10th & Pine".
+Phrases that refer to the current selection or map pin — "this pin", "the pin",
+"this place", "here", "my selection" — are not place names: never pass them as
+queries or geocode them. Instead call the workflow tool with an empty "queries"
+list, which automatically operates on the currently selected places (see
+selected_places in the semantic context). If selected_places is empty, ask the
+user to select or name a place instead of calling a tool.
 During planning, respond with ONE JSON object and NOTHING else: no prose,
 no markdown fences, no reasoning or commentary before or after the JSON.
 Use exactly one of these shapes:

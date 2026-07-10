@@ -219,6 +219,18 @@ def test_planning_prompt_requests_statistical_interpretation():
     assert "adjusted p-value" in text
 
 
+def test_planning_prompt_routes_deictic_references_to_selection():
+    """"What's near this pin?" must use the current selection, not geocode the
+    literal phrase — this failure surfaced live on the hosted-LLM demo."""
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert '"this pin"' in text
+    assert "empty" in text and "queries" in text
+    assert "currently selected" in text
+    assert "not place names" in text
+
+
 class _FakeProvider:
     def __init__(self, hits):
         self._hits = hits
