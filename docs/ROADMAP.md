@@ -1,6 +1,6 @@
 # Waypoint — Roadmap
 
-**Last updated:** 2026-07-04 · **Status:** canonical, living document.
+**Last updated:** 2026-07-09 · **Status:** canonical, living document.
 **Verified against:** base commit `5fe1da0` (routes removal — backend excision + migration 0012).
 
 This is the single source of truth for *where Waypoint is going*. It supersedes the dated
@@ -196,11 +196,33 @@ thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
   Both slice-2 carry-ins landed: (a) `setStyle()` layer re-registration via `style.load`; (b) the
   `mapLayers.ts` extraction (`addBeatLayers`/`addIncidentLayers`/`incidentCardElement` out of
   `MapCanvas.tsx`). Deviations logged in the spec's _Shipped deviations_ section.
-  (PR pending)
+  (#113; css hygiene follow-up #114)
 - [ ] **Deferred (slice 2, non-blocking):** `/dashboard/incident-points` filters + sorts on the
   unindexed `coalesce(offense_start_utc, report_utc)` expression; a Postgres expression index is
   the mitigation when incident volume grows (needs a migration — out of scope for the no-migration
   slices). Bounded today by the 5,000-row cap + Seattle bbox clamp.
+
+## Phase 7 — Public capstone (2026-07-09)
+*Strategic direction chosen 2026-07-09: Waypoint's next chapter is a **portfolio/showcase
+capstone** — public repo (real history), hosted live demo, deep write-up — for both the
+3-minute hiring skim and the technical-peer deep dive. This deliberately replaces the
+"eventual public release" service pile (auth/tenancy/accounts stay unplanned). Sequenced
+repo-first because publishing history is the irreversible step. Spec:
+`docs/superpowers/specs/2026-07-09-public-capstone-design.md`; each slice gets its own
+spec → plan → PR.*
+
+- [ ] **Slice 1 — Repo goes public:** full-history audit (secrets + the user's personal
+  addresses in fixtures/seeds/docs/logs; `git filter-repo` redaction contingency), MIT
+  license, GitHub rename → `waypoint`, README rebuilt as the front door (invariant up top,
+  screenshots, quickstart), Socrata seed-data terms check, public CI green + badge,
+  CONTRIBUTING expectations note.
+- [ ] **Slice 2 — Hosted live demo:** small VPS + existing compose stack + domain/TLS;
+  fictional/landmark seed places; **rate limiter (the phase's one substantial new backend
+  surface)**; assistant on a hosted OpenAI-compatible API (existing offline state as
+  fallback); ingest cron hitting the admin endpoint for freshness.
+- [ ] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
+  baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
+  de-merge, privacy posture) as long-form pieces linked from the README.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
@@ -208,11 +230,9 @@ thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
 
 ---
 
-> **Eventual public release — a note, not planned work.** A public release is the intended
-> *final* step for Waypoint, but it is **not on the roadmap as planned work** and has **no
-> date**. If it is ever pursued it would require substantial work that is deliberately *not*
-> queued above: production hardening (real authentication, encryption at rest, per-user tenant
-> isolation, a locked-down edge surface) and product polish (user accounts with cross-session
-> persistence, first-run onboarding, automated SPD data refresh, address-search polish). None
-> of this is scheduled. Until then — and for the
-> foreseeable future — Waypoint stays a disciplined, low-debt internal-trial v1.
+> **Eventual public release — superseded by Phase 7 (2026-07-09).** The open question this
+> note held ("does Waypoint ever go public, and as what?") is now answered: Waypoint goes
+> public as a **showcase** (Phase 7 — public repo, hosted demo, write-up), not as an
+> operated multi-user service. The service pile this note enumerated (real authentication,
+> encryption at rest, per-user tenant isolation, user accounts, onboarding) remains
+> deliberately unplanned with no date.
