@@ -31,7 +31,7 @@ docker compose --env-file .env.deploy up -d --build   # Waypoint on :8000
 ```
 
 If `host.docker.internal` ever fails to resolve, substitute the ThinkPad's LAN IP
-(e.g. `http://10.0.0.76:8080/...`). Detailed steps for each piece (secrets, crime data,
+(e.g. `http://<llm-host-lan-ip>:8080/...`). Detailed steps for each piece (secrets, crime data,
 analyst) follow.
 
 ## 1. Generate secrets
@@ -174,7 +174,7 @@ used.
 Set two variables in `.env.deploy`:
 
 ```
-MCA_LLM_BASE_URL=http://10.0.0.76:8080/v1   # reachable from container (LAN IP or host.docker.internal:PORT)
+MCA_LLM_BASE_URL=http://<llm-host-lan-ip>:8080/v1   # reachable from container (LAN IP or host.docker.internal:PORT)
 MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 ```
 

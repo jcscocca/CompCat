@@ -1,12 +1,27 @@
 # Waypoint
 
-Waypoint is a privacy-first web app for exploring **reported Seattle SPD incident context**
-around the addresses you care about. You look up an address on a map, pick a radius and date
-range, and Waypoint shows how many reported incidents fall nearby, what kinds, and how candidate
-addresses compare — plus an optional AI analyst you can ask questions in plain language.
+[![CI](https://github.com/jcscocca/waypoint/actions/workflows/ci.yml/badge.svg)](https://github.com/jcscocca/waypoint/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Waypoint describes *reported incident context*. It does **not** score safety, rank places as
-safe or unsafe, or claim anyone was present when an incident happened.
+Waypoint is a privacy-first web app for exploring **reported Seattle SPD incident context**
+around the addresses you care about. Look up an address, pick a radius and date range, and
+Waypoint shows how many reported incidents fall nearby, what kinds, and how candidate
+addresses compare — with honest statistics (exposure-adjusted rates, confidence intervals,
+overdispersion handling) and an optional AI analyst grounded in your dashboard.
+
+> **The product invariant:** Waypoint describes *reported incident context*. It does **not**
+> score safety, rank places as safe or unsafe, or claim anyone was present when an incident
+> happened. The AI analyst refuses safety-scoring requests by design. This constraint shapes
+> the whole product — see [docs/](docs/README.md) for how.
+
+| Light | Night |
+| --- | --- |
+| ![Waypoint dashboard, light theme](docs/images/dashboard-light.png) | ![Waypoint dashboard, night theme](docs/images/dashboard-night.png) |
+
+Built with FastAPI + SQLAlchemy/Alembic, React + TypeScript + Vite, MapLibre over a
+self-hosted Seattle vector-tile extract, SQLite for dev / Postgres for deploy. The deployed
+app makes **zero third-party requests** — tiles, fonts, and geocoding are all self-hosted or
+proxied.
 
 ## What it does
 
@@ -310,9 +325,17 @@ dataset (`tazs-3rd5`). Reported crime data can be incomplete, delayed, corrected
 geographically generalized, and personal location history can be incomplete, inaccurate, or
 biased by device behavior. Waypoint provides context summaries, not safety predictions.
 
-## References and licensing
+Police beat boundaries come from the City of Seattle's Seattle GeoData open-data site
+(Seattle Police Department Beats layer; source: City of Seattle, Seattle Police Department
+GIS), published under the City's Open Data Policy on an open-license basis with no
+restriction on copying, republishing, or modifying — the City provides these boundaries
+as-is and makes no warranty as to positional accuracy. The bundled seed/sample incident
+CSVs are synthetic — generated to resemble the schema of SPD's "Crime Data: 2008-Present"
+dataset (Socrata `tazs-3rd5`, itself published Public Domain by SPD) for offline
+development — not redistributed SPD records.
 
-This implementation is original. Related projects (Google Timeline parsing tools, Reitti,
-GeoPulse, Dawarich, and Seattle crime-data pipelines) were used as architecture references only;
-no AGPL/GPL/BSL source was copied. If MIT-licensed code is reused, preserve attribution and
-license notices.
+## License
+
+MIT — see [LICENSE](LICENSE). This implementation is original; related projects (Google
+Timeline parsing tools, Reitti, GeoPulse, Dawarich, and Seattle crime-data pipelines) were
+used as architecture references only — no AGPL/GPL/BSL source was copied.
