@@ -165,8 +165,10 @@ def test_get_incident_details_caps_limit_for_agent_path(tmp_path):
         session.close()
 
     assert result["tool_name"] == "get_incident_details"
-    assert result["arguments"]["limit"] == 100
-    assert result["result"]["limit"] == 100
+    # 30, not 100: the tool result is echoed verbatim over the assistant SSE stream,
+    # and 100 incident rows ≈ 50KB per turn (heavy over the demo tunnel).
+    assert result["arguments"]["limit"] == 30
+    assert result["result"]["limit"] == 30
     assert result["result"]["total_count"] == 1
 
 
@@ -243,6 +245,20 @@ def test_planning_prompt_documents_adjustable_knobs():
     assert "available_radii_m" in text
     assert "only the changed" in text
     assert "stating the parameter" in text
+    # Live miss: Groq stepped 250→1000 on a vague "increase the radius".
+    assert "adjacent" in text
+    assert "never straight to" in text
+
+
+def test_planning_prompt_routes_compare_intent_to_compare_places():
+    """Live miss: "increase the radius and compare my places again" ran analyze_places,
+    so the Compare pane never received the verdict."""
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert "side-by-side verdict" in text
+    assert "not analyze_places" in text
+    assert '"versus"' in text
 
 
 class _FakeProvider:

@@ -40,6 +40,9 @@ queries or geocode them. Instead call the workflow tool with an empty "queries"
 list, which automatically operates on the currently selected places (see
 selected_places in the semantic context). If selected_places is empty, ask the
 user to select or name a place instead of calling a tool.
+When the user asks to compare — "compare", "versus", "vs", "which has fewer" —
+with two or more places selected or named, call compare_places, which produces
+the side-by-side verdict; not analyze_places.
 Analysis parameters ("knobs") you may adjust when the user asks: pass only the changed
 field(s) in "arguments" — everything you omit is filled from the current dashboard
 state, so never restate unchanged knobs.
@@ -51,8 +54,9 @@ state, so never restate unchanged knobs.
 - Offense filter: "offense_category" (or null to clear it back to all).
 - Data layer: "layer" is "reported", "arrests", or "calls" (e.g. "same thing for 911
   calls" means {"layer": "calls"}), keeping the layer-framing rules above.
-A vague "increase/decrease the radius" means the next/previous value in
-available_radii_m relative to the current one in active_filters. Whenever a result
+A vague "increase/decrease the radius" means the single adjacent value in
+available_radii_m — one step from the current one in active_filters (from 250 go
+to 500, never straight to 1000). Whenever a result
 came from an adjusted knob, begin your final answer by stating the parameter used,
 e.g. "At 500 m: ...".
 During planning, respond with ONE JSON object and NOTHING else: no prose,

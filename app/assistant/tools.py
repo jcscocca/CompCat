@@ -30,7 +30,10 @@ from app.services.dashboard_service import dashboard_summary
 from app.services.manual_place_service import _place_response
 from app.services.neighborhood_service import neighborhood_analysis_for_places
 
-AGENT_INCIDENT_LIMIT = 100
+# Tool results are echoed verbatim over the assistant SSE stream (the frontend bridge
+# consumes them to populate the panes); 100 rows was ~50KB per turn — heavy over the
+# demo tunnel. The UI already shows "Showing nearest N of M" when capped.
+AGENT_INCIDENT_LIMIT = 30
 
 
 @lru_cache(maxsize=1)
