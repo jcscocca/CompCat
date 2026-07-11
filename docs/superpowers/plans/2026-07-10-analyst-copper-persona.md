@@ -62,27 +62,27 @@ Expected: both PASS (nothing changed yet). `git status` must show a clean tree.
 
 ### Task 2: Reword `_SAFETY_REDIRECT` in Copper's voice (backend)
 
-Same meaning, same refusal enumeration, same redirect targets — only the framing changes. Three existing tests assert the substring `"reported incident context"`, which exists only in the old text; they flip to `"reported incident counts"`, which exists only in the new text — giving us a real red→green cycle.
+Same meaning, same refusal enumeration, same redirect targets — only the framing changes. One existing test asserts the substring `"reported incident context"` against the redirect text, which exists only in the old wording; it flips to `"reported incident counts"`, which exists only in the new wording — giving us a real red→green cycle.
 
 **Files:**
-- Modify: `tests/test_assistant_agent.py` (3 assertion sites)
+- Modify: `tests/test_assistant_agent.py` (1 assertion site)
 - Modify: `app/assistant/agent.py:85-90`
 
-- [ ] **Step 1: Update the three test assertions**
+- [ ] **Step 1: Update the test assertion**
 
-In `tests/test_assistant_agent.py`, replace **all 3** occurrences of:
+In `tests/test_assistant_agent.py`, in `test_agent_redirects_safe_unsafe_language_without_model_call` (line ~158), replace:
 
 ```python
-"reported incident context" in
+assert "reported incident context" in events[1].data["delta"]
 ```
 
 with:
 
 ```python
-"reported incident counts" in
+assert "reported incident counts" in events[1].data["delta"]
 ```
 
-(Sites: `test_agent_redirects_safe_unsafe_language_without_model_call`, `test_agent_redirects_when_safety_request_is_in_an_earlier_turn`, and the output-guard redirect test — verify with `grep -n '"reported incident counts"' tests/test_assistant_agent.py` → exactly 3 hits, and `grep -c '"reported incident context"' tests/test_assistant_agent.py` → 0.)
+(The two other occurrences of `"reported incident context"` in the file, lines ~338/347, belong to an unrelated pass-through fixture — the phrase there is incidental filler in a fake LLM final message and its echo assertion. They stay untouched.)
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -90,7 +90,7 @@ with:
 .venv/bin/python -m pytest tests/test_assistant_agent.py -q
 ```
 
-Expected: exactly 3 FAILures, each an `AssertionError` on the `"reported incident counts"` substring check.
+Expected: exactly 1 FAILure, an `AssertionError` on the `"reported incident counts"` substring check.
 
 - [ ] **Step 3: Reword the redirect**
 

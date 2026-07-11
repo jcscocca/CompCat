@@ -155,7 +155,7 @@ def test_agent_redirects_safe_unsafe_language_without_model_call(tmp_path):
         session.close()
 
     assert [event.event for event in events] == ["meta", "token", "done"]
-    assert "reported incident context" in events[1].data["delta"]
+    assert "reported incident counts" in events[1].data["delta"]
     assert client.calls == []
 
 
