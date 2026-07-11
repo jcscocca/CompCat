@@ -23,6 +23,8 @@ const SUGGESTED_PROMPTS = [
   "What's on file around here?",
 ];
 
+const GREETED_KEY = "wp-copper-greeted";
+
 export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -31,8 +33,13 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   const [errorMessage, setErrorMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
 
   async function sendTurn(turnMessages: AssistantMessage[]) {
+    if (!greeted) {
+      localStorage.setItem(GREETED_KEY, "1");
+      setGreeted(true);
+    }
     let assistantText = "";
     let errored = false;
     let turnError = "";
@@ -96,7 +103,7 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
     <aside className="mc-dock" aria-label="Analyst">
       <div className="mc-dock-head">
         <h3>
-          <CopperAvatar variant="mark" size={20} />
+          <CopperAvatar variant="mark" size={20} className={greeted ? undefined : "mc-copper-pulse"} />
           Copper
           <span className="mc-dock-role">case desk · analyst</span>
         </h3>

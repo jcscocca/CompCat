@@ -27,6 +27,7 @@ function sseResponse(text: string): Response {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe("AssistantPanel", () => {
@@ -219,6 +220,22 @@ describe("AssistantPanel", () => {
     expect(screen.getByText("At the desk")).toBeInTheDocument();
     expect(container.querySelector('svg[data-variant="mark"]')).not.toBeNull();
     expect(container.querySelector('svg[data-variant="bust"]')).not.toBeNull();
+  });
+
+  it("pulses the avatar until the first message is sent, then sets the greeted flag", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse("event: done\ndata: {}\n\n"));
+    const { container } = render(<AssistantPanel dashboardState={dashboardState} />);
+    expect(container.querySelector("svg.mc-copper-pulse")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(container.querySelector("svg.mc-copper-pulse")).toBeNull());
+    expect(localStorage.getItem("wp-copper-greeted")).toBe("1");
+  });
+
+  it("does not pulse when previously greeted", () => {
+    localStorage.setItem("wp-copper-greeted", "1");
+    const { container } = render(<AssistantPanel dashboardState={dashboardState} />);
+    expect(container.querySelector("svg.mc-copper-pulse")).toBeNull();
   });
 });
 
