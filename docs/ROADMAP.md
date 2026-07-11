@@ -231,6 +231,13 @@ spec → plan → PR.*
   adjust radius / dates / category / layer conversationally ("increase radius to 500")
   and re-run; changes sync the dashboard controls so they stick across turns. Spec:
   `docs/superpowers/specs/2026-07-10-analyst-knob-control-design.md`.
+- [x] **Follow-up — Analyst persona "Copper" + upgraded dock:** the Analyst presents as
+  Copper, a fictional case-desk basset hound (noir bust; no SPD insignia, never claims
+  official status) — avatar header + in-voice status, greeting empty state with a third
+  deictic chip, one-time first-visit pulse (reduced-motion safe), reworded safety redirect,
+  and a "From the reports:" lead-in on analyze/compare summaries. Chrome + framing copy
+  only; guards, data content, and the planning prompt untouched. Spec:
+  `docs/superpowers/specs/2026-07-10-analyst-copper-persona-design.md`.
 - [ ] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
   baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
   de-merge, privacy posture) as long-form pieces linked from the README.

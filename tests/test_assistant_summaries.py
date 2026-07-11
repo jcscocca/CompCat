@@ -125,3 +125,37 @@ def test_analyze_summary_without_baseline():
     text = build_tool_summary(_envelope("analyze_places", result))
     assert "Home: 5 reported incidents within 250 m" in text
     assert "no neighborhood baseline available" in text
+
+
+def test_analyze_and_compare_summaries_carry_reports_lead_in():
+    analyze = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Pike Place",
+                    "place_incident_count": 3,
+                    "decision": "insufficient_data",
+                }
+            ]
+        },
+    }
+    assert build_tool_summary(_envelope("analyze_places", analyze)).startswith(
+        "From the reports: "
+    )
+    compare = {
+        "settings_used": {"radius_m": 250},
+        "comparison": {"overview": {"options": [{"label": "A", "incident_count": 1}]}},
+    }
+    assert build_tool_summary(_envelope("compare_places", compare)).startswith(
+        "From the reports: "
+    )
+
+
+def test_reports_lead_in_absent_on_empty_results_and_other_tools():
+    assert build_tool_summary(_envelope("analyze_places", {})) == "No places to analyze."
+    assert build_tool_summary(_envelope("compare_places", {})) == "Compared the selected places."
+    assert (
+        build_tool_summary(_envelope("get_dashboard_summary", {"totals": {"place_count": 2}}))
+        == "You have 2 saved places."
+    )

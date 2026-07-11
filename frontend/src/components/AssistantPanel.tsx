@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 
 import { streamAssistantChat } from "../api/client";
 import type { AssistantDashboardState, AssistantMessage } from "../types";
+import { CopperAvatar } from "./CopperAvatar";
 
 type Props = {
   dashboardState: AssistantDashboardState;
@@ -14,7 +15,15 @@ type ToolActivity = {
 };
 
 const OFFLINE_MESSAGE =
-  "The analyst is offline right now. Your data is unaffected — the rest of Waypoint works.";
+  "Copper can't reach the case files right now. Your data is unaffected — the rest of Waypoint works.";
+
+const SUGGESTED_PROMPTS = [
+  "What's near this pin?",
+  "Compare my places",
+  "What's on file around here?",
+];
+
+const GREETED_KEY = "wp-copper-greeted";
 
 export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -24,8 +33,13 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   const [errorMessage, setErrorMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
 
   async function sendTurn(turnMessages: AssistantMessage[]) {
+    if (!greeted) {
+      localStorage.setItem(GREETED_KEY, "1");
+      setGreeted(true);
+    }
     let assistantText = "";
     let errored = false;
     let turnError = "";
@@ -88,8 +102,12 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   return (
     <aside className="mc-dock" aria-label="Analyst">
       <div className="mc-dock-head">
-        <h3><span className="mc-dock-dot" />Analyst</h3>
-        <span>{sending ? "Working" : "Ready"}</span>
+        <h3>
+          <CopperAvatar variant="mark" size={20} className={greeted ? undefined : "mc-copper-pulse"} />
+          Copper
+          <span className="mc-dock-role">case desk · analyst</span>
+        </h3>
+        <span className="mc-dock-status">{sending ? "Checking the files…" : "At the desk"}</span>
         <button
           type="button"
           className="mc-dock-collapse"
@@ -116,9 +134,10 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
             {draft ? <div className="mc-dock-msg is-assistant">{draft}</div> : null}
             {messages.length === 0 && !draft ? (
               <div className="mc-dock-empty">
-                <p>Ask about what the map is showing</p>
+                <CopperAvatar variant="bust" size={72} />
+                <p>Copper, case desk. Point me at a place and I'll pull the reports near it.</p>
                 <div className="mc-dock-chips">
-                  {["What's near this pin?", "Compare my places"].map((prompt) => (
+                  {SUGGESTED_PROMPTS.map((prompt) => (
                     <button key={prompt} type="button" className="mc-chip" disabled={sending}
                       onClick={() => void sendTurn([...messages, { role: "user", content: prompt }])}>
                       {prompt}

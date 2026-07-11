@@ -83,10 +83,10 @@ _SAFETY_SCORE_PATTERN = _UNAMBIGUOUS_SAFETY_PATTERN
 
 # Single source for the refusal/redirect text, reused by the input- and output-side guards.
 _SAFETY_REDIRECT = (
-    "I can discuss reported incident context, but I can't label places safe or unsafe, rank "
-    "them by safety, danger, or risk, or produce a personal safety score. I can instead order "
-    "places by reported incident count or compare exposure-adjusted incident rates — just ask "
-    "it that way."
+    "That's not something I can pull from the files — I can't label places safe or unsafe, "
+    "rank them by safety, danger, or risk, or produce a personal safety score. I can order "
+    "places by reported incident counts or compare exposure-adjusted incident rates — just "
+    "ask it that way."
 )
 
 # Presence-claim guard — the third prong of the product invariant: the assistant MUST NOT

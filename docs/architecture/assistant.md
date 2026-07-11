@@ -2,6 +2,16 @@ Reference for the Waypoint Analyst — the optional chat assistant that is groun
 
 > Verified against `d30235b` (2026-06-29).
 
+## Persona — "Copper, case desk"
+
+The Analyst presents as **Copper**, a fictional basset-hound detective at the case desk
+(spec: `docs/superpowers/specs/2026-07-10-analyst-copper-persona-design.md`). The persona is
+chrome + framing copy only: the `CopperAvatar` mark/bust SVGs and greeting/status/offline
+strings in `AssistantPanel.tsx`, the in-voice `_SAFETY_REDIRECT`, and a fixed
+"From the reports: " lead-in on `analyze_places`/`compare_places` summaries. Data content,
+the guards, and the planning prompt carry no persona. Copper wears no SPD insignia and never
+claims official status; "analyst" remains the product term (and the dock's aria-label).
+
 ---
 
 ## 1. Decision-tree architecture
