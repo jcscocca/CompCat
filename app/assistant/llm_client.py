@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -240,17 +241,27 @@ class FailoverLlmClient:
         # failures are LlmStreamInterrupted), so failing over here never repeats text.
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
+        yielded = False
         for index, client in enumerate(self.clients):
             try:
-                async for delta in client.stream(
-                    messages,
-                    role=role,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                ):
-                    yield delta
+                async with contextlib.aclosing(
+                    client.stream(
+                        messages,
+                        role=role,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                ) as inner:
+                    async for delta in inner:
+                        yielded = True
+                        yield delta
                 return
             except LlmUnavailable as exc:
+                if yielded:
+                    # Contract violation (LlmUnavailable after a delta): failing over
+                    # would repeat text, so re-raise and let the caller replace the
+                    # partial answer instead.
+                    raise
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc

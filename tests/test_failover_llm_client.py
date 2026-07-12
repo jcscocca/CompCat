@@ -233,3 +233,23 @@ def test_stream_mid_stream_interrupt_propagates_without_failover() -> None:
     with pytest.raises(LlmStreamInterrupted):
         asyncio.run(run())
     assert fallback.stream_called == 0
+
+
+class _StreamYieldsThenUnavailable:
+    async def stream(self, messages, *, role, temperature=None, max_tokens=None):
+        yield "partial "
+        raise LlmUnavailable("late failure")
+
+
+def test_stream_no_failover_after_first_delta_even_on_unavailable() -> None:
+    fallback = _StreamOk(["never"])
+
+    async def run() -> None:
+        async for _d in FailoverLlmClient(
+            [_StreamYieldsThenUnavailable(), fallback]
+        ).stream([{"role": "user", "content": "hi"}], role=None):
+            pass
+
+    with pytest.raises(LlmUnavailable, match="late failure"):
+        asyncio.run(run())
+    assert fallback.stream_called == 0
