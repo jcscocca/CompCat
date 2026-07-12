@@ -196,6 +196,8 @@ export type AssistantStreamEvent =
   | { event: "meta"; data: Record<string, unknown> }
   | { event: "tool"; data: { tool_name?: string; result?: unknown; [key: string]: unknown } }
   | { event: "token"; data: { delta?: string } }
+  | { event: "status"; data: { label?: string } }
+  | { event: "replace"; data: { text?: string } }
   | { event: "done"; data: Record<string, unknown> }
   | { event: "error"; data: { message?: string } };
 

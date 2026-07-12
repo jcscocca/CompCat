@@ -237,5 +237,41 @@ describe("AssistantPanel", () => {
     const { container } = render(<AssistantPanel dashboardState={dashboardState} />);
     expect(container.querySelector("svg.mc-copper-pulse")).toBeNull();
   });
+
+  it("shows status labels transiently and clears them on the first token", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(
+        'event: status\ndata: {"label":"interpreting your request…"}\n\n' +
+          'event: status\ndata: {"label":"writing up…"}\n\n' +
+          'event: token\ndata: {"delta":"Two places on file."}\n\n' +
+          "event: done\ndata: {}\n\n",
+      ),
+    );
+
+    render(<AssistantPanel dashboardState={dashboardState} />);
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "compare" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Two places on file.")).toBeInTheDocument();
+    expect(screen.queryByText("interpreting your request…")).not.toBeInTheDocument();
+    expect(screen.queryByText("writing up…")).not.toBeInTheDocument();
+  });
+
+  it("replace resets the draft and commits the replacement text", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(
+        'event: token\ndata: {"delta":"partial answer that gets "}\n\n' +
+          'event: replace\ndata: {"text":"Final replacement answer."}\n\n' +
+          "event: done\ndata: {}\n\n",
+      ),
+    );
+
+    render(<AssistantPanel dashboardState={dashboardState} />);
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Final replacement answer.")).toBeInTheDocument();
+    expect(screen.queryByText(/partial answer that gets/)).not.toBeInTheDocument();
+  });
 });
 

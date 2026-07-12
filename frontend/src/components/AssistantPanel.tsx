@@ -28,6 +28,7 @@ const GREETED_KEY = "wp-copper-greeted";
 export function AssistantPanel({ dashboardState, onToolResult }: Props) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [statusLine, setStatusLine] = useState("");
   const [input, setInput] = useState("");
   const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
@@ -59,8 +60,17 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
               setToolActivity((current) => [{ label: toolName }, ...current].slice(0, 4));
               onToolResult?.(event.data);
             }
+            if (event.event === "status") {
+              setStatusLine(String(event.data.label ?? ""));
+            }
             if (event.event === "token") {
               assistantText += event.data.delta ?? "";
+              setStatusLine("");
+              setDraft(assistantText);
+            }
+            if (event.event === "replace") {
+              assistantText = String(event.data.text ?? "");
+              setStatusLine("");
               setDraft(assistantText);
             }
             if (event.event === "error") {
@@ -81,6 +91,7 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
       setDraft("");
       setErrorMessage(OFFLINE_MESSAGE);
     } finally {
+      setStatusLine("");
       setSending(false);
     }
   }
@@ -131,7 +142,14 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
                 )}
               </div>
             ))}
-            {draft ? <div className="mc-dock-msg is-assistant">{draft}</div> : null}
+            {draft ? (
+              <div className="mc-dock-msg is-assistant">
+                <ReactMarkdown>{draft}</ReactMarkdown>
+              </div>
+            ) : null}
+            {!draft && statusLine ? (
+              <div className="mc-dock-msg is-assistant mc-dock-statusline">{statusLine}</div>
+            ) : null}
             {messages.length === 0 && !draft ? (
               <div className="mc-dock-empty">
                 <CopperAvatar variant="bust" size={72} />
