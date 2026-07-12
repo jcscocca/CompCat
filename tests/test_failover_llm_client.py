@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from app.assistant import llm_client
-from app.assistant.llm_client import FailoverLlmClient, LlmUnavailable
+from app.assistant.llm_client import FailoverLlmClient, LlmStreamInterrupted, LlmUnavailable
 
 _MESSAGES = [{"role": "user", "content": "hi"}]
 
@@ -162,3 +162,74 @@ def test_final_failure_emits_no_failover_warning() -> None:
             asyncio.run(client.complete(_MESSAGES, role="x"))
 
     assert not any("failing over" in r.getMessage() for r in records)
+
+
+class _StreamOk:
+    def __init__(self, deltas: list[str]) -> None:
+        self.deltas = deltas
+        self.stream_called = 0
+
+    async def stream(self, messages, *, role, temperature=None, max_tokens=None):
+        self.stream_called += 1
+        for delta in self.deltas:
+            yield delta
+
+
+class _StreamUnavailable:
+    def __init__(self) -> None:
+        self.stream_called = 0
+
+    async def stream(self, messages, *, role, temperature=None, max_tokens=None):
+        self.stream_called += 1
+        raise LlmUnavailable("offline")
+        yield  # pragma: no cover - makes this an async generator
+
+    def __getattr__(self, name):  # base_url label used in failover logging
+        if name == "base_url":
+            return "http://primary"
+        raise AttributeError(name)
+
+
+class _StreamInterrupted:
+    async def stream(self, messages, *, role, temperature=None, max_tokens=None):
+        yield "partial "
+        raise LlmStreamInterrupted("died mid-stream")
+
+
+async def _drain(client) -> list[str]:
+    return [d async for d in client.stream([{"role": "user", "content": "hi"}], role=None)]
+
+
+def test_stream_uses_primary_when_healthy() -> None:
+    primary = _StreamOk(["a", "b"])
+    fallback = _StreamOk(["never"])
+    assert asyncio.run(_drain(FailoverLlmClient([primary, fallback]))) == ["a", "b"]
+    assert fallback.stream_called == 0
+
+
+def test_stream_fails_over_before_first_delta() -> None:
+    primary = _StreamUnavailable()
+    fallback = _StreamOk(["from-fallback"])
+    assert asyncio.run(_drain(FailoverLlmClient([primary, fallback]))) == ["from-fallback"]
+    assert primary.stream_called == 1
+
+
+def test_stream_raises_when_all_fail() -> None:
+    with pytest.raises(LlmUnavailable, match="All LLM endpoints failed"):
+        asyncio.run(_drain(FailoverLlmClient([_StreamUnavailable(), _StreamUnavailable()])))
+
+
+def test_stream_mid_stream_interrupt_propagates_without_failover() -> None:
+    fallback = _StreamOk(["never"])
+
+    async def run() -> list[str]:
+        got = []
+        async for d in FailoverLlmClient([_StreamInterrupted(), fallback]).stream(
+            [{"role": "user", "content": "hi"}], role=None
+        ):
+            got.append(d)
+        return got
+
+    with pytest.raises(LlmStreamInterrupted):
+        asyncio.run(run())
+    assert fallback.stream_called == 0

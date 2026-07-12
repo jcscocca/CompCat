@@ -227,3 +227,43 @@ class FailoverLlmClient:
         raise LlmUnavailable(
             "All LLM endpoints failed: " + "; ".join(failures)
         ) from last_exc
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[str]:
+        # LlmUnavailable is only raised by a client before its first delta (mid-stream
+        # failures are LlmStreamInterrupted), so failing over here never repeats text.
+        failures: list[str] = []
+        last_exc: LlmUnavailable | None = None
+        for index, client in enumerate(self.clients):
+            try:
+                async for delta in client.stream(
+                    messages,
+                    role=role,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                ):
+                    yield delta
+                return
+            except LlmUnavailable as exc:
+                label = getattr(client, "base_url", f"client[{index}]")
+                failures.append(f"{label}: {exc}")
+                last_exc = exc
+                if index + 1 < len(self.clients):
+                    next_label = getattr(
+                        self.clients[index + 1], "base_url", f"client[{index + 1}]"
+                    )
+                    logger.warning(
+                        "LLM endpoint %s unavailable (%s); failing over to %s",
+                        label,
+                        exc,
+                        next_label,
+                    )
+        raise LlmUnavailable(
+            "All LLM endpoints failed: " + "; ".join(failures)
+        ) from last_exc
