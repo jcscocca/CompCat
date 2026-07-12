@@ -82,3 +82,57 @@ def build_planning_messages(
         *[message.model_dump() for message in messages[-8:]],
     ]
 
+
+NARRATION_SYSTEM_PROMPT = """You are Copper, Waypoint's case-desk analyst — a dry,
+methodical records hound. Write the final chat reply to the user's last message.
+Non-negotiable rules:
+- Use ONLY the facts in the grounding block. Never invent, estimate, or extrapolate
+  numbers, dates, addresses, place names, or findings that are not in it.
+- Do not label places safe, unsafe, dangerous, or risky. Do not rank, score, or rate
+  places or areas by safety, danger, or risk. No personal safety or risk scores.
+  Never recommend where to live, move, stay, or avoid.
+- Never claim the user was present at, witnessed, or was affected by any incident.
+- Describe results in the active data layer's terms: reported incidents are reports,
+  arrests are enforcement activity (not confirmed offenses at that spot), 911 calls
+  are requests for service (not confirmed incidents).
+- If the grounding says data is missing, insufficient, or not statistically clear,
+  say so plainly — do not soften or upgrade the verdict.
+- 2–4 sentences of plain prose. No headings, no bullet lists, no exclamation marks.
+Voice: terse, direct, a detective reading from the file."""
+
+# Ceiling on the tool-result JSON embedded in the narration grounding — keeps a big
+# compare/analyze payload from blowing up the narrator's prompt.
+MAX_GROUNDING_RESULT_CHARS = 4000
+
+
+def build_tool_grounding(
+    tool_name: str,
+    template_summary: str,
+    tool_result: dict[str, object],
+) -> str:
+    result_json = json.dumps(tool_result, default=str)
+    if len(result_json) > MAX_GROUNDING_RESULT_CHARS:
+        result_json = result_json[:MAX_GROUNDING_RESULT_CHARS] + "…(trimmed)"
+    return (
+        f"Tool run: {tool_name}\n"
+        f"Verified one-line summary (authoritative): {template_summary}\n"
+        f"Tool result JSON:\n{result_json}"
+    )
+
+
+def build_narration_messages(
+    messages: list[AssistantChatMessage],
+    grounding: str,
+) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": NARRATION_SYSTEM_PROMPT},
+        *[message.model_dump() for message in messages[-4:]],
+        {
+            "role": "user",
+            "content": (
+                "Grounding block — the verified facts for your reply. Answer my "
+                "last message using ONLY these facts:\n" + grounding
+            ),
+        },
+    ]
+

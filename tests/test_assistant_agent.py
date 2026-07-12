@@ -1753,3 +1753,47 @@ def test_agent_does_not_redirect_neutral_count_framing_in_model_answer(tmp_path)
             assert events[1].data["delta"] == answer, answer  # streamed unchanged
     finally:
         session.close()
+
+
+# ---------- narration prompt builders (pure functions) ----------
+
+
+def test_build_tool_grounding_contains_tool_template_and_result():
+    from app.assistant.prompts import build_tool_grounding
+
+    grounding = build_tool_grounding(
+        "compare_places",
+        "Compared 2 places.",
+        {"tool_name": "compare_places", "result": {"verdict": "not_clear"}},
+    )
+    assert "compare_places" in grounding
+    assert "Compared 2 places." in grounding
+    assert "not_clear" in grounding
+
+
+def test_build_tool_grounding_trims_oversized_results():
+    from app.assistant.prompts import MAX_GROUNDING_RESULT_CHARS, build_tool_grounding
+
+    grounding = build_tool_grounding(
+        "analyze_places",
+        "Analyzed.",
+        {"blob": "x" * (MAX_GROUNDING_RESULT_CHARS * 2)},
+    )
+    assert len(grounding) < MAX_GROUNDING_RESULT_CHARS + 500
+    assert "trimmed" in grounding
+
+
+def test_build_narration_messages_shape():
+    from app.assistant.prompts import NARRATION_SYSTEM_PROMPT, build_narration_messages
+
+    history = [
+        AssistantChatMessage(role="user", content="compare my places"),
+        AssistantChatMessage(role="assistant", content="on it"),
+        AssistantChatMessage(role="user", content="and the verdict?"),
+    ]
+    built = build_narration_messages(history, "GROUNDING-BLOCK")
+    assert built[0] == {"role": "system", "content": NARRATION_SYSTEM_PROMPT}
+    assert [m["role"] for m in built[1:-1]] == ["user", "assistant", "user"]
+    assert built[-1]["role"] == "user"
+    assert "GROUNDING-BLOCK" in built[-1]["content"]
+    assert "ONLY" in built[-1]["content"]
