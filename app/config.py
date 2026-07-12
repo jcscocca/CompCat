@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
     assistant_role: str = "waypoint_analyst"
+    # Streamed Copper narration finals + turn status events. Off = the pre-streaming
+    # behavior (deterministic template finals, no status events) — a deploy-side kill
+    # switch if local-model narration misbehaves.
+    assistant_narration_enabled: bool = True
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k"
     # Disable chain-of-thought for thinking models (e.g. Qwen) so the answer

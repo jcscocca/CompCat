@@ -50,6 +50,6 @@ class AssistantChatRequest(BaseModel):
 
 
 class AssistantStreamEvent(BaseModel):
-    event: Literal["meta", "tool", "token", "done", "error"]
+    event: Literal["meta", "tool", "token", "status", "replace", "done", "error"]
     data: dict[str, Any]
 
