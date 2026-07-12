@@ -152,6 +152,62 @@ def test_analyze_and_compare_summaries_carry_reports_lead_in():
     )
 
 
+def _layered_analyze(layer):
+    return {
+        "settings_used": {"radius_m": 250, "layer": layer},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Pike Place",
+                    "place_incident_count": 3,
+                    "decision": "insufficient_data",
+                }
+            ]
+        },
+    }
+
+
+def _layered_compare(layer):
+    return {
+        "settings_used": {"radius_m": 250, "layer": layer},
+        "comparison": {"overview": {"options": [{"label": "A", "incident_count": 1}]}},
+    }
+
+
+def test_analyze_and_compare_summaries_use_arrests_layer_terms():
+    analyze = build_tool_summary(_envelope("analyze_places", _layered_analyze("arrests")))
+    assert analyze.startswith("From the arrest records: ")
+    assert "3 arrests within 250 m" in analyze
+    assert "reported incidents" not in analyze
+
+    compare = build_tool_summary(_envelope("compare_places", _layered_compare("arrests")))
+    assert compare.startswith("From the arrest records: ")
+    assert "Arrests within 250 m — A: 1." in compare
+    assert "reported incidents" not in compare
+
+
+def test_analyze_and_compare_summaries_use_calls_layer_terms():
+    analyze = build_tool_summary(_envelope("analyze_places", _layered_analyze("calls")))
+    assert analyze.startswith("From the call logs: ")
+    assert "3 911 calls within 250 m" in analyze
+    assert "reported incidents" not in analyze
+
+    compare = build_tool_summary(_envelope("compare_places", _layered_compare("calls")))
+    assert compare.startswith("From the call logs: ")
+    assert "911 calls within 250 m — A: 1." in compare
+    assert "reported incidents" not in compare
+
+
+def test_explicit_reported_layer_keeps_default_phrasing():
+    analyze = build_tool_summary(_envelope("analyze_places", _layered_analyze("reported")))
+    assert analyze.startswith("From the reports: ")
+    assert "3 reported incidents within 250 m" in analyze
+
+    compare = build_tool_summary(_envelope("compare_places", _layered_compare("reported")))
+    assert compare.startswith("From the reports: ")
+    assert "Reported incidents within 250 m — A: 1." in compare
+
+
 def test_reports_lead_in_absent_on_empty_results_and_other_tools():
     assert build_tool_summary(_envelope("analyze_places", {})) == "No places to analyze."
     assert build_tool_summary(_envelope("compare_places", {})) == "Compared the selected places."

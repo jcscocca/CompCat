@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from app.assistant.schemas import AssistantChatMessage, SemanticContextPacket
 
@@ -91,6 +92,7 @@ Non-negotiable rules:
 - Do not label places safe, unsafe, dangerous, or risky. Do not rank, score, or rate
   places or areas by safety, danger, or risk. No personal safety or risk scores.
   Never recommend where to live, move, stay, or avoid.
+- Do not call an area high-crime, rough, or the worst or best of a set.
 - Never claim the user was present at, witnessed, or was affected by any incident.
 - Describe results in the active data layer's terms: reported incidents are reports,
   arrests are enforcement activity (not confirmed offenses at that spot), 911 calls
@@ -108,7 +110,7 @@ MAX_GROUNDING_RESULT_CHARS = 4000
 def build_tool_grounding(
     tool_name: str,
     template_summary: str,
-    tool_result: dict[str, object],
+    tool_result: dict[str, Any],
 ) -> str:
     result_json = json.dumps(tool_result, default=str)
     if len(result_json) > MAX_GROUNDING_RESULT_CHARS:
@@ -130,8 +132,8 @@ def build_narration_messages(
         {
             "role": "user",
             "content": (
-                "Grounding block — the verified facts for your reply. Answer my "
-                "last message using ONLY these facts:\n" + grounding
+                "Grounding block — the verified facts for your reply. Answer the "
+                "user's most recent question above using ONLY these facts:\n" + grounding
             ),
         },
     ]

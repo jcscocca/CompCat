@@ -11,7 +11,18 @@ _DECISION_PHRASES = {
     "baseline_unavailable": "no neighborhood baseline available",
 }
 
-_REPORTS_LEAD_IN = "From the reports: "
+# Layer-aware framing: arrests are enforcement activity and 911 calls are requests
+# for service — neither may be presented as reported incidents.
+_LAYER_TERMS = {
+    "reported": ("From the reports: ", "reported incidents"),
+    "arrests": ("From the arrest records: ", "arrests"),
+    "calls": ("From the call logs: ", "911 calls"),
+}
+
+
+def _layer_terms(result: dict[str, Any]) -> tuple[str, str]:
+    layer = (result.get("settings_used") or {}).get("layer") or "reported"
+    return _LAYER_TERMS.get(layer, _LAYER_TERMS["reported"])
 
 
 def build_tool_summary(tool_result: dict[str, Any]) -> str:
@@ -55,6 +66,7 @@ def _select_places_summary(result: dict[str, Any]) -> str:
 
 def _analyze_places_summary(result: dict[str, Any]) -> str:
     radius = (result.get("settings_used") or {}).get("radius_m")
+    lead_in, noun = _layer_terms(result)
     places = (result.get("neighborhood") or {}).get("places") or []
     sentences: list[str] = []
     for place in places:
@@ -70,17 +82,18 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
                 ci = f" (95% CI {lower:.1f}–{upper:.1f})"
             sentences.append(
                 f"{label}: {place['rate_ratio']:.1f}× its surrounding area — {phrase}{ci}; "
-                f"{count} reported incidents within {radius} m."
+                f"{count} {noun} within {radius} m."
             )
         else:
             phrase = _DECISION_PHRASES.get(place.get("decision"), "no surrounding-area comparison")
-            sentences.append(f"{label}: {count} reported incidents within {radius} m ({phrase}).")
-    summary = (_REPORTS_LEAD_IN + " ".join(sentences)) if sentences else "No places to analyze."
+            sentences.append(f"{label}: {count} {noun} within {radius} m ({phrase}).")
+    summary = (lead_in + " ".join(sentences)) if sentences else "No places to analyze."
     return _with_provenance(summary, result)
 
 
 def _compare_places_summary(result: dict[str, Any]) -> str:
     radius = (result.get("settings_used") or {}).get("radius_m")
+    lead_in, noun = _layer_terms(result)
     overview = (result.get("comparison") or {}).get("overview") or {}
     options = overview.get("options") or []
     parts: list[str] = []
@@ -90,10 +103,10 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
         if o.get("label") and o.get("incident_count") is not None
     )
     if counts:
-        parts.append(f"Reported incidents within {radius} m — {counts}.")
+        parts.append(f"{noun.capitalize()} within {radius} m — {counts}.")
     if overview.get("summary_text"):
         parts.append(overview["summary_text"])
-    summary = (_REPORTS_LEAD_IN + " ".join(parts)) if parts else "Compared the selected places."
+    summary = (lead_in + " ".join(parts)) if parts else "Compared the selected places."
     return _with_provenance(summary, result)
 
 

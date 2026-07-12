@@ -1797,3 +1797,24 @@ def test_build_narration_messages_shape():
     assert built[-1]["role"] == "user"
     assert "GROUNDING-BLOCK" in built[-1]["content"]
     assert "ONLY" in built[-1]["content"]
+
+
+def test_build_tool_grounding_serializes_dates():
+    from datetime import date
+
+    from app.assistant.prompts import build_tool_grounding
+
+    grounding = build_tool_grounding(
+        "compare_places",
+        "Compared.",
+        {"result": {"analysis_start_date": date(2024, 1, 1)}},
+    )
+    assert "2024-01-01" in grounding
+
+
+def test_build_narration_messages_handles_empty_history():
+    from app.assistant.prompts import build_narration_messages
+
+    built = build_narration_messages([], "FACTS")
+    assert [m["role"] for m in built] == ["system", "user"]
+    assert "FACTS" in built[-1]["content"]
