@@ -37,11 +37,18 @@ def test_analyze_summary_reads_beat_verdict():
                 {
                     "place_label": "Capitol Hill",
                     "baseline_available": True,
-                    "rate_ratio": 1.4,
-                    "ci_lower": 1.1,
-                    "ci_upper": 1.8,
                     "decision": "above_clear",
                     "place_incident_count": 84,
+                    "baselines": [
+                        {
+                            "kind": "beat",
+                            "label": "Beat M3",
+                            "rate_ratio": 1.4,
+                            "ci_lower": 1.1,
+                            "ci_upper": 1.8,
+                            "relation": "above",
+                        }
+                    ],
                 }
             ]
         },
@@ -51,7 +58,7 @@ def test_analyze_summary_reads_beat_verdict():
     text = build_tool_summary(_envelope("analyze_places", result))
     assert "Capitol Hill" in text
     assert "1.4×" in text
-    assert "above its surrounding-area baseline, statistically clear" in text
+    assert "above Beat M3's rate" in text
     assert "95% CI 1.1–1.8" in text
     assert "84 reported incidents within 250 m" in text
 

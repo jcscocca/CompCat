@@ -16,7 +16,7 @@ from tests.helpers_dashboard import (
 _M3_POLYGONS = square_beat_polygons("M3", 47.60945, -122.33595)
 
 
-def test_known_beat_returns_place_and_beat_rates(tmp_path):
+def test_known_beat_returns_place_rate_and_beat_baseline(tmp_path):
     session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
     result = neighborhood_analysis_for_places(
         session=session,
@@ -34,7 +34,9 @@ def test_known_beat_returns_place_and_beat_rates(tmp_path):
     place = result["places"][0]
     assert place["beat"] == "M3"
     assert place["baseline_available"] is True
-    assert place["place_rate"] > 0 and place["beat_rate"] > 0
+    assert place["place_rate"] > 0
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    assert by_kind["beat"]["baseline_rate"] > 0
 
 
 def test_unknown_beat_marks_baseline_unavailable(tmp_path):
@@ -107,9 +109,9 @@ def test_baseline_excludes_place_buffer_incidents(tmp_path):
     # 5 incidents are within the 250 m buffer; 8 are elsewhere in beat M3.
     # The baseline is now the REST of the beat, so the 5 are carved out.
     assert place["place_incident_count"] == 5
-    assert place["beat_incident_count"] == 8
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    assert by_kind["beat"]["baseline_incident_count"] == 8
     assert place["baseline_available"] is True
-    assert place["exact_p_value"] is not None
 
 
 def test_oversized_buffer_marks_baseline_too_small(tmp_path):
@@ -271,13 +273,14 @@ def test_rest_of_beat_area_carves_only_the_in_beat_buffer_overlap(tmp_path):
 
     place = result["places"][0]
     assert place["baseline_available"] is True
+    beat_baseline = {entry["kind"]: entry for entry in place["baselines"]}["beat"]
     overlap = buffer_beat_overlap_km2(
         lon=place_lon, lat=place_lat, radius_m=250, beat_polygons_for_beat=beat_polygons["M3"]
     )
     assert 0.0 < overlap < pi * 250 * 250 / 1_000_000.0  # a partial buffer, not the whole circle
     days = (end - start).days + 1
-    expected_beat_rate = place["beat_incident_count"] / ((1.0 - overlap) * days)
-    assert place["beat_rate"] == pytest.approx(expected_beat_rate, rel=1e-9)
+    expected_beat_rate = beat_baseline["baseline_incident_count"] / ((1.0 - overlap) * days)
+    assert beat_baseline["baseline_rate"] == pytest.approx(expected_beat_rate, rel=1e-9)
 
 
 def test_buffer_larger_than_its_beat_pools_neighboring_beats(tmp_path):
@@ -340,8 +343,9 @@ def test_buffer_larger_than_its_beat_pools_neighboring_beats(tmp_path):
     rest_area = sum(area_lookup.values()) - sum(overlaps.values())
     days = (end - start).days + 1
     # All fixture incidents are DB-tagged beat M3; 5 are in-buffer (carved out), 8 remain.
-    assert place["beat_incident_count"] == 8
-    assert place["beat_rate"] == pytest.approx(8 / (rest_area * days), rel=1e-9)
+    beat_baseline = {entry["kind"]: entry for entry in place["baselines"]}["beat"]
+    assert beat_baseline["baseline_incident_count"] == 8
+    assert beat_baseline["baseline_rate"] == pytest.approx(8 / (rest_area * days), rel=1e-9)
 
 
 def test_buffer_swallowing_every_surrounding_beat_reports_baseline_too_small(tmp_path):
@@ -453,14 +457,13 @@ def test_non_sector_beat_omits_sector_baseline(tmp_path):
     assert "city" in kinds
 
 
-def test_baseline_entries_carry_adjusted_p_and_legacy_fields(tmp_path):
+def test_baseline_entries_carry_adjusted_p_and_no_legacy_pair_fields(tmp_path):
     session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
     place = _run_with_baselines(session, user_hash, place_id)["places"][0]
     for entry in place["baselines"]:
         assert 0.0 <= entry["adjusted_p_value"] <= 1.0
-    # Legacy top-level beat fields still present and untouched this slice.
     assert place["baseline_available"] is True
-    assert "rate_ratio" in place and "beat_rate" in place
+    assert "rate_ratio" not in place and "beat_rate" not in place
 
 
 def test_place_rate_interval_present_and_ordered(tmp_path):

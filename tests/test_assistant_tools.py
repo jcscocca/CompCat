@@ -193,9 +193,11 @@ def test_get_neighborhood_analysis_exposes_beat_baseline_stats(tmp_path):
     place = result["result"]["places"][0]
     assert place["beat"] == "M3"
     assert place["baseline_available"] is True
-    # The CI / significance / verdict the assistant must interpret are all present.
-    for field in ("rate_ratio", "ci_lower", "ci_upper", "adjusted_p_value", "decision"):
-        assert field in place
+    assert place["decision"] is not None
+    # The CI / ratio / significance the assistant must interpret now live per baseline.
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    for field in ("rate_ratio", "ci_lower", "ci_upper", "adjusted_p_value", "method"):
+        assert field in by_kind["beat"]
 
 
 def test_advertised_menu_is_the_six_poc_tools():
