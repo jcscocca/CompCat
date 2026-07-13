@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.analysis.area_baselines import load_mcpp_areas, load_mcpp_polygons
 from app.analysis.beat_baselines import (
     BeatPolygons,
     load_beat_areas,
@@ -34,6 +35,7 @@ from app.services.dashboard_analysis_service import (
 )
 from app.services.geocoding_service import search_addresses
 from app.services.incident_points_service import incident_points
+from app.services.mcpp_geometry_service import mcpp_geojson_payloads
 from app.services.neighborhood_service import neighborhood_analysis_for_places
 
 router = APIRouter()
@@ -47,6 +49,16 @@ def _beat_areas() -> dict[str, float]:
 @lru_cache(maxsize=1)
 def _beat_polygons() -> BeatPolygons:
     return load_beat_polygons()
+
+
+@lru_cache(maxsize=1)
+def _mcpp_areas() -> dict[str, float]:
+    return load_mcpp_areas()
+
+
+@lru_cache(maxsize=1)
+def _mcpp_polygons() -> BeatPolygons:
+    return load_mcpp_polygons()
 
 
 @router.post("/dashboard/analyze")
@@ -164,6 +176,8 @@ def dashboard_neighborhood(
             nibrs_group=request.nibrs_group,
             area_lookup=_beat_areas(),
             beat_polygons=_beat_polygons(),
+            mcpp_area_lookup=_mcpp_areas(),
+            mcpp_polygons=_mcpp_polygons(),
             sources=sources_for_layer(request.layer),
         )
     except ValueError as exc:
@@ -191,6 +205,23 @@ def dashboard_beats(
     # StreamingResponse and break its incremental flush, and per-request middleware
     # compression would defeat the once-cached gzip bytes.
     raw, gzipped = beats_geojson_payloads()
+    headers = {"Cache-Control": "public, max-age=3600", "Vary": "Accept-Encoding"}
+    if "gzip" in request.headers.get("accept-encoding", "").lower():
+        headers["Content-Encoding"] = "gzip"
+        return Response(content=gzipped, media_type="application/geo+json", headers=headers)
+    return Response(content=raw, media_type="application/geo+json", headers=headers)
+
+
+@router.get("/dashboard/mcpp")
+def dashboard_mcpp(
+    request: Request,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+) -> Response:
+    """SPD MCPP (neighborhood) polygons for map/locator layers (static bundled data)."""
+    # Negotiation is hand-rolled: global GZipMiddleware would wrap the /assistant/chat SSE
+    # StreamingResponse and break its incremental flush, and per-request middleware
+    # compression would defeat the once-cached gzip bytes.
+    raw, gzipped = mcpp_geojson_payloads()
     headers = {"Cache-Control": "public, max-age=3600", "Vary": "Accept-Encoding"}
     if "gzip" in request.headers.get("accept-encoding", "").lower():
         headers["Content-Encoding"] = "gzip"

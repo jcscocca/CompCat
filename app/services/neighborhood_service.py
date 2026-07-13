@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.analysis.area_baselines import sector_for_beat
 from app.analysis.beat_baselines import (
     BeatPolygons,
     assign_beat,
@@ -87,6 +88,40 @@ def _assign_beat(cluster: PlaceClusterData, beat_polygons: BeatPolygons) -> str 
     return assign_beat(cluster.display_longitude, cluster.display_latitude, beat_polygons)
 
 
+def _area_incidents(
+    session: Session,
+    column,
+    values: Sequence[str],
+    start: date,
+    end: date,
+    offense_category,
+    offense_subcategory,
+    nibrs_group,
+    sources: Sequence[str] | None = None,
+) -> list[CrimeIncidentData]:
+    """Incidents in the window whose area attribute (``CrimeIncident.beat`` or
+    ``CrimeIncident.mcpp``) is one of ``values`` — attribute bucketing, not a spatial
+    join, so it is robust to SPD's block-level coordinate fuzzing."""
+    effective_sources = tuple(sources) if sources is not None else (SOURCE_SPD_CRIME,)
+    start_at, end_at = _analysis_datetime_bounds(start, end)
+    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
+    stmt = (
+        select(CrimeIncident)
+        .where(CrimeIncident.source_dataset.in_(effective_sources))
+        .where(column.in_(tuple(values)))
+        .where(observed >= start_at)
+        .where(observed <= end_at)
+        .where(CrimeIncident.latitude.is_not(None))
+    )
+    if offense_category is not None:
+        stmt = stmt.where(CrimeIncident.offense_category == offense_category)
+    if offense_subcategory is not None:
+        stmt = stmt.where(CrimeIncident.offense_subcategory == offense_subcategory)
+    if nibrs_group is not None:
+        stmt = stmt.where(CrimeIncident.nibrs_group == nibrs_group)
+    return [_incident_data(r) for r in session.scalars(stmt).all()]
+
+
 def _beat_incidents(
     session: Session,
     beats: Sequence[str],
@@ -99,23 +134,17 @@ def _beat_incidents(
     sources: Sequence[str] | None = None,
 ) -> list[CrimeIncidentData]:
     effective_sources = tuple(sources) if sources is not None else (source_dataset,)
-    start_at, end_at = _analysis_datetime_bounds(start, end)
-    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
-    stmt = (
-        select(CrimeIncident)
-        .where(CrimeIncident.source_dataset.in_(effective_sources))
-        .where(CrimeIncident.beat.in_(tuple(beats)))
-        .where(observed >= start_at)
-        .where(observed <= end_at)
-        .where(CrimeIncident.latitude.is_not(None))
+    return _area_incidents(
+        session,
+        CrimeIncident.beat,
+        beats,
+        start,
+        end,
+        offense_category,
+        offense_subcategory,
+        nibrs_group,
+        sources=effective_sources,
     )
-    if offense_category is not None:
-        stmt = stmt.where(CrimeIncident.offense_category == offense_category)
-    if offense_subcategory is not None:
-        stmt = stmt.where(CrimeIncident.offense_subcategory == offense_subcategory)
-    if nibrs_group is not None:
-        stmt = stmt.where(CrimeIncident.nibrs_group == nibrs_group)
-    return [_incident_data(r) for r in session.scalars(stmt).all()]
 
 
 def _category_breakdown(
@@ -188,6 +217,182 @@ def _category_breakdown(
     return rows
 
 
+# Maps the existing neighborhood_decision() outputs onto the plot's relation words.
+# "model_warning" (dispersion could not be estimated) reads as insufficient — the UI
+# must not claim a direction the model can't support.
+_RELATION_BY_DECISION = {
+    "above_clear": "above",
+    "below_clear": "below",
+    "not_clear": "similar",
+    "insufficient_data": "insufficient",
+    "model_warning": "insufficient",
+}
+
+
+def _baselines_for_place(
+    session: Session,
+    cluster: PlaceClusterData,
+    place_incidents: list[CrimeIncidentData],
+    *,
+    radius_m: int,
+    days: int,
+    start: date,
+    end: date,
+    offense_category,
+    offense_subcategory,
+    nibrs_group,
+    sources: Sequence[str] | None,
+    area_lookup: dict[str, float],
+    beat: str | None,
+    beat_rest_incidents: list[CrimeIncidentData] | None,
+    beat_rest_area: float | None,
+    mcpp_area_lookup: dict[str, float] | None,
+    mcpp_polygons: BeatPolygons | None,
+    query_cache: dict[tuple, list[CrimeIncidentData]],
+) -> list[dict[str, Any]]:
+    """One comparison entry per resolvable baseline geography, all sharing the place's
+    buffer rate. MCPP and beat are rest-of-area (buffer carved out, mirroring the legacy
+    beat baseline); sector and citywide are whole-area — the buffer is negligible at
+    those scales. The whole-area approximation also applies to the dispersion input: the
+    place's own incidents appear in both halves of the combined monthly counts for
+    sector/city, which is negligible at those scales. Geography that cannot be resolved
+    (no polygon hit, no sector letter) is omitted rather than reported as a failed
+    comparison, and so is a rest-of-area (mcpp/beat) entry whose rest is empty or whose
+    rest area is non-positive — mirroring the legacy ``baseline_too_small`` refusal.
+    Statistical inadequacy on a surviving entry (e.g. a zero-count sector/city baseline)
+    reports relation="insufficient" via the decision machinery.
+    """
+    candidates: list[dict[str, Any]] = []
+
+    if mcpp_polygons and mcpp_area_lookup:
+        name = assign_beat(cluster.display_longitude, cluster.display_latitude, mcpp_polygons)
+        if name and name in mcpp_area_lookup:
+            overlaps = beats_intersecting_buffer(
+                lon=cluster.display_longitude,
+                lat=cluster.display_latitude,
+                radius_m=radius_m,
+                beat_polygons=mcpp_polygons,
+            )
+            names = sorted(n for n in overlaps if n in mcpp_area_lookup)
+            if name not in names:
+                names = sorted([*names, name])
+            incidents = _area_incidents(
+                session, CrimeIncident.mcpp, names, start, end,
+                offense_category, offense_subcategory, nibrs_group, sources=sources,
+            )
+            rest = [
+                incident
+                for incident in incidents
+                if incident.latitude is None
+                or incident.longitude is None
+                or haversine_m(
+                    cluster.display_latitude, cluster.display_longitude,
+                    incident.latitude, incident.longitude,
+                )
+                > radius_m
+            ]
+            rest_area = sum(mcpp_area_lookup[n] for n in names) - sum(
+                overlaps.get(n, 0.0) for n in names
+            )
+            if rest_area > 0 and rest:
+                candidates.append(
+                    {"kind": "mcpp", "label": name.title(), "incidents": rest,
+                     "area_km2": rest_area}
+                )
+
+    if beat is not None and beat_rest_incidents and beat_rest_area and beat_rest_area > 0:
+        candidates.append(
+            {"kind": "beat", "label": f"Beat {beat}", "incidents": beat_rest_incidents,
+             "area_km2": beat_rest_area}
+        )
+
+    sector = sector_for_beat(beat)
+    if sector:
+        members = sorted(b for b in area_lookup if sector_for_beat(b) == sector)
+        if members:
+            cache_key = ("sector", sector)
+            incidents = query_cache.get(cache_key)
+            if incidents is None:
+                incidents = _area_incidents(
+                    session, CrimeIncident.beat, members, start, end,
+                    offense_category, offense_subcategory, nibrs_group, sources=sources,
+                )
+                query_cache[cache_key] = incidents
+            candidates.append(
+                {"kind": "sector", "label": f"Sector {sector}", "incidents": incidents,
+                 "area_km2": sum(area_lookup[b] for b in members)}
+            )
+
+    if area_lookup:
+        cache_key = ("city",)
+        incidents = query_cache.get(cache_key)
+        if incidents is None:
+            incidents = _area_incidents(
+                session, CrimeIncident.beat, sorted(area_lookup), start, end,
+                offense_category, offense_subcategory, nibrs_group, sources=sources,
+            )
+            query_cache[cache_key] = incidents
+        candidates.append(
+            {"kind": "city", "label": "Citywide", "incidents": incidents,
+             "area_km2": sum(area_lookup.values())}
+        )
+
+    if not candidates:
+        return []
+
+    place_exposure = _place_exposure_km2_days(radius_m, days)
+    place_monthly = _monthly_counts(place_incidents, start, end)
+    prepared, p_values = [], []
+    for cand in candidates:
+        baseline_monthly = _monthly_counts(cand["incidents"], start, end)
+        combined_monthly = trim_partial_edge_months(
+            [p + b for p, b in zip(place_monthly, baseline_monthly, strict=True)], start, end
+        )
+        dispersion = dispersion_status(combined_monthly)
+        exposure = cand["area_km2"] * days
+        test = compare_incident_rates(
+            count_a=len(place_incidents),
+            exposure_a=max(place_exposure, 1e-9),
+            count_b=len(cand["incidents"]),
+            exposure_b=max(exposure, 1e-9),
+            overdispersion_phi=dispersion.phi,
+        )
+        p_values.append(test.p_value)
+        prepared.append((cand, combined_monthly, exposure))
+
+    entries = []
+    # BH within the place across its baseline comparisons (nested, correlated references
+    # presented together — one adjustment family per place, like the pairwise section).
+    for (cand, combined_monthly, exposure), adjusted in zip(
+        prepared, benjamini_hochberg(p_values), strict=True
+    ):
+        result = place_vs_beat(
+            place_count=len(place_incidents),
+            place_exposure=place_exposure,
+            beat_count=len(cand["incidents"]),
+            beat_exposure=exposure,
+            combined_monthly_counts=combined_monthly,
+            analysis_days=days,
+            adjusted_p_value=adjusted,
+        )
+        entries.append(
+            {
+                "kind": cand["kind"],
+                "label": cand["label"],
+                "area_km2": cand["area_km2"],
+                "baseline_incident_count": len(cand["incidents"]),
+                "baseline_rate": result.beat_rate,
+                "rate_ratio": result.rate_ratio,
+                "ci_lower": result.ci_lower,
+                "ci_upper": result.ci_upper,
+                "adjusted_p_value": result.adjusted_p_value,
+                "method": result.method,
+                "relation": _RELATION_BY_DECISION.get(result.decision, "insufficient"),
+            }
+        )
+    return entries
+
+
 def neighborhood_analysis_for_places(
     *,
     session: Session,
@@ -202,6 +407,8 @@ def neighborhood_analysis_for_places(
     nibrs_group: str | None,
     area_lookup: dict[str, float],
     beat_polygons: BeatPolygons,
+    mcpp_area_lookup: dict[str, float] | None = None,
+    mcpp_polygons: BeatPolygons | None = None,
     sources: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     validate_date_range(analysis_start_date, analysis_end_date)
@@ -324,6 +531,7 @@ def neighborhood_analysis_for_places(
                 "beat_incidents": rest_incidents,
                 "place_exposure": place_exposure,
                 "beat_exposure": beat_exposure,
+                "rest_area": rest_area,
                 "place_monthly": place_monthly,
                 "combined_monthly": combined_monthly,
             }
@@ -333,8 +541,34 @@ def neighborhood_analysis_for_places(
     adjusted_iter = iter(adjusted)
 
     places = []
+    # Sector/city baselines are place-independent; compute each once per request.
+    baseline_query_cache: dict[tuple, list[CrimeIncidentData]] = {}
     for entry in raw:
         cluster = entry["cluster"]
+        baselines = (
+            []
+            if cluster.display_latitude is None or cluster.display_longitude is None
+            else _baselines_for_place(
+                session,
+                cluster,
+                entry.get("place_incidents", []),
+                radius_m=radius_m,
+                days=days,
+                start=analysis_start_date,
+                end=analysis_end_date,
+                offense_category=offense_category,
+                offense_subcategory=offense_subcategory,
+                nibrs_group=nibrs_group,
+                sources=sources,
+                area_lookup=area_lookup,
+                beat=entry.get("beat"),
+                beat_rest_incidents=entry.get("beat_incidents"),
+                beat_rest_area=entry.get("rest_area"),
+                mcpp_area_lookup=mcpp_area_lookup,
+                mcpp_polygons=mcpp_polygons,
+                query_cache=baseline_query_cache,
+            )
+        )
         base = {
             "place_id": cluster.id,
             "place_label": cluster.display_label or "Selected place",
@@ -343,6 +577,7 @@ def neighborhood_analysis_for_places(
             # sits inside one beat); absent when no baseline could be formed at all.
             "baseline_beats": entry.get("baseline_beats"),
             "radius_m": radius_m,
+            "baselines": baselines,
         }
         if entry.get("beat") is None or entry.get("area") is None:
             places.append(

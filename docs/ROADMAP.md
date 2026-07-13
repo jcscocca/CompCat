@@ -270,6 +270,19 @@ spec → plan → PR.*
 - [ ] **Slice C — niceties:** friendly offline screen, haptics, share-sheet exports,
   app shortcuts.
 
+## Desktop focus mode & multi-baseline analysis (2026-07-12)
+*Three connected desktop changes — a focus drawer preset, a place identity/locator system, and
+multi-baseline (MCPP/beat/sector/city) neighborhood comparison — decomposed into three
+independently-shippable slices. Spec:
+`docs/superpowers/specs/2026-07-12-desktop-focus-multi-baseline-design.md`.*
+
+- [x] **Slice 1 — Backend geography + API:** Multi-baseline neighborhood API — MCPP assets +
+  `baselines[]` (mcpp/beat/sector/city) + `/dashboard/mcpp` (2026-07-12)
+- [ ] **Slice 2 — Analyze tab plot:** `BaselineIntervalPlot`, headline aggregation, How-we-know
+  table, identity badges on cards; removes `ComparisonBars` + the legacy top-level beat fields.
+- [ ] **Slice 3 — Focus mode + locators:** drawer preset, locator chips, hover-sync, pin identity
+  styling. Pure frontend.
+
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.

@@ -76,6 +76,8 @@ which are unauthenticated or session-creating.
 | `/dashboard/compare` | POST | `app/api/routes_public_dashboard.py` | `DashboardCompareRequest` | `dict` |
 | `/dashboard/neighborhood` | POST | `app/api/routes_public_dashboard.py` | `DashboardAnalyzeRequest` | `dict` |
 | `/dashboard/freshness` | GET | `app/api/routes_public_dashboard.py` | — | `dict` |
+| `/dashboard/beats` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed beat-outline GeoJSON, gzip-negotiated) |
+| `/dashboard/mcpp` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed MCPP-neighborhood-polygon GeoJSON, gzip-negotiated; sibling of `/dashboard/beats`) |
 | `/dashboard/geocode` | GET | `app/api/routes_public_dashboard.py` | `?q=` query param | `list[GeocodeResultSchema]` |
 | `/assistant/chat` | POST | `app/api/routes_assistant.py` | `AssistantChatRequest` (`app/assistant/schemas.py`) | SSE stream (see §4) |
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
@@ -95,6 +97,14 @@ it produced. `/dashboard/analyze` records the layer on the `AnalysisRun` and the
 `PlaceCrimeSummary` rows it persists, so `/dashboard/summary` echoes a `layer` field.
 `/dashboard/freshness` returns coverage keyed by layer (`{"reported": {...}, "calls": {...}}`)
 so the UI pill reflects the active layer.
+
+`/dashboard/neighborhood` response payload. Each place additionally carries `baselines: [{kind:
+"mcpp"|"beat"|"sector"|"city", label, area_km2, baseline_incident_count, baseline_rate,
+rate_ratio, ci_lower, ci_upper, adjusted_p_value (BH within place), method, relation:
+"above"|"similar"|"below"|"insufficient"}]`. MCPP/beat entries are rest-of-area (place buffer
+carved out); sector/city are whole-area. Unresolvable geographies are omitted. Legacy top-level
+beat fields are retained until the frontend migrates (slice 2). Also new: `GET /dashboard/mcpp` —
+slimmed MCPP polygon GeoJSON, session-gated, gzip-negotiated (sibling of `GET /dashboard/beats`).
 
 ### Internal tier
 

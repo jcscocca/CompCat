@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
+from app.analysis.area_baselines import load_mcpp_areas, load_mcpp_polygons
 from app.analysis.beat_baselines import (
     BeatPolygons,
     load_beat_areas,
@@ -44,6 +45,16 @@ def _beat_areas() -> dict[str, float]:
 @lru_cache(maxsize=1)
 def _beat_polygons() -> BeatPolygons:
     return load_beat_polygons()
+
+
+@lru_cache(maxsize=1)
+def _mcpp_areas() -> dict[str, float]:
+    return load_mcpp_areas()
+
+
+@lru_cache(maxsize=1)
+def _mcpp_polygons() -> BeatPolygons:
+    return load_mcpp_polygons()
 
 
 class AssistantToolError(ValueError):
@@ -226,6 +237,8 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
         nibrs_group=args.nibrs_group,
         area_lookup=_beat_areas(),
         beat_polygons=_beat_polygons(),
+        mcpp_area_lookup=_mcpp_areas(),
+        mcpp_polygons=_mcpp_polygons(),
         sources=sources,
     )
     incidents = incident_details_for_places(
@@ -348,6 +361,8 @@ def execute_tool(
                 nibrs_group=args.nibrs_group,
                 area_lookup=_beat_areas(),
                 beat_polygons=_beat_polygons(),
+                mcpp_area_lookup=_mcpp_areas(),
+                mcpp_polygons=_mcpp_polygons(),
                 sources=sources_for_layer(args.layer),
             )
             validated_arguments = args.model_dump(mode="json")

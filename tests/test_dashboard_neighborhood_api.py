@@ -165,3 +165,41 @@ def test_neighborhood_endpoint_includes_category_breakdown_and_no_type_mix(neigh
     blob = json.dumps(body).lower()
     for banned in ("unsafe", "dangerous", "safest", "risky", "avoid "):
         assert banned not in blob
+
+
+def test_neighborhood_response_carries_baselines(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'nb.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+    place = client.post(
+        "/places",
+        json={
+            "display_label": "Baseline place",
+            "latitude": 47.60945,
+            "longitude": -122.33595,
+            "visit_count": 1,
+            "sensitivity_class": "normal",
+        },
+    ).json()
+    response = client.post(
+        "/dashboard/neighborhood",
+        json={
+            "place_ids": [place["id"]],
+            "radii_m": [250],
+            "analysis_start_date": "2026-01-01",
+            "analysis_end_date": "2026-06-30",
+        },
+    )
+    assert response.status_code == 200
+    places = response.json()["places"]
+    assert places and isinstance(places[0]["baselines"], list)
+    # Real bundled geometry resolves this downtown point. With an empty incident DB the
+    # mcpp/beat entries are omitted (no rest incidents), but sector and citywide always
+    # form from the bundled beat areas — their presence proves the route wired the real
+    # geography through without error.
+    kinds = {entry["kind"] for entry in places[0]["baselines"]}
+    assert {"sector", "city"} <= kinds

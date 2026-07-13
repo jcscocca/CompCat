@@ -360,3 +360,104 @@ def test_buffer_swallowing_every_surrounding_beat_reports_baseline_too_small(tmp
     assert place["decision"] == "insufficient_data"
     assert place["minimum_data_status"] == "baseline_too_small"
     assert place["baseline_beats"] == ["M3"]
+
+
+_MCPP_POLYGONS = square_beat_polygons("TEST HILL", 47.60945, -122.33595)
+_MCPP_AREAS = {"TEST HILL": 3.0}
+
+
+def _run_with_baselines(session, user_hash, place_id, **overrides):
+    kwargs = dict(
+        session=session,
+        user_id_hash=user_hash,
+        place_ids=[place_id],
+        radius_m=250,
+        analysis_start_date=date(2026, 1, 1),
+        analysis_end_date=date(2026, 6, 30),
+        offense_category=None,
+        offense_subcategory=None,
+        nibrs_group=None,
+        area_lookup={"M3": 3.0},
+        beat_polygons=_M3_POLYGONS,
+        mcpp_area_lookup=_MCPP_AREAS,
+        mcpp_polygons=_MCPP_POLYGONS,
+    )
+    kwargs.update(overrides)
+    return neighborhood_analysis_for_places(**kwargs)
+
+
+def test_baselines_cover_all_four_kinds(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(session, user_hash, place_id)["places"][0]
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    assert set(by_kind) == {"mcpp", "beat", "sector", "city"}
+    assert by_kind["mcpp"]["label"] == "Test Hill"
+    assert by_kind["beat"]["label"] == "Beat M3"
+    assert by_kind["sector"]["label"] == "Sector M"
+    assert by_kind["city"]["label"] == "Citywide"
+    for entry in place["baselines"]:
+        assert entry["relation"] in {"above", "similar", "below", "insufficient"}
+        assert entry["adjusted_p_value"] >= 0
+        assert entry["area_km2"] > 0
+
+
+def test_baseline_rest_vs_whole_area_counts(tmp_path):
+    # Fixture: 5 in-buffer + 8 out-of-buffer incidents, all beat=M3 / mcpp=TEST HILL.
+    # mcpp/beat baselines carve out the buffer (rest = 8); sector/city are whole-area (13).
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(session, user_hash, place_id)["places"][0]
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    assert by_kind["mcpp"]["baseline_incident_count"] == 8
+    assert by_kind["beat"]["baseline_incident_count"] == 8
+    assert by_kind["sector"]["baseline_incident_count"] == 13
+    assert by_kind["city"]["baseline_incident_count"] == 13
+    # Whole-area exposure uses the full beat area; the carved baselines use less.
+    assert by_kind["city"]["area_km2"] == pytest.approx(3.0)
+    assert by_kind["beat"]["area_km2"] < 3.0
+
+
+def test_baselines_without_mcpp_geography_omit_mcpp(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(
+        session, user_hash, place_id, mcpp_area_lookup=None, mcpp_polygons=None
+    )["places"][0]
+    kinds = {entry["kind"] for entry in place["baselines"]}
+    assert kinds == {"beat", "sector", "city"}
+
+
+def test_baselines_when_place_outside_mcpp_polygons(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(
+        session,
+        user_hash,
+        place_id,
+        mcpp_polygons=square_beat_polygons("TEST HILL", 30.0, -100.0),  # far away
+    )["places"][0]
+    kinds = {entry["kind"] for entry in place["baselines"]}
+    assert kinds == {"beat", "sector", "city"}
+
+
+def test_non_sector_beat_omits_sector_baseline(tmp_path):
+    # A lookup keyed by the harbor placeholder "99" has no lettered sector; the city
+    # baseline still forms from the full lookup.
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(
+        session,
+        user_hash,
+        place_id,
+        area_lookup={"99": 3.0},
+        beat_polygons=square_beat_polygons("99", 47.60945, -122.33595),
+    )["places"][0]
+    kinds = {entry["kind"] for entry in place["baselines"]}
+    assert "sector" not in kinds
+    assert "city" in kinds
+
+
+def test_baseline_entries_carry_adjusted_p_and_legacy_fields(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(session, user_hash, place_id)["places"][0]
+    for entry in place["baselines"]:
+        assert 0.0 <= entry["adjusted_p_value"] <= 1.0
+    # Legacy top-level beat fields still present and untouched this slice.
+    assert place["baseline_available"] is True
+    assert "rate_ratio" in place and "beat_rate" in place
