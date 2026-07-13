@@ -87,6 +87,40 @@ def _assign_beat(cluster: PlaceClusterData, beat_polygons: BeatPolygons) -> str 
     return assign_beat(cluster.display_longitude, cluster.display_latitude, beat_polygons)
 
 
+def _area_incidents(
+    session: Session,
+    column,
+    values: Sequence[str],
+    start: date,
+    end: date,
+    offense_category,
+    offense_subcategory,
+    nibrs_group,
+    sources: Sequence[str] | None = None,
+) -> list[CrimeIncidentData]:
+    """Incidents in the window whose area attribute (``CrimeIncident.beat`` or
+    ``CrimeIncident.mcpp``) is one of ``values`` — attribute bucketing, not a spatial
+    join, so it is robust to SPD's block-level coordinate fuzzing."""
+    effective_sources = tuple(sources) if sources is not None else (SOURCE_SPD_CRIME,)
+    start_at, end_at = _analysis_datetime_bounds(start, end)
+    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
+    stmt = (
+        select(CrimeIncident)
+        .where(CrimeIncident.source_dataset.in_(effective_sources))
+        .where(column.in_(tuple(values)))
+        .where(observed >= start_at)
+        .where(observed <= end_at)
+        .where(CrimeIncident.latitude.is_not(None))
+    )
+    if offense_category is not None:
+        stmt = stmt.where(CrimeIncident.offense_category == offense_category)
+    if offense_subcategory is not None:
+        stmt = stmt.where(CrimeIncident.offense_subcategory == offense_subcategory)
+    if nibrs_group is not None:
+        stmt = stmt.where(CrimeIncident.nibrs_group == nibrs_group)
+    return [_incident_data(r) for r in session.scalars(stmt).all()]
+
+
 def _beat_incidents(
     session: Session,
     beats: Sequence[str],
@@ -99,23 +133,17 @@ def _beat_incidents(
     sources: Sequence[str] | None = None,
 ) -> list[CrimeIncidentData]:
     effective_sources = tuple(sources) if sources is not None else (source_dataset,)
-    start_at, end_at = _analysis_datetime_bounds(start, end)
-    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
-    stmt = (
-        select(CrimeIncident)
-        .where(CrimeIncident.source_dataset.in_(effective_sources))
-        .where(CrimeIncident.beat.in_(tuple(beats)))
-        .where(observed >= start_at)
-        .where(observed <= end_at)
-        .where(CrimeIncident.latitude.is_not(None))
+    return _area_incidents(
+        session,
+        CrimeIncident.beat,
+        beats,
+        start,
+        end,
+        offense_category,
+        offense_subcategory,
+        nibrs_group,
+        sources=effective_sources,
     )
-    if offense_category is not None:
-        stmt = stmt.where(CrimeIncident.offense_category == offense_category)
-    if offense_subcategory is not None:
-        stmt = stmt.where(CrimeIncident.offense_subcategory == offense_subcategory)
-    if nibrs_group is not None:
-        stmt = stmt.where(CrimeIncident.nibrs_group == nibrs_group)
-    return [_incident_data(r) for r in session.scalars(stmt).all()]
 
 
 def _category_breakdown(

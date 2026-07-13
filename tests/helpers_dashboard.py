@@ -29,9 +29,10 @@ def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
 
     Inserts a single ``PlaceCluster`` at a downtown point that the real beat polygons
     (and ``square_beat_polygons("M3", ...)``) resolve to beat ``M3``, several
-    ``CrimeIncident`` rows WITHIN 250 m carrying ``beat="M3"``, and additional
-    ``beat="M3"`` rows OUTSIDE the 250 m buffer (so the beat-wide incident count
-    exceeds the place count). All incidents are dated across 2026-01..2026-06 so a
+    ``CrimeIncident`` rows WITHIN 250 m carrying ``beat="M3"``/``mcpp="TEST HILL"``,
+    and additional rows OUTSIDE the 250 m buffer with the same tags (so the beat-wide
+    incident count exceeds the place count). All incidents are dated across
+    2026-01..2026-06 so a
     full-range analysis has both positive place and beat rates while a short sub-range
     falls below the minimum analysis-window length.
 
@@ -92,6 +93,7 @@ def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
                 offense_subcategory="Theft",
                 nibrs_group="PROPERTY",
                 beat="M3",
+                mcpp="TEST HILL",
                 latitude=place_lat + dlat,
                 longitude=place_lon + dlon,
             )
@@ -119,6 +121,7 @@ def session_with_places_and_beat_crime(tmp_path) -> tuple[Session, str, str]:
                 offense_subcategory="Burglary",
                 nibrs_group="PROPERTY",
                 beat="M3",
+                mcpp="TEST HILL",
                 latitude=place_lat + dlat,
                 longitude=place_lon + dlon,
             )
