@@ -63,6 +63,75 @@ def test_analyze_summary_reads_beat_verdict():
     assert "84 reported incidents within 250 m" in text
 
 
+def test_analyze_summary_prefers_mcpp_over_beat():
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "baseline_available": True,
+                    "decision": "above_clear",
+                    "place_incident_count": 12,
+                    "baselines": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Capitol Hill",
+                            "rate_ratio": 2.0,
+                            "ci_lower": 1.3,
+                            "ci_upper": 3.1,
+                            "relation": "above",
+                        },
+                        {
+                            "kind": "beat",
+                            "label": "Beat M3",
+                            "rate_ratio": 1.1,
+                            "ci_lower": 0.8,
+                            "ci_upper": 1.5,
+                            "relation": "similar",
+                        },
+                    ],
+                }
+            ]
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    text = build_tool_summary(_envelope("analyze_places", result))
+    assert "above Capitol Hill's rate" in text
+    assert "Beat M3" not in text
+
+
+def test_analyze_summary_falls_back_when_primary_baseline_insufficient():
+    # An insufficient primary baseline renders the honest decision-phrase fallback,
+    # not a ratio the model can't support.
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "baseline_available": True,
+                    "decision": "not_clear",
+                    "place_incident_count": 12,
+                    "baselines": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Capitol Hill",
+                            "relation": "insufficient",
+                        }
+                    ],
+                }
+            ]
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    text = build_tool_summary(_envelope("analyze_places", result))
+    assert "not statistically clear vs its surrounding area" in text
+    assert "×" not in text
+
+
 def test_add_place_summary_reports_created_with_address():
     result = {
         "place": {"display_label": "Capitol Hill"},
