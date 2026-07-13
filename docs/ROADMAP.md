@@ -284,8 +284,8 @@ independently-shippable slices. Spec:
 - [x] **Slice 3 — Focus mode + locators:** drawer preset (spec's `min(vw−96, 0.9·vw)` clamp shared
   with drag, focus-width chrome treatment), MCPP locator chips on verdict cards, card→pin
   hover pulse, identity-colored lettered pins. Pure frontend. (2026-07-12)
-- [ ] Sector/city baselines via month-grouped SQL COUNT(*) (calls layer materializes ~700k
-  rows/yr per citywide request today — do before demoing the calls layer)
+- [x] Sector/city baselines via month-grouped SQL COUNT(*) (calls layer materializes ~700k
+  rows/yr per citywide request today — do before demoing the calls layer) (2026-07-12)
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
