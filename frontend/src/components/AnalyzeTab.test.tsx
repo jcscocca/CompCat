@@ -33,11 +33,15 @@ const analyzedSummary: DashboardSummary = {
 const homePlace: NeighborhoodPlace = {
   place_id: "p1", place_label: "Home", beat: "M2", radius_m: 250,
   baseline_available: true, decision: "above_clear", place_incident_count: 12,
-  beat_incident_count: 60, place_rate: 0.67, beat_rate: 0.17, rate_ratio: 4.0,
-  ci_lower: 2.1, ci_upper: 7.6, adjusted_p_value: 0.002, exact_p_value: 0.012,
-  method: "wald_log_rate_ratio",
-  overdispersion_status: "poisson_ok", minimum_data_status: "met",
+  place_rate: 0.67, place_rate_ci_lower: 0.41, place_rate_ci_upper: 0.98,
+  minimum_data_status: "met",
   nearest_incident_m: 42, monthly_counts: [1, 2, 1, 3, 2, 3],
+  baselines: [
+    { kind: "mcpp", label: "Capitol Hill", area_km2: 2.4, baseline_incident_count: 320, baseline_rate: 0.20, rate_ratio: 3.4, ci_lower: 2.1, ci_upper: 5.5, adjusted_p_value: 0.002, method: "quasi_poisson", relation: "above" },
+    { kind: "beat", label: "Beat M2", area_km2: 1.1, baseline_incident_count: 180, baseline_rate: 0.17, rate_ratio: 4.0, ci_lower: 2.1, ci_upper: 7.6, adjusted_p_value: 0.002, method: "quasi_poisson", relation: "above" },
+    { kind: "sector", label: "Sector M", area_km2: 5.0, baseline_incident_count: 600, baseline_rate: 0.62, rate_ratio: 1.1, ci_lower: 0.7, ci_upper: 1.6, adjusted_p_value: 0.4, method: "quasi_poisson", relation: "similar" },
+    { kind: "city", label: "Citywide", area_km2: 217, baseline_incident_count: 40000, baseline_rate: 0.024, rate_ratio: 27.9, ci_lower: 14.0, ci_upper: 55.0, adjusted_p_value: 0.001, method: "quasi_poisson", relation: "above" },
+  ],
   category_breakdown: [
     { label: "Theft", place_count: 5, place_share: 0.71, beat_share: 0.20 },
     { label: "Assault", place_count: 2, place_share: 0.29, beat_share: null },
@@ -117,9 +121,11 @@ describe("AnalyzeTab", () => {
       />,
     );
     expect(
-      screen.getByText("Home has more reported incidents than its surrounding area."),
+      screen.getByText(
+        "Home's reported incident rate is above Capitol Hill, its beat (M2), and the citywide rate; similar to its sector (M).",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("✓ statistically clear")).toBeInTheDocument();
+    expect(screen.getByTestId("baseline-plot")).toBeInTheDocument();
     expect(screen.getByText("4.0×")).toBeInTheDocument();
     expect(
       screen.getByText(/within 250 m · 2026-01-01 – 2026-06-30/),
@@ -213,7 +219,7 @@ describe("AnalyzeTab", () => {
   it("shows a fallback line when a place has no beat baseline", () => {
     const noBaseline: NeighborhoodPlace = {
       ...homePlace, place_id: "p3", place_label: "Cabin", baseline_available: false,
-      decision: "baseline_unavailable", place_incident_count: 3,
+      decision: "baseline_unavailable", place_incident_count: 3, baselines: [],
     };
     render(
       <AnalyzeTab
@@ -226,7 +232,7 @@ describe("AnalyzeTab", () => {
         onRun={vi.fn()}
       />,
     );
-    expect(screen.getByText("No neighborhood baseline available for Cabin.")).toBeInTheDocument();
+    expect(screen.getByText("No area baseline available for Cabin.")).toBeInTheDocument();
     expect(
       screen.getByText(/3 reported incidents in range; no beat baseline\./i),
     ).toBeInTheDocument();
@@ -373,7 +379,11 @@ describe("AnalyzeTab", () => {
       />,
     );
     // Verdict, incident-details header, and reveal summary all reflect the active layer.
-    expect(screen.getByText(/Home has more 911 calls than its surrounding area\./i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Home's 911 call rate is above Capitol Hill, its beat (M2), and the citywide rate; similar to its sector (M).",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("911 calls near selected places")).toBeInTheDocument();
     expect(screen.getByText(/See the 1 911 call\b/i)).toBeInTheDocument();
     // The incident table drops the (always-empty) Category column and renames Subcategory.

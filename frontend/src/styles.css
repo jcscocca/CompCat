@@ -4,8 +4,9 @@
   background:#EEF2F5;
   font-family:'Archivo','Helvetica Neue',system-ui,sans-serif;
   font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;
+  --id-a:#534AB7;--id-b:#1D9E75;--id-c:#C2410C;--id-d:#2E7DD1;--id-x:#74858E;
 }
-[data-theme="dark"]{color-scheme:dark;color:#E8EDF2;background:#151C23;}
+[data-theme="dark"]{color-scheme:dark;color:#E8EDF2;background:#151C23;--id-a:#6E64D9;}
 
 /*
  * Base resets + the Places modal forms (PlaceForm / BulkPlaceEntry) and Notice. The

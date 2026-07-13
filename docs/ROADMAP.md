@@ -278,8 +278,9 @@ independently-shippable slices. Spec:
 
 - [x] **Slice 1 — Backend geography + API:** Multi-baseline neighborhood API — MCPP assets +
   `baselines[]` (mcpp/beat/sector/city) + `/dashboard/mcpp` (2026-07-12)
-- [ ] **Slice 2 — Analyze tab plot:** `BaselineIntervalPlot`, headline aggregation, How-we-know
+- [x] **Slice 2 — Analyze tab plot:** `BaselineIntervalPlot`, headline aggregation, How-we-know
   table, identity badges on cards; removes `ComparisonBars` + the legacy top-level beat fields.
+  (2026-07-12)
 - [ ] **Slice 3 — Focus mode + locators:** drawer preset, locator chips, hover-sync, pin identity
   styling. Pure frontend.
 

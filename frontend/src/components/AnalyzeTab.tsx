@@ -12,7 +12,10 @@ import type {
 import { formatIncidentAddress, titleCase } from "../lib/addressLabel";
 import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { countNoun, incidentNoun, type IncidentNoun } from "../lib/layerCopy";
-import { decisionHeadline } from "../lib/verdictCopy";
+import { aggregateHeadline } from "../lib/verdictCopy";
+import { placeIdentity } from "../lib/placeIdentity";
+import { annualIncidentsWithin, formatPerYear } from "../lib/rateFormat";
+import { BaselineIntervalPlot, plotDomainMax } from "./BaselineIntervalPlot";
 import {
   clampInt,
   DAYSET_DAYS,
@@ -100,25 +103,6 @@ function formatDistanceMeters(value: number) {
 function barHeight(value: number, all: number[]) {
   const max = Math.max(1, ...all);
   return Math.round((value / max) * 100);
-}
-
-function ComparisonBars({ rateRatio }: { rateRatio: number }) {
-  const CAP = 3;
-  const width = (value: number) => `${(Math.min(value, CAP) / CAP) * 100}%`;
-  return (
-    <div className="mc-cmpbars" aria-hidden="true">
-      <div className="mc-cmpbar">
-        <span className="name">surrounding area</span>
-        <span className="track"><span className="fill beat" style={{ width: width(1) }} /></span>
-        <span className="val">1.0×</span>
-      </div>
-      <div className="mc-cmpbar">
-        <span className="name">this place</span>
-        <span className="track"><span className="fill place" style={{ width: width(rateRatio) }} /></span>
-        <span className="val">{rateRatio.toFixed(1)}×</span>
-      </div>
-    </div>
-  );
 }
 
 function ProfileBars({
@@ -268,20 +252,21 @@ function CategoryBreakdown({ rows }: { rows: CategoryShare[] }) {
   );
 }
 
-function VerdictCard({ place, windowLabel, noun }: { place: NeighborhoodPlace; windowLabel: string; noun: IncidentNoun }) {
-  const { headline, chip } = decisionHeadline(place, noun);
+function VerdictCard({ place, index, windowLabel, noun, domainMax }: { place: NeighborhoodPlace; index: number; windowLabel: string; noun: IncidentNoun; domainMax: number }) {
+  const identity = placeIdentity(index);
+  const headline = aggregateHeadline(place, noun);
   return (
     <section className="mc-verdict" aria-label={`Verdict for ${place.place_label}`}>
       <div className="mc-verdict-head">
-        <span className={`mc-vchip ${chip.tone}`}>{chip.label}</span>
+        <span className={`mc-idbadge id-${identity.slot}`} aria-hidden="true">{identity.letter}</span>
+        <p className="mc-verdict-headline">{headline}</p>
       </div>
-      <p className="mc-verdict-headline">{headline}</p>
       {place.baseline_available ? (
         <>
           <p className="mc-verdict-sub">
             {place.place_incident_count} {countNoun(noun, place.place_incident_count)} within {place.radius_m} m · {windowLabel}
           </p>
-          {place.rate_ratio != null ? <ComparisonBars rateRatio={place.rate_ratio} /> : null}
+          <BaselineIntervalPlot place={place} identity={identity} noun={noun} domainMax={domainMax} />
           {place.monthly_counts?.length ? (
             <div className="mc-spark" aria-hidden="true">
               {place.monthly_counts.map((n, i) => (
@@ -291,14 +276,29 @@ function VerdictCard({ place, windowLabel, noun }: { place: NeighborhoodPlace; w
           ) : null}
           <details className="mc-analytical">
             <summary>How we know</summary>
+            {place.baselines.length > 0 ? (
+              <div className="mc-incident-table-wrap">
+                <table className="mc-incident-table mc-baseline-table">
+                  <thead>
+                    <tr><th scope="col">Baseline</th><th scope="col">Rate/yr</th><th scope="col">Ratio</th><th scope="col">95% CI</th><th scope="col">adj p</th><th scope="col">Method</th></tr>
+                  </thead>
+                  <tbody>
+                    {place.baselines.map((b) => (
+                      <tr key={b.kind}>
+                        <td>{b.label}</td>
+                        <td>{formatPerYear(annualIncidentsWithin(b.baseline_rate, place.radius_m))}</td>
+                        <td>{b.rate_ratio.toFixed(1)}×</td>
+                        <td>{b.ci_lower.toFixed(1)}–{b.ci_upper.toFixed(1)}×</td>
+                        <td>{b.adjusted_p_value.toFixed(3)}</td>
+                        <td>{b.method}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
             <dl>
               <div><dt>Baseline beats</dt><dd>{place.baseline_beats?.length ? place.baseline_beats.join(" + ") : (place.beat ?? "—")}</dd></div>
-              <div><dt>Place vs area rate</dt><dd>{place.place_rate != null && place.beat_rate != null ? `${place.place_rate.toFixed(2)} vs ${place.beat_rate.toFixed(2)} /km²·day` : "—"}</dd></div>
-              <div><dt>95% CI (this comparison)</dt><dd>{place.ci_lower != null && place.ci_upper != null ? `${place.ci_lower.toFixed(1)}–${place.ci_upper.toFixed(1)}×` : "—"}</dd></div>
-              <div><dt>Adjusted p-value</dt><dd>{place.adjusted_p_value != null ? place.adjusted_p_value.toFixed(3) : "—"}</dd></div>
-              <div><dt>Exact p-value</dt><dd>{place.exact_p_value != null ? place.exact_p_value.toFixed(3) : "—"}</dd></div>
-              <div><dt>Dispersion</dt><dd>{place.overdispersion_status}</dd></div>
-              <div><dt>Method</dt><dd>{place.method}</dd></div>
               <div><dt>Adequacy</dt><dd>{place.minimum_data_status}</dd></div>
               <div><dt>Nearest</dt><dd>{place.nearest_incident_m != null ? `${Math.round(place.nearest_incident_m)} m` : "—"}</dd></div>
             </dl>
@@ -308,6 +308,7 @@ function VerdictCard({ place, windowLabel, noun }: { place: NeighborhoodPlace; w
       ) : (
         <>
           <p className="mc-verdict-sub">{place.place_incident_count} {countNoun(noun, place.place_incident_count)} in range; no beat baseline.</p>
+          <BaselineIntervalPlot place={place} identity={identity} noun={noun} domainMax={domainMax} />
           <CategoryBreakdown rows={place.category_breakdown} />
         </>
       )}
@@ -539,9 +540,12 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
             </div>
           )}
 
-          {neighborhood?.places?.map((place) => (
-            <VerdictCard key={place.place_id} place={place} windowLabel={windowLabel} noun={noun} />
-          ))}
+          {(() => {
+            const domainMax = plotDomainMax(neighborhood?.places ?? []);
+            return neighborhood?.places?.map((place, index) => (
+              <VerdictCard key={place.place_id} place={place} index={index} windowLabel={windowLabel} noun={noun} domainMax={domainMax} />
+            ));
+          })()}
 
           {neighborhood?.pairwise?.length ? <PairwiseSection neighborhood={neighborhood} /> : null}
 

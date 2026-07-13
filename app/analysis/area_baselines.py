@@ -47,6 +47,22 @@ def sector_for_beat(beat: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+# Tokens .title() would mangle in user-facing labels: district acronyms and the
+# compass suffixes SPD uses in MCPP names.
+_LABEL_UPPER_TOKENS = frozenset({"SODO", "SLU", "NE", "NW", "SE", "SW"})
+
+
+def mcpp_display_label(name: str) -> str:
+    """Human display label for an UPPERCASE MCPP name ("SLU/CASCADE" → "SLU/Cascade")."""
+
+    def fix(token: str) -> str:
+        return token if token in _LABEL_UPPER_TOKENS else token.title()
+
+    return "/".join(
+        " ".join(fix(word) for word in part.split(" ")) for part in name.split("/")
+    )
+
+
 def load_mcpp_areas(path: Path | None = None) -> dict[str, float]:
     source = path or DEFAULT_MCPP_AREA_CSV
     areas: dict[str, float] = {}

@@ -64,6 +64,18 @@ def _select_places_summary(result: dict[str, Any]) -> str:
     return " ".join(parts) if parts else "No matching places."
 
 
+_RELATION_PHRASES = {
+    "above": "above",
+    "below": "below",
+    "similar": "about the same as",
+}
+
+
+def _primary_baseline(place: dict[str, Any]) -> dict[str, Any] | None:
+    by_kind = {entry.get("kind"): entry for entry in place.get("baselines") or []}
+    return by_kind.get("mcpp") or by_kind.get("beat") or by_kind.get("city")
+
+
 def _analyze_places_summary(result: dict[str, Any]) -> str:
     radius = (result.get("settings_used") or {}).get("radius_m")
     lead_in, noun = _layer_terms(result)
@@ -72,20 +84,19 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
     for place in places:
         label = place.get("place_label") or "The place"
         count = place.get("place_incident_count") or 0
-        if place.get("baseline_available") and place.get("rate_ratio") is not None:
-            phrase = _DECISION_PHRASES.get(
-                place.get("decision"), "compared to its surrounding area"
-            )
+        entry = _primary_baseline(place)
+        relation = (entry or {}).get("relation")
+        if entry and relation in _RELATION_PHRASES and entry.get("rate_ratio") is not None:
             ci = ""
-            lower, upper = place.get("ci_lower"), place.get("ci_upper")
+            lower, upper = entry.get("ci_lower"), entry.get("ci_upper")
             if lower is not None and upper is not None:
                 ci = f" (95% CI {lower:.1f}–{upper:.1f})"
             sentences.append(
-                f"{label}: {place['rate_ratio']:.1f}× its surrounding area — {phrase}{ci}; "
-                f"{count} {noun} within {radius} m."
+                f"{label}: {entry['rate_ratio']:.1f}× — {_RELATION_PHRASES[relation]} "
+                f"{entry.get('label')}'s rate{ci}; {count} {noun} within {radius} m."
             )
         else:
-            phrase = _DECISION_PHRASES.get(place.get("decision"), "no surrounding-area comparison")
+            phrase = _DECISION_PHRASES.get(place.get("decision"), "no area comparison")
             sentences.append(f"{label}: {count} {noun} within {radius} m ({phrase}).")
     summary = (lead_in + " ".join(sentences)) if sentences else "No places to analyze."
     return _with_provenance(summary, result)

@@ -211,6 +211,20 @@ export type TemporalProfile = {
 
 export type CategoryShare = { label: string; place_count: number; place_share: number; beat_share: number | null };
 
+export type BaselineEntry = {
+  kind: "mcpp" | "beat" | "sector" | "city";
+  label: string;
+  area_km2: number;
+  baseline_incident_count: number;
+  baseline_rate: number;
+  rate_ratio: number;
+  ci_lower: number;
+  ci_upper: number;
+  adjusted_p_value: number;
+  method: string;
+  relation: "above" | "similar" | "below" | "insufficient";
+};
+
 export type NeighborhoodPlace = {
   place_id: string;
   place_label: string;
@@ -220,21 +234,15 @@ export type NeighborhoodPlace = {
   baseline_available: boolean;
   decision: "above_clear" | "below_clear" | "not_clear" | "insufficient_data" | "model_warning" | "baseline_unavailable";
   place_incident_count: number;
-  beat_incident_count?: number;
   place_rate?: number;
-  beat_rate?: number;
-  rate_ratio?: number;
-  ci_lower?: number;
-  ci_upper?: number;
-  adjusted_p_value?: number;
-  exact_p_value?: number | null;
-  method?: string;
-  overdispersion_status?: string;
   minimum_data_status?: string;
   nearest_incident_m?: number | null;
   monthly_counts?: number[];
   category_breakdown: CategoryShare[];
   temporal?: TemporalProfile | null;
+  baselines: BaselineEntry[];
+  place_rate_ci_lower?: number;
+  place_rate_ci_upper?: number;
 };
 
 export type NeighborhoodPair = {

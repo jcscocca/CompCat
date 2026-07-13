@@ -7,6 +7,7 @@ import pytest
 from app.analysis.area_baselines import (
     load_mcpp_areas,
     load_mcpp_polygons,
+    mcpp_display_label,
     normalize_mcpp,
     sector_for_beat,
 )
@@ -104,3 +105,17 @@ def test_load_mcpp_areas_rejects_non_positive_area(tmp_path):
     csv_path.write_text("mcpp,area_km2\nTEST HILL,0\n", encoding="utf-8")
     with pytest.raises(ValueError):
         load_mcpp_areas(csv_path)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("CAPITOL HILL", "Capitol Hill"),
+        ("SODO", "SODO"),
+        ("SLU/CASCADE", "SLU/Cascade"),
+        ("FAUNTLEROY SW", "Fauntleroy SW"),
+        ("BALLARD NORTH", "Ballard North"),
+    ],
+)
+def test_mcpp_display_label(name, expected):
+    assert mcpp_display_label(name) == expected

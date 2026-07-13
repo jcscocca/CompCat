@@ -82,11 +82,12 @@ def test_overdispersed_place_verdict_honors_overdispersion(tmp_path):
     )
     place = result["places"][0]
     assert place["place_incident_count"] == 13
-    assert place["beat_incident_count"] == 27
-    assert place["overdispersion_status"] == "overdispersed"
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    assert by_kind["beat"]["baseline_incident_count"] == 27
     # The overdispersion-aware test is NOT significant, so the verdict must not
-    # claim 'above_clear', and the adjusted p must reflect the inflated variance.
-    assert place["adjusted_p_value"] > 0.05
+    # claim 'above_clear', and the beat baseline's adjusted p must reflect the
+    # inflated variance.
+    assert by_kind["beat"]["adjusted_p_value"] > 0.05
     assert place["decision"] == "not_clear"
 
 
@@ -155,7 +156,8 @@ def test_hotspot_reads_above_clear_after_removing_self_dilution(tmp_path):
     )
     place = result["places"][0]
     assert place["place_incident_count"] == 12
-    assert place["beat_incident_count"] == 6  # rest of beat only
+    by_kind = {entry["kind"]: entry for entry in place["baselines"]}
+    assert by_kind["beat"]["baseline_incident_count"] == 6  # rest of beat only
     assert place["decision"] == "above_clear"
 
 
@@ -228,7 +230,10 @@ def test_neighborhood_bh_adjusted_p_aligns_across_multiple_places(tmp_path):
     assert by_id["B"]["baseline_available"] is True
     assert by_id["A"]["place_incident_count"] == 6
     assert by_id["B"]["place_incident_count"] == 6
-    # Symmetric inputs -> equal adjusted p-values and identical verdicts. An off-by-one in the
-    # build-p-values / consume-adjusted two-loop alignment would desync these.
-    assert by_id["A"]["adjusted_p_value"] == by_id["B"]["adjusted_p_value"]
+    # Symmetric inputs -> identical verdicts and equal per-baseline adjusted p-values. An
+    # off-by-one in either build-p-values / consume-adjusted two-loop alignment would desync
+    # these (the across-places pool feeds decision; the within-place pool feeds baselines[]).
+    a_beat = {entry["kind"]: entry for entry in by_id["A"]["baselines"]}["beat"]
+    b_beat = {entry["kind"]: entry for entry in by_id["B"]["baselines"]}["beat"]
+    assert a_beat["adjusted_p_value"] == b_beat["adjusted_p_value"]
     assert by_id["A"]["decision"] == by_id["B"]["decision"]
