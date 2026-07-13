@@ -84,6 +84,15 @@ export type BeatFeatureCollection = {
   }>;
 };
 
+export type McppFeatureCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: { mcpp: string };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+};
+
 export type DashboardSummary = {
   /** The layer the persisted totals were computed for (server always sends it; optional so
    * fixtures predating it still type-check). Absent is treated as "reported". */
