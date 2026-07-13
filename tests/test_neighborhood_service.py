@@ -461,3 +461,20 @@ def test_baseline_entries_carry_adjusted_p_and_legacy_fields(tmp_path):
     # Legacy top-level beat fields still present and untouched this slice.
     assert place["baseline_available"] is True
     assert "rate_ratio" in place and "beat_rate" in place
+
+
+def test_place_rate_interval_present_and_ordered(tmp_path):
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(session, user_hash, place_id)["places"][0]
+    assert place["place_rate"] > 0
+    assert place["place_rate_ci_lower"] < place["place_rate"] < place["place_rate_ci_upper"]
+
+
+def test_place_rate_interval_present_without_beat_baseline(tmp_path):
+    # Even when no beat baseline forms (empty area lookup), the place's own rate and
+    # interval are published — the plot renders the band with whatever ticks exist.
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    place = _run_with_baselines(session, user_hash, place_id, area_lookup={})["places"][0]
+    assert place["baseline_available"] is False
+    assert place["place_rate"] > 0
+    assert place["place_rate_ci_lower"] < place["place_rate_ci_upper"]

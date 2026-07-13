@@ -22,6 +22,7 @@ from app.analysis.rate_tests import (
     benjamini_hochberg,
     compare_incident_rates,
     dispersion_status,
+    rate_confidence_interval,
 )
 from app.analysis.temporal import build_temporal_profile
 from app.api.dashboard_schemas import AnalysisPoint
@@ -393,6 +394,29 @@ def _baselines_for_place(
     return entries
 
 
+def _place_rate_fields(
+    place_incidents: list[CrimeIncidentData], radius_m: int, days: int, start: date, end: date
+) -> dict[str, Any]:
+    """The place's own exposure-adjusted rate with a quasi-Poisson interval — same
+    helper and same own-monthly-dispersion convention as the Compare tab's per-address
+    interval, so the two surfaces share one variance model."""
+    exposure = _place_exposure_km2_days(radius_m, days)
+    if exposure <= 0:
+        return {}
+    monthly = trim_partial_edge_months(
+        _monthly_counts(place_incidents, start, end), start, end
+    )
+    dispersion = dispersion_status(monthly)
+    interval = rate_confidence_interval(
+        count=len(place_incidents), exposure=exposure, overdispersion_phi=dispersion.phi
+    )
+    return {
+        "place_rate": len(place_incidents) / exposure,
+        "place_rate_ci_lower": interval.ci_lower,
+        "place_rate_ci_upper": interval.ci_upper,
+    }
+
+
 def neighborhood_analysis_for_places(
     *,
     session: Session,
@@ -545,6 +569,17 @@ def neighborhood_analysis_for_places(
     baseline_query_cache: dict[tuple, list[CrimeIncidentData]] = {}
     for entry in raw:
         cluster = entry["cluster"]
+        place_stats = (
+            {}
+            if cluster.display_latitude is None or cluster.display_longitude is None
+            else _place_rate_fields(
+                entry.get("place_incidents", []),
+                radius_m,
+                days,
+                analysis_start_date,
+                analysis_end_date,
+            )
+        )
         baselines = (
             []
             if cluster.display_latitude is None or cluster.display_longitude is None
@@ -578,6 +613,7 @@ def neighborhood_analysis_for_places(
             "baseline_beats": entry.get("baseline_beats"),
             "radius_m": radius_m,
             "baselines": baselines,
+            **place_stats,
         }
         if entry.get("beat") is None or entry.get("area") is None:
             places.append(
