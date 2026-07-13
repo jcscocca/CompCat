@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.analysis.area_baselines import sector_for_beat
+from app.analysis.area_baselines import mcpp_display_label, sector_for_beat
 from app.analysis.beat_baselines import (
     BeatPolygons,
     assign_beat,
@@ -296,7 +296,7 @@ def _baselines_for_place(
             )
             if rest_area > 0 and rest:
                 candidates.append(
-                    {"kind": "mcpp", "label": name.title(), "incidents": rest,
+                    {"kind": "mcpp", "label": mcpp_display_label(name), "incidents": rest,
                      "area_km2": rest_area}
                 )
 
