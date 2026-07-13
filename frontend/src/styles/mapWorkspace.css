@@ -430,14 +430,6 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-idbadge.id-c{background:var(--id-c);}
 .mc-idbadge.id-d{background:var(--id-d);}
 .mc-idbadge.id-x{background:var(--id-x);}
-.mc-cmpbars{display:grid;gap:6px;margin-top:2px;}
-.mc-cmpbar{display:flex;align-items:center;gap:9px;font-size:11px;}
-.mc-cmpbar .name{width:104px;flex:none;text-align:right;color:var(--text);}
-.mc-cmpbar .track{flex:1;height:13px;border-radius:4px;background:var(--surface-sunken);overflow:hidden;}
-.mc-cmpbar .fill{display:block;height:100%;border-radius:4px;}
-.mc-cmpbar .fill.beat{background:var(--border-strong);}
-.mc-cmpbar .fill.place{background:var(--slate);}
-.mc-cmpbar .val{width:40px;flex:none;font-family:var(--f-mono);color:var(--text-strong);}
 .mc-incident-reveal{margin-top:4px;}
 .mc-incident-reveal>summary{cursor:pointer;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);list-style:none;display:inline-flex;align-items:center;gap:6px;}
 .mc-incident-reveal>summary::before{content:"▸";font-size:10px;transition:transform .15s ease;}

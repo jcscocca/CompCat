@@ -15,6 +15,7 @@ const RELATION_TEXT: Record<BaselineEntry["relation"], string> = {
 /** Shared per-year axis domain across all plotted places: covers every place's CI and
  * every baseline tick, zero-anchored with 5% headroom, so the citywide tick lands in
  * the same visual position on every card. */
+// Assumes one global radius per run (true today): mixing per-place radii would silently mix axis scales.
 export function plotDomainMax(places: NeighborhoodPlace[]): number {
   let max = 0;
   for (const place of places) {
@@ -62,14 +63,15 @@ export function BaselineIntervalPlot({
       <div className="mc-bplot-chart">
         <span
           className="mc-bplot-band"
+          aria-hidden="true"
           style={{ left: `${bandLeft}%`, width: `${bandWidth}%` }}
           title={`95% interval ${perYear(place.place_rate_ci_lower)}–${perYear(place.place_rate_ci_upper)} /yr`}
         />
         <div className="mc-bplot-row">
           <span className="name" data-testid="bplot-name">This place</span>
           <span className="track">
-            <span className="bar" style={{ left: `${bandLeft}%`, width: `${bandWidth}%` }} />
-            <span className="dot" style={{ left: `${pos(place.place_rate)}%` }} title={`${perYear(place.place_rate)} /yr`} />
+            <span className="bar" aria-hidden="true" style={{ left: `${bandLeft}%`, width: `${bandWidth}%` }} />
+            <span className="dot" aria-hidden="true" style={{ left: `${pos(place.place_rate)}%` }} title={`${perYear(place.place_rate)} /yr`} />
           </span>
           <span className="val">{perYear(place.place_rate)} /yr</span>
         </div>
@@ -77,12 +79,12 @@ export function BaselineIntervalPlot({
           <div className="mc-bplot-row" key={entry.kind}>
             <span className="name" data-testid="bplot-name">{entry.label}</span>
             <span className="track">
-              <span className="tickmark" style={{ left: `${pos(entry.baseline_rate)}%` }} title={`${perYear(entry.baseline_rate)} /yr`} />
+              <span className="tickmark" aria-hidden="true" style={{ left: `${pos(entry.baseline_rate)}%` }} title={`${perYear(entry.baseline_rate)} /yr`} />
             </span>
             <span className="val">{perYear(entry.baseline_rate)} /yr · <em>{RELATION_TEXT[entry.relation]}</em></span>
           </div>
         ))}
-        <div className="mc-bplot-foot">
+        <div className="mc-bplot-foot" aria-hidden="true">
           <span className="name" />
           <span className="track">
             <span className="mc-bplot-bandlabel" style={{ left: `${bandLeft}%`, width: `${bandWidth}%` }}>
