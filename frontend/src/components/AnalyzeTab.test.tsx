@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AnalyzeTab } from "./AnalyzeTab";
 import { METHODS_DEFINITIONS } from "../lib/methodsDefinitions";
-import type { AnalysisSettings, DashboardSummary, NeighborhoodAnalysis, NeighborhoodPlace, Place } from "../types";
+import type { AnalysisSettings, DashboardSummary, McppFeatureCollection, NeighborhoodAnalysis, NeighborhoodPlace, Place } from "../types";
 
 const home: Place = {
   id: "p1", display_label: "Home", latitude: 47.61, longitude: -122.33, visit_count: 5,
@@ -61,6 +61,19 @@ const homePlace: NeighborhoodPlace = {
 const neighborhood: NeighborhoodAnalysis = {
   radius_m: 250, analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30",
   offense_category: null, pairwise: [], places: [homePlace],
+};
+
+// homePlace's mcpp baseline label is "Capitol Hill" — the canonical polygon name is its
+// uppercased form (LocatorChip.mcppLabel.toUpperCase() round-trip).
+const MCPP_FC: McppFeatureCollection = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { mcpp: "CAPITOL HILL" },
+      geometry: { type: "Polygon", coordinates: [[[-122.34, 47.60], [-122.32, 47.60], [-122.32, 47.62], [-122.34, 47.62], [-122.34, 47.60]]] },
+    },
+  ],
 };
 
 afterEach(cleanup);
@@ -134,6 +147,43 @@ describe("AnalyzeTab", () => {
     for (const id of ["reportedIncidentRate", "beatBaselineRate", "rateRatio", "confidenceInterval", "adjustedPValue", "overdispersion", "minimumDataStatus", "nearestIncident", "monthlyTrend"]) {
       expect(ids.has(id)).toBe(true);
     }
+  });
+
+  it("reports card hover to onHoverPlace", () => {
+    const onHoverPlace = vi.fn();
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        onHoverPlace={onHoverPlace}
+      />,
+    );
+    const card = screen.getByLabelText(/Verdict for/);
+    fireEvent.mouseEnter(card);
+    expect(onHoverPlace).toHaveBeenCalledWith(expect.any(String));
+    fireEvent.mouseLeave(card);
+    expect(onHoverPlace).toHaveBeenLastCalledWith(null);
+  });
+
+  it("renders a locator chip on verdict cards when MCPP polygons are loaded", () => {
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        mcppPolygons={MCPP_FC}
+      />,
+    );
+    expect(screen.getAllByTestId("locator-chip").length).toBeGreaterThan(0);
   });
 
   it("shows the confidence interval in analytical detail, not on the verdict line", () => {

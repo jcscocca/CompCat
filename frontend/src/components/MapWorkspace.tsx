@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons } from "../api/client";
+import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, getMcppPolygons } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { interpretToolResult } from "../lib/assistantBridge";
-import { DRAWER_PEEK } from "../lib/drawer";
+import { DRAWER_PEEK, FOCUS_CHROME_MIN } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
+import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useAnalyze } from "../lib/useAnalyze";
 import { useIncidentPoints } from "../lib/useIncidentPoints";
@@ -31,7 +32,7 @@ import { PlacesTab } from "./PlacesTab";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
 import type { ComparePoint } from "../lib/useCompareSet";
-import type { AnalysisSettings, AssistantDashboardState, BeatFeatureCollection, GeocodeResult, MapBounds, PlaceCreate, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, BeatFeatureCollection, GeocodeResult, MapBounds, McppFeatureCollection, PlaceCreate, TabKey } from "../types";
 
 export function MapWorkspace() {
   const { theme, setTheme } = useTheme();
@@ -69,6 +70,11 @@ export function MapWorkspace() {
     getBeatPolygons().then(setBeats).catch(() => setBeats(null)); // outline layer is optional chrome
   }, []);
 
+  const [mcppPolygons, setMcppPolygons] = useState<McppFeatureCollection | null>(null);
+  useEffect(() => {
+    getMcppPolygons().then(setMcppPolygons).catch(() => setMcppPolygons(null)); // locator chips are optional chrome
+  }, []);
+
   const incidentLayer = useIncidentPoints({ bounds: viewport, analysis });
 
   const data = useDashboardData();
@@ -104,6 +110,14 @@ export function MapWorkspace() {
     }
     return data.places.filter((place) => selectedIds.has(place.id));
   }, [sharedPoints, lookupPoint, data.places, selectedIds]);
+
+  // One identity source for cards AND pins: index within `selected` (AnalyzeTab letters
+  // use the same array order, so the teal "B" card is always the teal "B" pin).
+  const identityByPlaceId = useMemo(
+    () => new Map<string, PlaceIdentity>(selected.map((place, index) => [place.id, placeIdentity(index)])),
+    [selected],
+  );
+  const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
   const compareSet = useCompareSet(selected);
 
   const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError, points: sharedPoints ?? (lookupPoint ? [lookupPoint] : undefined) });
@@ -312,10 +326,14 @@ export function MapWorkspace() {
   const showLanding =
     data.places.length === 0 && !lookupPoint && !sharedPoints && !manualEntry && activeTab === "places" && !pinDraft.draft;
 
+  // Recomputed every render: useDrawer's window-resize listener always produces a new
+  // drawer object, so viewport changes re-render. No extra state needed.
+  const isFocus = !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
+
   return (
     <div className="mc-scope">
       <div
-        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}`}
+        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}${isFocus ? " is-focus" : ""}`}
         style={{ "--panel-width": `${drawer.collapsed ? DRAWER_PEEK : drawer.widthPx}px` } as CSSProperties}
       >
         <MapCanvas
@@ -330,6 +348,8 @@ export function MapWorkspace() {
           highlightBeats={highlightBeats}
           incidentPoints={incidentLayer.geojson}
           theme={theme}
+          identityByPlaceId={identityByPlaceId}
+          pulsePlaceId={hoveredPlaceId}
           onViewportChange={setViewport}
           onMapClick={pinDraft.handleMapClick}
           onMarkerClick={handleToggleSelect}
@@ -439,6 +459,8 @@ export function MapWorkspace() {
               onCopyLink={() => buildShareUrl("analyze")}
               onCompareWith={() => setActiveTab("compare")}
               onSave={lookupPoint ? handleSaveLookup : undefined}
+              onHoverPlace={setHoveredPlaceId}
+              mcppPolygons={mcppPolygons}
             />
           ) : null}
           {activeTab === "compare" ? (

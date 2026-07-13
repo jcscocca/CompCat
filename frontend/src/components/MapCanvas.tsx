@@ -13,6 +13,7 @@ import {
   RINGS_SOURCE,
 } from "../lib/mapLayers";
 import { buildMapStyle, cartoRasterStyle, fallbackMapStyle, type MapTheme, TILES_URL } from "../lib/mapStyle";
+import type { PlaceIdentity } from "../lib/placeIdentity";
 import type { IncidentFeatureCollection } from "../lib/useIncidentPoints";
 import type { BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
 
@@ -38,18 +39,30 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => HTML_ENTITIES[char]);
 }
 
-export function iconHtml(kind: MarkerKind, opts: { count?: number | null; label?: string }): string {
+function letterGlyph(letter: string): string {
+  return `<text x="12" y="16" font-size="11" fill="#fff" text-anchor="middle" font-family="Archivo" font-weight="700">${escapeHtml(letter)}</text>`;
+}
+
+export function iconHtml(
+  kind: MarkerKind,
+  opts: { count?: number | null; label?: string; identity?: PlaceIdentity },
+): string {
+  const fill = opts.identity
+    ? `var(--id-${opts.identity.slot})`
+    : kind === "low"
+      ? "#74858E"
+      : kind === "selected"
+        ? "var(--accent)"
+        : "#3A3F46";
+  const glyph = opts.identity ? letterGlyph(opts.identity.letter) : kind === "low" ? QGLYPH : DOT;
   if (kind === "selected") {
     const label = opts.label ? escapeHtml(opts.label) : "";
-    return `<span class="mc-pin-halo"></span>${teardrop("var(--accent)", DOT)}<span class="mc-pin-tag">${label}</span>`;
+    return `<span class="mc-pin-halo"></span>${teardrop(fill, glyph)}<span class="mc-pin-tag">${label}</span>`;
   }
   if (kind === "analyzed") {
-    return `${teardrop("#3A3F46", DOT)}<span class="mc-pin-badge"><b>${opts.count ?? 0}</b><i>inc.</i></span>`;
+    return `${teardrop(fill, glyph)}<span class="mc-pin-badge"><b>${opts.count ?? 0}</b><i>inc.</i></span>`;
   }
-  if (kind === "low") {
-    return teardrop("#74858E", QGLYPH);
-  }
-  return teardrop("#3A3F46", DOT);
+  return teardrop(fill, glyph);
 }
 
 export function markerKindFor(
@@ -120,6 +133,8 @@ type Props = {
   highlightBeats: string[];
   incidentPoints: IncidentFeatureCollection | null;
   theme: MapTheme;
+  identityByPlaceId?: Map<string, PlaceIdentity>;
+  pulsePlaceId?: string | null;
   onViewportChange?: (bounds: MapBounds) => void;
   onMapClick: (latlng: LatLng) => void;
   onMarkerClick: (placeId: string) => void;
@@ -137,6 +152,8 @@ export function MapCanvas({
   highlightBeats,
   incidentPoints,
   theme,
+  identityByPlaceId,
+  pulsePlaceId,
   onViewportChange,
   onMapClick,
   onMarkerClick,
@@ -144,6 +161,7 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const markerElsRef = useRef(new Map<string, HTMLElement>());
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
   const onViewportChangeRef = useRef(onViewportChange);
@@ -254,13 +272,14 @@ export function MapCanvas({
     if (!map || !mapReady) return;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+    markerElsRef.current.clear();
     for (const place of places) {
       if (place.latitude === null || place.longitude === null) continue;
       const kind = markerKindFor(place, selectedIds, summary, radiusM);
       const count = incidentCountForPlace(summary, place.id, radiusM);
       const el = document.createElement("div");
       el.className = "mc-pin-icon";
-      el.innerHTML = iconHtml(kind, { count, label: place.display_label });
+      el.innerHTML = iconHtml(kind, { count, label: place.display_label, identity: identityByPlaceId?.get(place.id) });
       el.tabIndex = 0;
       el.setAttribute("role", "button");
       el.setAttribute("aria-label", place.display_label);
@@ -273,6 +292,7 @@ export function MapCanvas({
         if (event.key === " ") event.preventDefault();
         onMarkerClickRef.current(place.id);
       });
+      markerElsRef.current.set(place.id, el);
       markersRef.current.push(
         new maplibregl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([place.longitude, place.latitude])
@@ -289,7 +309,13 @@ export function MapCanvas({
           .addTo(map),
       );
     }
-  }, [places, selectedIds, summary, radiusM, draft, mapReady]);
+  }, [places, selectedIds, summary, radiusM, draft, mapReady, identityByPlaceId]);
+
+  useEffect(() => {
+    for (const [id, el] of markerElsRef.current) {
+      el.classList.toggle("is-pulsing", id === pulsePlaceId);
+    }
+  }, [pulsePlaceId, places, selectedIds, summary, radiusM, draft, mapReady, identityByPlaceId]);
 
   useEffect(() => {
     const map = mapRef.current;

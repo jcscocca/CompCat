@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   AnalysisSettings,
   CategoryShare,
   IncidentDetail,
   IncidentDetailsResponse,
+  McppFeatureCollection,
   NeighborhoodAnalysis,
   NeighborhoodPlace,
   Place,
@@ -14,8 +15,10 @@ import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { countNoun, incidentNoun, type IncidentNoun } from "../lib/layerCopy";
 import { aggregateHeadline } from "../lib/verdictCopy";
 import { placeIdentity } from "../lib/placeIdentity";
+import { collectionBox, mosaicPath } from "../lib/locatorGeometry";
 import { annualIncidentsWithin, formatPerYear } from "../lib/rateFormat";
 import { BaselineIntervalPlot, plotDomainMax } from "./BaselineIntervalPlot";
+import { LocatorChip, type LocatorData } from "./LocatorChip";
 import {
   clampInt,
   DAYSET_DAYS,
@@ -55,6 +58,8 @@ type Props = {
   onCopyLink?: () => string | null;
   onCompareWith?: () => void;
   onSave?: () => void;
+  onHoverPlace?: (placeId: string | null) => void;
+  mcppPolygons?: McppFeatureCollection | null;
 };
 
 const CATEGORIES: { value: string; label: string }[] = [
@@ -252,12 +257,28 @@ function CategoryBreakdown({ rows }: { rows: CategoryShare[] }) {
   );
 }
 
-function VerdictCard({ place, index, windowLabel, noun, domainMax }: { place: NeighborhoodPlace; index: number; windowLabel: string; noun: IncidentNoun; domainMax: number }) {
+function VerdictCard({ place, index, windowLabel, noun, domainMax, onHoverPlace, locator, coords }: { place: NeighborhoodPlace; index: number; windowLabel: string; noun: IncidentNoun; domainMax: number; onHoverPlace?: (placeId: string | null) => void; locator: LocatorData | null; coords: { latitude: number; longitude: number } | null }) {
   const identity = placeIdentity(index);
   const headline = aggregateHeadline(place, noun);
   return (
-    <section className="mc-verdict" aria-label={`Verdict for ${place.place_label}`}>
+    <section
+      className="mc-verdict"
+      aria-label={`Verdict for ${place.place_label}`}
+      onMouseEnter={() => onHoverPlace?.(place.place_id)}
+      onMouseLeave={() => onHoverPlace?.(null)}
+      onFocus={() => onHoverPlace?.(place.place_id)}
+      onBlur={() => onHoverPlace?.(null)}
+    >
       <div className="mc-verdict-head">
+        {locator && coords ? (
+          <LocatorChip
+            locator={locator}
+            latitude={coords.latitude}
+            longitude={coords.longitude}
+            mcppLabel={place.baselines.find((b) => b.kind === "mcpp")?.label ?? null}
+            identity={identity}
+          />
+        ) : null}
         <span className={`mc-idbadge id-${identity.slot}`} aria-hidden="true">{identity.letter}</span>
         <p className="mc-verdict-headline">{headline}</p>
       </div>
@@ -431,8 +452,21 @@ function IncidentDetailsCards({ details, noun, showCategory }: { details: Incide
   );
 }
 
-export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave }: Props) {
+export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave, onHoverPlace, mcppPolygons }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
+
+  function coordsFor(place: NeighborhoodPlace, index: number): { latitude: number; longitude: number } | null {
+    const match = selected.find((p) => p.id === place.place_id) ?? selected[index];
+    return match && match.latitude != null && match.longitude != null
+      ? { latitude: match.latitude, longitude: match.longitude }
+      : null;
+  }
+
+  const locator = useMemo<LocatorData | null>(() => {
+    if (!mcppPolygons) return null;
+    const box = collectionBox(mcppPolygons);
+    return box ? { polygons: mcppPolygons, box, mosaic: mosaicPath(mcppPolygons, box) } : null;
+  }, [mcppPolygons]);
   const canRun = selected.length >= 1 && !running;
   const width = panelWidthPx ?? Infinity;
   const incidentLayout = width >= INCIDENT_TABLE_MIN ? "table" : "cards";
@@ -543,7 +577,17 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
           {(() => {
             const domainMax = plotDomainMax(neighborhood?.places ?? []);
             return neighborhood?.places?.map((place, index) => (
-              <VerdictCard key={place.place_id} place={place} index={index} windowLabel={windowLabel} noun={noun} domainMax={domainMax} />
+              <VerdictCard
+                key={place.place_id}
+                place={place}
+                index={index}
+                windowLabel={windowLabel}
+                noun={noun}
+                domainMax={domainMax}
+                onHoverPlace={onHoverPlace}
+                locator={locator}
+                coords={coordsFor(place, index)}
+              />
             ));
           })()}
 

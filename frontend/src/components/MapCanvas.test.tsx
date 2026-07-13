@@ -120,6 +120,7 @@ vi.mock("pmtiles", () => ({ Protocol: class { tile = vi.fn(); } }));
 import maplibregl from "maplibre-gl";
 
 import { MapCanvas, iconHtml, markerKindFor, ringsGeoJSON } from "./MapCanvas";
+import { placeIdentity } from "../lib/placeIdentity";
 import type { DashboardSummary, Place } from "../types";
 
 type MockMapInstance = {
@@ -210,6 +211,27 @@ describe("iconHtml", () => {
     const html = iconHtml("selected", { label: '<img src=x onerror="alert(1)">' });
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
     expect(html).not.toContain("<img");
+  });
+});
+
+describe("iconHtml with identity", () => {
+  it("uses the identity color token and letter glyph", () => {
+    const html = iconHtml("selected", { label: "Cafe", identity: placeIdentity(0) });
+    expect(html).toContain("var(--id-a)");
+    expect(html).toContain(">A</text>");
+    expect(html).toContain("mc-pin-halo"); // kind extras preserved
+  });
+
+  it("keeps the count badge for analyzed identity pins", () => {
+    const html = iconHtml("analyzed", { count: 7, identity: placeIdentity(1) });
+    expect(html).toContain("var(--id-b)");
+    expect(html).toContain(">B</text>");
+    expect(html).toContain("mc-pin-badge");
+  });
+
+  it("renders legacy colors when no identity is given", () => {
+    expect(iconHtml("selected", { label: "x" })).toContain("var(--accent)");
+    expect(iconHtml("default", {})).toContain("#3A3F46");
   });
 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { clampWidth, DRAWER_DEFAULT, DRAWER_WIDE, type DrawerPreset } from "./drawer";
+import { clampWidth, drawerMax, DRAWER_DEFAULT, DRAWER_WIDE, type DrawerPreset } from "./drawer";
 import { loadDrawerState, saveDrawerState } from "./drawerStorage";
 import type { DrawerState } from "../types";
 
@@ -41,6 +41,7 @@ export function useDrawer(): DrawerController {
     onPreset: (preset) =>
       setDrawer((current) => {
         if (preset === "peek") return { ...current, collapsed: true };
+        if (preset === "focus") return { collapsed: false, widthPx: drawerMax() };
         return { collapsed: false, widthPx: clampWidth(preset === "wide" ? DRAWER_WIDE : DRAWER_DEFAULT) };
       }),
   };

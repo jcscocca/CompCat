@@ -126,6 +126,15 @@
   font-family:var(--f-mono);background:var(--surface-sunken);padding:3px 8px;border-radius:6px;}
 .mc-frame .maplibregl-ctrl-bottom-right{right:calc(var(--panel-width) + 14px);bottom:18px;z-index:1100;}
 
+/* Focus mode: the map is a locator strip — shed map-reading chrome, stack the topbar
+   vertically inside the strip so layer/theme/freshness stay reachable. */
+.mc-frame.is-focus .mc-wordmark,.mc-frame.is-focus .mc-status:not(.mc-freshness){display:none;}
+.mc-frame.is-focus .mc-topbar{flex-direction:column;align-items:flex-start;height:auto;gap:10px;padding:12px 10px;}
+.mc-frame.is-focus .mc-topbar-right{flex-wrap:wrap;row-gap:8px;}
+.mc-frame.is-focus .mc-searchpill,.mc-frame.is-focus .mc-legend,.mc-frame.is-focus .mc-disclosure,.mc-frame.is-focus .mc-helper{display:none;}
+.mc-frame.is-focus .maplibregl-ctrl-bottom-right{display:none;}
+.mc-frame.is-focus .mc-attrib{right:auto;left:8px;max-width:calc(100vw - var(--panel-width) - 16px);}
+
 .mc-workspace-panel{position:absolute;top:0;right:0;bottom:0;z-index:1200;width:var(--panel-width);height:auto;
   background:var(--surface);border-left:1px solid var(--border);border-radius:0;
   box-shadow:-18px 0 40px -28px rgba(16,24,32,.25);
@@ -218,7 +227,7 @@
 .mc-verdict.tone-hot{background:var(--accent-soft);border-color:var(--accent-soft);border-left-color:var(--accent);}
 .mc-verdict.tone-ok{background:rgba(116,133,142,.10);border-color:var(--slate-soft);border-left-color:var(--slate);}
 .mc-verdict.tone-muted{background:var(--surface-raised);border-color:var(--border);border-left-color:var(--border-strong);}
-.mc-verdict-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.mc-verdict-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;}
 .mc-ratio{font-family:var(--f-mono);font-weight:500;font-size:28px;line-height:1;color:var(--text-strong);}
 .mc-verdict.tone-hot .mc-ratio{color:var(--accent-deep);}
 .mc-verdict.tone-ok .mc-ratio{color:var(--slate);}
@@ -319,6 +328,8 @@
    (was the legend-dodge selector, retired when the legend moved bottom-right). */
 .mc-pin-icon{background:transparent;border:0;overflow:visible;}
 .mc-pin-icon svg{display:block;filter:drop-shadow(0 6px 7px rgba(20,24,28,.28));animation:pindrop .5s cubic-bezier(.2,.9,.25,1.1) both;transform-origin:bottom center;}
+.mc-pin-icon.is-pulsing svg{animation:pinpulse 1s ease-in-out infinite;}
+@keyframes pinpulse{0%,100%{transform:scale(1);}50%{transform:scale(1.18);}}
 .mc-pin-badge{position:absolute;left:100%;top:0;transform:translate(-8px,-55%);display:inline-flex;align-items:baseline;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:4px 9px;box-shadow:0 8px 18px -10px rgba(16,24,32,.45);white-space:nowrap;}
 .mc-pin-badge b{font-family:var(--f-mono);font-weight:500;font-size:12px;color:var(--accent-deep);line-height:1;}
 .mc-pin-badge i{font-style:normal;font-size:10px;color:var(--text-dim);}
@@ -430,6 +441,11 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-idbadge.id-c{background:var(--id-c);}
 .mc-idbadge.id-d{background:var(--id-d);}
 .mc-idbadge.id-x{background:var(--id-x);}
+.mc-locator{flex:none;background:var(--surface);border:0.5px solid var(--border);border-radius:6px;--idc:var(--id-x);}
+.mc-locator.id-a{--idc:var(--id-a);}.mc-locator.id-b{--idc:var(--id-b);}.mc-locator.id-c{--idc:var(--id-c);}.mc-locator.id-d{--idc:var(--id-d);}
+.mc-locator .mosaic{fill:none;stroke:var(--border);stroke-width:.6;}
+.mc-locator .hood{fill:color-mix(in srgb,var(--idc) 18%,transparent);stroke:var(--idc);stroke-width:1;}
+.mc-locator .pin{fill:var(--idc);stroke:var(--surface);stroke-width:1;}
 .mc-incident-reveal{margin-top:4px;}
 .mc-incident-reveal>summary{cursor:pointer;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);list-style:none;display:inline-flex;align-items:center;gap:6px;}
 .mc-incident-reveal>summary::before{content:"▸";font-size:10px;transition:transform .15s ease;}
@@ -502,7 +518,10 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-numberline .mc-plot-axis .tick{position:absolute;top:1px;transform:translateX(-50%);font-family:var(--f-mono,ui-monospace);font-size:10px;color:var(--text-dim);white-space:nowrap;}
 .mc-numberline .mc-plot-guides{position:absolute;inset:4px 0;display:grid;grid-template-columns:96px 1fr 74px;grid-template-rows:1fr;gap:10px;pointer-events:none;}
 .mc-numberline .mc-plot-guides .track{position:relative;}
-.mc-bplot{display:grid;gap:6px;margin:2px 0 4px;--idc:var(--id-x);}
+.mc-bplot{display:grid;gap:6px;margin:2px 0 4px;--idc:var(--id-x);overflow-x:auto;}
+/* The 96/1fr/148 columns need real width for the track; below it, scroll the plot
+   horizontally (same idiom as .mc-incident-table-wrap) instead of collapsing to 0. */
+.mc-bplot-chart{min-width:380px;}
 .mc-bplot.id-a{--idc:var(--id-a);}.mc-bplot.id-b{--idc:var(--id-b);}.mc-bplot.id-c{--idc:var(--id-c);}.mc-bplot.id-d{--idc:var(--id-d);}
 .mc-bplot-chart{position:relative;display:grid;gap:5px;}
 .mc-bplot-overlay{position:absolute;inset:0 0 26px 0;display:grid;grid-template-columns:96px 1fr 148px;gap:10px;pointer-events:none;}

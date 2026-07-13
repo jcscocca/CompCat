@@ -27,6 +27,7 @@ vi.mock("../api/client", () => ({
   getIncidentPoints: vi.fn().mockResolvedValue({
     points: [], returned_count: 0, total_count: 0, unmappable_citywide_count: 0, limit: 5000,
   }),
+  getMcppPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getNeighborhoodAnalysis: vi.fn(),
   getDashboardSummary: vi.fn(),
   getDashboardFreshness: vi.fn().mockResolvedValue(null),
@@ -254,6 +255,28 @@ describe("MapWorkspace", () => {
         layer: "reported",
       });
     });
+  });
+
+  it("marks the frame is-focus only when the drawer leaves less than the chrome minimum", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+
+    try {
+      // Default width (400) leaves a 624px strip at jsdom's 1024 viewport — chrome stays.
+      const wide = render(<MapWorkspace />);
+      await screen.findByRole("heading", { name: /look up an address/i });
+      expect(wide.container.querySelector(".mc-frame")).not.toHaveClass("is-focus");
+      wide.unmount();
+
+      // A 900px drawer leaves a 124px strip (< FOCUS_CHROME_MIN 240) — chrome sheds.
+      localStorage.setItem("waypoint.drawer.width", "900");
+      const focus = render(<MapWorkspace />);
+      await screen.findByRole("heading", { name: /look up an address/i });
+      expect(focus.container.querySelector(".mc-frame")).toHaveClass("is-focus");
+    } finally {
+      localStorage.removeItem("waypoint.drawer.width");
+      localStorage.removeItem("waypoint.drawer.collapsed");
+    }
   });
 
   it("collapses the workspace panel while choosing where to drop a pin", async () => {

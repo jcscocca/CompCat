@@ -73,7 +73,9 @@ never safety language.
   owned-interval plot (band + dot), locator chips, and Compare-tab rows for the same
   places.
 - **Hover-sync:** hovering a verdict card (or its locator chip) pulses the matching map
-  pin; clicking the chip flies the map to it. Works at every drawer width.
+  pin; clicking the chip flies the map to it *(click-to-fly deferred at slice-3 review —
+  needs a button wrapper + flyTo prop threading; hover-sync shipped)*. Works at every
+  drawer width.
 
 ## 3. Locator chips
 

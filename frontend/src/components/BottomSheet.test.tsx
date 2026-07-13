@@ -50,8 +50,15 @@ describe("BottomSheet", () => {
     expect(props.onPreset).toHaveBeenCalledWith("wide");
   });
 
+  it("offers a Focus preset and forwards it", () => {
+    const onPreset = vi.fn();
+    renderSheet({ onPreset });
+    fireEvent.click(screen.getByRole("button", { name: "Focus" }));
+    expect(onPreset).toHaveBeenCalledWith("focus");
+  });
+
   it("keeps the Wide preset pressed when its width is clamped on a narrow viewport", () => {
-    setViewport(800); // drawerMax() == 576, so clampWidth(DRAWER_WIDE=640) == 576
+    setViewport(680); // drawerMax() == max(340, 680 - 96) == 584, so clampWidth(DRAWER_WIDE=640) == 584
     try {
       renderSheet({ widthPx: clampWidth(DRAWER_WIDE) });
       expect(screen.getByRole("button", { name: /wide/i })).toHaveAttribute("aria-pressed", "true");
@@ -62,7 +69,7 @@ describe("BottomSheet", () => {
   });
 
   it("never marks both Default and Wide pressed when their clamped widths collide", () => {
-    setViewport(500); // drawerMax() == 360, so clampWidth(DEFAULT) === clampWidth(WIDE) === 360
+    setViewport(460); // drawerMax() == max(340, 460 - 96) == 364, so clampWidth(DEFAULT) === clampWidth(WIDE) === 364
     try {
       renderSheet({ widthPx: clampWidth(DRAWER_WIDE) });
       // A segmented control must have a single active option; the shared clamped width

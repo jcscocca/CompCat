@@ -63,6 +63,7 @@ const PRESETS: { preset: DrawerPreset; label: string }[] = [
   { preset: "peek", label: "Peek" },
   { preset: "default", label: "Default" },
   { preset: "wide", label: "Wide" },
+  { preset: "focus", label: "Focus" },
 ];
 
 function activateWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, action: () => void) {
@@ -92,10 +93,17 @@ export function BottomSheet({
     if (preset === "peek") return collapsed;
     if (collapsed) return false;
     if (preset === "default") return widthPx === clampWidth(DRAWER_DEFAULT);
-    // On narrow viewports clampWidth(WIDE) can equal clampWidth(DEFAULT); when they
-    // collide the shared width reads as "default", so the two presets are never both
-    // marked pressed (a segmented control must have a single active option).
-    return widthPx === clampWidth(DRAWER_WIDE) && clampWidth(DRAWER_WIDE) !== clampWidth(DRAWER_DEFAULT);
+    // On narrow viewports the clamped widths can collide (drawerMax === wide === default);
+    // when they do the smaller preset wins and the larger ones suppress themselves, so a
+    // segmented control only ever marks a single active option.
+    if (preset === "wide") {
+      return widthPx === clampWidth(DRAWER_WIDE) && clampWidth(DRAWER_WIDE) !== clampWidth(DRAWER_DEFAULT);
+    }
+    return (
+      widthPx === drawerMax() &&
+      drawerMax() !== clampWidth(DRAWER_WIDE) &&
+      drawerMax() !== clampWidth(DRAWER_DEFAULT)
+    );
   }
 
   function onHandlePointerDown(event: PointerEvent<HTMLDivElement>) {
