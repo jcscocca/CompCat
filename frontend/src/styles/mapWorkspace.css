@@ -446,6 +446,8 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-locator .mosaic{fill:none;stroke:var(--border);stroke-width:.6;}
 .mc-locator .hood{fill:color-mix(in srgb,var(--idc) 18%,transparent);stroke:var(--idc);stroke-width:1;}
 .mc-locator .pin{fill:var(--idc);stroke:var(--surface);stroke-width:1;}
+.mc-locator-btn{padding:0;border:0;background:none;cursor:pointer;border-radius:6px;display:block;}
+.mc-locator-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .mc-incident-reveal{margin-top:4px;}
 .mc-incident-reveal>summary{cursor:pointer;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);list-style:none;display:inline-flex;align-items:center;gap:6px;}
 .mc-incident-reveal>summary::before{content:"▸";font-size:10px;transition:transform .15s ease;}

@@ -60,6 +60,7 @@ type Props = {
   onSave?: () => void;
   onHoverPlace?: (placeId: string | null) => void;
   mcppPolygons?: McppFeatureCollection | null;
+  onFlyTo?: (target: { latitude: number; longitude: number }) => void;
 };
 
 const CATEGORIES: { value: string; label: string }[] = [
@@ -257,7 +258,7 @@ function CategoryBreakdown({ rows }: { rows: CategoryShare[] }) {
   );
 }
 
-function VerdictCard({ place, index, windowLabel, noun, domainMax, onHoverPlace, locator, coords }: { place: NeighborhoodPlace; index: number; windowLabel: string; noun: IncidentNoun; domainMax: number; onHoverPlace?: (placeId: string | null) => void; locator: LocatorData | null; coords: { latitude: number; longitude: number } | null }) {
+function VerdictCard({ place, index, windowLabel, noun, domainMax, onHoverPlace, locator, coords, onFlyTo }: { place: NeighborhoodPlace; index: number; windowLabel: string; noun: IncidentNoun; domainMax: number; onHoverPlace?: (placeId: string | null) => void; locator: LocatorData | null; coords: { latitude: number; longitude: number } | null; onFlyTo?: (target: { latitude: number; longitude: number }) => void }) {
   const identity = placeIdentity(index);
   const headline = aggregateHeadline(place, noun);
   return (
@@ -277,6 +278,7 @@ function VerdictCard({ place, index, windowLabel, noun, domainMax, onHoverPlace,
             longitude={coords.longitude}
             mcppLabel={place.baselines.find((b) => b.kind === "mcpp")?.label ?? null}
             identity={identity}
+            onActivate={coords && onFlyTo ? () => onFlyTo(coords) : undefined}
           />
         ) : null}
         <span className={`mc-idbadge id-${identity.slot}`} aria-hidden="true">{identity.letter}</span>
@@ -452,7 +454,7 @@ function IncidentDetailsCards({ details, noun, showCategory }: { details: Incide
   );
 }
 
-export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave, onHoverPlace, mcppPolygons }: Props) {
+export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave, onHoverPlace, mcppPolygons, onFlyTo }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
 
   function coordsFor(place: NeighborhoodPlace, index: number): { latitude: number; longitude: number } | null {
@@ -587,6 +589,7 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
                 onHoverPlace={onHoverPlace}
                 locator={locator}
                 coords={coordsFor(place, index)}
+                onFlyTo={onFlyTo}
               />
             ));
           })()}

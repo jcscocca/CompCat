@@ -186,6 +186,25 @@ describe("AnalyzeTab", () => {
     expect(screen.getAllByTestId("locator-chip").length).toBeGreaterThan(0);
   });
 
+  it("fires onFlyTo with the place's coords when the chip button is clicked", () => {
+    const onFlyTo = vi.fn();
+    render(
+      <AnalyzeTab
+        selected={[home]}
+        analysis={analysis}
+        availableRadii={[250]}
+        running={false}
+        neighborhood={neighborhood}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        mcppPolygons={MCPP_FC}
+        onFlyTo={onFlyTo}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /fly the map to/i }));
+    expect(onFlyTo).toHaveBeenCalledWith({ latitude: home.latitude, longitude: home.longitude });
+  });
+
   it("shows the confidence interval in analytical detail, not on the verdict line", () => {
     const { container } = render(
       <AnalyzeTab
