@@ -518,7 +518,10 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-numberline .mc-plot-axis .tick{position:absolute;top:1px;transform:translateX(-50%);font-family:var(--f-mono,ui-monospace);font-size:10px;color:var(--text-dim);white-space:nowrap;}
 .mc-numberline .mc-plot-guides{position:absolute;inset:4px 0;display:grid;grid-template-columns:96px 1fr 74px;grid-template-rows:1fr;gap:10px;pointer-events:none;}
 .mc-numberline .mc-plot-guides .track{position:relative;}
-.mc-bplot{display:grid;gap:6px;margin:2px 0 4px;--idc:var(--id-x);}
+.mc-bplot{display:grid;gap:6px;margin:2px 0 4px;--idc:var(--id-x);overflow-x:auto;}
+/* The 96/1fr/148 columns need real width for the track; below it, scroll the plot
+   horizontally (same idiom as .mc-incident-table-wrap) instead of collapsing to 0. */
+.mc-bplot-chart{min-width:380px;}
 .mc-bplot.id-a{--idc:var(--id-a);}.mc-bplot.id-b{--idc:var(--id-b);}.mc-bplot.id-c{--idc:var(--id-c);}.mc-bplot.id-d{--idc:var(--id-d);}
 .mc-bplot-chart{position:relative;display:grid;gap:5px;}
 .mc-bplot-overlay{position:absolute;inset:0 0 26px 0;display:grid;grid-template-columns:96px 1fr 148px;gap:10px;pointer-events:none;}
