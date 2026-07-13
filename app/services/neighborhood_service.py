@@ -140,8 +140,16 @@ def _area_month_counts(
     effective_sources = tuple(sources) if sources is not None else (SOURCE_SPD_CRIME,)
     start_at, end_at = _analysis_datetime_bounds(start, end)
     observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
-    year = extract("year", observed)
-    month = extract("month", observed)
+    # Postgres evaluates extract() in the session TimeZone; normalize to UTC so the SQL
+    # bucketing always matches _month_key's Python-side UTC reads. SQLite stores UTC
+    # literals (and has no timezone()), so it needs no normalization.
+    bucket = (
+        func.timezone("UTC", observed)
+        if session.get_bind().dialect.name == "postgresql"
+        else observed
+    )
+    year = extract("year", bucket)
+    month = extract("month", bucket)
     stmt = (
         select(year, month, func.count())
         .where(CrimeIncident.source_dataset.in_(effective_sources))
