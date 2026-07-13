@@ -102,8 +102,11 @@ so the UI pill reflects the active layer.
 "mcpp"|"beat"|"sector"|"city", label, area_km2, baseline_incident_count, baseline_rate,
 rate_ratio, ci_lower, ci_upper, adjusted_p_value (BH within place), method, relation:
 "above"|"similar"|"below"|"insufficient"}]`. MCPP/beat entries are rest-of-area (place buffer
-carved out); sector/city are whole-area. Unresolvable geographies are omitted. Legacy top-level
-beat fields are retained until the frontend migrates (slice 2). Also new: `GET /dashboard/mcpp` —
+carved out); sector/city are whole-area. Unresolvable geographies are omitted. Each place also
+carries its own quasi-Poisson rate interval (place_rate, place_rate_ci_lower/upper — same variance
+model as the Compare tab's per-address interval). The former top-level single-beat pair fields
+(beat_rate, rate_ratio, ci_*, adjusted_p_value, method, overdispersion_status) were removed in
+slice 2; per-baseline statistics live in baselines[]. Also new: `GET /dashboard/mcpp` —
 slimmed MCPP polygon GeoJSON, session-gated, gzip-negotiated (sibling of `GET /dashboard/beats`).
 
 ### Internal tier
