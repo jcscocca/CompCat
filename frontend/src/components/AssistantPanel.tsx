@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 
 import { streamAssistantChat } from "../api/client";
 import type { AssistantDashboardState, AssistantMessage } from "../types";
-import { CopperAvatar } from "./CopperAvatar";
+import { TabbyAvatar } from "./TabbyAvatar";
 
 type Props = {
   dashboardState: AssistantDashboardState;
@@ -115,7 +115,7 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
     <aside className="mc-dock" aria-label="Analyst">
       <div className="mc-dock-head">
         <h3>
-          <CopperAvatar variant="mark" size={20} className={greeted ? undefined : "mc-copper-pulse"} />
+          <TabbyAvatar variant="mark" size={20} className={greeted ? undefined : "mc-tabby-pulse"} />
           Copper
           <span className="mc-dock-role">case desk · analyst</span>
         </h3>
@@ -153,7 +153,7 @@ export function AssistantPanel({ dashboardState, onToolResult }: Props) {
             ) : null}
             {messages.length === 0 && !draft ? (
               <div className="mc-dock-empty">
-                <CopperAvatar variant="bust" size={72} />
+                <TabbyAvatar variant="bust" size={72} />
                 <p>Copper, case desk. Point me at a place and I'll pull the reports near it.</p>
                 <div className="mc-dock-chips">
                   {SUGGESTED_PROMPTS.map((prompt) => (

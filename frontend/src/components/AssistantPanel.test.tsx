@@ -225,17 +225,17 @@ describe("AssistantPanel", () => {
   it("pulses the avatar until the first message is sent, then sets the greeted flag", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse("event: done\ndata: {}\n\n"));
     const { container } = render(<AssistantPanel dashboardState={dashboardState} />);
-    expect(container.querySelector("svg.mc-copper-pulse")).not.toBeNull();
+    expect(container.querySelector("svg.mc-tabby-pulse")).not.toBeNull();
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(container.querySelector("svg.mc-copper-pulse")).toBeNull());
+    await waitFor(() => expect(container.querySelector("svg.mc-tabby-pulse")).toBeNull());
     expect(localStorage.getItem("wp-copper-greeted")).toBe("1");
   });
 
   it("does not pulse when previously greeted", () => {
     localStorage.setItem("wp-copper-greeted", "1");
     const { container } = render(<AssistantPanel dashboardState={dashboardState} />);
-    expect(container.querySelector("svg.mc-copper-pulse")).toBeNull();
+    expect(container.querySelector("svg.mc-tabby-pulse")).toBeNull();
   });
 
   it("shows status labels transiently and clears them on the first token", async () => {
