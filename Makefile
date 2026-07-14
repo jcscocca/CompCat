@@ -1,4 +1,4 @@
-.PHONY: install test lint run migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe
+.PHONY: install test lint run dev migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe
 
 install:
 	python3.11 -m venv .venv
@@ -12,6 +12,11 @@ lint:
 
 run:
 	.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# Run the full app locally on the Mac: backend (:8000) + frontend dev server (:5173).
+# One command, Ctrl-C stops both. No ThinkPad/LLM host required (chat degrades gracefully).
+dev:
+	./scripts/dev.sh
 
 migrate:
 	.venv/bin/alembic upgrade head
