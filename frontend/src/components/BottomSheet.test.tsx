@@ -14,7 +14,7 @@ afterEach(cleanup);
 
 function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {}) {
   const props = {
-    activeTab: "places" as const,
+    activeTab: "analyze" as const,
     onTabChange: vi.fn(),
     collapsed: false,
     widthPx: DRAWER_DEFAULT,
@@ -28,10 +28,10 @@ function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {})
 }
 
 describe("BottomSheet", () => {
-  it("renders four tabs and marks the active one", () => {
-    renderSheet({ activeTab: "places" });
-    expect(screen.getAllByRole("tab")).toHaveLength(4);
-    expect(screen.getByRole("tab", { name: /places/i })).toHaveAttribute("aria-selected", "true");
+  it("renders three tabs and marks the active one", () => {
+    renderSheet({ activeTab: "analyze" });
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("tab", { name: /analyze/i })).toHaveAttribute("aria-selected", "true");
   });
 
   it("calls onTabChange when another tab is clicked or activated by keyboard", () => {
@@ -136,7 +136,7 @@ describe("BottomSheet", () => {
     expect(panel()).toHaveClass("is-open");
     expect(panel().style.width).toBe("420px");
     rerender(
-      <BottomSheet activeTab="places" onTabChange={vi.fn()} collapsed widthPx={420} onToggleCollapsed={vi.fn()} onResize={vi.fn()} onPreset={vi.fn()}>
+      <BottomSheet activeTab="analyze" onTabChange={vi.fn()} collapsed widthPx={420} onToggleCollapsed={vi.fn()} onResize={vi.fn()} onPreset={vi.fn()}>
         <div>panel</div>
       </BottomSheet>,
     );

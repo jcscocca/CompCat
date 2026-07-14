@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { toCompareVerdict } from "../lib/compareVerdict";
 import { incidentNoun } from "../lib/layerCopy";
 import type { GeocodingProvider } from "../lib/geocoding";
@@ -20,18 +22,22 @@ type Props = {
   running: boolean;
   onRun: () => void;
   onCopyLink?: () => string | null;
+  /** Rendered above the panel head; the panel is absolutely positioned, so drawer-level
+   * chrome (place chip strip, pin-draft popover) must live inside it to be visible. */
+  topSlot?: ReactNode;
 };
 
 const REVISED_CAVEAT =
   "Reported incident context, not a personal risk prediction. Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
 
-export function CompareTab({ set, provider, onAddPoint, onRemovePoint, analysis, comparison, running, onRun, onCopyLink }: Props) {
+export function CompareTab({ set, provider, onAddPoint, onRemovePoint, analysis, comparison, running, onRun, onCopyLink, topSlot }: Props) {
   const noun = incidentNoun(analysis.layer);
   const canRun = set.length >= 2 && !running;
   const verdict = comparison ? toCompareVerdict(comparison) : null;
 
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Compare">
+      {topSlot}
       <div className="mc-panel-head"><h4>Compare addresses</h4></div>
 
       <div className="mc-cmpset">

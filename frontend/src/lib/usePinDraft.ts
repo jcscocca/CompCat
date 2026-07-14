@@ -22,7 +22,7 @@ export interface PinDraftController {
 interface PinDraftDeps {
   selectPlaceIds: (ids: string[]) => void;
   refreshWithFallback: (fallbackMessage: string) => Promise<void>;
-  setActiveTab: (tab: "places") => void;
+  setActiveTab: (tab: "analyze") => void;
   setDrawerCollapsed: (collapsed: boolean) => void;
 }
 
@@ -56,7 +56,7 @@ export function usePinDraft({
 
   function startAddPin() {
     setAddPinMode(true);
-    setActiveTab("places");
+    setActiveTab("analyze");
     setDrawerCollapsed(true);
   }
 
@@ -72,12 +72,12 @@ export function usePinDraft({
     });
     setDraftError("");
     setAddPinMode(false);
-    setActiveTab("places");
+    setActiveTab("analyze");
     setDrawerCollapsed(false);
   }
 
   // Sets the draft pin + flies the map to a searched address, WITHOUT changing the active
-  // tab. handleSearchSelect adds the Places-tab switch (to show the save popover); the
+  // tab. handleSearchSelect adds the Analyze-tab switch (to show the save popover); the
   // single-address lookup reuses previewSearch alone and routes to Analyze itself.
   function previewSearch(result: GeocodeResult) {
     setDraft({
@@ -94,7 +94,7 @@ export function usePinDraft({
 
   function handleSearchSelect(result: GeocodeResult) {
     previewSearch(result);
-    setActiveTab("places");
+    setActiveTab("analyze");
   }
 
   async function saveDraft() {

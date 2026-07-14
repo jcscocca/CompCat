@@ -205,7 +205,12 @@ describe("MapWorkspace", () => {
     fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "Home" } });
     fireEvent.click(screen.getByRole("button", { name: /save pin/i }));
 
-    expect(await screen.findByRole("checkbox", { name: "Select Home" })).toHaveAttribute("aria-checked", "true");
+    // Scoped inside the Analyze panel: the chip strip must render WITHIN the absolutely
+    // positioned .mc-panel (as its topSlot), not as a covered sibling behind it.
+    await waitFor(() => {
+      const analyzePanel = screen.getByRole("tabpanel", { name: "Analyze" });
+      expect(within(analyzePanel).getByRole("checkbox", { name: "Home" })).toHaveAttribute("aria-checked", "true");
+    });
 
     fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
@@ -235,7 +240,7 @@ describe("MapWorkspace", () => {
     await screen.findByRole("heading", { name: /look up an address/i });
 
     fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
     fireEvent.change(screen.getByLabelText("CSV rows"), {
       target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
     });
@@ -257,6 +262,27 @@ describe("MapWorkspace", () => {
         layer: "reported",
       });
     });
+  });
+
+  it("closes the manage modal when its address search hands off to the draft flow", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    geocodeSearch.mockResolvedValue([{ label: "500 Pine St", latitude: 47.615, longitude: -122.335, source: "test" }]);
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    expect(screen.getByRole("dialog", { name: "Manage places" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search an address or place"), { target: { value: "500 Pine" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(await screen.findByText("500 Pine St"));
+
+    // The scrim would hide the draft popover, so the handoff must close the modal first.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const analyzePanel = screen.getByRole("tabpanel", { name: "Analyze" });
+    expect(within(analyzePanel).getByRole("button", { name: /save pin/i })).toBeInTheDocument();
   });
 
   it("marks the frame is-focus only when the drawer leaves less than the chrome minimum", async () => {
@@ -310,7 +336,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Home" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Home" }));
     fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
 
@@ -336,7 +362,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Home" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Home" }));
     fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
 
@@ -363,7 +389,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Home" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Home" }));
     fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
 
@@ -383,7 +409,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Home" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Home" }));
     fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(screen.getByRole("button", { name: /run analysis/i }));
 

@@ -28,8 +28,9 @@ import { MapCanvas } from "./MapCanvas";
 import { MapLegend } from "./MapLegend";
 import { PinDraftPopover } from "./PinDraftPopover";
 import { IncidentDisclosure } from "./IncidentDisclosure";
+import { PlaceChipStrip } from "./PlaceChipStrip";
 import { PlaceSearch } from "./PlaceSearch";
-import { PlacesTab } from "./PlacesTab";
+import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
 import type { ComparePoint } from "../lib/useCompareSet";
@@ -45,13 +46,11 @@ export function MapWorkspace() {
   const [sharedPoints, setSharedPoints] = useState(initialView ? initialView.points : null);
   const [showBadLink, setShowBadLink] = useState(hadViewParam && initialView === null);
 
-  const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "places");
+  const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "analyze");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lookupPoint, setLookupPoint] = useState<ComparePoint | null>(null);
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
-  // Latches once the user leaves the landing for manual place management; the landing does
-  // not return for the rest of the session (a lookup resets it).
-  const [manualEntry, setManualEntry] = useState(false);
+  const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
     if (initialView) {
       return {
@@ -178,7 +177,6 @@ export function MapWorkspace() {
     pinDraft.previewSearch(result);
     invalidateAnalysisContext();
     setSelectedIds(new Set());
-    setManualEntry(false);
     setLookupPoint({ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) });
     setActiveTab("analyze");
   }
@@ -328,15 +326,39 @@ export function MapWorkspace() {
     layer: analysis.layer,
   }), [analysis, selectedIds]);
 
-  // Landing shows only on a truly fresh places-tab session: no saved data, no lookup/shared
-  // subject, not dismissed into manual mode, and no in-progress draft (so a search preview or
-  // dropped pin reaches PlacesTab instead of being hidden behind the landing).
+  // Landing shows only on a truly fresh Analyze session: no saved data, no lookup/shared
+  // subject, and no in-progress draft (so a search preview or dropped pin reaches the chip
+  // strip + draft popover instead of being hidden behind the landing).
   const showLanding =
-    data.places.length === 0 && !lookupPoint && !sharedPoints && !manualEntry && activeTab === "places" && !pinDraft.draft;
+    data.places.length === 0 && !lookupPoint && !sharedPoints && activeTab === "analyze" && !pinDraft.draft;
 
   // Recomputed every render: useDrawer's window-resize listener always produces a new
   // drawer object, so viewport changes re-render. No extra state needed.
   const isFocus = !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
+
+  // Rendered INSIDE the Analyze/Compare panels (topSlot): .mc-panel is absolutely
+  // positioned over .mc-panels, so a sibling rendered outside would be painted over.
+  const drawerTopSlot = (
+    <>
+      <PlaceChipStrip
+        places={data.places}
+        identityByPlaceId={identityByPlaceId}
+        onToggle={handleToggleSelect}
+        onHoverPlace={setHoveredPlaceId}
+        onAdd={() => setManagePlaces("manage")}
+      />
+      {pinDraft.draft ? (
+        <PinDraftPopover
+          draft={pinDraft.draft}
+          saving={pinDraft.draftSaving}
+          error={pinDraft.draftError}
+          onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
+          onSave={pinDraft.saveDraft}
+          onCancel={() => pinDraft.setDraft(null)}
+        />
+      ) : null}
+    </>
+  );
 
   return (
     <div className="mc-scope">
@@ -396,7 +418,7 @@ export function MapWorkspace() {
           limit={incidentLayer.limit}
         />
 
-        {data.error && activeTab !== "analyze" ? <p className="mc-error" role="alert">{data.error}</p> : null}
+        {data.error && (showLanding || activeTab !== "analyze") ? <p className="mc-error" role="alert">{data.error}</p> : null}
 
         {sharedPoints ? (
           <div className="mc-banner" role="status">
@@ -419,41 +441,16 @@ export function MapWorkspace() {
           onToggleCollapsed={onToggleCollapsed}
           onResize={onDrawerResize}
           onPreset={onPreset}
-          tabBadges={{ places: data.places.length, compare: compareSet.points.length }}
+          tabBadges={{ compare: compareSet.points.length }}
           dock={<AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} />}
         >
           {showLanding ? (
-            <AddressLookup provider={geocodingProvider} onSelect={handleLookup} onManual={() => setManualEntry(true)} />
+            <AddressLookup provider={geocodingProvider} onSelect={handleLookup} onManual={() => setManagePlaces("manual")} />
           ) : (
             <>
-          {activeTab === "places" ? (
-            <PlacesTab
-              places={data.places}
-              selectedIds={selectedIds}
-              summary={data.summary}
-              radiusM={analysis.radiusM}
-              addPinMode={pinDraft.addPinMode}
-              search={<PlaceSearch provider={geocodingProvider} onSelectResult={pinDraft.handleSearchSelect} />}
-              draftPopover={pinDraft.draft ? (
-                <PinDraftPopover
-                  draft={pinDraft.draft}
-                  saving={pinDraft.draftSaving}
-                  error={pinDraft.draftError}
-                  onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
-                  onSave={pinDraft.saveDraft}
-                  onCancel={() => pinDraft.setDraft(null)}
-                />
-              ) : null}
-              onStartAddPin={pinDraft.startAddPin}
-              onToggleSelect={handleToggleSelect}
-              onDelete={handleDelete}
-              onManualSubmit={handleManualSubmit}
-              onImportSubmit={handleImport}
-              onUploaded={data.personalUploadsEnabled ? () => data.refreshWithFallback("Uploaded, but dashboard totals could not refresh.") : undefined}
-            />
-          ) : null}
           {activeTab === "analyze" ? (
             <AnalyzeTab
+              topSlot={drawerTopSlot}
               selected={selected}
               analysis={analysis}
               availableRadii={data.availableRadii}
@@ -474,6 +471,7 @@ export function MapWorkspace() {
           ) : null}
           {activeTab === "compare" ? (
             <CompareTab
+              topSlot={drawerTopSlot}
               set={compareSet.points}
               provider={geocodingProvider}
               onAddPoint={compareSet.add}
@@ -489,6 +487,25 @@ export function MapWorkspace() {
             </>
           )}
         </BottomSheet>
+
+        {managePlaces ? (
+          <ManagePlacesModal
+            places={data.places}
+            selectedIds={selectedIds}
+            summary={data.summary}
+            radiusM={analysis.radiusM}
+            addPinMode={pinDraft.addPinMode}
+            search={<PlaceSearch provider={geocodingProvider} onSelectResult={(result) => { setManagePlaces(null); pinDraft.handleSearchSelect(result); }} />}
+            initialView={managePlaces}
+            onStartAddPin={() => { setManagePlaces(null); pinDraft.startAddPin(); }}
+            onToggleSelect={handleToggleSelect}
+            onDelete={handleDelete}
+            onManualSubmit={handleManualSubmit}
+            onImportSubmit={handleImport}
+            onUploaded={data.personalUploadsEnabled ? () => data.refreshWithFallback("Uploaded, but dashboard totals could not refresh.") : undefined}
+            onClose={() => setManagePlaces(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

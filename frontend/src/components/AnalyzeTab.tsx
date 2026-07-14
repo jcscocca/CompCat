@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import type {
   AnalysisSettings,
   CategoryShare,
@@ -61,6 +62,9 @@ type Props = {
   onHoverPlace?: (placeId: string | null) => void;
   mcppPolygons?: McppFeatureCollection | null;
   onFlyTo?: (target: { latitude: number; longitude: number }) => void;
+  /** Rendered above the querybar; the panel is absolutely positioned, so drawer-level
+   * chrome (place chip strip, pin-draft popover) must live inside it to be visible. */
+  topSlot?: ReactNode;
 };
 
 const CATEGORIES: { value: string; label: string }[] = [
@@ -454,7 +458,7 @@ function IncidentDetailsCards({ details, noun, showCategory }: { details: Incide
   );
 }
 
-export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave, onHoverPlace, mcppPolygons, onFlyTo }: Props) {
+export function AnalyzeTab({ selected, analysis, availableRadii, running, incidentDetails, neighborhood, error, panelWidthPx, onChange, onRun, onCopyLink, onCompareWith, onSave, onHoverPlace, mcppPolygons, onFlyTo, topSlot }: Props) {
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
 
   function coordsFor(place: NeighborhoodPlace, index: number): { latitude: number; longitude: number } | null {
@@ -484,6 +488,7 @@ export function AnalyzeTab({ selected, analysis, availableRadii, running, incide
 
   return (
     <div className="mc-panel is-active has-querybar" role="tabpanel" aria-label="Analyze">
+      {topSlot}
       <div className="mc-querybar">
         <div className="mc-field">
           <label htmlFor="analysis-start-date">Date range</label>

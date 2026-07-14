@@ -140,7 +140,7 @@ export type PlaceCreate = {
   sensitivity_class?: string;
 };
 
-export type TabKey = "places" | "analyze" | "compare" | "export";
+export type TabKey = "analyze" | "compare" | "export";
 
 export type DrawerState = { collapsed: boolean; widthPx: number };
 
