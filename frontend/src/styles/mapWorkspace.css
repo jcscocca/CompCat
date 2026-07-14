@@ -441,6 +441,16 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-idbadge.id-c{background:var(--id-c);}
 .mc-idbadge.id-d{background:var(--id-d);}
 .mc-idbadge.id-x{background:var(--id-x);}
+.mc-chipstrip{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 10px;}
+.mc-chipstrip .mc-chip{display:inline-flex;align-items:center;gap:6px;max-width:180px;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;}
+.mc-chipstrip .mc-chip:hover{border-color:var(--border-strong);}
+.mc-chipstrip .mc-chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--text-strong);}
+.mc-chipstrip .mc-chip.on:hover{border-color:var(--accent-deep);}
+.mc-chipstrip .mc-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.mc-chipstrip .mc-chip-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mc-chipstrip .mc-chip-add{color:var(--accent-deep);border-style:dashed;}
+.mc-chipstrip .mc-chip .mc-idbadge{width:16px;height:16px;font-size:9.5px;margin-left:-4px;}
 .mc-locator{flex:none;background:var(--surface);border:0.5px solid var(--border);border-radius:6px;--idc:var(--id-x);}
 .mc-locator.id-a{--idc:var(--id-a);}.mc-locator.id-b{--idc:var(--id-b);}.mc-locator.id-c{--idc:var(--id-c);}.mc-locator.id-d{--idc:var(--id-d);}
 .mc-locator .mosaic{fill:none;stroke:var(--border);stroke-width:.6;}
