@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
     assistant_role: str = "waypoint_analyst"
-    # Streamed Copper narration finals + turn status events. Off = the pre-streaming
+    # Streamed Tabby narration finals + turn status events. Off = the pre-streaming
     # behavior (deterministic template finals, no status events) — a deploy-side kill
     # switch if local-model narration misbehaves.
     assistant_narration_enabled: bool = True
