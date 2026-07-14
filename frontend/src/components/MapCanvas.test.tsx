@@ -393,7 +393,7 @@ describe("themed map", () => {
     // The rings re-register with the dark accent hex after the swap (canvas paint can't
     // read CSS vars, so the theme picks the fixed color at registration).
     const ringLine = MockedMap.last!.layers.find((l) => l.id === "mc-ring-line");
-    expect((ringLine?.paint as Record<string, unknown>)["line-color"]).toBe("#4FB3D9");
+    expect((ringLine?.paint as Record<string, unknown>)["line-color"]).toBe("#3FBF8F");
   });
 
   it("passes the theme to the style builder", async () => {

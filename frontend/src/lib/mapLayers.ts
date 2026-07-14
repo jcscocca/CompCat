@@ -10,7 +10,7 @@ export const RINGS_SOURCE = "mc-rings";
 // The analyzed ring uses fixed hexes — canvas paint can't read CSS vars. The dark value
 // mirrors the dark --accent so the ring reads against the dark basemap.
 export function addRingLayers(map: maplibregl.Map, theme: MapTheme): void {
-  const analyzedColor = theme === "dark" ? "#4FB3D9" : "#0B6E99";
+  const analyzedColor = theme === "dark" ? "#3FBF8F" : "#0F6E56";
   map.addSource(RINGS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   map.addLayer({
     id: "mc-ring-fill",

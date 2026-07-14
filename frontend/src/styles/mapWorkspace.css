@@ -2,8 +2,8 @@
   --surface:#FFFFFF; --surface-raised:#F6F9FA; --surface-sunken:#EEF2F5;
   --border:#D5DEE4; --border-strong:#C3CFD8;
   --text-strong:#16232B; --text:#3D4C57; --text-dim:#64747F;
-  --accent:#0B6E99; --accent-deep:#095A7E;
-  --accent-soft:rgba(11,110,153,.10); --accent-halo:rgba(11,110,153,.30);
+  --accent:#0F6E56; --accent-deep:#0A5443;
+  --accent-soft:rgba(15,110,86,.10); --accent-halo:rgba(15,110,86,.30);
   --on-accent:#fff;
   --danger:#B3402E; --danger-soft:rgba(179,64,46,.12);
   --ok:#3FA46B;
@@ -554,12 +554,12 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
    --slate-soft) are deliberately NOT overridden: the calm neutral marks stay
    identical in both themes (product invariant). */
 [data-theme="dark"] .mc-scope{
-  --surface:#1B232B; --surface-raised:#151C23; --surface-sunken:#232C35;
-  --border:#2C3742; --border-strong:#3A4754;
+  --surface:#1A222B; --surface-raised:#12181F; --surface-sunken:#232C35;
+  --border:#2A3540; --border-strong:#3A4754;
   --text-strong:#E8EDF2; --text:#B9C6D0; --text-dim:#7C8B99;
-  --accent:#4FB3D9; --accent-deep:#7BC8E4;
-  --accent-soft:rgba(79,179,217,.14); --accent-halo:rgba(79,179,217,.35);
-  --on-accent:#10181F;
+  --accent:#3FBF8F; --accent-deep:#7FE0BC;
+  --accent-soft:rgba(63,191,143,.14); --accent-halo:rgba(63,191,143,.35);
+  --on-accent:#0E1519;
   --danger:#F0937B; --danger-soft:rgba(240,147,123,.16);
   --ok:#5BBF87;
   --scrim:rgba(0,0,0,0.25);
