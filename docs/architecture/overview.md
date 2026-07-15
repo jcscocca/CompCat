@@ -6,7 +6,7 @@ This document describes CompCat's system architecture for maintainers and AI cod
 
 ## 1. Purpose & product invariant
 
-CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates for those places — organized into Places, Analyze, Compare, and Export tabs.
+CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates for those places — organized into Analyze, Compare, and Export tabs, with saved places carried across the analytic tabs as a chip strip (a manage-places dialog handles add/rename/remove).
 
 ⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/agent.py` contains a regex guard (`_SAFETY_SCORE_PATTERN`) that intercepts any chat message matching safety-scoring language and returns a hard refusal before the LLM is ever called. Both enforcement points must be preserved in future changes.
 

@@ -1,6 +1,6 @@
 # CompCat
 
-[![CI](https://github.com/jcscocca/waypoint/actions/workflows/ci.yml/badge.svg)](https://github.com/jcscocca/waypoint/actions/workflows/ci.yml)
+[![CI](https://github.com/jcscocca/CompCat/actions/workflows/ci.yml/badge.svg)](https://github.com/jcscocca/CompCat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 *CompCat — a pun on CompStat. Formerly Waypoint.*
@@ -33,8 +33,8 @@ proxied.
 - Shows reported-incident counts, nearest-incident distance, the category mix, the top specific
   offenses, and the individual incident rows behind the numbers.
 - Compares two or more candidate addresses side by side at a single radius.
-- Optional **CompCat Analyst** chat that answers questions grounded in your current dashboard
-  data ("how does this address compare to my downtown one?").
+- Optional **CompCat Analyst** chat — *Tabby*, the case-desk analyst — that answers questions
+  grounded in your current dashboard data ("how does this address compare to my downtown one?").
 - Statistical, exposure-adjusted rate comparison of place buffers.
 - Exports privacy-safe, Tableau-ready CSVs using generalized display coordinates.
 - Loads a bundled Seattle crime sample for offline development, or ingests a recent window of
@@ -50,13 +50,19 @@ proxied.
 ## The dashboard
 
 The dashboard is the primary way to use CompCat. It is a single-page React app built around a
-full-screen MapLibre map of Seattle, with a resizable side drawer organized into four tabs.
+full-screen MapLibre map of Seattle, with a resizable side drawer organized into three tabs —
+**Analyze**, **Compare**, and **Export** — plus a place chip strip that carries your saved places
+across the two analytic tabs.
 
-- **Places** — add places four ways: search by name/address (OpenStreetMap Nominatim geocoding),
-  click **Add pin** and drop a point on the map, enter latitude/longitude manually, or paste a
-  CSV of places. Select places to analyze, and remove ones you no longer want.
-- **Analyze** — choose a date range, a radius, and an offense-category filter, then run analysis.
-  Results include a findings summary, a crime-mix chart, the top offenses, and an incident-detail
+- **Place chips** — saved places appear as toggle chips at the top of the Analyze and Compare
+  tabs, each with an identity letter and color that matches its map pin (hovering a chip
+  highlights the pin). Click a chip to include or exclude a place; click **+ Add** to open the
+  manage-places dialog, where you add places four ways — search by name/address (OpenStreetMap
+  Nominatim geocoding), **Drop pin** on the map, enter latitude/longitude manually, or paste a
+  CSV — and rename or remove the places you already have.
+- **Analyze** (the default tab) — choose a date range, a radius, and an offense-category filter.
+  Analysis runs automatically for your selected places when the app loads, and re-runs on demand;
+  results include a findings summary, a crime-mix chart, the top offenses, and an incident-detail
   table (date, category, distance, block address, incident id). Analyzed places show their radius
   rings on the map.
 - **Compare** — with two or more places selected, compare reported-incident counts and the top
@@ -72,10 +78,10 @@ required by Nominatim's usage policy). The browser never calls the geocoder dire
 
 ## The CompCat Analyst
 
-The Analyst panel is an optional chat assistant that answers questions about your dashboard data.
-It is grounded in what you currently have selected (places, date range, radii, and offense
-filters) and is policy-constrained: it reports incident context and will refuse to label a place
-as safe or unsafe.
+The Analyst panel is an optional chat assistant — **Tabby**, CompCat's case-desk analyst — that
+answers questions about your dashboard data. It is grounded in what you currently have selected
+(places, date range, radii, and offense filters) and is policy-constrained: it reports incident
+context and will refuse to label a place as safe or unsafe.
 
 Under the hood the assistant plans with a single LLM call and can invoke a small set of tools
 (`add_place`, `select_places`, `analyze_places`, `compare_places`, `get_dashboard_summary`,
