@@ -14,4 +14,9 @@ describe("index.html privacy guard", () => {
     // fonts.css is imported from main.tsx; index.html itself needs no font link at all.
     expect(html).not.toMatch(/fonts\.googleapis|fonts\.gstatic/);
   });
+
+  it("opts into the safe-area viewport (viewport-fit=cover) for iOS insets", () => {
+    const viewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.exec(html)?.[0] ?? "";
+    expect(viewport).toMatch(/viewport-fit=cover/);
+  });
 });
