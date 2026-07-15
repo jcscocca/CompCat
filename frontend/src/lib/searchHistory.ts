@@ -1,6 +1,6 @@
 import type { GeocodeResult } from "../types";
 
-const RECENT_KEY = "waypoint.search.recent";
+const RECENT_KEY = "compcat.search.recent";
 const MAX_RECENT = 5;
 
 function dedupeKey(r: GeocodeResult): string {

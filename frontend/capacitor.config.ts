@@ -5,7 +5,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const PLACEHOLDER_SERVER_URL = "https://compcat.example.ts.net";
 
 const config: CapacitorConfig = {
-  appId: "com.jscocca.waypoint",
+  appId: "com.jscocca.compcat",
   appName: "CompCat",
   webDir: "../app/static/dashboard",
   backgroundColor: "#1A222B",

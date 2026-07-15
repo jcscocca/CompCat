@@ -12,7 +12,7 @@ describe("capacitor config", () => {
     vi.stubEnv("MCA_IOS_SERVER_URL", "");
     const { default: config } = await import("./capacitor.config");
     expect(config.server?.url).toBe("https://compcat.example.ts.net");
-    expect(config.appId).toBe("com.jscocca.waypoint");
+    expect(config.appId).toBe("com.jscocca.compcat");
     expect(config.appName).toBe("CompCat");
     expect(config.webDir).toBe("../app/static/dashboard");
   });

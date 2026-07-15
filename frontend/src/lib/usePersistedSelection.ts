@@ -2,8 +2,7 @@ import { useCallback, useRef, useState } from "react";
 
 import type { Place } from "../types";
 
-// New keys get the new brand; legacy waypoint.*/wp-* keys stay (identifier renames
-// are out of scope for the rebrand).
+// All persisted UI state uses the compcat.* storage brand.
 const STORAGE_KEY = "compcat.selection";
 
 function loadStored(): string[] {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type ThemeName = "light" | "dark";
-const STORAGE_KEY = "wp-theme";
+const STORAGE_KEY = "compcat.theme";
 
 function stored(): ThemeName | null {
   const value = localStorage.getItem(STORAGE_KEY);
