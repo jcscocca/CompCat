@@ -82,7 +82,7 @@ def test_assistant_chat_streams_agent_events(monkeypatch, tmp_path):
     from app.api import routes_assistant
 
     async def fake_run_assistant_turn(*args, **kwargs):
-        yield AssistantStreamEvent(event="meta", data={"role": "waypoint_analyst"})
+        yield AssistantStreamEvent(event="meta", data={"role": "compcat_analyst"})
         yield AssistantStreamEvent(event="token", data={"delta": "hello"})
         yield AssistantStreamEvent(event="done", data={})
 
@@ -101,7 +101,7 @@ def test_assistant_chat_streams_agent_events(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert "event: meta" in response.text
-    assert '"role": "waypoint_analyst"' in response.text
+    assert '"role": "compcat_analyst"' in response.text
     assert "event: token" in response.text
     assert '"delta": "hello"' in response.text
     assert "event: done" in response.text

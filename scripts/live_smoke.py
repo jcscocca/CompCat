@@ -5,7 +5,7 @@ Drives the running instance through all major endpoints and prints PASS/FAIL
 per step, exiting non-zero on any hard failure.
 
 Config (env vars):
-  WAYPOINT_URL  Base URL of the running instance. Default: http://localhost:8080
+  COMPCAT_URL  Base URL of the running instance. Default: http://localhost:8080
 
 Assumptions:
   - The instance is already running and crime data is already ingested.
@@ -21,7 +21,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-BASE_URL: str = os.environ.get("WAYPOINT_URL", "http://localhost:8080").rstrip("/")
+BASE_URL: str = os.environ.get("COMPCAT_URL", "http://localhost:8080").rstrip("/")
 
 # --------------------------------------------------------------------------- #
 # Results tracking

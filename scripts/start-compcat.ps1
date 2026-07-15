@@ -7,7 +7,7 @@
 # the Mac), and rebuilds only if HEAD actually moved. If the tree is dirty or origin is
 # unreachable it warns and starts the current checkout rather than failing to come up.
 #
-#   pwsh -File scripts\start-waypoint.ps1     # pull latest, rebuild if it changed, then start
+#   pwsh -File scripts\start-compcat.ps1     # pull latest, rebuild if it changed, then start
 #
 # To stop everything when you're done: `docker compose stop`,
 # and close llama-swap from Task Manager (or just reboot — nothing comes back).
@@ -94,7 +94,7 @@ if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCont
     if (-not $exe) { $exe = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\mostlygeek.llama-swap_Microsoft.Winget.Source_8wekyb3d8bbwe\llama-swap.exe' }
     if (-not (Test-Path $exe)) { throw "llama-swap.exe not found (PATH and $exe)" }
     $config = Join-Path $env:USERPROFILE 'llama-swap.yaml'
-    $logDir = Join-Path $env:USERPROFILE '.waypoint'
+    $logDir = Join-Path $env:USERPROFILE '.compcat'
     if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
     Start-Process -FilePath $exe -ArgumentList @('-config', $config, '-listen', '0.0.0.0:8080') `
         -RedirectStandardOutput (Join-Path $logDir 'llama-swap.out.log') `

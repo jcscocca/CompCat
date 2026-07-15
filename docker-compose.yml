@@ -63,7 +63,7 @@ services:
       # refuses to boot otherwise), so these must reach the container.
       MCA_GEOCODER_PROVIDER: ${MCA_GEOCODER_PROVIDER:-nominatim}
       MCA_GEOCODER_BASE_URL: ${MCA_GEOCODER_BASE_URL:-https://nominatim.openstreetmap.org/search}
-      MCA_GEOCODER_USER_AGENT: ${MCA_GEOCODER_USER_AGENT:-Waypoint/0.1}
+      MCA_GEOCODER_USER_AGENT: ${MCA_GEOCODER_USER_AGENT:-CompCat/0.1}
       MCA_GEOCODER_CONTACT_EMAIL: ${MCA_GEOCODER_CONTACT_EMAIL:-}
       MCA_GEOCODER_CACHE_TTL_DAYS: "${MCA_GEOCODER_CACHE_TTL_DAYS:-30}"
       MCA_GEOCODER_MAX_RESULTS: "${MCA_GEOCODER_MAX_RESULTS:-5}"

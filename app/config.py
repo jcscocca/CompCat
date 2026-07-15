@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     socrata_calls_dataset_id: str = "33kz-ixgy"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
-    assistant_role: str = "waypoint_analyst"
+    assistant_role: str = "compcat_analyst"
     # Streamed Tabby narration finals + turn status events. Off = the pre-streaming
     # behavior (deterministic template finals, no status events) — a deploy-side kill
     # switch if local-model narration misbehaves.

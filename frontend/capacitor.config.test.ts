@@ -11,7 +11,7 @@ describe("capacitor config", () => {
   it("falls back to the placeholder tailnet URL when MCA_IOS_SERVER_URL is unset", async () => {
     vi.stubEnv("MCA_IOS_SERVER_URL", "");
     const { default: config } = await import("./capacitor.config");
-    expect(config.server?.url).toBe("https://waypoint.example.ts.net");
+    expect(config.server?.url).toBe("https://compcat.example.ts.net");
     expect(config.appId).toBe("com.jscocca.waypoint");
     expect(config.appName).toBe("CompCat");
     expect(config.webDir).toBe("../app/static/dashboard");

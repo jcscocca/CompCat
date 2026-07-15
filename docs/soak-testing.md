@@ -18,7 +18,7 @@ The harness is two stdlib-only Python processes run side-by-side on the deploy h
 ## Prerequisites
 
 1. **Deploy up** — bring the stack up on the ThinkPad the usual way:
-   `pwsh -File scripts\start-waypoint.ps1`. This starts Postgres, the api (migrations run on
+   `pwsh -File scripts\start-compcat.ps1`. This starts Postgres, the api (migrations run on
    boot), and llama-swap.
 2. **Data ingested** — crime / calls / arrests data must already be loaded, or the dashboard
    queries return empty and the soak proves nothing. See `docs/DEPLOY.md`.
@@ -78,7 +78,7 @@ python scripts\soak\soak_driver.py --users 25 --ramp 60 --duration 2h --out soak
 Windows-specific prep, in order:
 
 1. **Update the checkout** so `scripts\soak\` and the `pg_stat_statements` compose change are
-   present: `pwsh -File scripts\start-waypoint.ps1 -Update` (then `git log --oneline -1` should
+   present: `pwsh -File scripts\start-compcat.ps1 -Update` (then `git log --oneline -1` should
    show the soak-harness commit or later).
 2. **Enable `pg_stat_statements`** (a preload lib — needs a db restart; `-Update` may already
    have recreated the db, so verify and only recreate if needed):

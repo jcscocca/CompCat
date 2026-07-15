@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.models import ImportBatch, StagingLocationObservation, StopVisit
 from app.parsers.base import SourceParser, UnsupportedFormatError
-from app.parsers.commute_scenario import CommuteScenarioParser
 from app.parsers.csv_points import CsvPointsParser
 from app.parsers.geojson_points import GeoJsonPointsParser
 from app.parsers.google_timeline import GoogleTimelineParser
@@ -25,7 +24,6 @@ PARSERS: list[SourceParser] = [
 ]
 
 DIRECT_PLACE_PARSERS: list[SourceParser] = [
-    CommuteScenarioParser(),
     RecurringPlacesParser(),
 ]
 

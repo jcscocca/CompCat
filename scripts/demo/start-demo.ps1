@@ -17,8 +17,8 @@ if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
     Write-Error "cloudflared not found — install with: winget install Cloudflare.cloudflared"
 }
 
-Write-Host "Starting demo compose project (waypoint-demo)..."
-docker compose -p waypoint-demo -f docker-compose.yml -f docker-compose.demo.yml --env-file .env.demo up -d --build
+Write-Host "Starting demo compose project (compcat-demo)..."
+docker compose -p compcat-demo -f docker-compose.yml -f docker-compose.demo.yml --env-file .env.demo up -d --build
 if ($LASTEXITCODE -ne 0) { Write-Error "compose up failed" }
 
 Write-Host "Waiting for /health..."

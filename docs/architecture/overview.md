@@ -6,7 +6,7 @@ This document describes CompCat's system architecture for maintainers and AI cod
 
 ## 1. Purpose & product invariant
 
-CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates for those places — organized into Places, Analyze, Compare, and Export tabs.
+CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates for those places — organized into Analyze, Compare, and Export tabs, with saved places carried across the analytic tabs as a chip strip (a manage-places dialog handles add/rename/remove).
 
 ⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/agent.py` contains a regex guard (`_SAFETY_SCORE_PATTERN`) that intercepts any chat message matching safety-scoring language and returns a hard refusal before the LLM is ever called. Both enforcement points must be preserved in future changes.
 
@@ -28,7 +28,7 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 | `app/schemas.py` | Shared Pydantic data-transfer objects and the `new_id()` UUID factory |
 | `app/sessions.py` | HMAC-signed session token creation and validation; derives `user_id_hash` from `SESSION_COOKIE_NAME` cookie |
 | `app/config.py` | `Settings` (pydantic-settings, `MCA_`-prefixed env vars) — one call to `get_settings()` per request |
-| `app/input_modes.py` | Pure-Python descriptor for the four supported entry modes (`manual_places`, `bulk_places`, `public_commute_scenario`, `personal_timeline`) |
+| `app/input_modes.py` | Pure-Python descriptor for the three supported entry modes (`manual_places`, `bulk_places`, `personal_timeline`) |
 
 **Database strategy:** `app/db.py` `init_db()` runs `Base.metadata.create_all` only when the backend is SQLite (dev/test). Postgres schema is owned by Alembic (`make migrate` = `alembic upgrade head`). Mixing both paths on Postgres would leave `alembic_version` unstamped and mask migration drift.
 
@@ -65,7 +65,7 @@ See `./api.md` for full endpoint-by-endpoint detail. Summary:
 | LLM client | `app/assistant/llm_client.py` | `OpenAiLlmClient` POSTs to `MCA_LLM_BASE_URL`; `FailoverLlmClient` wraps two clients for automatic failover |
 | Statistical analysis | `app/analysis/comparison.py` | Exposure-adjusted rate tests (Poisson / quasi-Poisson), Benjamini-Hochberg correction, `DecisionClass` output |
 | Crime ingestion | `app/crime/` | `seattle_socrata.py` fetches from Socrata; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
-| Upload pipeline | `app/parsers/` + `app/normalization/` | Parsers (`google_timeline`, `gpx_points`, `csv_points`, `geojson_points`, `recurring_places`, `commute_scenario`) normalize raw uploads into `StagingLocationObservation` rows |
+| Upload pipeline | `app/parsers/` + `app/normalization/` | Parsers (`google_timeline`, `gpx_points`, `csv_points`, `geojson_points`, `recurring_places`) normalize raw uploads into `StagingLocationObservation` rows |
 | Exports | `app/exports/` | `tableau.py` produces Tableau-ready CSV from stored `PlaceCrimeSummary` data |
 | Geocoding | `app/geocoding/providers.py` | `NominatimProvider` calls Nominatim; region-locked to the Seattle-metro viewbox (`MCA_GEOCODER_VIEWBOX`, bounded by default) |
 | Places | `app/places/schemas.py` + `app/services/manual_place_service.py` | Manual and bulk place creation/update/delete; `PlaceCluster` is the canonical record |

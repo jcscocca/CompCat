@@ -67,7 +67,7 @@ def latest_build_name(listing_json: str) -> str:
 def _download(url: str) -> bytes:
     print(f"  fetching {url}")
     # Some hosts (build-metadata.protomaps.dev) 403 the default Python-urllib UA.
-    req = urllib.request.Request(url, headers={"User-Agent": "waypoint-fetch-tiles"})
+    req = urllib.request.Request(url, headers={"User-Agent": "compcat-fetch-tiles"})
     with urllib.request.urlopen(req, timeout=90) as resp:  # noqa: S310 - fixed https hosts
         return resp.read()
 

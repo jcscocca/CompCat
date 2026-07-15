@@ -37,18 +37,6 @@ def supported_input_modes(include_personal_uploads: bool = False) -> list[dict[s
                 "Downtown transfer stop,47.609,-122.333,12,360\n"
             ),
         },
-        {
-            "id": "public_commute_scenario",
-            "label": "Public commute scenario",
-            "privacy_level": "very_low",
-            "description": "Model a commute using generalized Seattle areas.",
-            "required_columns": ["origin_area", "destination_area", "mode"],
-            "optional_columns": ["usual_departure_time", "frequency_per_week"],
-            "sample_csv": (
-                "origin_area,destination_area,mode,usual_departure_time,frequency_per_week\n"
-                "Capitol Hill,Downtown Seattle,transit,08:00,4\n"
-            ),
-        },
     ]
     if include_personal_uploads:
         modes.append(

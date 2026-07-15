@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 // The real tailnet hostname is personal and never committed (public repo).
 // Set MCA_IOS_SERVER_URL before `npm run ios:sync` — see docs/IOS.md.
-const PLACEHOLDER_SERVER_URL = "https://waypoint.example.ts.net";
+const PLACEHOLDER_SERVER_URL = "https://compcat.example.ts.net";
 
 const config: CapacitorConfig = {
   appId: "com.jscocca.waypoint",

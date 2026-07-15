@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "waypoint-analyzer"
+name = "compcat-analyzer"
 version = "0.1.0"
 description = "Privacy-first reported incident analysis for selected places."
 readme = "README.md"

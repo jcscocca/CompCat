@@ -5,7 +5,7 @@ down when done. Design: `docs/superpowers/specs/2026-07-10-demo-on-demand-design
 
 ## What it is
 
-- A **second, isolated compose project** (`waypoint-demo`) on the deploy machine: own
+- A **second, isolated compose project** (`compcat-demo`) on the deploy machine: own
   Postgres volume, own port (8001), demo secrets, personal uploads OFF, rate limiting ON.
   The personal instance and its data are not reachable through the demo. The demo's
   Postgres is not host-published — it is reachable only inside the compose network (the

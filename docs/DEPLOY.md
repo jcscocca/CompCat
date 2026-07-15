@@ -102,7 +102,7 @@ is created automatically on first load.
 ## Basemap tiles (self-hosted)
 
 The map renders from a self-hosted Seattle vector-tile extract so no third-party tile
-server ever sees where users look. `scripts/start-waypoint.ps1` fetches it automatically
+server ever sees where users look. `scripts/start-compcat.ps1` fetches it automatically
 on first run; to fetch or refresh manually:
 
     python scripts/fetch_tiles.py            # or: make fetch-tiles (Mac/dev)
@@ -219,17 +219,17 @@ The database lives in the named volume `mca-postgres`. Back it up with a logical
 
 ```bash
 # Backup -> a timestamped SQL file on the host
-docker compose exec -T db pg_dump -U mca -d mca > "waypoint-$(date +%Y%m%d).sql"
+docker compose exec -T db pg_dump -U mca -d mca > "compcat-$(date +%Y%m%d).sql"
 
 # Restore into a fresh/empty database (wipe first if needed: docker compose down -v && docker compose up -d db)
-cat waypoint-YYYYMMDD.sql | docker compose exec -T db psql -U mca -d mca
+cat compcat-YYYYMMDD.sql | docker compose exec -T db psql -U mca -d mca
 ```
 
 For a binary, parallel-restorable dump use custom format instead:
 
 ```bash
-docker compose exec -T db pg_dump -U mca -d mca -Fc > waypoint.dump
-docker compose exec -T db pg_restore -U mca -d mca --clean --if-exists < waypoint.dump
+docker compose exec -T db pg_dump -U mca -d mca -Fc > compcat.dump
+docker compose exec -T db pg_restore -U mca -d mca --clean --if-exists < compcat.dump
 ```
 
 Keep dumps off-host. A daily `pg_dump` via cron/systemd-timer on the ThinkPad is enough

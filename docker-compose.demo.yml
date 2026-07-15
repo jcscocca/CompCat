@@ -1,7 +1,7 @@
 # Demo-on-demand overlay. ALWAYS run with a distinct project name so volumes and
 # networks never collide with the personal instance on the same machine:
 #
-#   docker compose -p waypoint-demo -f docker-compose.yml -f docker-compose.demo.yml \
+#   docker compose -p compcat-demo -f docker-compose.yml -f docker-compose.demo.yml \
 #     --env-file .env.demo up -d --build
 #
 # See docs/DEMO.md. The -p prefix gives the demo its own db volume for free.
