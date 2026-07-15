@@ -4,6 +4,9 @@ import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 import { clampWidth, DRAWER_DEFAULT, DRAWER_MIN, DRAWER_PEEK, DRAWER_RESIZE_STEP, DRAWER_WIDE, drawerMax, type DrawerPreset } from "../lib/drawer";
 import type { TabKey } from "../types";
 
+const GRABBER_TAP_SLOP = 6;
+const GRABBER_DRAG_THRESHOLD = 40;
+
 type Props = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
@@ -14,6 +17,8 @@ type Props = {
   onPreset: (preset: DrawerPreset) => void;
   tabBadges?: Partial<Record<TabKey, number>>;
   dock?: ReactNode;
+  isMobile?: boolean;
+  peekHeader?: ReactNode;
   children: ReactNode;
 };
 
@@ -56,7 +61,7 @@ const PRESETS: { preset: DrawerPreset; label: string }[] = [
   { preset: "focus", label: "Focus" },
 ];
 
-function activateWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, action: () => void) {
+function activateWithKeyboard(event: KeyboardEvent<HTMLElement>, action: () => void) {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     action();
@@ -73,11 +78,34 @@ export function BottomSheet({
   onPreset,
   tabBadges,
   dock,
+  isMobile = false,
+  peekHeader,
   children,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const dragging = useRef(false);
   const moved = useRef(false);
+  const grabStartY = useRef<number | null>(null);
+
+  function onGrabberPointerDown(event: PointerEvent<HTMLDivElement>) {
+    grabStartY.current = event.clientY;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function onGrabberPointerUp(event: PointerEvent<HTMLDivElement>) {
+    const start = grabStartY.current;
+    grabStartY.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (start === null) return;
+    const dy = event.clientY - start;
+    if (Math.abs(dy) <= GRABBER_TAP_SLOP) {
+      onToggleCollapsed();
+    } else if (collapsed && dy <= -GRABBER_DRAG_THRESHOLD) {
+      onToggleCollapsed(); // drag up to expand
+    } else if (!collapsed && dy >= GRABBER_DRAG_THRESHOLD) {
+      onToggleCollapsed(); // drag down to collapse
+    }
+  }
 
   function presetPressed(preset: DrawerPreset) {
     if (preset === "peek") return collapsed;
@@ -150,39 +178,60 @@ export function BottomSheet({
     <section
       ref={panelRef}
       className={`mc-workspace-panel ${collapsed ? "is-collapsed" : "is-open"}`}
-      style={collapsed ? undefined : { width: widthPx }}
+      style={!isMobile && !collapsed ? { width: widthPx } : undefined}
       aria-label="Workspace panel"
     >
-      <div
-        className="mc-handle"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize workspace panel"
-        aria-valuemin={DRAWER_PEEK}
-        aria-valuemax={drawerMax()}
-        aria-valuenow={collapsed ? DRAWER_PEEK : widthPx}
-        tabIndex={0}
-        onPointerDown={onHandlePointerDown}
-        onPointerMove={onHandlePointerMove}
-        onPointerUp={onHandlePointerUp}
-        onPointerCancel={() => { dragging.current = false; }}
-        onKeyDown={onHandleKeyDown}
-      />
-      <div className="mc-snaps" role="group" aria-label="Panel size">
-        {PRESETS.map(({ preset, label }) => (
-          <button
-            key={preset}
-            type="button"
-            className={presetPressed(preset) ? "on" : undefined}
-            aria-pressed={presetPressed(preset)}
-            onClick={() => onPreset(preset)}
-            onKeyDown={(event) => activateWithKeyboard(event, () => onPreset(preset))}
+      {isMobile ? (
+        <>
+          <div
+            className="mc-grabber"
+            role="button"
+            tabIndex={0}
+            aria-label={collapsed ? "Expand panel" : "Collapse panel"}
+            aria-expanded={!collapsed}
+            onPointerDown={onGrabberPointerDown}
+            onPointerUp={onGrabberPointerUp}
+            onPointerCancel={() => { grabStartY.current = null; }}
+            onKeyDown={(event) => activateWithKeyboard(event, onToggleCollapsed)}
           >
-            <span>{label}</span>
             <b />
-          </button>
-        ))}
-      </div>
+          </div>
+          {peekHeader ? <div className="mc-sheet-head">{peekHeader}</div> : null}
+        </>
+      ) : (
+        <>
+          <div
+            className="mc-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize workspace panel"
+            aria-valuemin={DRAWER_PEEK}
+            aria-valuemax={drawerMax()}
+            aria-valuenow={collapsed ? DRAWER_PEEK : widthPx}
+            tabIndex={0}
+            onPointerDown={onHandlePointerDown}
+            onPointerMove={onHandlePointerMove}
+            onPointerUp={onHandlePointerUp}
+            onPointerCancel={() => { dragging.current = false; }}
+            onKeyDown={onHandleKeyDown}
+          />
+          <div className="mc-snaps" role="group" aria-label="Panel size">
+            {PRESETS.map(({ preset, label }) => (
+              <button
+                key={preset}
+                type="button"
+                className={presetPressed(preset) ? "on" : undefined}
+                aria-pressed={presetPressed(preset)}
+                onClick={() => onPreset(preset)}
+                onKeyDown={(event) => activateWithKeyboard(event, () => onPreset(preset))}
+              >
+                <span>{label}</span>
+                <b />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <nav className="mc-tabs" role="tablist" aria-label="Workspace sections">
         {TABS.map((tab) => {
           const badge = tabBadges?.[tab.key];
