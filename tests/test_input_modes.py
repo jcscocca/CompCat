@@ -14,7 +14,7 @@ def test_input_modes_hide_personal_uploads_by_default(tmp_path, monkeypatch):
     assert response.status_code == 200
     modes = response.json()["modes"]
     mode_ids = [mode["id"] for mode in modes]
-    assert mode_ids == ["manual_places", "bulk_places", "public_commute_scenario"]
+    assert mode_ids == ["manual_places", "bulk_places"]
 
     bulk_mode = next(mode for mode in modes if mode["id"] == "bulk_places")
     assert bulk_mode["required_columns"] == ["latitude", "longitude"]
@@ -34,6 +34,5 @@ def test_input_modes_include_personal_uploads_when_enabled(tmp_path, monkeypatch
     assert mode_ids == [
         "manual_places",
         "bulk_places",
-        "public_commute_scenario",
         "personal_timeline",
     ]
