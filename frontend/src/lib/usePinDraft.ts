@@ -77,8 +77,8 @@ export function usePinDraft({
   }
 
   // Sets the draft pin + flies the map to a searched address, WITHOUT changing the active
-  // tab. handleSearchSelect adds the Analyze-tab switch (to show the save popover); the
-  // single-address lookup reuses previewSearch alone and routes to Analyze itself.
+  // tab. handleSearchSelect adds the Compare-tab switch (to show the save popover); the
+  // single-address lookup reuses previewSearch alone and routes to Compare itself.
   function previewSearch(result: GeocodeResult) {
     setDraft({
       latitude: result.latitude,

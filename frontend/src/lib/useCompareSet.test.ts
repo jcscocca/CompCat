@@ -39,6 +39,17 @@ describe("useAddressList", () => {
     expect(result.current.entries).toHaveLength(3);
   });
 
+  it("reports edited=false while seeded and true after the first mutation", () => {
+    const { result, rerender } = renderHook(({ seed }) => useAddressList({ seed, onSavedIdsChange: persistSpy }), {
+      initialProps: { seed: [home] },
+    });
+    expect(result.current.edited).toBe(false);
+    rerender({ seed: [home, work] });
+    expect(result.current.edited).toBe(false);
+    act(() => result.current.add({ latitude: 47.7, longitude: -122.3, label: "Adhoc" }));
+    expect(result.current.edited).toBe(true);
+  });
+
   it("add() normalizes coords to 3 decimals and dedupes by keyOf, capped at MAX", () => {
     const { result } = renderHook(() => useAddressList({ seed: [], onSavedIdsChange: persistSpy }));
     act(() => result.current.add({ latitude: 47.6123456, longitude: -122.334567, label: "A" }));

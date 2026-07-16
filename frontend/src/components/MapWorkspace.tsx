@@ -87,7 +87,11 @@ export function MapWorkspace() {
   );
   const list = useAddressList({
     seed: seedPlaces,
-    onSavedIdsChange: (ids) => setSelectedIds(new Set(ids)),
+    // Never write back before the restore has run: an early lookup/share-link edit
+    // must not mark the persisted selection dirty (that would skip the restore).
+    onSavedIdsChange: (ids) => {
+      if (restored) setSelectedIds(new Set(ids));
+    },
   });
 
   // One identity source for cards AND pins: index within the list (saved entries carry
@@ -145,7 +149,7 @@ export function MapWorkspace() {
   // links own their first run above; landing lookups arm pendingAutoRun themselves.
   const autoRunArmedRef = useRef(false);
   useEffect(() => {
-    if (autoRunArmedRef.current || initialView || !restored) return;
+    if (autoRunArmedRef.current || initialView || !restored || list.edited) return;
     if (list.entries.length > 0) {
       autoRunArmedRef.current = true;
       setPendingAutoRun(true);
@@ -301,7 +305,7 @@ export function MapWorkspace() {
   }, [list, analysis]);
 
   const assistantState: AssistantDashboardState = useMemo(() => ({
-    selected_place_ids: list.savedIds(),
+    selected_place_ids: Array.from(savedIdSet),
     analysis_start_date: analysis.startDate || null,
     analysis_end_date: analysis.endDate || null,
     radii_m: [analysis.radiusM],
@@ -309,7 +313,7 @@ export function MapWorkspace() {
     offense_subcategory: null,
     nibrs_group: null,
     layer: analysis.layer,
-  }), [analysis, selectedIds]);
+  }), [analysis, savedIdSet]);
 
   // Landing shows only on a truly fresh session: no saved data and no in-progress draft
   // (so a search preview or dropped pin reaches the chip strip + draft popover instead of

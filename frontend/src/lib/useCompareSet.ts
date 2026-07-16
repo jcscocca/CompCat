@@ -28,6 +28,8 @@ export interface AddressList {
   markSaved: (key: string, savedPlaceId: string) => void;
   /** Saved-place ids currently in the list, in list order. */
   savedIds: () => string[];
+  /** True once the user (or a programmatic replace) has edited the list — seeding no longer applies. */
+  edited: boolean;
 }
 
 export function keyOf(p: { latitude: number; longitude: number }): string {
@@ -154,7 +156,7 @@ export function useAddressList({ seed, onSavedIdsChange }: AddressListDeps): Add
     return entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id));
   }
 
-  return { entries, add, removeAt, toggleSaved, replaceAll, markSaved, savedIds };
+  return { entries, add, removeAt, toggleSaved, replaceAll, markSaved, savedIds, edited: editedRef.current };
 }
 
 /**
