@@ -129,7 +129,7 @@ describe("CompareTab (unified panel)", () => {
   });
 
   it("copies the share link when results exist", async () => {
-    // clipboard mock per AnalyzeTab.test.tsx's copy-link test idiom
+    // clipboard idiom: define writeText mock via Object.defineProperty
     const writeText = vi.fn();
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const onCopyLink = vi.fn().mockReturnValue("https://example.test/?view=abc");

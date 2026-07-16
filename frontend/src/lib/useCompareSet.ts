@@ -12,10 +12,6 @@ export type AddressEntry = {
 
 export const MAX_ADDRESSES = 10;
 
-/** @deprecated slice-2 transition aliases — removed in the cleanup task. */
-export type ComparePoint = AddressEntry;
-export const MAX_COMPARE_POINTS = MAX_ADDRESSES;
-
 export interface AddressList {
   entries: AddressEntry[];
   add: (entry: AddressEntry) => void;
@@ -64,9 +60,6 @@ export function entriesFromPlaces(places: Place[]): AddressEntry[] {
   }
   return dedupeCap(entries);
 }
-
-/** @deprecated transition alias — removed in the cleanup task. */
-export const pointsFromPlaces = entriesFromPlaces;
 
 interface AddressListDeps {
   /** Saved places to seed from (the restored persisted selection). Re-seeds until the first edit. */
@@ -157,20 +150,4 @@ export function useAddressList({ seed, onSavedIdsChange }: AddressListDeps): Add
   }
 
   return { entries, add, removeAt, toggleSaved, replaceAll, markSaved, savedIds, edited: editedRef.current };
-}
-
-/**
- * @deprecated slice-2 transition shim for the old CompareSet consumers; removed in the
- * cleanup task once MapWorkspace is on useAddressList.
- */
-export interface CompareSet {
-  points: AddressEntry[];
-  add: (point: AddressEntry) => void;
-  removeAt: (index: number) => void;
-}
-
-/** @deprecated transition shim — removed in the cleanup task. */
-export function useCompareSet(seed: Place[]): CompareSet {
-  const list = useAddressList({ seed });
-  return { points: list.entries, add: list.add, removeAt: list.removeAt };
 }
