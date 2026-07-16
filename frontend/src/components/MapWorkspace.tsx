@@ -238,6 +238,8 @@ export function MapWorkspace() {
     invalidateAnalysisContext();
     try {
       await deletePlace(id);
+      const entryIndex = list.entries.findIndex((e) => e.savedPlaceId === id);
+      if (entryIndex >= 0) list.removeAt(entryIndex);
       setSelectedIds((current) => { const next = new Set(current); next.delete(id); return next; });
       await data.refreshWithFallback("Removed place, but dashboard totals could not refresh.");
     } catch {
@@ -309,9 +311,9 @@ export function MapWorkspace() {
     layer: analysis.layer,
   }), [analysis, selectedIds]);
 
-  // Landing shows only on a truly fresh Analyze session: no saved data, no lookup/shared
-  // subject, and no in-progress draft (so a search preview or dropped pin reaches the chip
-  // strip + draft popover instead of being hidden behind the landing).
+  // Landing shows only on a truly fresh session: no saved data and no in-progress draft
+  // (so a search preview or dropped pin reaches the chip strip + draft popover instead of
+  // being hidden behind the landing).
   const showLanding =
     data.places.length === 0 && list.entries.length === 0 && activeTab === "compare" && !pinDraft.draft;
 
