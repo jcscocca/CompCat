@@ -182,7 +182,7 @@ describe("useAddressSearch", () => {
 
   it("loads persisted recent places on mount", () => {
     const pike = { label: "Pike Place", latitude: 47.61, longitude: -122.34, source: "nominatim" };
-    localStorage.setItem("waypoint.search.recent", JSON.stringify([pike]));
+    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     const search = vi.fn().mockResolvedValue([]);
     const { result } = renderHook(() => useAddressSearch(search));
     expect(result.current.recent).toHaveLength(1);
@@ -198,7 +198,7 @@ describe("useAddressSearch", () => {
 
     expect(result.current.recent).toHaveLength(1);
     expect(result.current.recent[0]).toEqual(pike);
-    const stored = JSON.parse(localStorage.getItem("waypoint.search.recent") ?? "[]");
+    const stored = JSON.parse(localStorage.getItem("compcat.search.recent") ?? "[]");
     expect(stored[0]).toEqual(pike);
   });
 

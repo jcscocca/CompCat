@@ -17,7 +17,7 @@ describe("useTheme", () => {
   });
 
   it("prefers the stored explicit choice over the dark default", () => {
-    localStorage.setItem("wp-theme", "light");
+    localStorage.setItem("compcat.theme", "light");
     const { result } = renderHook(() => useTheme());
     expect(result.current.theme).toBe("light");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
@@ -26,12 +26,12 @@ describe("useTheme", () => {
   it("persists an explicit choice and applies the attribute", () => {
     const { result } = renderHook(() => useTheme());
     act(() => result.current.setTheme("light"));
-    expect(localStorage.getItem("wp-theme")).toBe("light");
+    expect(localStorage.getItem("compcat.theme")).toBe("light");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
   it("ignores garbage stored values and falls back to dark", () => {
-    localStorage.setItem("wp-theme", "sepia");
+    localStorage.setItem("compcat.theme", "sepia");
     const { result } = renderHook(() => useTheme());
     expect(result.current.theme).toBe("dark");
   });

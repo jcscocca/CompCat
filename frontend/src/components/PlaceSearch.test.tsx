@@ -59,7 +59,7 @@ describe("PlaceSearch", () => {
 
   it("does not show the recent list when the input is not focused", () => {
     const pike = { label: "Pike Place Market, Seattle", latitude: 47.6097, longitude: -122.3331, source: "nominatim" };
-    localStorage.setItem("waypoint.search.recent", JSON.stringify([pike]));
+    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     render(<PlaceSearch provider={providerReturning()} onSelectResult={vi.fn()} />);
 
     expect(screen.queryByRole("list", { name: "Recent searches" })).not.toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("PlaceSearch", () => {
 
   it("shows the recent list when the input is focused and query is empty", () => {
     const pike = { label: "Pike Place Market, Seattle", latitude: 47.6097, longitude: -122.3331, source: "nominatim" };
-    localStorage.setItem("waypoint.search.recent", JSON.stringify([pike]));
+    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     render(<PlaceSearch provider={providerReturning()} onSelectResult={vi.fn()} />);
 
     fireEvent.focus(screen.getByLabelText("Search an address or place"));
@@ -78,7 +78,7 @@ describe("PlaceSearch", () => {
 
   it("hides the recent list once the user starts typing", () => {
     const pike = { label: "Pike Place Market, Seattle", latitude: 47.6097, longitude: -122.3331, source: "nominatim" };
-    localStorage.setItem("waypoint.search.recent", JSON.stringify([pike]));
+    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     render(<PlaceSearch provider={providerReturning()} onSelectResult={vi.fn()} />);
 
     fireEvent.focus(screen.getByLabelText("Search an address or place"));
@@ -90,7 +90,7 @@ describe("PlaceSearch", () => {
 
   it("clicking a recent result calls rememberPlace and onSelectResult", () => {
     const pike = { label: "Pike Place Market, Seattle", latitude: 47.6097, longitude: -122.3331, source: "nominatim" };
-    localStorage.setItem("waypoint.search.recent", JSON.stringify([pike]));
+    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     const onSelectResult = vi.fn();
     render(<PlaceSearch provider={providerReturning()} onSelectResult={onSelectResult} />);
 
@@ -100,7 +100,7 @@ describe("PlaceSearch", () => {
 
     expect(onSelectResult).toHaveBeenCalledWith(expect.objectContaining({ label: "Pike Place Market, Seattle" }));
     // also persists: the recent list in localStorage still contains the entry
-    const stored = JSON.parse(localStorage.getItem("waypoint.search.recent") ?? "[]");
+    const stored = JSON.parse(localStorage.getItem("compcat.search.recent") ?? "[]");
     expect(stored[0].label).toBe("Pike Place Market, Seattle");
   });
 

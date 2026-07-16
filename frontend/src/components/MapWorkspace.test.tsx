@@ -132,7 +132,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  localStorage.removeItem("wp-theme");
+  localStorage.removeItem("compcat.theme");
   document.documentElement.removeAttribute("data-theme");
   window.innerWidth = 1024;
 });
@@ -328,13 +328,13 @@ describe("MapWorkspace", () => {
       wide.unmount();
 
       // A 900px drawer leaves a 124px strip (< FOCUS_CHROME_MIN 240) — chrome sheds.
-      localStorage.setItem("waypoint.drawer.width", "900");
+      localStorage.setItem("compcat.drawer.width", "900");
       const focus = render(<MapWorkspace />);
       await screen.findByRole("heading", { name: /look up an address/i });
       expect(focus.container.querySelector(".mc-frame")).toHaveClass("is-focus");
     } finally {
-      localStorage.removeItem("waypoint.drawer.width");
-      localStorage.removeItem("waypoint.drawer.collapsed");
+      localStorage.removeItem("compcat.drawer.width");
+      localStorage.removeItem("compcat.drawer.collapsed");
     }
   });
 

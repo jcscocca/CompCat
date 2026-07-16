@@ -1,8 +1,8 @@
 import type { DrawerState } from "../types";
 import { clampWidth, DRAWER_DEFAULT } from "./drawer";
 
-const WIDTH_KEY = "waypoint.drawer.width";
-const COLLAPSED_KEY = "waypoint.drawer.collapsed";
+const WIDTH_KEY = "compcat.drawer.width";
+const COLLAPSED_KEY = "compcat.drawer.collapsed";
 
 export function loadDrawerState(): DrawerState {
   try {

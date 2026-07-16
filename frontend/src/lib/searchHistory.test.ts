@@ -60,7 +60,7 @@ describe("searchHistory", () => {
   });
 
   it("returns an empty list when stored JSON is valid but not an array", () => {
-    localStorage.setItem("waypoint.search.recent", '{"x":1}');
+    localStorage.setItem("compcat.search.recent", '{"x":1}');
     expect(loadRecentPlaces()).toEqual([]);
     // and a subsequent add does not throw on the bad shape
     const result = addRecentPlace(pike);
