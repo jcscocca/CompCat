@@ -59,6 +59,23 @@ describe("useCompare unified run", () => {
     expect(analyzePlaces).not.toHaveBeenCalled();
   });
 
+  it("does not fire onSummariesRefreshed when the list is all ad-hoc", async () => {
+    const onSummariesRefreshed = vi.fn();
+    const { result } = renderHook(() => useCompare({ entries: [A], analysis, setError: vi.fn(), onSummariesRefreshed }));
+    await act(async () => { await result.current.run(); });
+    expect(onSummariesRefreshed).not.toHaveBeenCalled();
+  });
+
+  it("does not fire onSummariesRefreshed when the place_ids refresh rejects", async () => {
+    mock(analyzePlaces).mockRejectedValueOnce(new Error("boom"));
+    const onSummariesRefreshed = vi.fn();
+    const setError = vi.fn();
+    const { result } = renderHook(() => useCompare({ entries: [A, B], analysis, setError, onSummariesRefreshed }));
+    await act(async () => { await result.current.run(); });
+    expect(onSummariesRefreshed).not.toHaveBeenCalled();
+    expect(setError).not.toHaveBeenCalledWith("Unable to run this analysis. Try again.");
+  });
+
   it("caps >120-char labels in the POSTed points", async () => {
     const longLabel = "A".repeat(140);
     const { result } = renderHook(() => useCompare({ entries: [{ ...A, label: longLabel }], analysis, setError: vi.fn() }));

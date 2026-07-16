@@ -12,8 +12,9 @@ export interface CompareController {
   neighborhood: NeighborhoodAnalysis | null;
   /** Combined incident disclosure rows for the whole list; null when unavailable. */
   incidents: IncidentDetailsResponse | null;
-  /** Snapshot of the points the current results were computed from (expansion coords,
-   * letters). Null when no results are on screen. */
+  /** Snapshot of the points the last run was computed from (expansion coords, letters).
+   * Set after every run — even a fully failed one — so consumers must gate result
+   * regions on the data slices (comparison/neighborhood), not on runPoints. */
   runPoints: AddressEntry[] | null;
   run: () => Promise<void>;
   /** Drop in-flight + current results (list or analysis controls changed). */
