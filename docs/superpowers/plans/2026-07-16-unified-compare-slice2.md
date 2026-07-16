@@ -1371,6 +1371,11 @@ git add frontend/src/components/IncidentDetailsSection.tsx frontend/src/componen
 git commit -m "feat(compare): unified panel — list + controls + scaling results in one surface"
 ```
 
+**Review amendments (applied post-commit, supersede the Step 5 code block):**
+1. The N=1/compare-failed module loop is keyed: `neighborhood.places.map((place, index) => <Fragment key={place.place_id}>{moduleFor(index)}</Fragment>)` (with `Fragment` imported) — unkeyed stateful children could carry a stale travel-window selection across addresses.
+2. `hasResults` also counts a surviving `incidents` payload, so the disclosure renders even when both primary payloads failed; locked by an incidents-only test (panel suite: 14 tests).
+3. Follow-up outside this slice (chip task_d2c32286): the compare endpoint's option ordering is only empirically stable (`ORDER BY created_at, id` with UUID tiebreaker) — the index join depends on it; harden the contract backend-side later.
+
 ---
 
 ## Task 5: One list in the workspace — rewrite `MapWorkspace` wiring, collapse tabs
