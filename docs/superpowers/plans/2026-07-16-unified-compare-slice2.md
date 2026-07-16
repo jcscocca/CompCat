@@ -760,7 +760,7 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
 - [ ] **Step 4: Run hook tests, then check consumers**
 
 Run: `cd frontend && npx vitest run src/lib/useCompare.test.ts --environment jsdom`
-Expected: PASS (13 tests).
+Expected: PASS (12 tests).
 Run: `cd frontend && npm run lint`
 Expected: **ERRORS in `MapWorkspace.tsx`** (old `useCompare({selectedIds, …, points})` deps and `runCompare`/`neighborhood` reads). Apply the minimal bridge at the two call sites so the tree stays green until Task 5:
 
