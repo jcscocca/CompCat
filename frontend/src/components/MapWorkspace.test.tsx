@@ -134,6 +134,7 @@ afterEach(() => {
   vi.clearAllMocks();
   localStorage.removeItem("wp-theme");
   document.documentElement.removeAttribute("data-theme");
+  window.innerWidth = 1024;
 });
 
 describe("MapWorkspace", () => {
@@ -335,6 +336,17 @@ describe("MapWorkspace", () => {
       localStorage.removeItem("waypoint.drawer.width");
       localStorage.removeItem("waypoint.drawer.collapsed");
     }
+  });
+
+  it("narrow viewport does not enter desktop focus mode", async () => {
+    window.innerWidth = 375;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+
+    const { container } = render(<MapWorkspace />);
+    await screen.findByText("Home");
+
+    expect(container.querySelector(".mc-frame")?.classList.contains("is-focus")).toBe(false);
   });
 
   it("collapses the workspace panel while choosing where to drop a pin", async () => {
@@ -854,5 +866,31 @@ describe("MapWorkspace", () => {
       ),
     );
     window.history.replaceState({}, "", "/");
+  });
+
+  it("narrow viewport: the layer toggle mounts in the sheet, not the top bar", async () => {
+    window.innerWidth = 375;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+
+    const group = screen.getByRole("group", { name: "Data layer" });
+    expect(group.closest(".mc-workspace-panel")).not.toBeNull();
+    expect(group.closest(".mc-topbar")).toBeNull();
+  });
+
+  it("wide viewport: the layer toggle mounts in the top bar", async () => {
+    window.innerWidth = 1200;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+
+    const group = screen.getByRole("group", { name: "Data layer" });
+    expect(group.closest(".mc-topbar")).not.toBeNull();
+    expect(group.closest(".mc-workspace-panel")).toBeNull();
   });
 });

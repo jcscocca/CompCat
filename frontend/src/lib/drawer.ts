@@ -9,6 +9,10 @@ export const MAP_STRIP_MIN = 96;
 // and the topbar stacks vertically inside the strip. 240 ≈ legend width + margins.
 export const FOCUS_CHROME_MIN = 240;
 
+// Viewports at/below this width render the workspace panel as a bottom sheet.
+// Must match the `@media (max-width:760px)` breakpoint in styles/mapWorkspace.css.
+export const MOBILE_MAX_WIDTH = 760;
+
 export type DrawerPreset = "peek" | "default" | "wide" | "focus";
 
 export function drawerMax(): number {

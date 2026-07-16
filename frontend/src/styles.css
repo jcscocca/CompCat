@@ -24,6 +24,7 @@
 body {
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
 }
 
@@ -38,6 +39,7 @@ button:disabled {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .panel-label {

@@ -4,7 +4,7 @@ import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, getMcppPol
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
 import { interpretToolResult } from "../lib/assistantBridge";
-import { DRAWER_PEEK, FOCUS_CHROME_MIN } from "../lib/drawer";
+import { DRAWER_PEEK, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { decodeView, encodeView } from "../lib/savedView";
@@ -367,7 +367,17 @@ export function MapWorkspace() {
 
   // Recomputed every render: useDrawer's window-resize listener always produces a new
   // drawer object, so viewport changes re-render. No extra state needed.
-  const isFocus = !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
+  const isMobile = window.innerWidth <= MOBILE_MAX_WIDTH;
+  // Focus mode is a desktop side-panel concept — force it off on mobile (the bottom sheet).
+  const isFocus = !isMobile && !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
+
+  // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
+  const layerControls = (
+    <>
+      <LayerToggle layer={analysis.layer} onChange={(layer) => handleAnalysisChange({ layer })} />
+      <DataFreshness freshness={data.freshness} layer={analysis.layer} />
+    </>
+  );
 
   // Rendered INSIDE the Analyze/Compare panels (topSlot): .mc-panel is absolutely
   // positioned over .mc-panels, so a sibling rendered outside would be painted over.
@@ -426,9 +436,8 @@ export function MapWorkspace() {
             <span className="mc-wordmark">CompCat</span>
           </div>
           <div className="mc-topbar-right">
-            <LayerToggle layer={analysis.layer} onChange={(layer) => handleAnalysisChange({ layer })} />
-            <DataFreshness freshness={data.freshness} layer={analysis.layer} />
-            <div className="mc-status"><span className="dot" />Public session - Seattle</div>
+            {!isMobile ? layerControls : null}
+            {!isMobile ? <div className="mc-status"><span className="dot" />Public session - Seattle</div> : null}
             <ThemeToggle theme={theme} onChange={setTheme} />
           </div>
         </header>
@@ -474,6 +483,8 @@ export function MapWorkspace() {
           onToggleCollapsed={onToggleCollapsed}
           onResize={onDrawerResize}
           onPreset={onPreset}
+          isMobile={isMobile}
+          peekHeader={isMobile ? layerControls : undefined}
           tabBadges={{ compare: compareSet.points.length }}
           dock={<AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} />}
         >

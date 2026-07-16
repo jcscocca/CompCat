@@ -143,4 +143,55 @@ describe("BottomSheet", () => {
     expect(panel()).toHaveClass("is-collapsed");
     expect(panel().style.width).toBe("");
   });
+
+  it("mobile: renders a grabber and the peek header instead of the resize handle", () => {
+    renderSheet({ isMobile: true, peekHeader: <div>LAYER SLOT</div> });
+    expect(screen.getByRole("button", { name: /collapse panel/i })).toBeInTheDocument();
+    expect(screen.getByText("LAYER SLOT")).toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: /resize workspace panel/i })).not.toBeInTheDocument();
+  });
+
+  it("desktop: keeps the vertical resize handle and no grabber", () => {
+    renderSheet({ isMobile: false });
+    expect(screen.getByRole("separator", { name: /resize workspace panel/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /(collapse|expand) panel/i })).not.toBeInTheDocument();
+  });
+
+  it("mobile: a tap on the grabber toggles collapsed", () => {
+    const { props } = renderSheet({ isMobile: true, collapsed: false });
+    const grabber = screen.getByRole("button", { name: /collapse panel/i });
+    fireEvent.pointerDown(grabber, { clientY: 120, pointerId: 1 });
+    fireEvent.pointerUp(grabber, { clientY: 122, pointerId: 1 });
+    expect(props.onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it("mobile: a downward drag collapses when open; an upward drag while open does nothing", () => {
+    const { props } = renderSheet({ isMobile: true, collapsed: false });
+    const grabber = screen.getByRole("button", { name: /collapse panel/i });
+    fireEvent.pointerDown(grabber, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(grabber, { clientY: 180, pointerId: 1 });
+    fireEvent.pointerDown(grabber, { clientY: 180, pointerId: 1 });
+    fireEvent.pointerUp(grabber, { clientY: 100, pointerId: 1 });
+    expect(props.onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it("mobile: an upward drag expands when collapsed; a downward drag while collapsed does nothing", () => {
+    const { props } = renderSheet({ isMobile: true, collapsed: true });
+    const grabber = screen.getByRole("button", { name: /expand panel/i });
+    // drag up 80px while collapsed → expand
+    fireEvent.pointerDown(grabber, { clientY: 180, pointerId: 1 });
+    fireEvent.pointerUp(grabber, { clientY: 100, pointerId: 1 });
+    // drag down 80px while still collapsed → ignored
+    fireEvent.pointerDown(grabber, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(grabber, { clientY: 180, pointerId: 1 });
+    expect(props.onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it("mobile: a short drag between slop and threshold is ignored (no toggle)", () => {
+    const { props } = renderSheet({ isMobile: true, collapsed: false });
+    const grabber = screen.getByRole("button", { name: /collapse panel/i });
+    fireEvent.pointerDown(grabber, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(grabber, { clientY: 120, pointerId: 1 }); // dy=20, dead zone
+    expect(props.onToggleCollapsed).not.toHaveBeenCalled();
+  });
 });

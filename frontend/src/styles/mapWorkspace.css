@@ -129,12 +129,16 @@
 
 /* Focus mode: the map is a locator strip — shed map-reading chrome, stack the topbar
    vertically inside the strip so layer/theme/freshness stay reachable. */
-.mc-frame.is-focus .mc-wordmark,.mc-frame.is-focus .mc-status:not(.mc-freshness){display:none;}
-.mc-frame.is-focus .mc-topbar{flex-direction:column;align-items:flex-start;height:auto;gap:10px;padding:12px 10px;}
-.mc-frame.is-focus .mc-topbar-right{flex-wrap:wrap;row-gap:8px;}
-.mc-frame.is-focus .mc-searchpill,.mc-frame.is-focus .mc-legend,.mc-frame.is-focus .mc-disclosure,.mc-frame.is-focus .mc-helper{display:none;}
-.mc-frame.is-focus .maplibregl-ctrl-bottom-right{display:none;}
-.mc-frame.is-focus .mc-attrib{right:auto;left:8px;max-width:calc(100vw - var(--panel-width) - 16px);}
+/* Focus mode is a desktop side-panel concept; scope it to desktop so these high-specificity
+   rules can never leak onto the mobile sheet (e.g. clobber the topbar safe-area-top inset). */
+@media (min-width:761px){
+  .mc-frame.is-focus .mc-wordmark,.mc-frame.is-focus .mc-status:not(.mc-freshness){display:none;}
+  .mc-frame.is-focus .mc-topbar{flex-direction:column;align-items:flex-start;height:auto;gap:10px;padding:12px 10px;}
+  .mc-frame.is-focus .mc-topbar-right{flex-wrap:wrap;row-gap:8px;}
+  .mc-frame.is-focus .mc-searchpill,.mc-frame.is-focus .mc-legend,.mc-frame.is-focus .mc-disclosure,.mc-frame.is-focus .mc-helper{display:none;}
+  .mc-frame.is-focus .maplibregl-ctrl-bottom-right{display:none;}
+  .mc-frame.is-focus .mc-attrib{right:auto;left:8px;max-width:calc(100vw - var(--panel-width) - 16px);}
+}
 
 .mc-workspace-panel{position:absolute;top:0;right:0;bottom:0;z-index:1200;width:var(--panel-width);height:auto;
   background:var(--surface);border-left:1px solid var(--border);border-radius:0;
@@ -157,14 +161,16 @@
 .mc-tab.is-active::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2.5px;border-radius:2px;background:var(--accent);}
 .mc-tab .pill{font-family:var(--f-mono);font-size:11px;background:var(--surface-sunken);color:var(--text);padding:1px 7px;border-radius:99px;}
 
-.mc-workspace-panel.is-collapsed .mc-snaps{right:14px;}
-.mc-workspace-panel.is-collapsed .mc-snaps button span{display:none;}
-.mc-workspace-panel.is-collapsed .mc-panels{display:none;}
-.mc-workspace-panel.is-collapsed .mc-tabs{display:flex;flex-direction:column;align-items:center;gap:8px;padding:70px 14px 0;border-bottom:0;}
-.mc-workspace-panel.is-collapsed .mc-tab{width:52px;height:52px;padding:0;gap:0;border-radius:12px;font-size:0;}
-.mc-workspace-panel.is-collapsed .mc-tab svg{width:18px;height:18px;}
-.mc-workspace-panel.is-collapsed .mc-tab.is-active::after{left:8px;right:auto;top:10px;bottom:10px;width:3px;height:auto;}
-.mc-workspace-panel.is-collapsed .mc-tab .pill{position:absolute;right:4px;top:4px;font-size:10px;padding:0 5px;}
+@media (min-width:761px){
+  .mc-workspace-panel.is-collapsed .mc-snaps{right:14px;}
+  .mc-workspace-panel.is-collapsed .mc-snaps button span{display:none;}
+  .mc-workspace-panel.is-collapsed .mc-panels{display:none;}
+  .mc-workspace-panel.is-collapsed .mc-tabs{display:flex;flex-direction:column;align-items:center;gap:8px;padding:70px 14px 0;border-bottom:0;}
+  .mc-workspace-panel.is-collapsed .mc-tab{width:52px;height:52px;padding:0;gap:0;border-radius:12px;font-size:0;}
+  .mc-workspace-panel.is-collapsed .mc-tab svg{width:18px;height:18px;}
+  .mc-workspace-panel.is-collapsed .mc-tab.is-active::after{left:8px;right:auto;top:10px;bottom:10px;width:3px;height:auto;}
+  .mc-workspace-panel.is-collapsed .mc-tab .pill{position:absolute;right:4px;top:4px;font-size:10px;padding:0 5px;}
+}
 
 .mc-panels{position:relative;flex:1;overflow:hidden;}
 .mc-panel{display:none;position:absolute;inset:0;padding:16px 18px;overflow:auto;}
@@ -297,7 +303,7 @@
 @media (max-width:760px){.mc-legend{display:none;}}
 
 .mc-scope{display:block;width:100%;height:100%;}
-.mc-frame{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--surface-sunken);border-radius:0;box-shadow:none;}
+.mc-frame{position:relative;width:100%;height:100vh;height:100dvh;overflow:hidden;background:var(--surface-sunken);border-radius:0;box-shadow:none;}
 
 .mc-modal-scrim{position:fixed;inset:0;z-index:1300;background:rgba(20,24,28,.45);display:grid;place-items:center;padding:20px;}
 .mc-modal{width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;}
@@ -403,36 +409,56 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-method code{display:block;margin-top:6px;font-family:var(--f-mono);font-size:11px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-soft);border-radius:7px;padding:5px 9px;overflow-wrap:anywhere;}
 
 @media (max-width:760px){
-  .mc-scope{--panel-width:min(320px,calc(100vw - 72px));--panel-rail:72px;}
-  .mc-topbar{padding:0 20px;gap:12px;}
+  /* Mobile bottom sheet. Breakpoint matches MOBILE_MAX_WIDTH (760) in src/lib/drawer.ts. */
+  .mc-topbar{right:0;height:auto;min-height:56px;padding:calc(env(safe-area-inset-top) + 8px) 20px 8px;gap:12px;}
   .mc-wordmark{font-size:20px;white-space:nowrap;}
-  .mc-status{display:none;}
-  .mc-searchpill{top:74px;left:20px;width:auto;max-width:calc(100vw - var(--panel-width) - 34px);}
+  .mc-searchpill{top:calc(env(safe-area-inset-top) + 64px);left:calc(env(safe-area-inset-left) + 16px);width:auto;max-width:calc(100vw - 32px);}
+  .mc-helper{top:calc(env(safe-area-inset-top) + 116px);left:calc(env(safe-area-inset-left) + 16px);}
   .mc-empty{top:34%;width:min(260px,calc(100% - 96px));padding:16px 18px;}
-  .mc-workspace-panel{top:0;left:auto;right:0;bottom:0;width:var(--panel-width);height:auto;border-radius:0;background:var(--surface);border-left:1px solid var(--border);box-shadow:-18px 0 40px -28px rgba(16,24,32,.25);animation:panelin .55s cubic-bezier(.2,.8,.2,1) both;}
-  .mc-workspace-panel.is-collapsed{width:var(--panel-rail);height:auto;}
-  .mc-handle{left:-7px;top:0;bottom:0;width:11px;height:auto;transform:none;}
-  .mc-tabs{grid-template-columns:repeat(2,minmax(0,1fr));padding:48px 14px 0;gap:4px;overflow:visible;scrollbar-width:none;}
-  .mc-tabs::-webkit-scrollbar{display:none;}
-  .mc-tab{padding:10px 11px;font-size:13px;min-width:0;justify-content:center;}
+
+  /* No side panel on mobile: drop the desktop --panel-width offset from map chrome and
+     lift the zoom + (required) attribution above the peek sheet so they stay visible.
+     Vertical offsets approximate the peek height; confirm/tune during on-device acceptance. */
+  .mc-frame .maplibregl-ctrl-bottom-right{right:calc(env(safe-area-inset-right) + 8px);bottom:calc(env(safe-area-inset-bottom) + 132px);}
+
+  /* Workspace panel becomes a bottom sheet: full width, height-driven, flex column. */
+  .mc-workspace-panel{
+    top:auto;left:0;right:0;bottom:0;
+    width:100%;height:min(80dvh,620px);
+    display:flex;flex-direction:column;
+    border-left:0;border-top:1px solid var(--border);
+    border-radius:16px 16px 0 0;
+    background:var(--surface);
+    box-shadow:0 -18px 40px -26px rgba(16,24,32,.4);
+    padding-bottom:env(safe-area-inset-bottom);
+    animation:sheetin .4s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .mc-workspace-panel.is-collapsed{width:100%;height:auto;} /* Peek: grabber + head + tabs only */
+
+  .mc-grabber{display:flex;align-items:center;justify-content:center;height:26px;flex:none;cursor:grab;touch-action:none;}
+  .mc-grabber b{display:block;width:38px;height:5px;border-radius:3px;background:var(--border-strong);}
+
+  .mc-sheet-head{display:flex;align-items:center;gap:10px;flex:none;padding:0 16px 8px;overflow-x:auto;scrollbar-width:none;}
+  .mc-sheet-head::-webkit-scrollbar{display:none;}
+  .mc-sheet-head .mc-freshness{white-space:nowrap;}
+
+  .mc-tabs{grid-template-columns:repeat(3,minmax(0,1fr));flex:none;gap:4px;padding:0 14px 8px;border-bottom:1px solid var(--border);}
+  .mc-tab{padding:9px 8px;font-size:13px;min-width:0;justify-content:center;}
   .mc-tab svg{width:15px;height:15px;}
   .mc-tab .pill{padding:1px 6px;}
-  .mc-snaps{top:12px;right:14px;flex-direction:row;gap:5px;}
-  .mc-snaps button{padding:4px 1px;}
-  .mc-snaps button span{display:none;}
-  .mc-snaps button b{width:12px;}
-  .mc-snaps button.on b{width:18px;}
-  .mc-workspace-panel.is-collapsed .mc-tabs{flex-direction:column;align-items:center;padding:62px 10px 0;border-bottom:0;gap:8px;overflow:visible;}
-  .mc-workspace-panel.is-collapsed .mc-tab{width:48px;height:48px;min-width:0;padding:0;font-size:0;gap:0;border-radius:12px;}
-  .mc-workspace-panel.is-collapsed .mc-tab svg{width:17px;height:17px;}
-  .mc-workspace-panel.is-collapsed .mc-tab.is-active::after{left:8px;right:auto;top:10px;bottom:10px;width:3px;height:auto;}
-  .mc-workspace-panel.is-collapsed .mc-tab .pill{position:absolute;right:4px;top:4px;font-size:10px;padding:0 5px;}
+
+  .mc-panels{flex:1;min-height:0;overflow:auto;}
+  .mc-workspace-panel.is-collapsed .mc-panels,
+  .mc-workspace-panel.is-collapsed .mc-dock-slot{display:none;}
+  .mc-workspace-panel.is-collapsed .mc-tabs{border-bottom:0;}
+
   .mc-panel{padding:14px 18px;}
   .mc-panel-head{align-items:flex-start;gap:10px;}
   .mc-head-actions{justify-content:flex-start;}
-.mc-search{height:auto;min-height:44px;}
+  .mc-search{height:auto;min-height:44px;}
   .mc-search-go{height:34px;}
 }
+@keyframes sheetin{from{transform:translateY(100%);}to{transform:translateY(0);}}
 .mc-vchip{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:2px 9px;border-radius:20px;border:1px solid var(--border);color:var(--text);background:var(--surface-sunken);}
 .mc-vchip.clear{color:var(--text-strong);border-color:var(--border-strong);background:var(--surface-sunken);}
 .mc-verdict-headline{margin:7px 0 2px;font-size:14px;font-weight:600;line-height:1.35;color:var(--text-strong);overflow-wrap:anywhere;}
