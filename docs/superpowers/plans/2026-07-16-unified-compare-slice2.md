@@ -976,7 +976,7 @@ describe("CompareTab (unified panel)", () => {
   it("renders the combined incident disclosure from the incidents payload", () => {
     render(<CompareTab {...base} entries={entriesOf("Pike", "Bell")} comparison={clearSweep} neighborhood={twoPlaceNeighborhood} runPoints={entriesOf("Pike", "Bell")} incidents={incidents} />);
     fireEvent.click(screen.getByText(/see the 2 reported incidents/i));
-    expect(screen.getByText("500 BLOCK PIKE ST")).toBeInTheDocument();
+    expect(screen.getByText("500 block of Pike St")).toBeInTheDocument();
   });
 
   it("address rows: remove fires with the index; unsaved rows offer Save", () => {
