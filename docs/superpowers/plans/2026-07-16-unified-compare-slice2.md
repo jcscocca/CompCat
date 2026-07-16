@@ -33,6 +33,8 @@
 **Files:**
 - Modify: `frontend/src/lib/savedView.ts`
 - Modify: `frontend/src/lib/savedView.test.ts`
+- Modify: `frontend/src/components/MapWorkspace.tsx` (three call-site fixes, Step 4)
+- Modify: `frontend/src/components/MapWorkspace.test.tsx` (drop `tab:` from its three `encodeView({...})` fixture literals — they exercise current-format links; legacy-format coverage lives in `savedView.test.ts` and Task 6)
 
 - [ ] **Step 1: Extend the tests (fail first)**
 
@@ -150,7 +152,7 @@ Re-run `npm run lint` → clean. Run the two workspace suites: `npx vitest run s
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/savedView.ts frontend/src/lib/savedView.test.ts frontend/src/components/MapWorkspace.tsx
+git add frontend/src/lib/savedView.ts frontend/src/lib/savedView.test.ts frontend/src/components/MapWorkspace.tsx frontend/src/components/MapWorkspace.test.tsx
 git commit -m "feat(share): tab-free share links; legacy analyze/compare links decode onto one surface"
 ```
 
