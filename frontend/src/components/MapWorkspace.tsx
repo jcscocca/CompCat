@@ -275,12 +275,14 @@ export function MapWorkspace() {
     if (effect.settings) {
       setAnalysis((current) => ({ ...current, ...effect.settings }));
     }
+    // Assistant selection edits invalidate like user edits; payload-bearing effects
+    // re-apply their panes right below.
+    if (effect.selection) compare.invalidate();
     if (effect.selection) {
       const { mode, ids } = effect.selection;
       if (mode === "clear") list.replaceAll([]);
       else if (mode === "replace") list.replaceAll(entriesForIds(ids));
       else entriesForIds(ids).forEach((entry) => list.add(entry));
-      if (mode === "clear") compare.invalidate();
     }
     if (effect.comparison !== undefined) {
       compare.applyAssistant({ comparison: effect.comparison });

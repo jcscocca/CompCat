@@ -135,6 +135,10 @@ afterEach(() => {
   localStorage.removeItem("compcat.theme");
   document.documentElement.removeAttribute("data-theme");
   window.innerWidth = 1024;
+  // A ?view= URL or captured fly sequence must never leak into the next test, even when
+  // an assertion fails before a test's own cleanup lines run.
+  window.history.replaceState(null, "", "/");
+  flyToCaptures.length = 0;
 });
 
 describe("MapWorkspace", () => {
@@ -463,7 +467,7 @@ describe("MapWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
-    expect(screen.queryByText("100 BLOCK MAIN ST")).not.toBeInTheDocument();
+    expect(screen.queryByText("100 block of Main St")).not.toBeInTheDocument();
   });
 
   it("shows an error when the session cannot start", async () => {
@@ -557,7 +561,6 @@ describe("MapWorkspace", () => {
     expect(await screen.findByText(/shared view/i)).toBeInTheDocument();
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({ points: expect.any(Array) })));
-    window.history.replaceState({}, "", "/");
   });
 
   it("hydrates a shared Compare view and renders its comparison instead of the select-two prompt", async () => {
@@ -580,7 +583,6 @@ describe("MapWorkspace", () => {
       expect.objectContaining({ points: expect.any(Array) })));
     // The shared Compare pane renders its verdict (synthetic selection ≥ 2).
     expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
-    window.history.replaceState({}, "", "/");
   });
 
   it("leads a fresh session with the look-up landing", async () => {
@@ -843,7 +845,6 @@ describe("MapWorkspace", () => {
     // Running the two-address list is what triggers the next fetch.
     fireEvent.click(screen.getByRole("button", { name: /compare 2 addresses/i }));
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(2));
-    window.history.replaceState({}, "", "/");
   });
 
   it("narrow viewport: the layer toggle mounts in the sheet, not the top bar", async () => {
@@ -887,7 +888,6 @@ describe("MapWorkspace", () => {
       points: [expect.objectContaining({ label: "Shared spot" })],
     })));
     expect(comparePlaces).not.toHaveBeenCalled();
-    window.history.replaceState(null, "", "/");
   });
 
   it("applies an assistant analyze_places context module onto the Compare surface", async () => {
@@ -979,7 +979,6 @@ describe("MapWorkspace", () => {
       expect(within(list).getByText(home.display_label)).toBeInTheDocument();
     });
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(2));
-    window.history.replaceState(null, "", "/");
   });
 
   it("does not double-run when a lookup fires before places finish loading", async () => {
@@ -1043,5 +1042,31 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(screen.queryByTestId("compare-ranked")).not.toBeInTheDocument());
     expect(screen.queryByRole("list", { name: /addresses to compare/i })).not.toBeInTheDocument();
     expect(screen.getByText(/add at least one address/i)).toBeInTheDocument();
+  });
+
+  it("drops stale panes when the assistant replaces the selection without new results", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
+    vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Home", "Work"));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 2 });
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({ event: "tool", data: { tool_name: "select_places", result: { place_ids: ["p2"], mode: "replace" } } });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    // The restored two-place selection auto-runs and renders the ranked spine.
+    expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "just Work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    // A payload-free selection replace is an edit: the stale ranked spine drops and the
+    // list swaps to the replacement row, waiting for the next Run.
+    await waitFor(() => expect(screen.queryByTestId("compare-ranked")).not.toBeInTheDocument());
+    const rows = screen.getByRole("list", { name: /addresses to compare/i });
+    expect(within(rows).getByText("Work")).toBeInTheDocument();
+    expect(within(rows).queryByText("Home")).not.toBeInTheDocument();
   });
 });
