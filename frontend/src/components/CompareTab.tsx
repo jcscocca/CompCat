@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 
 import { toCompareVerdict } from "../lib/compareVerdict";
@@ -5,12 +6,14 @@ import { incidentNoun } from "../lib/layerCopy";
 import type { GeocodingProvider } from "../lib/geocoding";
 import type { ComparePoint } from "../lib/useCompareSet";
 import { MAX_COMPARE_POINTS, keyOf } from "../lib/useCompareSet";
-import type { AnalysisSettings, SiteComparison } from "../types";
+import type { AnalysisSettings, NeighborhoodAnalysis, SiteComparison } from "../types";
+import { plotDomainMax } from "./BaselineIntervalPlot";
 import { CompareAddressInput } from "./CompareAddressInput";
 import { CompareRankedList } from "./CompareRankedList";
 import { CompareRateNumberLine } from "./CompareRateNumberLine";
 import { CompareVerdict } from "./CompareVerdict";
 import { MethodsAppendix } from "./MethodsAppendix";
+import { PlaceContextCard } from "./PlaceContextCard";
 
 type Props = {
   set: ComparePoint[];
@@ -22,6 +25,8 @@ type Props = {
   onSavePoint: (point: ComparePoint) => void;
   analysis: AnalysisSettings;
   comparison: SiteComparison | null;
+  /** Per-address neighborhood context from the same run; null degrades expansions. */
+  neighborhood: NeighborhoodAnalysis | null;
   running: boolean;
   onRun: () => void;
   onCopyLink?: () => string | null;
@@ -33,10 +38,35 @@ type Props = {
 const REVISED_CAVEAT =
   "Reported incident context, not a personal risk prediction. Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
 
-export function CompareTab({ set, provider, onAddPoint, onRemovePoint, savedKeys, onSavePoint, analysis, comparison, running, onRun, onCopyLink, topSlot }: Props) {
+export function CompareTab({ set, provider, onAddPoint, onRemovePoint, savedKeys, onSavePoint, analysis, comparison, neighborhood, running, onRun, onCopyLink, topSlot }: Props) {
   const noun = incidentNoun(analysis.layer);
   const canRun = set.length >= 2 && !running;
   const verdict = comparison ? toCompareVerdict(comparison) : null;
+
+  const expansionByOptionId = useMemo(() => {
+    if (!comparison || !neighborhood?.places?.length) return undefined;
+    const domainMax = plotDomainMax(neighborhood.places);
+    const windowLabel = `${neighborhood.analysis_start_date} – ${neighborhood.analysis_end_date}`;
+    const map = new Map<string, ReactNode>();
+    comparison.analytical.options.forEach((option, index) => {
+      const place = neighborhood.places[index];
+      if (!place) return;
+      const point = set[index];
+      map.set(
+        option.id,
+        <PlaceContextCard
+          place={place}
+          index={index}
+          windowLabel={windowLabel}
+          noun={noun}
+          domainMax={domainMax}
+          locator={null}
+          coords={point ? { latitude: point.latitude, longitude: point.longitude } : null}
+        />,
+      );
+    });
+    return map;
+  }, [comparison, neighborhood, set, noun]);
 
   return (
     <div className="mc-panel is-active" role="tabpanel" aria-label="Compare">
@@ -77,7 +107,10 @@ export function CompareTab({ set, provider, onAddPoint, onRemovePoint, savedKeys
         <>
           <CompareVerdict callout={verdict.callout} noun={noun} />
           <p className="mc-ranked-title">Ranked by {noun.singular} rate — lowest first</p>
-          <CompareRankedList rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} />
+          <CompareRankedList rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} expansionByOptionId={expansionByOptionId} />
+          {!expansionByOptionId ? (
+            <p className="mc-search-msg">Per-address context unavailable for this run.</p>
+          ) : null}
           <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} />
         </>
       ) : set.length >= 2 ? (

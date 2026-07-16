@@ -468,7 +468,7 @@ describe("AnalyzeTab", () => {
   });
 
   it("renders a sparkline bar for each monthly_counts entry", () => {
-    // homePlace has monthly_counts of length 6; the VerdictCard renders one <span> per entry
+    // homePlace has monthly_counts of length 6; the PlaceContextCard renders one <span> per entry
     const { container } = render(
       <AnalyzeTab
         selected={[home]}

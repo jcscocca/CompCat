@@ -164,6 +164,18 @@ strong before it becomes the front door.
   tab, plus a one-click compare bridge that carries the looked-up address in as the anchor and
   an optional "Save to my places". Frontend-only; invariant untouched. Spec/plan:
   `docs/superpowers/{specs,plans}/2026-07-03-compare-single-address-entry*`.
+
+**Unified Compare surface (2026-07-16):** the tabs converge on one surface named Compare
+(spec: `docs/superpowers/specs/2026-07-16-unified-compare-surface-design.md`), in three
+slices.
+- [x] **Slice 1 — extract + enrich** — `PlaceContextCard` extracted from Analyze; Compare
+  fetches the points-based neighborhood analysis in parallel and ranked rows expand into
+  full per-address context. Plan: `docs/superpowers/plans/2026-07-16-unified-compare-slice1.md`.
+- [ ] **Slice 2 — unify** — one list + one panel, tabs collapse to Compare + Export,
+  pairwise section and bridge retire, share-link + assistant-bridge migration.
+- [ ] **Slice 3 — polish** — adaptive CTA label, mobile tuning; later optional:
+  pin-to-compare columns, progressive spine-first rendering.
+
 - [x] **Per-address rate interval (backend)** — every compared address now carries its own
   quasi-Poisson rate confidence interval (`rate_confidence_interval`), surfaced on the
   `/dashboard/compare` options payload (persisted via migration `0013`). Empirically chosen

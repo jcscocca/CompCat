@@ -49,4 +49,17 @@ describe("CompareRankedList", () => {
       expect(text).not.toContain(banned);
     }
   });
+
+  it("renders a Full context disclosure only for rows with an expansion", () => {
+    const expansions = new Map([["b", <p key="x">Bell context body</p>]]);
+    render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} expansionByOptionId={expansions} />);
+    const region = screen.getByTestId("compare-ranked");
+    expect(within(region).getAllByText("Full context")).toHaveLength(1);
+    expect(within(region).getByText("Bell context body")).toBeInTheDocument();
+  });
+
+  it("renders no Full context disclosure when no expansions are provided", () => {
+    render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
+    expect(within(screen.getByTestId("compare-ranked")).queryByText("Full context")).not.toBeInTheDocument();
+  });
 });

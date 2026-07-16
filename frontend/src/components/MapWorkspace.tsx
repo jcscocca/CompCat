@@ -542,6 +542,7 @@ export function MapWorkspace() {
               }}
               analysis={analysis}
               comparison={compare.comparison}
+              neighborhood={compare.neighborhood}
               running={compare.running}
               onRun={compare.runCompare}
               onCopyLink={() => buildShareUrl("compare")}

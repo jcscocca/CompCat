@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { annualIncidentsWithin, formatPerYear } from "../lib/rateFormat";
 import type { IncidentNoun } from "../lib/layerCopy";
 import type { CompareRelationship, CompareVerdictRow } from "../lib/compareVerdict";
@@ -9,11 +11,12 @@ const CHIP: Record<CompareRelationship, { label: string; clear: boolean }> = {
   limited: { label: "limited data", clear: false },
 };
 
-export function CompareRankedList({ rows, noun, radiusM }: { rows: CompareVerdictRow[]; noun: IncidentNoun; radiusM: number }) {
+export function CompareRankedList({ rows, noun, radiusM, expansionByOptionId }: { rows: CompareVerdictRow[]; noun: IncidentNoun; radiusM: number; expansionByOptionId?: Map<string, ReactNode> }) {
   return (
     <div className="mc-ranked" data-testid="compare-ranked">
       {rows.map((row) => {
         const chip = CHIP[row.relationship];
+        const expansion = expansionByOptionId?.get(row.optionId) ?? null;
         return (
           <div className={`mc-ranked-row${row.relationship === "lowest" ? " is-lowest" : ""}`} key={row.optionId}>
             <span className="mc-rank">{row.rank}</span>
@@ -35,6 +38,12 @@ export function CompareRankedList({ rows, noun, radiusM }: { rows: CompareVerdic
                   <div><dt>adjusted p</dt><dd>{row.pairwise.adjusted_p_value.toFixed(3)}</dd></div>
                   <div><dt>method</dt><dd>{row.pairwise.method}</dd></div>
                 </dl>
+              </details>
+            ) : null}
+            {expansion ? (
+              <details className="mc-analytical mc-ranked-detail mc-ranked-context">
+                <summary>Full context</summary>
+                {expansion}
               </details>
             ) : null}
           </div>
