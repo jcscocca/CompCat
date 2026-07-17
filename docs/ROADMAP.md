@@ -305,6 +305,19 @@ independently-shippable slices. Spec:
 - [x] Sector/city baselines via month-grouped SQL COUNT(*) (calls layer materializes ~700k
   rows/yr per citywide request today — do before demoing the calls layer) (2026-07-12)
 
+## Volume-over-time trend section (2026-07-16)
+*First slice of the public-release feature push: descriptive monthly trends on the analyze
+surface. Methodology (anchored citywide indexing, rolling mean, inference limits) is a
+durable reference: `docs/analysis/trend-indexing-method.md`.*
+
+- [x] **Trend section — reported volume over time:** monthly MCPP-vs-citywide series on the
+  unified Compare surface's per-address context (12-month rolling mean + anchored-indexed
+  citywide overlay, neutral marks, layer-aware copy, suppression rules for short windows /
+  degenerate anchors); lazy `GET /dashboard/trends` returning raw zero-filled series with a
+  shared-citywide TTL cache; safety guard broadened for trend-flavored asks
+  (`worse`/`empeorando` + place context). Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-16-analyze-trend-section*`. (2026-07-16)
+
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.

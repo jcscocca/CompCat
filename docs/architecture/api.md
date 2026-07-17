@@ -81,6 +81,7 @@ which are unauthenticated or session-creating.
 | `/dashboard/beats` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed beat-outline GeoJSON, gzip-negotiated) |
 | `/dashboard/mcpp` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed MCPP-neighborhood-polygon GeoJSON, gzip-negotiated; sibling of `/dashboard/beats`) |
 | `/dashboard/geocode` | GET | `app/api/routes_public_dashboard.py` | `?q=` query param | `list[GeocodeResultSchema]` |
+| `/dashboard/trends` | GET | `app/api/routes_public_dashboard.py` | `?mcpp=` (normalized, 404 unknown), `?layer=` (400 unknown), `?category=` | `dict` (raw zero-filled monthly `area_counts`/`citywide_counts`, last complete month, TTL-cached with a shared citywide entry; math: `docs/analysis/trend-indexing-method.md`) |
 | `/assistant/chat` | POST | `app/api/routes_assistant.py` | `AssistantChatRequest` (`app/assistant/schemas.py`) | SSE stream (see §4) |
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
 | `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (gated — see §4) |

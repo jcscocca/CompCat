@@ -165,4 +165,14 @@ only with place context, which keeps "my code is getting worse" safe. Tests both
 
 ## Shipped deviations
 
-(Record any implementation-time deviations here, per house convention.)
+- **Placement: `CompareTab.tsx`, not `AnalyzeTab.tsx`.** The unified-Compare refactor
+  (#145/#146) landed on `main` between this spec's code survey and implementation,
+  removing `AnalyzeTab`/`PairwiseSection`. `<TrendSection>` renders at the structural
+  equivalent: after the per-place verdict cards, before `IncidentDetailsSection`, gated
+  on a non-null `neighborhood`.
+- **Cache clock threading:** `trends_for_mcpp` reads `now()` once per call and threads
+  the value through the shared/citywide cache checks (the spec's inline-reads version
+  double-advances injectable test clocks); semantics unchanged.
+- **`TrendChart` gained an optional `label` prop** feeding only the `aria-label`.
+- Guard tests written as plain functions (matching the guard test module's existing
+  style) rather than parametrize tuples.
