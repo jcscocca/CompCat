@@ -230,7 +230,7 @@ In `CompareTab.tsx`:
 3. Append to `frontend/src/styles/mapWorkspace.css`:
 
 ```css
-.mc-copy-status{font-size:12px;color:var(--dim);margin-left:8px;}
+.mc-copy-status{font-size:12px;color:var(--text-dim);margin-top:2px;}
 ```
 
 - [ ] **Step 4: Run to verify green**
@@ -244,6 +244,8 @@ Expected: all pass (panel suite baseline +2 net), lint clean.
 git add frontend/src/components/CompareTab.tsx frontend/src/components/CompareTab.test.tsx frontend/src/styles/mapWorkspace.css
 git commit -m "feat(compare): copy-link success and failure feedback"
 ```
+
+**Review amendments:** the plan originally cited a nonexistent `--dim` token (repo convention is `--text-dim` — the implementer caught and corrected this), and `margin-left` inside the column-flex `.mc-analyze-actions` was swapped for `margin-top:2px` (a left margin only indents there).
 
 ---
 
