@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.analysis.area_baselines import load_mcpp_areas, load_mcpp_polygons
+from app.analysis.area_baselines import load_mcpp_areas, load_mcpp_polygons, normalize_mcpp
 from app.analysis.beat_baselines import (
     BeatPolygons,
     load_beat_areas,
@@ -23,7 +23,7 @@ from app.api.dashboard_schemas import (
 )
 from app.api.deps import required_public_user_hash
 from app.config import get_settings
-from app.crime.sources import sources_for_layer
+from app.crime.sources import LAYER_REPORTED, sources_for_layer
 from app.db import get_session
 from app.geocoding.providers import GeocodeProvider, GeocoderUpstreamError, build_provider
 from app.services.beat_geometry_service import beats_geojson_payloads
@@ -37,6 +37,7 @@ from app.services.geocoding_service import search_addresses
 from app.services.incident_points_service import incident_points
 from app.services.mcpp_geometry_service import mcpp_geojson_payloads
 from app.services.neighborhood_service import neighborhood_analysis_for_places
+from app.services.trends_service import trends_for_mcpp
 
 router = APIRouter()
 
@@ -193,6 +194,24 @@ def dashboard_freshness(
     # session gate just keeps it on the authenticated public tier like its siblings. The
     # frontend pill shows the entry for the active layer.
     return dashboard_freshness_by_layer(session)
+
+
+@router.get("/dashboard/trends")
+def dashboard_trends(
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+    mcpp: Annotated[str, Query(max_length=80)],
+    layer: Annotated[str, Query(max_length=20)] = LAYER_REPORTED,
+    category: Annotated[str | None, Query(max_length=80)] = None,
+) -> dict[str, object]:
+    try:
+        sources_for_layer(layer)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    name = normalize_mcpp(mcpp)
+    if name is None or name not in _mcpp_areas():
+        raise HTTPException(status_code=404, detail="Unknown MCPP")
+    return trends_for_mcpp(session, mcpp=name, layer=layer, offense_category=category)
 
 
 @router.get("/dashboard/beats")
