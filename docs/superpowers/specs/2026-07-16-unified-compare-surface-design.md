@@ -76,11 +76,12 @@ doing the differentiation work).
   surface always sends `points` — no backend change, and the constraint never bites.
   Nothing downstream depends on server place ids: hover-linking and letters work by
   index within one response; Save/Export live off the saved-places store.
-- **Run = 1 or 2 calls.** N=1 → neighborhood analysis only. N≥2 → neighborhood analysis
-  + `/dashboard/compare` in parallel behind one loading state; results render when both
-  resolve (spine from the compare payload; expansions and the incident disclosure from
-  the analysis payload). If one call fails, render the sections the other payload
-  supports and show the existing inline error for the rest.
+- **Run = 2–4 parallel calls** (see the recorded deltas): neighborhood analysis +
+  incident details always; `/dashboard/compare` at N≥2; a `place_ids` summary refresh
+  when saved entries exist. One loading state; results render when all settle (spine
+  from the compare payload; expansions and the incident disclosure from the analysis
+  payload). Only the primary payload's failure (compare at N≥2, neighborhood at N=1)
+  surfaces the inline error; secondary failures degrade their sections silently.
 - **Share links.** One `points`-based format without the `tab=` discriminator. Legacy
   `tab=analyze` and `tab=compare` links keep decoding onto the unified surface and
   auto-run.
@@ -127,6 +128,21 @@ Three shippable slices, each its own PR gated on `make test-all`:
 - Existing `compareVerdict` / `CompareRankedList` / `CompareVerdict` tests carry over
   unmodified.
 - Banned-vocabulary sweeps cover the new dynamic regions.
+
+## Implementation deltas (slice 2, recorded 2026-07-16)
+
+- **Saved-place summaries:** the unified run additionally fires `analyzePlaces({ place_ids })`
+  for the list's saved entries — the points path never persists `crime_summaries`, and the
+  map's per-place rings read them from the summary payload.
+- **Auto-run policy:** seeding events auto-run (persisted-selection restore, share link,
+  landing lookup); manual list edits and control changes invalidate and wait for Run. The
+  old "points-subject re-runs on control change" special case is retired.
+- **Adaptive CTA** shipped in slice 2 (querybar rebuild made it free).
+- The module's landmark reads "Context for X" (was "Verdict for X").
+- **Assistant selection edits invalidate results** like user edits do; payload-bearing
+  assistant effects re-apply their panes after the invalidate.
+- **Deleting a saved place also removes its list entry** (a dangling saved id would
+  poison the run's `place_ids` summary refresh).
 
 ## Out of scope
 

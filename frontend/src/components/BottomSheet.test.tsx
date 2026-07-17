@@ -14,7 +14,7 @@ afterEach(cleanup);
 
 function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {}) {
   const props = {
-    activeTab: "analyze" as const,
+    activeTab: "compare" as const,
     onTabChange: vi.fn(),
     collapsed: false,
     widthPx: DRAWER_DEFAULT,
@@ -28,18 +28,18 @@ function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {})
 }
 
 describe("BottomSheet", () => {
-  it("renders three tabs and marks the active one", () => {
-    renderSheet({ activeTab: "analyze" });
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
-    expect(screen.getByRole("tab", { name: /analyze/i })).toHaveAttribute("aria-selected", "true");
+  it("renders two tabs and marks the active one", () => {
+    renderSheet({ activeTab: "compare" });
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("tab", { name: /compare/i })).toHaveAttribute("aria-selected", "true");
   });
 
   it("calls onTabChange when another tab is clicked or activated by keyboard", () => {
     const { props } = renderSheet();
-    fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
-    expect(props.onTabChange).toHaveBeenCalledWith("analyze");
-    fireEvent.keyDown(screen.getByRole("tab", { name: /compare/i }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("tab", { name: /compare/i }));
     expect(props.onTabChange).toHaveBeenCalledWith("compare");
+    fireEvent.keyDown(screen.getByRole("tab", { name: /export/i }), { key: "Enter" });
+    expect(props.onTabChange).toHaveBeenCalledWith("export");
   });
 
   it("exposes Peek, Default, and Wide presets and marks the active one pressed", () => {
@@ -136,7 +136,7 @@ describe("BottomSheet", () => {
     expect(panel()).toHaveClass("is-open");
     expect(panel().style.width).toBe("420px");
     rerender(
-      <BottomSheet activeTab="analyze" onTabChange={vi.fn()} collapsed widthPx={420} onToggleCollapsed={vi.fn()} onResize={vi.fn()} onPreset={vi.fn()}>
+      <BottomSheet activeTab="compare" onTabChange={vi.fn()} collapsed widthPx={420} onToggleCollapsed={vi.fn()} onResize={vi.fn()} onPreset={vi.fn()}>
         <div>panel</div>
       </BottomSheet>,
     );

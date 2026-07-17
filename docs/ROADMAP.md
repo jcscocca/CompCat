@@ -171,10 +171,16 @@ slices.
 - [x] **Slice 1 — extract + enrich** — `PlaceContextCard` extracted from Analyze; Compare
   fetches the points-based neighborhood analysis in parallel and ranked rows expand into
   full per-address context. Plan: `docs/superpowers/plans/2026-07-16-unified-compare-slice1.md`.
-- [ ] **Slice 2 — unify** — one list + one panel, tabs collapse to Compare + Export,
-  pairwise section and bridge retire, share-link + assistant-bridge migration.
-- [ ] **Slice 3 — polish** — adaptive CTA label, mobile tuning; later optional:
-  pin-to-compare columns, progressive spine-first rendering.
+- [x] **Slice 2 — unify** — shipped: one address list (saved + ad-hoc, persisted saved ids),
+  one run (neighborhood + incidents always, compare at 2+, saved-summary refresh), one panel;
+  tabs collapsed to Compare + Export; tab-free share links with legacy decode; assistant
+  bridge and pin/lookup/manage flows retargeted. Plan:
+  `docs/superpowers/plans/2026-07-16-unified-compare-slice2.md`.
+- [ ] **Slice 3 — polish** — mobile tuning (adaptive CTA shipped early, in slice 2);
+  review-accumulated: ranked-row↔map hover linkage at N≥2 (incl. assistant-applied panes, which lose hover via the nulled runPoints), pending-id list appends without invalidation, aria-live results
+  announcement, clipboard-failure feedback on Copy link, pre-load banner-Exit corner,
+  `useCompareSet.ts` → `useAddressList.ts` rename, map pins for ad-hoc entries; later
+  optional: pin-to-compare columns, progressive spine-first rendering.
 
 - [x] **Per-address rate interval (backend)** — every compared address now carries its own
   quasi-Poisson rate confidence interval (`rate_confidence_interval`), surfaced on the

@@ -24,17 +24,6 @@ type Props = {
 
 const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
   {
-    key: "analyze",
-    label: "Analyze",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M4 8h10M18 8h2M4 16h2M10 16h10" />
-        <circle cx="16" cy="8" r="2.4" />
-        <circle cx="8" cy="16" r="2.4" />
-      </svg>
-    ),
-  },
-  {
     key: "compare",
     label: "Compare",
     icon: (

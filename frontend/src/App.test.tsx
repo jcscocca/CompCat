@@ -39,6 +39,6 @@ describe("App", () => {
   it("renders the map-first workspace shell", async () => {
     render(<App />);
     expect(await screen.findByText("CompCat")).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
   });
 });

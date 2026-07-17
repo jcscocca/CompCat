@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { decodeView, encodeView, type SavedView } from "./savedView";
 
 const VIEW: SavedView = {
-  tab: "analyze",
   points: [{ latitude: 47.61, longitude: -122.34, label: "Pike Place" }],
   radiusM: 250,
   startDate: "2024-01-01",
@@ -48,8 +47,59 @@ describe("savedView", () => {
   });
 
   it("preserves the arrests layer through encode/decode", () => {
-    const view = { tab: "analyze" as const, points: [{ latitude: 47.6, longitude: -122.3, label: "P" }], radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31", layer: "arrests" as const, offenseCategory: "" };
+    const view = { points: [{ latitude: 47.6, longitude: -122.3, label: "P" }], radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31", layer: "arrests" as const, offenseCategory: "" };
     expect(decodeView(encodeView(view))?.layer).toBe("arrests");
+  });
+
+  it("encodes without a tab discriminator", () => {
+    const encoded = encodeView({
+      points: [{ latitude: 47.6, longitude: -122.33, label: "Home" }],
+      radiusM: 250, startDate: "2026-01-01", endDate: "2026-06-30",
+      layer: "reported", offenseCategory: "",
+    });
+    const wire = JSON.parse(
+      decodeURIComponent(escape(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")))),
+    );
+    expect(wire.t).toBeUndefined();
+    expect(wire.pts).toHaveLength(1);
+  });
+
+  it("decodes a hand-built wire object that omits the tab key (tab-free format)", () => {
+    const wire = btoa(unescape(encodeURIComponent(JSON.stringify({
+      v: 1, r: 250, s: "2026-01-01", e: "2026-06-30", ly: "reported",
+      pts: [{ y: 47.6, x: -122.33, l: "Home" }], c: null,
+    })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const view = decodeView(wire);
+    expect(view).not.toBeNull();
+    expect(view!.points[0].label).toBe("Home");
+  });
+
+  it("decodes a legacy tab=analyze link onto the unified view", () => {
+    const legacy = btoa(unescape(encodeURIComponent(JSON.stringify({
+      v: 1, t: "analyze", r: 250, s: "2026-01-01", e: "2026-06-30", ly: "reported",
+      pts: [{ y: 47.6, x: -122.33, l: "Home" }], c: null,
+    })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const view = decodeView(legacy);
+    expect(view).not.toBeNull();
+    expect(view!.points[0].label).toBe("Home");
+  });
+
+  it("decodes a legacy tab=compare link onto the unified view", () => {
+    const legacy = btoa(unescape(encodeURIComponent(JSON.stringify({
+      v: 1, t: "compare", r: 250, s: "2026-01-01", e: "2026-06-30", ly: "reported",
+      pts: [{ y: 47.6, x: -122.33, l: "A" }, { y: 47.61, x: -122.34, l: "B" }], c: null,
+    })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const view = decodeView(legacy);
+    expect(view).not.toBeNull();
+    expect(view!.points).toHaveLength(2);
+  });
+
+  it("still rejects wire garbage (unknown t value)", () => {
+    const bad = btoa(unescape(encodeURIComponent(JSON.stringify({
+      v: 1, t: "bogus", r: 250, s: "2026-01-01", e: "2026-06-30", ly: "reported",
+      pts: [{ y: 47.6, x: -122.33, l: "Home" }], c: null,
+    })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(decodeView(bad)).toBeNull();
   });
 });
 

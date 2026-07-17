@@ -1,7 +1,5 @@
 import type { LayerKey } from "../types";
 
-export type ViewTab = "analyze" | "compare";
-
 export interface ViewPoint {
   latitude: number;
   longitude: number;
@@ -16,7 +14,6 @@ interface SharedViewFields {
 }
 
 export interface PointsSavedView extends SharedViewFields {
-  tab: "analyze" | "compare";
   points: ViewPoint[];
   offenseCategory: string;
 }
@@ -39,7 +36,7 @@ function fromBase64Url(param: string): string {
 const wirePoint = (p: ViewPoint) => ({ y: p.latitude, x: p.longitude, l: p.label });
 
 export function encodeView(view: SavedView): string {
-  const base = { v: VERSION, t: view.tab, r: view.radiusM, s: view.startDate, e: view.endDate, ly: view.layer };
+  const base = { v: VERSION, r: view.radiusM, s: view.startDate, e: view.endDate, ly: view.layer };
   const wire = { ...base, pts: view.points.map(wirePoint), c: view.offenseCategory || null };
   return toBase64Url(JSON.stringify(wire));
 }
@@ -57,14 +54,13 @@ export function decodeView(param: string): SavedView | null {
   try {
     const wire = JSON.parse(fromBase64Url(param));
     if (wire.v !== VERSION) return null;
-    if (wire.t !== "analyze" && wire.t !== "compare") return null;
+    if (wire.t !== undefined && wire.t !== "analyze" && wire.t !== "compare") return null;
     if (!Array.isArray(wire.pts) || wire.pts.length === 0) return null;
     const points = wire.pts.map((p: unknown) => readWirePoint(p));
     if (points.some((p: ViewPoint | null) => p === null)) return null;
     const radiusM = Number(wire.r);
     if (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 5000) return null;
     return {
-      tab: wire.t,
       points: points as ViewPoint[],
       radiusM,
       startDate: String(wire.s),

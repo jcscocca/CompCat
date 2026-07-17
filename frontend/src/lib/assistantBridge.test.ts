@@ -25,7 +25,7 @@ describe("interpretToolResult", () => {
     });
   });
 
-  it("maps analyze_places to neighborhood + incidents on the Analyze tab", () => {
+  it("maps analyze_places to neighborhood + incidents on the Compare tab", () => {
     const effect = interpretToolResult({
       tool_name: "analyze_places",
       result: {
@@ -35,7 +35,7 @@ describe("interpretToolResult", () => {
         incidents: { incidents: [], returned_count: 0, total_count: 0, limit: 100, radius_m: 250 },
       },
     });
-    expect(effect?.tab).toBe("analyze");
+    expect(effect?.tab).toBe("compare");
     expect(effect?.selection).toEqual({ mode: "replace", ids: ["a"] });
     expect(effect?.settings?.radiusM).toBe(250);
     expect(effect?.settings?.offenseCategory).toBe("");

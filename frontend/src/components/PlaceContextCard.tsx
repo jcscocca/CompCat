@@ -187,7 +187,7 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
   return (
     <section
       className="mc-verdict"
-      aria-label={`Verdict for ${place.place_label}`}
+      aria-label={`Context for ${place.place_label}`}
       onMouseEnter={() => onHoverPlace?.(place.place_id)}
       onMouseLeave={() => onHoverPlace?.(null)}
       onFocus={() => onHoverPlace?.(place.place_id)}

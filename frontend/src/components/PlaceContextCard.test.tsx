@@ -53,7 +53,7 @@ function renderCard(place: NeighborhoodPlace = homePlace) {
 describe("PlaceContextCard", () => {
   it("renders the verdict region with the count sub-line", () => {
     renderCard();
-    expect(screen.getByLabelText("Verdict for Home")).toBeInTheDocument();
+    expect(screen.getByLabelText("Context for Home")).toBeInTheDocument();
     expect(screen.getByText(/12 reported incidents within 250 m/)).toBeInTheDocument();
   });
 

@@ -8,17 +8,15 @@ import { DRAWER_PEEK, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { decodeView, encodeView } from "../lib/savedView";
-import { useAnalyze } from "../lib/useAnalyze";
 import { useIncidentPoints } from "../lib/useIncidentPoints";
 import { useCompare } from "../lib/useCompare";
-import { useCompareSet, keyOf } from "../lib/useCompareSet";
+import { entriesFromPlaces, keyOf, useAddressList, type AddressEntry } from "../lib/useCompareSet";
 import { useDashboardData } from "../lib/useDashboardData";
 import { useDrawer } from "../lib/useDrawer";
 import { usePersistedSelection } from "../lib/usePersistedSelection";
 import { usePinDraft } from "../lib/usePinDraft";
 import { useTheme } from "../lib/useTheme";
 import { AddressLookup } from "./AddressLookup";
-import { AnalyzeTab } from "./AnalyzeTab";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
 import { CompareTab } from "./CompareTab";
@@ -34,7 +32,6 @@ import { PlaceSearch } from "./PlaceSearch";
 import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
-import type { ComparePoint } from "../lib/useCompareSet";
 import type { AnalysisSettings, AssistantDashboardState, BeatFeatureCollection, GeocodeResult, LatLng, MapBounds, McppFeatureCollection, PlaceCreate, TabKey } from "../types";
 
 export function MapWorkspace() {
@@ -44,11 +41,10 @@ export function MapWorkspace() {
     return param ? decodeView(param) : null;
   }, []);
   const hadViewParam = useMemo(() => Boolean(new URLSearchParams(window.location.search).get("view")), []);
-  const [sharedPoints, setSharedPoints] = useState(initialView ? initialView.points : null);
+  const [sharedBanner, setSharedBanner] = useState(Boolean(initialView));
   const [showBadLink, setShowBadLink] = useState(hadViewParam && initialView === null);
 
-  const [activeTab, setActiveTab] = useState<TabKey>(initialView?.tab ?? "analyze");
-  const [lookupPoint, setLookupPoint] = useState<ComparePoint | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("compare");
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
   const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
@@ -83,114 +79,127 @@ export function MapWorkspace() {
   const [pendingAutoRun, setPendingAutoRun] = useState(false);
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset } = useDrawer();
 
-  // A shared view has no persisted places to select from, so synthesize a place-shaped
-  // selection from its points. This makes selected.length correct (CompareTab renders, and
-  // canRun enables Run — which recomputes via the points path the hooks already receive).
-  const selected = useMemo(() => {
-    if (sharedPoints) {
-      return sharedPoints.map((point, index) => ({
-        id: `shared-${index}`,
-        display_label: point.label,
-        latitude: point.latitude,
-        longitude: point.longitude,
-        visit_count: 0,
-        total_dwell_minutes: null,
-        inferred_place_type: "shared_place",
-        sensitivity_class: "normal",
-      }));
-    }
-    if (lookupPoint) {
-      return [{
-        id: "lookup-0",
-        display_label: lookupPoint.label,
-        latitude: lookupPoint.latitude,
-        longitude: lookupPoint.longitude,
-        visit_count: 0,
-        total_dwell_minutes: null,
-        inferred_place_type: "lookup_place",
-        sensitivity_class: "normal",
-      }];
-    }
-    return data.places.filter((place) => selectedIds.has(place.id));
-  }, [sharedPoints, lookupPoint, data.places, selectedIds]);
+  // The single address list: seeded from the restored saved selection (share links replace
+  // it on mount below). Saved ids write back through so returning sessions keep their list.
+  const seedPlaces = useMemo(
+    () => (initialView ? [] : data.places.filter((place) => selectedIds.has(place.id))),
+    [initialView, data.places, selectedIds],
+  );
+  const list = useAddressList({
+    seed: seedPlaces,
+    // Never write back before the restore has run: an early lookup/share-link edit
+    // must not mark the persisted selection dirty (that would skip the restore).
+    onSavedIdsChange: (ids) => {
+      if (restored) setSelectedIds(new Set(ids));
+    },
+  });
 
-  // One identity source for cards AND pins: index within `selected` (AnalyzeTab letters
-  // use the same array order, so the teal "B" card is always the teal "B" pin).
+  // One identity source for cards AND pins: index within the list (saved entries carry
+  // their place id so pins and chips can letter themselves).
   const identityByPlaceId = useMemo(
-    () => new Map<string, PlaceIdentity>(selected.map((place, index) => [place.id, placeIdentity(index)])),
-    [selected],
+    () =>
+      new Map<string, PlaceIdentity>(
+        list.entries
+          .map((entry, index) => [entry.savedPlaceId, placeIdentity(index)] as const)
+          .filter((pair): pair is [string, PlaceIdentity] => Boolean(pair[0])),
+      ),
+    [list.entries],
+  );
+  const savedIdSet = useMemo(
+    () => new Set(list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id))),
+    [list.entries],
   );
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
-  const compareSet = useCompareSet(selected);
   const savedPlaceKeys = useMemo(
     () =>
       new Set(
         data.places
           .filter((p) => p.latitude != null && p.longitude != null)
-          .map((p) => keyOf({ latitude: p.latitude as number, longitude: p.longitude as number, label: p.display_label })),
+          .map((p) => keyOf({ latitude: p.latitude as number, longitude: p.longitude as number })),
       ),
     [data.places],
   );
 
-  const analyze = useAnalyze({ selectedIds, analysis, refreshWithFallback: data.refreshWithFallback, setError: data.setError, points: sharedPoints ?? (lookupPoint ? [lookupPoint] : undefined) });
-  const compare = useCompare({ selectedIds, analysis, setError: data.setError, points: compareSet.points });
+  const compare = useCompare({
+    entries: list.entries,
+    analysis,
+    setError: data.setError,
+    onSummariesRefreshed: () => void data.refreshWithFallback("Ran, but dashboard totals could not refresh."),
+  });
 
   // analyzed-beat highlight from the neighborhood payload
   const highlightBeats = useMemo(
     () =>
-      (analyze.neighborhood?.places ?? [])
+      (compare.neighborhood?.places ?? [])
         .map((place) => place.beat)
         .filter((beat): beat is string => Boolean(beat)),
-    [analyze.neighborhood],
+    [compare.neighborhood],
   );
 
-  // A ?view= link seeds tab/analysis/points above; run it once so the shared context
-  // (not just an empty tab) is what the recipient sees on load.
+  // A ?view= link replaces the list on mount; the pending-auto-run effect below owns the
+  // first run once the entries commit.
   useEffect(() => {
     if (!initialView) return;
-    if (initialView.tab === "compare") void compare.runCompare();
-    else if (initialView.tab === "analyze") void analyze.runAnalyze();
+    list.replaceAll(initialView.points);
+    setPendingAutoRun(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // "Analysis greets you": one shot after the persisted selection is restored. Skips
-  // sessions that already own their first run (share links via initialView, lookup,
-  // shared views) and empty selections. The flag fires runAnalyze only AFTER the
-  // restored ids have committed — useAnalyze snapshots selectedIds per render, so a
-  // same-tick call would analyze the pre-restore (empty) set.
+  // "Analysis greets you": one shot after the persisted selection seeds the list. Share
+  // links own their first run above; landing lookups arm pendingAutoRun themselves.
   const autoRunArmedRef = useRef(false);
   useEffect(() => {
-    if (!restored || autoRunArmedRef.current) return;
-    autoRunArmedRef.current = true;
-    if (!initialView && !lookupPoint && !sharedPoints && selectedIds.size > 0) {
+    if (autoRunArmedRef.current || initialView || !restored || list.edited) return;
+    if (list.entries.length > 0) {
+      autoRunArmedRef.current = true;
       setPendingAutoRun(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restored]);
+  }, [restored, list.entries.length]);
 
   useEffect(() => {
-    if (!pendingAutoRun || selectedIds.size === 0) return;
+    if (!pendingAutoRun || list.entries.length === 0) return;
     setPendingAutoRun(false);
-    void analyze.runAnalyze();
+    void compare.run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAutoRun, selectedIds]);
+  }, [pendingAutoRun, list.entries]);
 
-  // Selection and analysis-control changes drop any current Analyze/Compare results (and
-  // invalidate in-flight ones) so a stale pane never lingers against a new selection.
   function invalidateAnalysisContext() {
-    analyze.invalidate();
     compare.invalidate();
   }
+
+  // Resolve saved-place ids to list entries; ids whose places haven't loaded yet are
+  // queued and appended when data.places refreshes (pin saves and assistant adds land
+  // before the summary refetch completes).
+  const pendingIdsRef = useRef<string[]>([]);
+  function entriesForIds(ids: string[]): AddressEntry[] {
+    const resolved: AddressEntry[] = [];
+    const missing: string[] = [];
+    for (const id of ids) {
+      const place = data.places.find((p) => p.id === id);
+      if (place && place.latitude != null && place.longitude != null) {
+        resolved.push({ latitude: place.latitude, longitude: place.longitude, label: place.display_label, savedPlaceId: place.id });
+      } else {
+        missing.push(id);
+      }
+    }
+    pendingIdsRef.current = [...pendingIdsRef.current, ...missing];
+    return resolved;
+  }
+  useEffect(() => {
+    if (pendingIdsRef.current.length === 0) return;
+    const pending = pendingIdsRef.current;
+    pendingIdsRef.current = [];
+    const resolved = entriesForIds(pending);
+    resolved.forEach((entry) => list.add(entry));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.places]);
 
   function selectPlaceIds(ids: string[]) {
     if (ids.length === 0) return;
     invalidateAnalysisContext();
-    setLookupPoint(null);
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      ids.forEach((id) => next.add(id));
-      return next;
-    });
+    setActiveTab("compare");
+    entriesForIds(ids).forEach((entry) => list.add(entry));
   }
 
   const pinDraft = usePinDraft({
@@ -209,67 +218,18 @@ export function MapWorkspace() {
   function handleLookup(result: GeocodeResult) {
     pinDraft.previewSearch(result);
     invalidateAnalysisContext();
-    setSelectedIds(new Set());
-    setLookupPoint({ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) });
-    setActiveTab("analyze");
-  }
-
-  // A points-subject (a just-looked-up address or a shared-view set) has no manual "Run" button,
-  // so re-run its analysis whenever it is set OR the analysis controls change. Without the
-  // controls dependency, flipping the layer/radius/date clears the pane (invalidateAnalysisContext)
-  // and leaves it blank with nothing to re-trigger the run. Skips the initial mount — the lookup
-  // is set post-mount, and the shared-view effect above owns the first run.
-  const analysisMountRef = useRef(true);
-  useEffect(() => {
-    if (analysisMountRef.current) {
-      analysisMountRef.current = false;
-      return;
-    }
-    if (lookupPoint || sharedPoints) void analyze.runAnalyze();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis, lookupPoint, sharedPoints]);
-
-  async function handleSaveLookup() {
-    if (!lookupPoint) return;
-    data.setError("");
-    try {
-      const created = await createPlace({
-        display_label: lookupPoint.label,
-        latitude: lookupPoint.latitude,
-        longitude: lookupPoint.longitude,
-        visit_count: 1,
-        sensitivity_class: "normal",
-      });
-      // Set the selection directly (NOT selectPlaceIds) so the analysis context is NOT
-      // invalidated — the saved place shares the looked-up coordinates, so the verdict on
-      // screen stays valid. Then drop the ephemeral lookup + its draft marker.
-      setSelectedIds(new Set([created.id]));
-      setLookupPoint(null);
-      pinDraft.setDraft(null);
-      await data.refreshWithFallback("Saved, but dashboard totals could not refresh.");
-    } catch {
-      data.setError("Unable to save place. Try again.");
-    }
+    setSharedBanner(false);
+    list.replaceAll([{ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) }]);
+    setActiveTab("compare");
+    setPendingAutoRun(true);
   }
 
   function handleToggleSelect(id: string) {
     invalidateAnalysisContext();
-    setLookupPoint(null);
     pinDraft.setDraft(null);
-    if (sharedPoints) {
-      // A chip click during a shared view exits it (same as the banner's Exit) and
-      // starts a fresh selection with the clicked place; the pending-auto-run effect
-      // owns the follow-up run once the new selection commits.
-      setSharedPoints(null);
-      setSelectedIds(new Set([id]));
-      setPendingAutoRun(true);
-      return;
-    }
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    setSharedBanner(false);
+    const place = data.places.find((p) => p.id === id);
+    if (place) list.toggleSaved(place);
   }
 
   function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
@@ -282,6 +242,8 @@ export function MapWorkspace() {
     invalidateAnalysisContext();
     try {
       await deletePlace(id);
+      const entryIndex = list.entries.findIndex((e) => e.savedPlaceId === id);
+      if (entryIndex >= 0) list.removeAt(entryIndex);
       setSelectedIds((current) => { const next = new Set(current); next.delete(id); return next; });
       await data.refreshWithFallback("Removed place, but dashboard totals could not refresh.");
     } catch {
@@ -306,37 +268,27 @@ export function MapWorkspace() {
   function applyAssistantToolResult(payload: { tool_name?: string; result?: unknown }) {
     const effect = interpretToolResult(payload);
     if (!effect) return;
-    // Once the assistant drives a pane, it is the source of truth — drop any ephemeral
-    // single-address lookup (and its draft pin) so it doesn't shadow the assistant's selection
-    // in the `selected` memo, the analyze points, or the share link.
     if (effect.selection || effect.neighborhood !== undefined || effect.incidents !== undefined || effect.comparison !== undefined) {
-      setLookupPoint(null);
       pinDraft.setDraft(null);
+      setSharedBanner(false);
     }
     if (effect.settings) {
       setAnalysis((current) => ({ ...current, ...effect.settings }));
     }
+    // Assistant selection edits invalidate like user edits; payload-bearing effects
+    // re-apply their panes right below.
+    if (effect.selection) compare.invalidate();
     if (effect.selection) {
       const { mode, ids } = effect.selection;
-      // Set the selection directly (NOT via selectPlaceIds) so it does NOT invalidate the
-      // analysis context — the analyst-provided slices below must stick to the new selection.
-      setSelectedIds((current) => {
-        if (mode === "clear") return new Set<string>();
-        if (mode === "replace") return new Set(ids);
-        const next = new Set(current);
-        ids.forEach((id) => next.add(id));
-        return next;
-      });
+      if (mode === "clear") list.replaceAll([]);
+      else if (mode === "replace") list.replaceAll(entriesForIds(ids));
+      else entriesForIds(ids).forEach((entry) => list.add(entry));
     }
-    // The tool result is the source of truth for the panes it drives; clear the slice it does
-    // NOT own so a prior manual Analyze/Compare does not leave stale data for the new selection.
     if (effect.comparison !== undefined) {
-      analyze.invalidate();
-      compare.applyAssistant(effect.comparison);
+      compare.applyAssistant({ comparison: effect.comparison });
     }
     if (effect.neighborhood !== undefined || effect.incidents !== undefined) {
-      compare.invalidate();
-      analyze.applyAssistant({ neighborhood: effect.neighborhood, incidents: effect.incidents });
+      compare.applyAssistant({ neighborhood: effect.neighborhood, incidents: effect.incidents });
     }
     if (effect.refetchSummary) {
       void data.refreshWithFallback("Analyst updated the view, but dashboard totals could not refresh.");
@@ -344,21 +296,19 @@ export function MapWorkspace() {
     if (effect.tab) setActiveTab(effect.tab);
   }
 
-  const buildShareUrl = useCallback((tab: "analyze" | "compare"): string | null => {
-    const points = tab === "compare"
-      ? compareSet.points.map((p) => ({ latitude: Number(p.latitude.toFixed(3)), longitude: Number(p.longitude.toFixed(3)), label: p.label }))
-      : (sharedPoints ?? selected.map((p) => ({ latitude: Number((p.latitude ?? 0).toFixed(3)), longitude: Number((p.longitude ?? 0).toFixed(3)), label: p.display_label })));
+  const buildShareUrl = useCallback((): string | null => {
+    const points = list.entries.map((e) => ({ latitude: Number(e.latitude.toFixed(3)), longitude: Number(e.longitude.toFixed(3)), label: e.label }));
     if (points.length === 0) return null;
     const encoded = encodeView({
-      tab, points, radiusM: analysis.radiusM,
+      points, radiusM: analysis.radiusM,
       startDate: analysis.startDate, endDate: analysis.endDate,
       layer: analysis.layer, offenseCategory: analysis.offenseCategory,
     });
     return `${window.location.origin}/?view=${encoded}`;
-  }, [sharedPoints, selected, compareSet, analysis]);
+  }, [list, analysis]);
 
   const assistantState: AssistantDashboardState = useMemo(() => ({
-    selected_place_ids: Array.from(selectedIds),
+    selected_place_ids: Array.from(savedIdSet),
     analysis_start_date: analysis.startDate || null,
     analysis_end_date: analysis.endDate || null,
     radii_m: [analysis.radiusM],
@@ -366,13 +316,13 @@ export function MapWorkspace() {
     offense_subcategory: null,
     nibrs_group: null,
     layer: analysis.layer,
-  }), [analysis, selectedIds]);
+  }), [analysis, savedIdSet]);
 
-  // Landing shows only on a truly fresh Analyze session: no saved data, no lookup/shared
-  // subject, and no in-progress draft (so a search preview or dropped pin reaches the chip
-  // strip + draft popover instead of being hidden behind the landing).
+  // Landing shows only on a truly fresh session: no saved data and no in-progress draft
+  // (so a search preview or dropped pin reaches the chip strip + draft popover instead of
+  // being hidden behind the landing).
   const showLanding =
-    data.places.length === 0 && !lookupPoint && !sharedPoints && activeTab === "analyze" && !pinDraft.draft;
+    data.places.length === 0 && list.entries.length === 0 && activeTab === "compare" && !pinDraft.draft;
 
   // Recomputed every render: useDrawer's window-resize listener always produces a new
   // drawer object, so viewport changes re-render. No extra state needed.
@@ -420,7 +370,7 @@ export function MapWorkspace() {
       >
         <MapCanvas
           places={data.places}
-          selectedIds={selectedIds}
+          selectedIds={savedIdSet}
           draft={pinDraft.draft}
           addPinMode={pinDraft.addPinMode}
           summary={data.summary}
@@ -469,12 +419,22 @@ export function MapWorkspace() {
           limit={incidentLayer.limit}
         />
 
-        {data.error && (showLanding || activeTab !== "analyze") ? <p className="mc-error" role="alert">{data.error}</p> : null}
+        {data.error && showLanding ? <p className="mc-error" role="alert">{data.error}</p> : null}
 
-        {sharedPoints ? (
+        {sharedBanner ? (
           <div className="mc-banner" role="status">
             Shared view · reported incident context.{" "}
-            <button type="button" onClick={() => setSharedPoints(null)}>Exit</button>
+            <button
+              type="button"
+              onClick={() => {
+                setSharedBanner(false);
+                invalidateAnalysisContext();
+                list.replaceAll(entriesFromPlaces(data.places.filter((p) => selectedIds.has(p.id))));
+                setPendingAutoRun(true);
+              }}
+            >
+              Exit
+            </button>
           </div>
         ) : null}
         {showBadLink ? (
@@ -494,58 +454,47 @@ export function MapWorkspace() {
           onPreset={onPreset}
           isMobile={isMobile}
           peekHeader={isMobile ? layerControls : undefined}
-          tabBadges={{ compare: compareSet.points.length }}
+          tabBadges={{ compare: list.entries.length }}
           dock={<AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} defaultCollapsed={isMobile} />}
         >
           {showLanding ? (
             <AddressLookup provider={geocodingProvider} onSelect={handleLookup} onManual={() => setManagePlaces("manual")} />
           ) : (
             <>
-          {activeTab === "analyze" ? (
-            <AnalyzeTab
-              topSlot={drawerTopSlot}
-              selected={selected}
-              analysis={analysis}
-              availableRadii={data.availableRadii}
-              running={analyze.running}
-              incidentDetails={analyze.incidentDetails}
-              neighborhood={analyze.neighborhood}
-              error={data.error}
-              panelWidthPx={drawer.widthPx}
-              isMobile={isMobile}
-              onChange={handleAnalysisChange}
-              onRun={analyze.runAnalyze}
-              onCopyLink={() => buildShareUrl("analyze")}
-              onCompareWith={() => setActiveTab("compare")}
-              onSave={lookupPoint ? handleSaveLookup : undefined}
-              onHoverPlace={setHoveredPlaceId}
-              mcppPolygons={mcppPolygons}
-              onFlyTo={({ latitude, longitude }) => setChipFlyTo({ lat: latitude, lng: longitude })}
-            />
-          ) : null}
           {activeTab === "compare" ? (
             <CompareTab
               topSlot={drawerTopSlot}
-              set={compareSet.points}
+              entries={list.entries}
               provider={geocodingProvider}
-              onAddPoint={compareSet.add}
-              onRemovePoint={compareSet.removeAt}
+              onAddEntry={(entry) => { invalidateAnalysisContext(); list.add(entry); }}
+              onRemoveEntry={(index) => { invalidateAnalysisContext(); list.removeAt(index); }}
               savedKeys={savedPlaceKeys}
-              onSavePoint={async (point) => {
+              onSaveEntry={async (entry) => {
                 data.setError("");
                 try {
-                  await createPlace({ display_label: point.label, latitude: point.latitude, longitude: point.longitude, visit_count: 1, sensitivity_class: "normal" });
+                  const created = await createPlace({ display_label: entry.label, latitude: entry.latitude, longitude: entry.longitude, visit_count: 1, sensitivity_class: "normal" });
+                  list.markSaved(keyOf(entry), created.id);
                   await data.refreshWithFallback("Saved, but your places list could not refresh.");
                 } catch {
                   data.setError("Unable to save this address. Try again.");
                 }
               }}
               analysis={analysis}
+              availableRadii={data.availableRadii}
               comparison={compare.comparison}
               neighborhood={compare.neighborhood}
+              incidents={compare.incidents}
+              runPoints={compare.runPoints}
               running={compare.running}
-              onRun={compare.runCompare}
-              onCopyLink={() => buildShareUrl("compare")}
+              error={data.error}
+              panelWidthPx={drawer.widthPx}
+              isMobile={isMobile}
+              onChange={handleAnalysisChange}
+              onRun={compare.run}
+              onCopyLink={buildShareUrl}
+              onHoverPlace={setHoveredPlaceId}
+              mcppPolygons={mcppPolygons}
+              onFlyTo={({ latitude, longitude }) => setChipFlyTo({ lat: latitude, lng: longitude })}
             />
           ) : null}
           {activeTab === "export" ? (
@@ -570,7 +519,7 @@ export function MapWorkspace() {
         {managePlaces ? (
           <ManagePlacesModal
             places={data.places}
-            selectedIds={selectedIds}
+            selectedIds={savedIdSet}
             summary={data.summary}
             radiusM={analysis.radiusM}
             addPinMode={pinDraft.addPinMode}

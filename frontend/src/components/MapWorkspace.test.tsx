@@ -49,7 +49,7 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, getDashboardSummary, getIncidentDetails, getMcppPolygons, getNeighborhoodAnalysis, streamAssistantChat, updatePlace } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getMcppPolygons, getNeighborhoodAnalysis, streamAssistantChat, updatePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { encodeView } from "../lib/savedView";
 import type { DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
@@ -135,6 +135,10 @@ afterEach(() => {
   localStorage.removeItem("compcat.theme");
   document.documentElement.removeAttribute("data-theme");
   window.innerWidth = 1024;
+  // A ?view= URL or captured fly sequence must never leak into the next test, even when
+  // an assertion fails before a test's own cleanup lines run.
+  window.history.replaceState(null, "", "/");
+  flyToCaptures.length = 0;
 });
 
 describe("MapWorkspace", () => {
@@ -208,20 +212,18 @@ describe("MapWorkspace", () => {
     fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "Home" } });
     fireEvent.click(screen.getByRole("button", { name: /save pin/i }));
 
-    // Scoped inside the Analyze panel: the chip strip must render WITHIN the absolutely
-    // positioned .mc-panel (as its topSlot), not as a covered sibling behind it.
+    // The saved pin lands in the one address list as a selected (saved) entry — its chip
+    // renders WITHIN the Compare panel (as its topSlot), checked.
     await waitFor(() => {
-      const analyzePanel = screen.getByRole("tabpanel", { name: "Analyze" });
-      expect(within(analyzePanel).getByRole("checkbox", { name: "Home" })).toHaveAttribute("aria-checked", "true");
+      const comparePanel = screen.getByRole("tabpanel", { name: "Compare" });
+      expect(within(comparePanel).getByRole("checkbox", { name: "Home" })).toHaveAttribute("aria-checked", "true");
     });
 
-    // The restored selection auto-runs (analysis greets you); clear it so the manual run
-    // below is what the payload assertion verifies.
-    await waitFor(() => expect(analyzePlaces).toHaveBeenCalled());
-    vi.mocked(analyzePlaces).mockClear();
-
-    fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /run analysis/i }));
+    // A manual save is an edit, so it waits for Run — no premature auto-run fires. Running
+    // then sends the saved place's id on the place_ids summary-refresh pass.
+    const runButton = await screen.findByRole("button", { name: /run analysis/i });
+    expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
+    fireEvent.click(runButton);
 
     await waitFor(() => {
       expect(analyzePlaces).toHaveBeenCalledWith({
@@ -257,13 +259,11 @@ describe("MapWorkspace", () => {
     expect(await screen.findByRole("checkbox", { name: "Select Home" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("checkbox", { name: "Select Work" })).toHaveAttribute("aria-checked", "true");
 
-    // The restored selection auto-runs (analysis greets you); clear it so the manual run
-    // below is what the payload assertion verifies.
-    await waitFor(() => expect(analyzePlaces).toHaveBeenCalled());
-    vi.mocked(analyzePlaces).mockClear();
-
-    fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /run analysis/i }));
+    // Importing is an edit, so it waits for Run — no premature auto-run fires. Two
+    // entries → the compare CTA.
+    const runButton = await screen.findByRole("button", { name: /compare 2 addresses/i });
+    expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
+    fireEvent.click(runButton);
 
     await waitFor(() => {
       expect(analyzePlaces).toHaveBeenCalledWith({
@@ -294,8 +294,8 @@ describe("MapWorkspace", () => {
 
     // The scrim would hide the draft popover, so the handoff must close the modal first.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    const analyzePanel = screen.getByRole("tabpanel", { name: "Analyze" });
-    expect(within(analyzePanel).getByRole("button", { name: /save pin/i })).toBeInTheDocument();
+    const comparePanel = screen.getByRole("tabpanel", { name: "Compare" });
+    expect(within(comparePanel).getByRole("button", { name: /save pin/i })).toBeInTheDocument();
   });
 
   it("surfaces an error when a rename fails", async () => {
@@ -383,7 +383,6 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalled());
     vi.mocked(analyzePlaces).mockClear();
 
-    fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(await screen.findByRole("button", { name: /run analysis/i }));
 
     await waitFor(() => {
@@ -413,12 +412,12 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(getIncidentDetails).toHaveBeenCalled());
     vi.mocked(getIncidentDetails).mockClear();
 
-    fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(await screen.findByRole("button", { name: /run analysis/i }));
 
+    // The unified run sends inline points (not place_ids) to the incident-details endpoint.
     await waitFor(() => {
       expect(getIncidentDetails).toHaveBeenCalledWith({
-        place_ids: ["p1"],
+        points: [{ latitude: home.latitude, longitude: home.longitude, label: "Home" }],
         analysis_start_date: window.analysis_start_date,
         analysis_end_date: window.analysis_end_date,
         radii_m: [250],
@@ -444,12 +443,12 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalled());
     vi.mocked(getNeighborhoodAnalysis).mockClear();
 
-    fireEvent.click(screen.getByRole("tab", { name: /analyze/i }));
     fireEvent.click(await screen.findByRole("button", { name: /run analysis/i }));
 
+    // The unified run sends inline points (not place_ids) to the neighborhood endpoint.
     await waitFor(() => {
       expect(getNeighborhoodAnalysis).toHaveBeenCalledWith(
-        expect.objectContaining({ place_ids: ["p1"], radii_m: [250] }),
+        expect.objectContaining({ points: [expect.objectContaining({ label: "Home" })], radii_m: [250] }),
       );
     });
   });
@@ -468,7 +467,7 @@ describe("MapWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
-    expect(screen.queryByText("100 BLOCK MAIN ST")).not.toBeInTheDocument();
+    expect(screen.queryByText("100 block of Main St")).not.toBeInTheDocument();
   });
 
   it("shows an error when the session cannot start", async () => {
@@ -516,7 +515,7 @@ describe("MapWorkspace", () => {
     expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
   });
 
-  it("opens the Analyze tab with incidents when the assistant returns analyze_places", async () => {
+  it("renders assistant analyze_places incidents on the Compare surface", async () => {
     const a: Place = { ...home, id: "a", display_label: "Alpha" };
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([a]));
@@ -541,6 +540,8 @@ describe("MapWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
+    // analyze_places lands on the Compare surface without firing a cross-address comparison.
+    expect(comparePlaces).not.toHaveBeenCalled();
   });
 
   it("hydrates a shared view from ?view= and runs the points path", async () => {
@@ -551,7 +552,6 @@ describe("MapWorkspace", () => {
     vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
 
     const view = encodeView({
-      tab: "analyze",
       points: [{ latitude: 47.61, longitude: -122.34, label: "Pike Place" }],
       radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31",
       layer: "reported", offenseCategory: "",
@@ -561,7 +561,6 @@ describe("MapWorkspace", () => {
     expect(await screen.findByText(/shared view/i)).toBeInTheDocument();
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({ points: expect.any(Array) })));
-    window.history.replaceState({}, "", "/");
   });
 
   it("hydrates a shared Compare view and renders its comparison instead of the select-two prompt", async () => {
@@ -570,7 +569,6 @@ describe("MapWorkspace", () => {
     vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Pike Place", "Second Site"));
 
     const view = encodeView({
-      tab: "compare",
       points: [
         { latitude: 47.61, longitude: -122.34, label: "Pike Place" },
         { latitude: 47.62, longitude: -122.33, label: "Waterfront" },
@@ -585,7 +583,6 @@ describe("MapWorkspace", () => {
       expect.objectContaining({ points: expect.any(Array) })));
     // The shared Compare pane renders its verdict (synthetic selection ≥ 2).
     expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
-    window.history.replaceState({}, "", "/");
   });
 
   it("leads a fresh session with the look-up landing", async () => {
@@ -612,43 +609,18 @@ describe("MapWorkspace", () => {
 
     // The lookup drops a draft pin on the map (via previewSearch) and flies to it.
     expect(await screen.findByTestId("draft-pin")).toBeInTheDocument();
+    // An ad-hoc lookup runs the inline-points path; no place is saved, so the place_ids
+    // summary-refresh pass is skipped entirely.
     await waitFor(() => {
-      expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({
+      expect(getNeighborhoodAnalysis).toHaveBeenCalledWith(expect.objectContaining({
         points: [{ latitude: 47.61, longitude: -122.34, label: "123 Main St" }],
         radii_m: [250],
         layer: "reported",
       }));
     });
+    expect(analyzePlaces).not.toHaveBeenCalled();
     expect(createPlace).not.toHaveBeenCalled();
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
-  });
-
-  it("re-runs a looked-up address's analysis when the layer changes", async () => {
-    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
-    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
-    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
-    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
-    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
-    geocodeSearch.mockResolvedValue([{ label: "123 Main St", latitude: 47.61, longitude: -122.34, source: "test" }]);
-
-    render(<MapWorkspace />);
-    await screen.findByRole("heading", { name: /look up an address/i });
-    fireEvent.change(screen.getByLabelText(/search an address/i), { target: { value: "123 Main" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    fireEvent.click(await screen.findByText("123 Main St"));
-
-    await waitFor(() => {
-      expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({ layer: "reported" }));
-    });
-
-    // Flipping the layer must re-run the same looked-up points, not strand the pane blank.
-    fireEvent.click(screen.getByRole("button", { name: "911 calls" }));
-    await waitFor(() => {
-      expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({
-        points: [{ latitude: 47.61, longitude: -122.34, label: "123 Main St" }],
-        layer: "calls",
-      }));
-    });
   });
 
   it("lets a later search recenter supersede the last chip fly", async () => {
@@ -722,8 +694,8 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(await screen.findByText("123 Main St"));
 
-    fireEvent.click(await screen.findByRole("button", { name: /compare with another address/i }));
-
+    // The lookup lands directly on the unified Compare surface with the address as row 1;
+    // there is no separate "compare with another address" bridge anymore.
     expect(await screen.findByRole("heading", { name: "Compare addresses" })).toBeInTheDocument();
     const list = screen.getByRole("list", { name: /addresses to compare/i });
     expect(within(list).getByText("123 Main St")).toBeInTheDocument();
@@ -747,7 +719,8 @@ describe("MapWorkspace", () => {
 
     // The lookup's analysis has rendered before we save.
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: /save to my places/i }));
+    // The looked-up address is row 1 of the list; its row-level Save persists it.
+    fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
 
     await waitFor(() => {
       expect(createPlace).toHaveBeenCalledWith({
@@ -758,9 +731,8 @@ describe("MapWorkspace", () => {
         sensitivity_class: "normal",
       });
     });
-    // Saving selects the new place directly (not via the invalidating path), so the verdict
-    // computed for the same coordinates stays on screen — a revert to selectPlaceIds would
-    // clear this and fail the assertion.
+    // Saving stamps the savedPlaceId onto the existing entry in place (markSaved, no
+    // invalidation), so the context computed for the same coordinates stays on screen.
     expect(screen.getByText("100 block of Main St")).toBeInTheDocument();
   });
 
@@ -842,13 +814,12 @@ describe("MapWorkspace", () => {
     expect(analyzePlaces).not.toHaveBeenCalled();
   });
 
-  it("exits a shared view and selects the clicked place from a chip", async () => {
+  it("exits a shared view and appends the clicked chip place without auto-running", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
-    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
 
     const view = encodeView({
-      tab: "analyze",
       points: [{ latitude: 47.61, longitude: -122.34, label: "Pike Place" }],
       radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31",
       layer: "reported", offenseCategory: "",
@@ -856,16 +827,24 @@ describe("MapWorkspace", () => {
     window.history.replaceState({}, "", `/?view=${view}`);
     render(<MapWorkspace />);
 
+    // The shared view auto-runs its single point once.
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
+    await screen.findByText(/shared view/i);
+
     const chip = await screen.findByRole("checkbox", { name: home.display_label });
     fireEvent.click(chip);
 
+    // The chip click exits the shared banner and APPENDS the saved place to the list
+    // alongside the shared row — a manual edit, so it does NOT auto-run.
     expect(screen.queryByText(/shared view/i)).not.toBeInTheDocument();
-    await waitFor(() =>
-      expect(analyzePlaces).toHaveBeenCalledWith(
-        expect.objectContaining({ place_ids: [home.id] }),
-      ),
-    );
-    window.history.replaceState({}, "", "/");
+    const list = screen.getByRole("list", { name: /addresses to compare/i });
+    expect(within(list).getByText("Pike Place")).toBeInTheDocument();
+    expect(within(list).getByText(home.display_label)).toBeInTheDocument();
+    expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1);
+
+    // Running the two-address list is what triggers the next fetch.
+    fireEvent.click(screen.getByRole("button", { name: /compare 2 addresses/i }));
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(2));
   });
 
   it("narrow viewport: the layer toggle mounts in the sheet, not the top bar", async () => {
@@ -892,5 +871,202 @@ describe("MapWorkspace", () => {
     const group = screen.getByRole("group", { name: "Data layer" });
     expect(group.closest(".mc-topbar")).not.toBeNull();
     expect(group.closest(".mc-workspace-panel")).toBeNull();
+  });
+
+  it("legacy 1-point analyze share link lands on the unified Compare surface and auto-runs", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([]));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    const legacy = btoa(unescape(encodeURIComponent(JSON.stringify({
+      v: 1, t: "analyze", r: 250, s: "2026-01-01", e: "2026-06-24", ly: "reported",
+      pts: [{ y: 47.61, x: -122.33, l: "Shared spot" }], c: null,
+    })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    window.history.replaceState(null, "", `/?view=${legacy}`);
+    render(<MapWorkspace />);
+    expect(await screen.findByRole("tabpanel", { name: "Compare" })).toBeInTheDocument();
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledWith(expect.objectContaining({
+      points: [expect.objectContaining({ label: "Shared spot" })],
+    })));
+    expect(comparePlaces).not.toHaveBeenCalled();
+  });
+
+  it("applies an assistant analyze_places context module onto the Compare surface", async () => {
+    const a: Place = { ...home, id: "a", display_label: "Alpha" };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([a]));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    const neighborhood: NeighborhoodAnalysis = {
+      ...makeNeighborhoodAnalysis(),
+      places: [{
+        place_id: "n-a", place_label: "Alpha", beat: "M2", radius_m: 250,
+        baseline_available: false, decision: "baseline_unavailable", place_incident_count: 3,
+        place_rate: 0.5, place_rate_ci_lower: 0.3, place_rate_ci_upper: 0.8,
+        minimum_data_status: "met", nearest_incident_m: 40, monthly_counts: [],
+        category_breakdown: [], baselines: [],
+      }],
+    };
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({
+        event: "tool",
+        data: {
+          tool_name: "analyze_places",
+          result: {
+            place_ids: ["a"],
+            settings_used: { radius_m: 250, analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30", offense_category: null },
+            neighborhood,
+            incidents: makeIncidentDetails(),
+          },
+        },
+      });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+    render(<MapWorkspace />);
+    await screen.findByRole("checkbox", { name: "Alpha" });
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    const comparePanel = await screen.findByRole("tabpanel", { name: "Compare" });
+    expect(await within(comparePanel).findByLabelText("Context for Alpha")).toBeInTheDocument();
+    expect(comparePlaces).not.toHaveBeenCalled();
+  });
+
+  it("deleting a saved place removes its address-list row", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
+    vi.mocked(deletePlace).mockResolvedValue(undefined);
+
+    render(<MapWorkspace />);
+    const list = await screen.findByRole("list", { name: /addresses to compare/i });
+    expect(within(list).getByText("Home")).toBeInTheDocument();
+    expect(within(list).getByText("Work")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    const dialog = await screen.findByRole("dialog", { name: "Manage places" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Remove Home" }));
+
+    // handleDelete drops the deleted place's entry from the one address list, so its row
+    // disappears while the surviving place's row stays.
+    await waitFor(() => {
+      const rows = screen.getByRole("list", { name: /addresses to compare/i });
+      expect(within(rows).queryByText("Home")).not.toBeInTheDocument();
+      expect(within(rows).getByText("Work")).toBeInTheDocument();
+    });
+  });
+
+  it("exits a shared banner back to the restored saved-place list", async () => {
+    localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Shared A", "Shared B"));
+
+    const legacy = btoa(unescape(encodeURIComponent(JSON.stringify({
+      v: 1, t: "compare", r: 250, s: "2026-01-01", e: "2026-06-24", ly: "reported",
+      pts: [{ y: 47.7, x: -122.4, l: "Shared A" }, { y: 47.71, x: -122.41, l: "Shared B" }], c: null,
+    })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    window.history.replaceState(null, "", `/?view=${legacy}`);
+    render(<MapWorkspace />);
+
+    // Shared view auto-runs its two points once; wait until places have loaded so the
+    // persisted selection has been restored (the guard the Exit path depends on).
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
+    await screen.findByRole("checkbox", { name: home.display_label });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Exit" }));
+
+    // Exit restores the persisted saved selection ([home]) and re-runs it.
+    await waitFor(() => {
+      const list = screen.getByRole("list", { name: /addresses to compare/i });
+      expect(within(list).getByText(home.display_label)).toBeInTheDocument();
+    });
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not double-run when a lookup fires before places finish loading", async () => {
+    let resolveSummary!: (value: DashboardSummary) => void;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockReturnValue(new Promise<DashboardSummary>((resolve) => { resolveSummary = resolve; }));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    geocodeSearch.mockResolvedValue([{ label: "123 Main St", latitude: 47.61, longitude: -122.34, source: "test" }]);
+
+    render(<MapWorkspace />);
+    // Fire a search-pill lookup before the dashboard summary resolves.
+    fireEvent.change(screen.getByRole("combobox", { name: /search address or place/i }), { target: { value: "123 Main" } });
+    fireEvent.click(await screen.findByRole("option", { name: "123 Main St" }));
+
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
+
+    // Places arrive after the lookup edit; the restore greet must not fire a second run.
+    resolveSummary(makeSummary([home]));
+    await screen.findByRole("checkbox", { name: "Home" });
+    expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps assistant selected_place_ids fresh after restore-seeding", async () => {
+    localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(streamAssistantChat).mockResolvedValue(undefined);
+
+    render(<MapWorkspace />);
+    // Wait for the restore-seeded greet run (home is saved → place_ids pass).
+    await waitFor(() => expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({ place_ids: [home.id] })));
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(streamAssistantChat).toHaveBeenCalled());
+    const payload = vi.mocked(streamAssistantChat).mock.calls[0][0];
+    expect(payload.dashboard_state.selected_place_ids).toEqual([home.id]);
+  });
+
+  it("clears the panes and the address list when the assistant clears the selection", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
+    vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Home", "Work"));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 2 });
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({ event: "tool", data: { tool_name: "select_places", result: { place_ids: [], mode: "clear" } } });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    // The restored two-place selection auto-runs and renders the ranked spine.
+    expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "clear" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    // The clear result empties the panes (invalidate) and the address list.
+    await waitFor(() => expect(screen.queryByTestId("compare-ranked")).not.toBeInTheDocument());
+    expect(screen.queryByRole("list", { name: /addresses to compare/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/add at least one address/i)).toBeInTheDocument();
+  });
+
+  it("drops stale panes when the assistant replaces the selection without new results", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
+    vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Home", "Work"));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 2 });
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({ event: "tool", data: { tool_name: "select_places", result: { place_ids: ["p2"], mode: "replace" } } });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    // The restored two-place selection auto-runs and renders the ranked spine.
+    expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "just Work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    // A payload-free selection replace is an edit: the stale ranked spine drops and the
+    // list swaps to the replacement row, waiting for the next Run.
+    await waitFor(() => expect(screen.queryByTestId("compare-ranked")).not.toBeInTheDocument());
+    const rows = screen.getByRole("list", { name: /addresses to compare/i });
+    expect(within(rows).getByText("Work")).toBeInTheDocument();
+    expect(within(rows).queryByText("Home")).not.toBeInTheDocument();
   });
 });

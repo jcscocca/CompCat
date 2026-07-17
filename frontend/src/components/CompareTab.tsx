@@ -1,133 +1,282 @@
-import { useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { toCompareVerdict } from "../lib/compareVerdict";
-import { incidentNoun } from "../lib/layerCopy";
+import { countNoun, incidentNoun } from "../lib/layerCopy";
+import { collectionBox, mosaicPath } from "../lib/locatorGeometry";
 import type { GeocodingProvider } from "../lib/geocoding";
-import type { ComparePoint } from "../lib/useCompareSet";
-import { MAX_COMPARE_POINTS, keyOf } from "../lib/useCompareSet";
-import type { AnalysisSettings, NeighborhoodAnalysis, SiteComparison } from "../types";
+import type { AddressEntry } from "../lib/useCompareSet";
+import { MAX_ADDRESSES, keyOf } from "../lib/useCompareSet";
+import type { AnalysisSettings, IncidentDetailsResponse, McppFeatureCollection, NeighborhoodAnalysis, SiteComparison } from "../types";
 import { plotDomainMax } from "./BaselineIntervalPlot";
 import { CompareAddressInput } from "./CompareAddressInput";
 import { CompareRankedList } from "./CompareRankedList";
 import { CompareRateNumberLine } from "./CompareRateNumberLine";
 import { CompareVerdict } from "./CompareVerdict";
+import { IncidentDetailsSection } from "./IncidentDetailsSection";
+import type { LocatorData } from "./LocatorChip";
 import { MethodsAppendix } from "./MethodsAppendix";
 import { PlaceContextCard } from "./PlaceContextCard";
 
+const INCIDENT_TABLE_MIN = 560;
+
 type Props = {
-  set: ComparePoint[];
+  entries: AddressEntry[];
   provider: GeocodingProvider;
-  onAddPoint: (point: ComparePoint) => void;
-  onRemovePoint: (index: number) => void;
-  /** Coord keys of the user's saved places, so already-saved points show "Saved" not "Save". */
+  onAddEntry: (entry: AddressEntry) => void;
+  onRemoveEntry: (index: number) => void;
+  /** Coord keys of saved places, so already-saved entries show "Saved" not "Save". */
   savedKeys: Set<string>;
-  onSavePoint: (point: ComparePoint) => void;
+  onSaveEntry: (entry: AddressEntry) => void;
   analysis: AnalysisSettings;
-  comparison: SiteComparison | null;
-  /** Per-address neighborhood context from the same run; null degrades expansions. */
-  neighborhood: NeighborhoodAnalysis | null;
+  availableRadii: number[];
   running: boolean;
+  comparison: SiteComparison | null;
+  neighborhood: NeighborhoodAnalysis | null;
+  incidents: IncidentDetailsResponse | null;
+  /** Snapshot of the points the results were computed from (coords, letters). */
+  runPoints: AddressEntry[] | null;
+  error?: string;
+  panelWidthPx?: number;
+  /** True in the mobile bottom sheet; collapses the controls to a summary after a run. */
+  isMobile?: boolean;
+  onChange: (patch: Partial<AnalysisSettings>) => void;
   onRun: () => void;
   onCopyLink?: () => string | null;
-  /** Rendered above the panel head; the panel is absolutely positioned, so drawer-level
-   * chrome (place chip strip, pin-draft popover) must live inside it to be visible. */
+  onHoverPlace?: (savedPlaceId: string | null) => void;
+  mcppPolygons?: McppFeatureCollection | null;
+  onFlyTo?: (target: { latitude: number; longitude: number }) => void;
+  /** Drawer-level chrome (chip strip, pin-draft popover) — must render inside the panel. */
   topSlot?: ReactNode;
 };
+
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: "", label: "All reported" },
+  { value: "PROPERTY", label: "Property" },
+  { value: "PERSON", label: "Person" },
+  { value: "SOCIETY", label: "Society" },
+];
 
 const REVISED_CAVEAT =
   "Reported incident context, not a personal risk prediction. Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
 
-export function CompareTab({ set, provider, onAddPoint, onRemovePoint, savedKeys, onSavePoint, analysis, comparison, neighborhood, running, onRun, onCopyLink, topSlot }: Props) {
-  const noun = incidentNoun(analysis.layer);
-  const canRun = set.length >= 2 && !running;
+export function CompareTab({ entries, provider, onAddEntry, onRemoveEntry, savedKeys, onSaveEntry, analysis, availableRadii, running, comparison, neighborhood, incidents, runPoints, error, panelWidthPx, isMobile = false, onChange, onRun, onCopyLink, onHoverPlace, mcppPolygons, onFlyTo, topSlot }: Props) {
+  const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
+  const noun = useMemo(() => incidentNoun(analysis.layer), [analysis.layer]);
+  const canRun = entries.length >= 1 && !running;
+  const hasResults = Boolean(neighborhood || comparison || incidents);
+
+  const resultsAnchorRef = useRef<HTMLDivElement>(null);
+  const wasRunningRef = useRef(false);
+  const [editingControls, setEditingControls] = useState(false);
+  useEffect(() => {
+    if (wasRunningRef.current && !running) {
+      if (isMobile) {
+        setEditingControls(false);
+      } else {
+        resultsAnchorRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      }
+    }
+    wasRunningRef.current = running;
+  }, [running, isMobile]);
+
+  const locator = useMemo<LocatorData | null>(() => {
+    if (!mcppPolygons) return null;
+    const box = collectionBox(mcppPolygons);
+    return box ? { polygons: mcppPolygons, box, mosaic: mosaicPath(mcppPolygons, box) } : null;
+  }, [mcppPolygons]);
+
+  const width = panelWidthPx ?? Infinity;
+  const incidentLayout = width >= INCIDENT_TABLE_MIN ? "table" : "cards";
+  const windowLabel = neighborhood
+    ? `${neighborhood.analysis_start_date} – ${neighborhood.analysis_end_date}`
+    : "";
+
+  const isCallsLayer = analysis.layer === "calls";
+  const isArrestsLayer = analysis.layer === "arrests";
+  const showCategory = analysis.layer !== "calls";
+  const subcategoryHeader = isCallsLayer ? "Call type" : isArrestsLayer ? "Charge" : "Subcategory";
+  const categoryLabel = CATEGORIES.find((c) => c.value === analysis.offenseCategory)?.label ?? "All reported";
+  const showFullControls = !isMobile || !hasResults || editingControls;
+
   const verdict = comparison ? toCompareVerdict(comparison) : null;
+
+  function moduleFor(index: number): ReactNode | null {
+    const place = neighborhood?.places?.[index];
+    if (!place || !neighborhood) return null;
+    const point = runPoints?.[index];
+    return (
+      <PlaceContextCard
+        place={place}
+        index={index}
+        windowLabel={windowLabel}
+        noun={noun}
+        domainMax={plotDomainMax(neighborhood.places)}
+        onHoverPlace={onHoverPlace ? (id) => onHoverPlace(id ? point?.savedPlaceId ?? null : null) : undefined}
+        locator={locator}
+        coords={point ? { latitude: point.latitude, longitude: point.longitude } : null}
+        onFlyTo={onFlyTo}
+      />
+    );
+  }
 
   const expansionByOptionId = useMemo(() => {
     if (!comparison || !neighborhood?.places?.length) return undefined;
-    const domainMax = plotDomainMax(neighborhood.places);
-    const windowLabel = `${neighborhood.analysis_start_date} – ${neighborhood.analysis_end_date}`;
     const map = new Map<string, ReactNode>();
     comparison.analytical.options.forEach((option, index) => {
-      const place = neighborhood.places[index];
-      if (!place) return;
-      const point = set[index];
-      map.set(
-        option.id,
-        <PlaceContextCard
-          place={place}
-          index={index}
-          windowLabel={windowLabel}
-          noun={noun}
-          domainMax={domainMax}
-          locator={null}
-          coords={point ? { latitude: point.latitude, longitude: point.longitude } : null}
-        />,
-      );
+      const node = moduleFor(index);
+      if (node) map.set(option.id, node);
     });
     return map;
-  }, [comparison, neighborhood, set, noun]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comparison, neighborhood, runPoints, noun, locator, onHoverPlace, onFlyTo]);
 
   return (
-    <div className="mc-panel is-active" role="tabpanel" aria-label="Compare">
+    <div className="mc-panel is-active has-querybar" role="tabpanel" aria-label="Compare">
       {topSlot}
       <div className="mc-panel-head"><h4>Compare addresses</h4></div>
 
       <div className="mc-cmpset">
-        <div className="mc-cmpset-head"><span className="mc-label">Addresses to compare · {set.length} of {MAX_COMPARE_POINTS}</span></div>
-        <CompareAddressInput provider={provider} onAdd={onAddPoint} disabled={set.length >= MAX_COMPARE_POINTS} />
-        {set.length === 0 ? (
-          <p className="mc-empty-list">Add at least two addresses to compare {noun.singular} context.</p>
+        <div className="mc-cmpset-head"><span className="mc-label">Addresses to compare · {entries.length} of {MAX_ADDRESSES}</span></div>
+        <CompareAddressInput provider={provider} onAdd={onAddEntry} disabled={entries.length >= MAX_ADDRESSES} />
+        {entries.length === 0 ? (
+          <p className="mc-empty-list">Add at least one address to see its {noun.singular} context — two or more to compare.</p>
         ) : (
           <ul className="mc-cmpset-rows" aria-label="Addresses to compare">
-            {set.map((point, index) => (
-              <li key={`${point.latitude},${point.longitude}`} className="mc-cmpset-row">
+            {entries.map((entry, index) => (
+              <li key={keyOf(entry)} className="mc-cmpset-row">
                 <span className="idx">{index + 1}</span>
-                <span className="lbl">{point.label}</span>
-                {savedKeys.has(keyOf(point)) ? (
+                <span className="lbl">{entry.label}</span>
+                {entry.savedPlaceId || savedKeys.has(keyOf(entry)) ? (
                   <span className="saved">Saved</span>
                 ) : (
-                  <button type="button" className="save" onClick={() => onSavePoint(point)}>Save</button>
+                  <button type="button" className="save" onClick={() => onSaveEntry(entry)}>Save</button>
                 )}
-                <button type="button" className="rm" aria-label={`Remove ${point.label}`} onClick={() => onRemovePoint(index)}>✕</button>
+                <button type="button" className="rm" aria-label={`Remove ${entry.label}`} onClick={() => onRemoveEntry(index)}>✕</button>
               </li>
             ))}
           </ul>
         )}
-        {set.length === 1 ? <p className="mc-search-msg">Add one more address to compare.</p> : null}
       </div>
 
-      {onCopyLink && comparison && (
-        <button type="button" className="mc-link-copy" onClick={async () => { const url = onCopyLink(); if (url) await navigator.clipboard.writeText(url); }}>
-          Copy link to this view
-        </button>
+      {showFullControls ? (
+      <div className="mc-querybar">
+        <div className="mc-field">
+          <label htmlFor="analysis-start-date">Date range</label>
+          <div className="mc-inputs">
+            <input id="analysis-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} aria-label="Start date" onChange={(event) => onChange({ startDate: event.target.value })} />
+            <input id="analysis-end-date" type="date" className="mc-inp" value={analysis.endDate} min={ANALYSIS_MIN_DATE} aria-label="End date" onChange={(event) => onChange({ endDate: event.target.value })} />
+          </div>
+        </div>
+
+        <div className="mc-field">
+          <label id="radius-label">Search radius</label>
+          <div className="mc-chips" role="group" aria-labelledby="radius-label">
+            {radii.map((value) => (
+              <button key={value} type="button" className={`mc-chip${analysis.radiusM === value ? " on" : ""}`} aria-pressed={analysis.radiusM === value} onClick={() => onChange({ radiusM: value })}>
+                {value} m
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {showCategory ? (
+          <div className="mc-field">
+            <label id="category-label">Incident categories</label>
+            <div className="mc-chips" role="group" aria-labelledby="category-label">
+              {CATEGORIES.map((category) => (
+                <button key={category.value || "all"} type="button" className={`mc-chip${analysis.offenseCategory === category.value ? " on" : ""}`} aria-pressed={analysis.offenseCategory === category.value} onClick={() => onChange({ offenseCategory: category.value })}>
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mc-querybar-run">
+          <span className="note">{entries.length} address{entries.length === 1 ? "" : "es"} · {analysis.radiusM} m</span>
+          <button type="button" className="mc-cta" disabled={!canRun} onClick={onRun}>
+            {running ? "Running…" : entries.length >= 2 ? `Compare ${entries.length} addresses` : "Run analysis"}
+          </button>
+        </div>
+      </div>
+      ) : (
+      <div className="mc-querybar-summary">
+        <span className="mc-querybar-sum">{entries.length} address{entries.length === 1 ? "" : "es"} · {analysis.radiusM} m{showCategory ? ` · ${categoryLabel}` : ""}</span>
+        <button type="button" className="mc-querybar-edit" onClick={() => setEditingControls(true)}>Adjust</button>
+      </div>
       )}
 
-      {verdict ? (
-        <>
-          <CompareVerdict callout={verdict.callout} noun={noun} />
-          <p className="mc-ranked-title">Ranked by {noun.singular} rate — lowest first</p>
-          <CompareRankedList rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} expansionByOptionId={expansionByOptionId} />
-          {!expansionByOptionId ? (
-            <p className="mc-search-msg">Per-address context unavailable for this run.</p>
-          ) : null}
-          <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} />
-        </>
-      ) : set.length >= 2 ? (
-        <p className="mc-empty-list">Compare these {set.length} addresses to rank their {noun.singular} rates.</p>
+      <div ref={resultsAnchorRef} aria-hidden="true" />
+
+      {isCallsLayer ? (
+        <p className="mc-layer-note" role="note">
+          911 calls are <strong>requests for service</strong>, not confirmed incidents. The same
+          event can generate several calls, many are proactive officer activity, and a call does
+          not mean a crime occurred. Counts below are call volume, not reported crime.
+        </p>
+      ) : isArrestsLayer ? (
+        <p className="mc-layer-note" role="note">
+          Arrests are <strong>enforcement activity, not reported incidents</strong>. An arrest is
+          logged where the arrest was made — which may differ from where an offense occurred — and
+          most reported crimes never result in one. Categories are a <strong>best-effort</strong>{" "}
+          NIBRS crosswalk from the arrest offense.
+        </p>
       ) : null}
 
-      <div className="mc-caveat">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v4h1" /></svg>
-        {REVISED_CAVEAT}
-      </div>
+      {error ? <p className="mc-inline-error" role="alert">{error}</p> : null}
 
-      <MethodsAppendix />
+      {running ? (
+        <div className="mc-analysis-loading" aria-live="polite" aria-busy="true">
+          <span className="mc-sr">Running analysis…</span>
+          <div className="mc-skeleton" style={{ height: 96 }} />
+          <div className="mc-skeleton" style={{ height: 96 }} />
+          <div className="mc-skeleton" style={{ height: 168 }} />
+        </div>
+      ) : (
+        <>
+          {hasResults && onCopyLink ? (
+            <div className="mc-analyze-actions">
+              <button
+                type="button"
+                className="mc-link-copy"
+                onClick={async () => {
+                  const url = onCopyLink();
+                  if (url) await navigator.clipboard.writeText(url);
+                }}
+              >
+                Copy link to this view
+              </button>
+            </div>
+          ) : null}
 
-      <div className="mc-compare-actions">
-        <span className="note">{set.length} address{set.length === 1 ? "" : "es"} · {analysis.radiusM} m</span>
-        <button type="button" className="mc-cta" disabled={!canRun} onClick={onRun}>{running ? "Comparing…" : "Compare addresses"}</button>
-      </div>
+          {verdict ? (
+            <>
+              <CompareVerdict callout={verdict.callout} noun={noun} />
+              <p className="mc-ranked-title">Ranked by {noun.singular} rate — lowest first</p>
+              <CompareRankedList rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} expansionByOptionId={expansionByOptionId} />
+              {!expansionByOptionId ? (
+                <p className="mc-search-msg">Per-address context unavailable for this run.</p>
+              ) : null}
+              <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={analysis.radiusM} />
+            </>
+          ) : neighborhood?.places?.length ? (
+            neighborhood.places.map((place, index) => <Fragment key={place.place_id}>{moduleFor(index)}</Fragment>)
+          ) : null}
+
+          {hasResults ? (
+            <IncidentDetailsSection details={incidents} noun={noun} layout={incidentLayout} showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
+          ) : null}
+
+          <div className="mc-caveat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v4h1" /></svg>
+            {REVISED_CAVEAT}
+          </div>
+
+          <MethodsAppendix />
+        </>
+      )}
     </div>
   );
 }

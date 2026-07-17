@@ -52,7 +52,7 @@ export function interpretToolResult(data: {
         neighborhood: (result.neighborhood as NeighborhoodAnalysis) ?? null,
         incidents: (result.incidents as IncidentDetailsResponse) ?? null,
         refetchSummary: true,
-        tab: "analyze",
+        tab: "compare",
       };
     case "add_place": {
       const place = (result.place ?? {}) as { id?: string };
