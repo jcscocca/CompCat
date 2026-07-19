@@ -2,46 +2,21 @@ import { useRef } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 
 import { clampWidth, DRAWER_DEFAULT, DRAWER_MIN, DRAWER_PEEK, DRAWER_RESIZE_STEP, DRAWER_WIDE, drawerMax, type DrawerPreset } from "../lib/drawer";
-import type { TabKey } from "../types";
 
 const GRABBER_TAP_SLOP = 6;
 const GRABBER_DRAG_THRESHOLD = 40;
 
 type Props = {
-  activeTab: TabKey;
-  onTabChange: (tab: TabKey) => void;
   collapsed: boolean;
   widthPx: number;
   onToggleCollapsed: () => void;
   onResize: (px: number) => void;
   onPreset: (preset: DrawerPreset) => void;
-  tabBadges?: Partial<Record<TabKey, number>>;
-  dock?: ReactNode;
+  nav?: ReactNode;
   isMobile?: boolean;
   peekHeader?: ReactNode;
   children: ReactNode;
 };
-
-const TABS: { key: TabKey; label: string; icon: ReactNode }[] = [
-  {
-    key: "compare",
-    label: "Compare",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 20V10M12 20V4M19 20v-7" />
-      </svg>
-    ),
-  },
-  {
-    key: "export",
-    label: "Export",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3v12M8 11l4 4 4-4M5 21h14" />
-      </svg>
-    ),
-  },
-];
 
 const PRESETS: { preset: DrawerPreset; label: string }[] = [
   { preset: "peek", label: "Peek" },
@@ -58,15 +33,12 @@ function activateWithKeyboard(event: KeyboardEvent<HTMLElement>, action: () => v
 }
 
 export function BottomSheet({
-  activeTab,
-  onTabChange,
   collapsed,
   widthPx,
   onToggleCollapsed,
   onResize,
   onPreset,
-  tabBadges,
-  dock,
+  nav,
   isMobile = false,
   peekHeader,
   children,
@@ -221,28 +193,8 @@ export function BottomSheet({
           </div>
         </>
       )}
-      <nav className="mc-tabs" role="tablist" aria-label="Workspace sections">
-        {TABS.map((tab) => {
-          const badge = tabBadges?.[tab.key];
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.key}
-              className={`mc-tab${activeTab === tab.key ? " is-active" : ""}`}
-              onClick={() => onTabChange(tab.key)}
-              onKeyDown={(event) => activateWithKeyboard(event, () => onTabChange(tab.key))}
-            >
-              {tab.icon}
-              {tab.label}
-              {badge ? <span className="pill">{badge}</span> : null}
-            </button>
-          );
-        })}
-      </nav>
+      {nav}
       <div className="mc-panels">{children}</div>
-      {dock ? <div className="mc-dock-slot">{dock}</div> : null}
     </section>
   );
 }

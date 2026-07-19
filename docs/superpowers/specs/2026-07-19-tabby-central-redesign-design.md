@@ -153,4 +153,7 @@ be explicitly scoped to the card's run).
 4. Presence badges + badge descriptors + fly-to with sheet-aware padding.
 5. Proactive onboarding + place-added moments; auto-run path audit.
 6. Mobile sheet snap mechanics.
-7. Parity checklist pass → delete legacy tabs.
+7. Parity checklist pass → delete legacy tabs. Includes ARIA cleanup: slice 1
+   removed the `role="tablist"`/`role="tab"` owners, so the `role="tabpanel"`
+   on CompareTab/ExportTab/AddressLookup is orphaned — retire or downgrade
+   those roles (e.g. to `role="region"`) when the tabs are deleted.

@@ -1,14 +1,22 @@
-import { useState } from "react";
+// frontend/src/components/AssistantPanel.tsx
+import { useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 
 import { streamAssistantChat } from "../api/client";
-import type { AssistantDashboardState, AssistantMessage } from "../types";
+import { toApiMessages, type ThreadItem } from "../lib/threadItems";
+import type { AssistantDashboardState } from "../types";
 import { TabbyAvatar } from "./TabbyAvatar";
 
 type Props = {
   dashboardState: AssistantDashboardState;
+  items: ThreadItem[];
+  onAppend: (item: ThreadItem) => void;
+  // In-flight flag lives in the parent: bridge effects can flip the drawer to a legacy
+  // view mid-stream, and a remounted panel must stay locked until the turn settles.
+  busy: boolean;
+  onBusyChange: (busy: boolean) => void;
   onToolResult?: (data: { tool_name?: string; result?: unknown }) => void;
-  defaultCollapsed?: boolean;
+  contextStrip?: ReactNode;
 };
 
 type ToolActivity = {
@@ -26,35 +34,35 @@ const SUGGESTED_PROMPTS = [
 
 const GREETED_KEY = "wp-copper-greeted";
 
-export function AssistantPanel({ dashboardState, onToolResult, defaultCollapsed = false }: Props) {
-  const [messages, setMessages] = useState<AssistantMessage[]>([]);
+export function AssistantPanel({ dashboardState, items, onAppend, busy, onBusyChange, onToolResult, contextStrip }: Props) {
   const [draft, setDraft] = useState("");
   const [statusLine, setStatusLine] = useState("");
   const [input, setInput] = useState("");
   const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
 
-  async function sendTurn(turnMessages: AssistantMessage[]) {
+  // text === null re-sends the thread as-is (Retry after an error notice).
+  async function sendTurn(text: string | null) {
     if (!greeted) {
       localStorage.setItem(GREETED_KEY, "1");
       setGreeted(true);
     }
+    const apiMessages = toApiMessages(items);
+    if (text !== null) {
+      apiMessages.push({ role: "user", content: text });
+      onAppend({ kind: "user_text", text });
+    }
     let assistantText = "";
     let errored = false;
     let turnError = "";
-    setMessages(turnMessages);
     setDraft("");
     setStatusLine("");
-    setErrorMessage("");
     setToolActivity([]);
-    setSending(true);
+    onBusyChange(true);
 
     try {
       await streamAssistantChat(
-        { messages: turnMessages, dashboard_state: dashboardState },
+        { messages: apiMessages, dashboard_state: dashboardState },
         {
           onEvent: (event) => {
             if (event.event === "tool") {
@@ -82,123 +90,114 @@ export function AssistantPanel({ dashboardState, onToolResult, defaultCollapsed 
           },
         },
       );
-      // Don't commit a partial/empty answer when the turn errored — surface the degraded
-      // state instead, so a "Retry" re-sends the same (still-unanswered) last turn.
+      // Don't commit a partial/empty answer when the turn errored — record a notice
+      // instead, so Retry re-sends the same (still-unanswered) last turn.
       if (!errored && assistantText.trim()) {
-        setMessages([...turnMessages, { role: "assistant", content: assistantText.trim() }]);
+        onAppend({ kind: "tabby_text", text: assistantText.trim() });
       }
       setDraft("");
-      if (errored) setErrorMessage(turnError || OFFLINE_MESSAGE);
+      if (errored) onAppend({ kind: "notice", text: turnError || OFFLINE_MESSAGE });
     } catch {
       setDraft("");
-      setErrorMessage(OFFLINE_MESSAGE);
+      onAppend({ kind: "notice", text: OFFLINE_MESSAGE });
     } finally {
       setStatusLine("");
-      setSending(false);
+      onBusyChange(false);
     }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || sending) return;
+    if (!content || busy) return;
     setInput("");
-    void sendTurn([...messages, { role: "user", content }]);
+    void sendTurn(content);
   }
 
-  function handleRetry() {
-    // The last message is the user turn that got no answer; re-send the conversation as-is.
-    if (sending || messages.length === 0) return;
-    void sendTurn(messages);
-  }
+  const conversationEmpty = items.every((item) => item.kind === "receipt");
+  // Fold the in-flight draft into the same list/keys the committed items use, so the
+  // bubble that shows streaming text is the same DOM node the final commit updates in
+  // place (rather than an unmount+remount when the turn settles).
+  const displayItems: ThreadItem[] = draft ? [...items, { kind: "tabby_text", text: draft }] : items;
 
   return (
-    <aside className="mc-dock" aria-label="Analyst">
+    <aside className="mc-dock mc-rail" aria-label="Tabby">
       <div className="mc-dock-head">
         <h3>
           <TabbyAvatar variant="mark" size={20} className={greeted ? undefined : "mc-tabby-pulse"} />
           Tabby
           <span className="mc-dock-role">case desk · analyst</span>
         </h3>
-        <span className="mc-dock-status">{sending ? "Checking the files…" : "At the desk"}</span>
-        <button
-          type="button"
-          className="mc-dock-collapse"
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand analyst" : "Collapse analyst"}
-          onClick={() => setCollapsed((c) => !c)}
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d={collapsed ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"} /></svg>
-        </button>
+        <span className="mc-dock-status">{busy ? "Checking the files…" : "At the desk"}</span>
       </div>
 
-      {collapsed ? null : (
-        <>
-          <div className="mc-dock-log" aria-live="polite">
-            {messages.map((message, index) => (
-              <div key={`${message.role}-${index}`} className={`mc-dock-msg is-${message.role}`}>
-                {message.role === "assistant" ? (
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                ) : (
-                  message.content
-                )}
+      <div className="mc-dock-log" aria-live="polite">
+        {displayItems.map((item, index) => {
+          if (item.kind === "user_text") {
+            return <div key={index} className="mc-dock-msg is-user">{item.text}</div>;
+          }
+          if (item.kind === "tabby_text") {
+            return (
+              <div key={index} className="mc-dock-msg is-assistant">
+                <ReactMarkdown>{item.text}</ReactMarkdown>
               </div>
-            ))}
-            {draft ? (
-              <div className="mc-dock-msg is-assistant">
-                <ReactMarkdown>{draft}</ReactMarkdown>
-              </div>
-            ) : null}
-            {!draft && statusLine ? (
-              <div className="mc-dock-msg is-assistant mc-dock-statusline">{statusLine}</div>
-            ) : null}
-            {messages.length === 0 && !draft ? (
-              <div className="mc-dock-empty">
-                <TabbyAvatar variant="bust" size={72} />
-                <p>Tabby, case desk. Point me at a place and I'll pull the reports near it.</p>
-                <div className="mc-dock-chips">
-                  {SUGGESTED_PROMPTS.map((prompt) => (
-                    <button key={prompt} type="button" className="mc-chip" disabled={sending}
-                      onClick={() => void sendTurn([...messages, { role: "user", content: prompt }])}>
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          {toolActivity.length ? (
-            <ul className="mc-dock-tools" aria-label="Tool activity">
-              {toolActivity.map((item, index) => (
-                <li key={`${item.label}-${index}`}>{item.label}</li>
-              ))}
-            </ul>
-          ) : null}
-
-          {errorMessage ? (
-            <div className="mc-dock-error" role="status">
-              <p>{errorMessage}</p>
-              <button type="button" className="mc-chip" onClick={handleRetry} disabled={sending}>
-                Retry
-              </button>
+            );
+          }
+          if (item.kind === "receipt") {
+            return <div key={index} className="mc-dock-msg is-receipt">{item.text}</div>;
+          }
+          return (
+            <div key={index} className="mc-dock-msg is-notice">
+              <p>{item.text}</p>
+              {items.slice(index + 1).every((later) => later.kind === "receipt") ? (
+                <button type="button" className="mc-chip" onClick={() => void sendTurn(null)} disabled={busy}>
+                  Retry
+                </button>
+              ) : null}
             </div>
-          ) : null}
+          );
+        })}
+        {!draft && statusLine ? (
+          <div className="mc-dock-msg is-assistant mc-dock-statusline">{statusLine}</div>
+        ) : null}
+        {conversationEmpty && !draft ? (
+          <div className="mc-dock-empty">
+            <TabbyAvatar variant="bust" size={72} />
+            <p>Tabby, case desk. Point me at a place and I'll pull the reports near it.</p>
+            <div className="mc-dock-chips">
+              {SUGGESTED_PROMPTS.map((prompt) => (
+                <button key={prompt} type="button" className="mc-chip" disabled={busy}
+                  onClick={() => void sendTurn(prompt)}>
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-          <form className="mc-dock-form" onSubmit={handleSubmit}>
-            <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
-            <textarea
-              id="assistant-message"
-              value={input}
-              rows={2}
-              onChange={(event) => setInput(event.target.value)}
-            />
-            <button type="submit" disabled={sending || !input.trim()}>
-              Send
-            </button>
-          </form>
-        </>
-      )}
+      {toolActivity.length ? (
+        <ul className="mc-dock-tools" aria-label="Tool activity">
+          {toolActivity.map((item, index) => (
+            <li key={`${item.label}-${index}`}>{item.label}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {contextStrip}
+
+      <form className="mc-dock-form" onSubmit={handleSubmit}>
+        <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
+        <textarea
+          id="assistant-message"
+          value={input}
+          rows={2}
+          onChange={(event) => setInput(event.target.value)}
+        />
+        <button type="submit" disabled={busy || !input.trim()}>
+          Send
+        </button>
+      </form>
     </aside>
   );
 }

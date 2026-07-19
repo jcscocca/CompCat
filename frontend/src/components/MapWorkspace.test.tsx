@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -152,6 +153,17 @@ afterEach(() => {
 });
 
 describe("MapWorkspace", () => {
+  // Rail-first drawer: legacy panels live behind the overflow menu; Tabby is home.
+  function openLegacyView(name: "Compare" | "Export") {
+    fireEvent.click(screen.getByRole("button", { name: "More panels" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(name, "i") }));
+  }
+  // The assistant input lives on the Tabby rail, but analysis flows (auto-run, lookup,
+  // bridge effects) open the Compare panel — step back to Tabby to reach the composer.
+  async function backToTabby() {
+    fireEvent.click(await screen.findByRole("button", { name: "Back to Tabby" }));
+  }
+
   it("theme toggle flips the document theme attribute", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
@@ -480,6 +492,24 @@ describe("MapWorkspace", () => {
     expect(screen.queryByText("100 block of Main St")).not.toBeInTheDocument();
   });
 
+  it("appends exactly one receipt per filter change under StrictMode", async () => {
+    // Guards updater purity: StrictMode double-invokes setAnalysis updaters in dev, so a
+    // thread.append inside the updater would duplicate every receipt. The append must
+    // stay hoisted into the event handler (see handleAnalysisChange).
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+
+    render(<StrictMode><MapWorkspace /></StrictMode>);
+    await screen.findByText("Home");
+    await backToTabby();
+
+    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: "500 m" }));
+
+    expect(screen.getAllByText("Search radius → 500 m")).toHaveLength(1);
+  });
+
   it("shows an error when the session cannot start", async () => {
     vi.mocked(createSession).mockRejectedValue(new Error("no session"));
     render(<MapWorkspace />);
@@ -514,6 +544,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     await screen.findByText("Alpha");
+    await backToTabby();
 
     fireEvent.change(screen.getByLabelText("Analyst message"), {
       target: { value: "compare Alpha and Bravo" },
@@ -547,6 +578,7 @@ describe("MapWorkspace", () => {
     });
     render(<MapWorkspace />);
     await screen.findByText("Alpha");
+    await backToTabby();
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
@@ -778,6 +810,7 @@ describe("MapWorkspace", () => {
 
     // The assistant now takes over the pane with a different selection; the ephemeral lookup
     // (and its draft pin) must be dropped so it no longer shadows the assistant's subject.
+    await backToTabby();
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
@@ -932,6 +965,7 @@ describe("MapWorkspace", () => {
     });
     render(<MapWorkspace />);
     await screen.findByRole("checkbox", { name: "Alpha" });
+    await backToTabby();
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     const comparePanel = await screen.findByRole("tabpanel", { name: "Compare" });
@@ -972,7 +1006,7 @@ describe("MapWorkspace", () => {
     await screen.findByText("Home");
 
     // Add an ad-hoc address via the compare input (type, search, pick the result).
-    fireEvent.change(screen.getByLabelText("Add an address to compare"), { target: { value: "500 Pine" } });
+    fireEvent.change(await screen.findByLabelText("Add an address to compare"), { target: { value: "500 Pine" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(await screen.findByText("500 Pine St"));
 
@@ -995,7 +1029,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.change(screen.getByLabelText("Add an address to compare"), { target: { value: "500 Pine" } });
+    fireEvent.change(await screen.findByLabelText("Add an address to compare"), { target: { value: "500 Pine" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(await screen.findByText("500 Pine St"));
 
@@ -1095,6 +1129,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     // Wait for the restore-seeded greet run (home is saved → place_ids pass).
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({ place_ids: [home.id] })));
+    await backToTabby();
 
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -1118,11 +1153,14 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     // The restored two-place selection auto-runs and renders the ranked spine.
     expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
+    await backToTabby();
 
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "clear" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    // The clear result empties the panes (invalidate) and the address list.
+    // The clear result empties the panes (invalidate) and the address list. select_places
+    // does not switch views, so open the legacy Compare panel to inspect the emptied state.
+    openLegacyView("Compare");
     await waitFor(() => expect(screen.queryByTestId("compare-ranked")).not.toBeInTheDocument());
     expect(screen.queryByRole("list", { name: /addresses to compare/i })).not.toBeInTheDocument();
     expect(screen.getByText(/add at least one address/i)).toBeInTheDocument();
@@ -1142,12 +1180,15 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     // The restored two-place selection auto-runs and renders the ranked spine.
     expect(await screen.findByTestId("compare-ranked")).toBeInTheDocument();
+    await backToTabby();
 
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "just Work" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     // A payload-free selection replace is an edit: the stale ranked spine drops and the
-    // list swaps to the replacement row, waiting for the next Run.
+    // list swaps to the replacement row, waiting for the next Run. select_places does not
+    // switch views, so open the legacy Compare panel to inspect it.
+    openLegacyView("Compare");
     await waitFor(() => expect(screen.queryByTestId("compare-ranked")).not.toBeInTheDocument());
     const rows = screen.getByRole("list", { name: /addresses to compare/i });
     expect(within(rows).getByText("Work")).toBeInTheDocument();
@@ -1220,6 +1261,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     await screen.findByRole("checkbox", { name: "Home" });
+    await backToTabby();
     // Let the greet run's own summary refresh land first, so the deferred below is
     // consumed by the tool effect's refetch and nothing else.
     await waitFor(() => expect(getDashboardSummary).toHaveBeenCalledTimes(2));

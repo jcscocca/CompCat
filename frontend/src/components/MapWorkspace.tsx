@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, getMcppPolygons, updatePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
+import { describeAnalysisPatch } from "../lib/analysisReceipt";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { DRAWER_PEEK, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
@@ -16,10 +17,12 @@ import { useDrawer } from "../lib/useDrawer";
 import { usePersistedSelection } from "../lib/usePersistedSelection";
 import { usePinDraft } from "../lib/usePinDraft";
 import { useTheme } from "../lib/useTheme";
+import { useThread } from "../lib/useThread";
 import { AddressLookup } from "./AddressLookup";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
 import { CompareTab } from "./CompareTab";
+import { ContextStrip } from "./ContextStrip";
 import { DataFreshness } from "./DataFreshness";
 import { ExportTab } from "./ExportTab";
 import { LayerToggle } from "./LayerToggle";
@@ -30,9 +33,10 @@ import { IncidentDisclosure } from "./IncidentDisclosure";
 import { PlaceChipStrip } from "./PlaceChipStrip";
 import { PlaceSearch } from "./PlaceSearch";
 import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
+import { RailNav, type RailView } from "./RailNav";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
-import type { AnalysisSettings, AssistantDashboardState, BeatFeatureCollection, GeocodeResult, LatLng, MapBounds, McppFeatureCollection, PlaceCreate, TabKey } from "../types";
+import type { AnalysisSettings, AssistantDashboardState, BeatFeatureCollection, GeocodeResult, LatLng, MapBounds, McppFeatureCollection, PlaceCreate } from "../types";
 
 export function MapWorkspace() {
   const { theme, setTheme } = useTheme();
@@ -44,7 +48,11 @@ export function MapWorkspace() {
   const [sharedBanner, setSharedBanner] = useState(Boolean(initialView));
   const [showBadLink, setShowBadLink] = useState(hadViewParam && initialView === null);
 
-  const [activeTab, setActiveTab] = useState<TabKey>("compare");
+  const [railView, setRailView] = useState<RailView>("tabby");
+  const thread = useThread();
+  // Lives here, not in AssistantPanel: bridge effects flip railView mid-stream, and the
+  // remounted panel must stay locked until the in-flight turn settles.
+  const [assistantBusy, setAssistantBusy] = useState(false);
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
   const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
@@ -183,6 +191,7 @@ export function MapWorkspace() {
   useEffect(() => {
     if (!pendingAutoRun || list.entries.length === 0) return;
     setPendingAutoRun(false);
+    setRailView("compare");
     void compare.run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAutoRun, list.entries]);
@@ -226,14 +235,14 @@ export function MapWorkspace() {
   function selectPlaceIds(ids: string[]) {
     if (ids.length === 0) return;
     invalidateAnalysisContext();
-    setActiveTab("compare");
+    setRailView("compare");
     entriesForIds(ids).forEach((entry) => list.add(entry));
   }
 
   const pinDraft = usePinDraft({
     selectPlaceIds,
     refreshWithFallback: data.refreshWithFallback,
-    setActiveTab,
+    setActiveTab: (tab) => setRailView(tab),
     setDrawerCollapsed,
   });
 
@@ -248,7 +257,7 @@ export function MapWorkspace() {
     invalidateAnalysisContext();
     setSharedBanner(false);
     list.replaceAll([{ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) }]);
-    setActiveTab("compare");
+    setRailView("compare");
     setPendingAutoRun(true);
   }
 
@@ -271,6 +280,10 @@ export function MapWorkspace() {
 
   function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
     invalidateAnalysisContext();
+    // Receipt append stays OUTSIDE the updater: StrictMode double-invokes updaters,
+    // so a side effect inside would duplicate every receipt in dev.
+    const receipt = describeAnalysisPatch(analysis, patch);
+    if (receipt) thread.append({ kind: "receipt", text: receipt });
     setAnalysis((current) => ({ ...current, ...patch }));
   }
 
@@ -310,6 +323,10 @@ export function MapWorkspace() {
       setSharedBanner(false);
     }
     if (effect.settings) {
+      // Same hoist as handleAnalysisChange (updater purity under StrictMode); reading
+      // render-scope `analysis` for the receipt text is an accepted trade-off.
+      const receipt = describeAnalysisPatch(analysis, effect.settings);
+      if (receipt) thread.append({ kind: "receipt", text: receipt });
       setAnalysis((current) => ({ ...current, ...effect.settings }));
     }
     // Assistant selection edits invalidate like user edits; payload-bearing effects
@@ -330,7 +347,7 @@ export function MapWorkspace() {
     if (effect.refetchSummary) {
       void data.refreshWithFallback("Analyst updated the view, but dashboard totals could not refresh.");
     }
-    if (effect.tab) setActiveTab(effect.tab);
+    if (effect.tab) setRailView(effect.tab);
   }
 
   const buildShareUrl = useCallback((): string | null => {
@@ -359,7 +376,7 @@ export function MapWorkspace() {
   // (so a search preview or dropped pin reaches the chip strip + draft popover instead of
   // being hidden behind the landing).
   const showLanding =
-    data.places.length === 0 && list.entries.length === 0 && activeTab === "compare" && !pinDraft.draft;
+    data.places.length === 0 && list.entries.length === 0 && railView !== "export" && !pinDraft.draft;
 
   // Recomputed every render: useDrawer's window-resize listener always produces a new
   // drawer object, so viewport changes re-render. No extra state needed.
@@ -485,8 +502,6 @@ export function MapWorkspace() {
         ) : null}
 
         <BottomSheet
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
           collapsed={drawer.collapsed}
           widthPx={drawer.widthPx}
           onToggleCollapsed={onToggleCollapsed}
@@ -494,14 +509,28 @@ export function MapWorkspace() {
           onPreset={onPreset}
           isMobile={isMobile}
           peekHeader={isMobile ? layerControls : undefined}
-          tabBadges={{ compare: list.entries.length }}
-          dock={<AssistantPanel dashboardState={assistantState} onToolResult={applyAssistantToolResult} defaultCollapsed={isMobile} />}
+          nav={<RailNav view={railView} compareCount={list.entries.length} onSelect={setRailView} />}
         >
           {showLanding ? (
             <AddressLookup provider={geocodingProvider} onSelect={handleLookup} onManual={() => setManagePlaces("manual")} />
+          ) : railView === "tabby" ? (
+            <div className="mc-rail-wrap">
+              {drawerTopSlot}
+              <AssistantPanel
+                dashboardState={assistantState}
+                items={thread.items}
+                onAppend={thread.append}
+                busy={assistantBusy}
+                onBusyChange={setAssistantBusy}
+                onToolResult={applyAssistantToolResult}
+                contextStrip={
+                  <ContextStrip analysis={analysis} availableRadii={data.availableRadii} onChange={handleAnalysisChange} />
+                }
+              />
+            </div>
           ) : (
             <>
-          {activeTab === "compare" ? (
+          {railView === "compare" ? (
             <CompareTab
               topSlot={drawerTopSlot}
               entries={list.entries}
@@ -537,7 +566,7 @@ export function MapWorkspace() {
               onFlyTo={({ latitude, longitude }) => setChipFlyTo({ lat: latitude, lng: longitude })}
             />
           ) : null}
-          {activeTab === "export" ? (
+          {railView === "export" ? (
             <ExportTab
               href={data.exportHref}
               places={data.places}

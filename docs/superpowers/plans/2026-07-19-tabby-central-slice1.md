@@ -1116,16 +1116,16 @@ const pinDraft = usePinDraft({
 
 **(e) `handleLookup`** (line 246-253) — replace `setActiveTab("compare")` with `setRailView("compare")`.
 
-**(f) `handleAnalysisChange`** (line 272-275) — append a receipt:
+**(f) `handleAnalysisChange`** (line 272-275) — append a receipt. The append must stay
+OUTSIDE the `setAnalysis` updater: updaters must be pure (StrictMode double-invokes them
+in dev, which would duplicate every receipt):
 
 ```ts
 function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
   invalidateAnalysisContext();
-  setAnalysis((current) => {
-    const receipt = describeAnalysisPatch(current, patch);
-    if (receipt) thread.append({ kind: "receipt", text: receipt });
-    return { ...current, ...patch };
-  });
+  const receipt = describeAnalysisPatch(analysis, patch);
+  if (receipt) thread.append({ kind: "receipt", text: receipt });
+  setAnalysis((current) => ({ ...current, ...patch }));
 }
 ```
 
@@ -1136,13 +1136,13 @@ function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
 if (effect.settings) {
   setAnalysis((current) => ({ ...current, ...effect.settings }));
 }
-// new
+// new — same hoist as (f): the append is a side effect, so it cannot live inside the
+// updater. Reading render-scope `analysis` for the receipt text is an accepted trade-off;
+// the state merge itself still uses `current`.
 if (effect.settings) {
-  setAnalysis((current) => {
-    const receipt = describeAnalysisPatch(current, effect.settings ?? {});
-    if (receipt) thread.append({ kind: "receipt", text: receipt });
-    return { ...current, ...effect.settings };
-  });
+  const receipt = describeAnalysisPatch(analysis, effect.settings);
+  if (receipt) thread.append({ kind: "receipt", text: receipt });
+  setAnalysis((current) => ({ ...current, ...effect.settings }));
 }
 ```
 

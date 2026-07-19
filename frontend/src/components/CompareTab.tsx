@@ -5,6 +5,7 @@ import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { toCompareVerdict } from "../lib/compareVerdict";
 import { countNoun, incidentNoun } from "../lib/layerCopy";
 import { collectionBox, mosaicPath } from "../lib/locatorGeometry";
+import { CATEGORIES } from "../lib/offenseCategories";
 import type { GeocodingProvider } from "../lib/geocoding";
 import type { AddressEntry } from "../lib/useAddressList";
 import { MAX_ADDRESSES, keyOf } from "../lib/useAddressList";
@@ -51,13 +52,6 @@ type Props = {
   /** Drawer-level chrome (chip strip, pin-draft popover) — must render inside the panel. */
   topSlot?: ReactNode;
 };
-
-const CATEGORIES: { value: string; label: string }[] = [
-  { value: "", label: "All reported" },
-  { value: "PROPERTY", label: "Property" },
-  { value: "PERSON", label: "Person" },
-  { value: "SOCIETY", label: "Society" },
-];
 
 const REVISED_CAVEAT =
   "Reported incident context, not a personal risk prediction. Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
