@@ -14,6 +14,7 @@ PUBLIC_PATHS = {
     "/dashboard/freshness",
     "/dashboard/trends",
     "/assistant/chat",
+    "/assistant/commands",
     "/exports/tableau/place-summary.csv",
     "/places/{place_id}",
 }

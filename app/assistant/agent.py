@@ -201,10 +201,12 @@ async def run_assistant_turn(
         )
         plan = _parse_model_json(raw_plan)
     except LlmUnavailable:
-        yield AssistantStreamEvent(event="error", data={"message": _UNREACHABLE_MESSAGE})
+        yield AssistantStreamEvent(
+            event="error", data={"message": _UNREACHABLE_MESSAGE, "code": "llm_unreachable"}
+        )
         return
     except ValueError as exc:
-        yield AssistantStreamEvent(event="error", data={"message": str(exc)})
+        yield AssistantStreamEvent(event="error", data={"message": str(exc), "code": "internal"})
         return
 
     if plan.get("type") == "tool_call":
@@ -225,7 +227,9 @@ async def run_assistant_turn(
             yield AssistantStreamEvent(event="done", data={})
             return
         except (AssistantToolError, ValueError) as exc:
-            yield AssistantStreamEvent(event="error", data={"message": str(exc)})
+            yield AssistantStreamEvent(
+                event="error", data={"message": str(exc), "code": "tool_error"}
+            )
             return
         yield AssistantStreamEvent(event="tool", data=tool_result)
         summary = build_tool_summary(tool_result)
@@ -252,7 +256,7 @@ async def run_assistant_turn(
     try:
         message = _final_message(plan)
     except ValueError as exc:
-        yield AssistantStreamEvent(event="error", data={"message": str(exc)})
+        yield AssistantStreamEvent(event="error", data={"message": str(exc), "code": "internal"})
         return
     # Output-side invariant guard: a model answer that slipped past the input guard must not
     # stream safety-ranking language, place-ranking/livability prose, or a claim that the user

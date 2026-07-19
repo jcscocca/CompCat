@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, getTrends, streamAssistantChat } from "./client";
+import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, getTrends, streamAssistantChat, streamAssistantCommand } from "./client";
 import type { AssistantDashboardState } from "../types";
 
 afterEach(() => {
@@ -172,5 +172,25 @@ describe("api client", () => {
     // A malformed *token* frame is dropped, but a terminal error must never be swallowed
     // or the user sees neither an answer nor an error.
     expect(events).toContain("error");
+  });
+
+  it("streams command events from /assistant/commands", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(
+        'event: meta\ndata: {"mode":"command","command":"suggest_followups"}\n\n' +
+          'event: tool\ndata: {"tool_name":"suggest_followups","arguments":{},"result":{"suggestions":["a"]}}\n\n' +
+          'event: token\ndata: {"delta":"Here are follow-ups."}\n\n' +
+          "event: done\ndata: {}\n\n",
+      ),
+    );
+
+    const events: string[] = [];
+    await streamAssistantCommand(
+      { command: "suggest_followups", arguments: {} },
+      { onEvent: (event) => events.push(event.event) },
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toContain("/assistant/commands");
+    expect(events).toEqual(["meta", "tool", "token", "done"]);
   });
 });

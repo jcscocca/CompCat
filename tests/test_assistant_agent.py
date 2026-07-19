@@ -518,6 +518,29 @@ def test_agent_reports_unreachable_classifier(tmp_path):
 
     assert events[-1].event == "error"
     assert "Couldn't reach the analyst" in events[-1].data["message"]
+    assert events[-1].data["code"] == "llm_unreachable"
+
+
+def test_agent_reports_tool_error_code(tmp_path):
+    client = FakeClient(
+        ['{"type":"tool_call","tool_name":"definitely_not_a_tool","arguments":{}}']
+    )
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Do the thing.")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert events[-1].event == "error"
+    assert events[-1].data["code"] == "tool_error"
 
 
 def test_agent_redirects_object_first_ranking_without_safety_words(tmp_path):

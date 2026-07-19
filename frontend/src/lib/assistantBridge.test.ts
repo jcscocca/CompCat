@@ -75,6 +75,14 @@ describe("interpretToolResult", () => {
       .toEqual({ selection: { mode: "clear", ids: [] } });
   });
 
+  it("maps update_filters patches to a settings effect with no view switch", () => {
+    const effect = interpretToolResult({
+      tool_name: "update_filters",
+      result: { patch: { radius_m: 500, offense_category: null, layer: "arrests" } },
+    });
+    expect(effect).toEqual({ settings: { radiusM: 500, offenseCategory: "", layer: "arrests" } });
+  });
+
   it("returns null when add_place result lacks a place id", () => {
     expect(interpretToolResult({ tool_name: "add_place", result: {} })).toBeNull();
     expect(interpretToolResult({ tool_name: "add_place", result: { place: {} } })).toBeNull();

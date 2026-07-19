@@ -44,6 +44,7 @@ vi.mock("../api/client", () => ({
   getDashboardFreshness: vi.fn().mockResolvedValue(null),
   getInputModes: vi.fn().mockResolvedValue({ modes: [] }),
   streamAssistantChat: vi.fn(),
+  streamAssistantCommand: vi.fn(),
   updatePlace: vi.fn(),
 }));
 
@@ -54,7 +55,7 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getMcppPolygons, getNeighborhoodAnalysis, streamAssistantChat, updatePlace } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getMcppPolygons, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { encodeView } from "../lib/savedView";
 import { keyOf } from "../lib/useAddressList";
@@ -1279,5 +1280,78 @@ describe("MapWorkspace", () => {
     const rows = screen.getByRole("list", { name: /addresses to compare/i });
     expect(await within(rows).findByText("Pike Street")).toBeInTheDocument();
     expect(screen.getByTestId("compare-ranked")).toBeInTheDocument();
+  });
+
+  it("runs the compare chip as a structured command and applies its effect on the rail", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+    // The command stream returns an update_filters tool event regardless of the sent
+    // command — pinning both the outgoing payload and the effect→receipt round-trip.
+    vi.mocked(streamAssistantCommand).mockImplementation(async (_p, { onEvent }) => {
+      onEvent({ event: "tool", data: { tool_name: "update_filters", arguments: {}, result: { patch: { radius_m: 500 } } } });
+      onEvent({ event: "token", data: { delta: "Updated the filters: radius 500 m." } });
+      onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+    await backToTabby();
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare my places" }));
+
+    // The chip runs the structured command path (never /assistant/chat) with the saved
+    // ids AND the dashboard window — without dates + radius the tool clarifies, not runs.
+    await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
+    expect(streamAssistantChat).not.toHaveBeenCalled();
+    const window = currentYearAnalysisWindow();
+    const payload = vi.mocked(streamAssistantCommand).mock.calls[0][0];
+    expect(payload.command).toBe("compare_places");
+    expect(payload.arguments).toEqual(expect.objectContaining({
+      place_ids: ["p1"],
+      radius_m: 250,
+      analysis_start_date: window.analysis_start_date,
+      analysis_end_date: window.analysis_end_date,
+    }));
+
+    // The update_filters effect lands as a receipt without leaving the rail (no tab effect),
+    // so the composer is still present.
+    expect(await screen.findByText("Search radius → 500 m")).toBeInTheDocument();
+    expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
+  });
+
+  it("keeps filters live while the composer degrades on an LLM outage", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+    vi.mocked(streamAssistantChat).mockImplementation(async (_p, { onEvent }) => {
+      onEvent({ event: "error", data: { message: "Couldn't reach the analyst.", code: "llm_unreachable" } });
+    });
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+    await backToTabby();
+
+    // Command chips are live before any turn (offline is false).
+    expect(screen.getByRole("button", { name: "Compare my places" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "what's the safest block" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    // The llm_unreachable code flows client → hook → panel: the composer degrades to a
+    // disabled textarea + Send behind the offline hint.
+    expect(await screen.findByText("Couldn't reach the analyst.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Analyst message")).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByText(/your filters and retry still work/i)).toBeInTheDocument();
+
+    // Filters are not gated by offline: a radius change still records a receipt on the rail.
+    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: "500 m" }));
+    expect(await screen.findByText("Search radius → 500 m")).toBeInTheDocument();
   });
 });

@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from app.assistant.tools import AssistantToolError, execute_tool
+from app.assistant.tools import AssistantClarification, AssistantToolError, execute_tool
 from app.db import get_sessionmaker
 from app.geocoding.providers import GeocodeHit
 from app.main import create_app
@@ -200,7 +200,7 @@ def test_get_neighborhood_analysis_exposes_beat_baseline_stats(tmp_path):
         assert field in by_kind["beat"]
 
 
-def test_advertised_menu_is_the_six_poc_tools():
+def test_advertised_menu_is_the_seven_poc_tools():
     from app.assistant.semantic_layer import AVAILABLE_TOOLS
 
     names = {tool["name"] for tool in AVAILABLE_TOOLS}
@@ -211,7 +211,54 @@ def test_advertised_menu_is_the_six_poc_tools():
         "compare_places",
         "get_dashboard_summary",
         "suggest_followups",
+        "update_filters",
     }
+
+
+def test_update_filters_echoes_validated_patch():
+    result = execute_tool(
+        None,
+        "user-hash",
+        "update_filters",
+        {"radius_m": 500, "analysis_start_date": "2026-01-01", "layer": "arrests"},
+    )
+    assert result["tool_name"] == "update_filters"
+    assert result["result"]["patch"] == {
+        "radius_m": 500,
+        "analysis_start_date": "2026-01-01",
+        "layer": "arrests",
+    }
+
+
+def test_update_filters_empty_category_clears_to_all():
+    result = execute_tool(None, "user-hash", "update_filters", {"offense_category": ""})
+    assert result["result"]["patch"] == {"offense_category": None}
+
+
+def test_update_filters_all_sentinel_clears_to_all():
+    # The chat path strips "" from tool arguments (_tool_arguments), so the LLM
+    # clears the category with the explicit ALL sentinel instead.
+    result = execute_tool(None, "user-hash", "update_filters", {"offense_category": "ALL"})
+    assert result["result"]["patch"] == {"offense_category": None}
+
+
+def test_update_filters_requires_at_least_one_field():
+    with pytest.raises(AssistantClarification):
+        execute_tool(None, "user-hash", "update_filters", {})
+
+
+def test_update_filters_rejects_bad_values():
+    with pytest.raises(AssistantToolError):
+        execute_tool(None, "user-hash", "update_filters", {"radius_m": 5})
+    with pytest.raises(AssistantToolError):
+        execute_tool(None, "user-hash", "update_filters", {"layer": "sonar"})
+    with pytest.raises(AssistantToolError):
+        execute_tool(
+            None,
+            "user-hash",
+            "update_filters",
+            {"analysis_start_date": "2026-07-01", "analysis_end_date": "2026-01-01"},
+        )
 
 
 def test_planning_prompt_requests_statistical_interpretation():

@@ -36,6 +36,7 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
         "compare_places": _compare_places_summary,
         "get_dashboard_summary": _dashboard_summary,
         "suggest_followups": _suggest_followups_summary,
+        "update_filters": _update_filters_summary,
     }.get(tool_result.get("tool_name"))
     if handler is None:
         return "Done."
@@ -124,6 +125,22 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
 def _dashboard_summary(result: dict[str, Any]) -> str:
     count = (result.get("totals") or {}).get("place_count") or 0
     return f"You have {count} saved place{'' if count == 1 else 's'}."
+
+
+def _update_filters_summary(result: dict[str, Any]) -> str:
+    patch = result.get("patch") or {}
+    parts: list[str] = []
+    if "radius_m" in patch:
+        parts.append(f"radius {patch['radius_m']} m")
+    if "analysis_start_date" in patch or "analysis_end_date" in patch:
+        parts.append(
+            f"dates {patch.get('analysis_start_date', '…')} – {patch.get('analysis_end_date', '…')}"
+        )
+    if "offense_category" in patch:
+        parts.append(f"categories {patch['offense_category'] or 'all reported'}")
+    if "layer" in patch:
+        parts.append(f"layer {patch['layer']}")
+    return "Updated the filters: " + " · ".join(parts) + "."
 
 
 def _suggest_followups_summary(result: dict[str, Any]) -> str:

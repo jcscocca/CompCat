@@ -49,6 +49,20 @@ class AssistantChatRequest(BaseModel):
     dashboard_state: AssistantDashboardState = Field(default_factory=AssistantDashboardState)
 
 
+class AssistantCommandRequest(BaseModel):
+    # The fixed command enum IS the security boundary: pydantic 422s anything else,
+    # so unadvertised tool handlers stay unreachable from the client.
+    command: Literal[
+        "analyze_places",
+        "compare_places",
+        "add_place",
+        "select_places",
+        "update_filters",
+        "suggest_followups",
+    ]
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 class AssistantStreamEvent(BaseModel):
     event: Literal["meta", "tool", "token", "status", "replace", "done", "error"]
     data: dict[str, Any]

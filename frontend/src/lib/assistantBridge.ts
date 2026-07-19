@@ -70,6 +70,8 @@ export function interpretToolResult(data: {
         },
       };
     }
+    case "update_filters":
+      return { settings: settingsFrom(result.patch as SettingsUsed) };
     default:
       return null;
   }

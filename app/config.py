@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     rate_limit_sessions_per_hour: int = 10
     rate_limit_assistant_per_hour: int = 20
     rate_limit_assistant_global_per_day: int = 100
+    rate_limit_assistant_commands_per_hour: int = 120
     rate_limit_burst_per_minute: int = 120
 
     geocoder_provider: str = "nominatim"

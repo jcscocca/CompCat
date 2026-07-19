@@ -163,4 +163,5 @@ def test_assistant_chat_emits_terminal_error_frame_when_turn_raises(monkeypatch,
     assert '"delta": "partial "' in response.text
     assert "event: error" in response.text
     assert "Couldn't reach the analyst" in response.text
+    assert '"code": "internal"' in response.text
 

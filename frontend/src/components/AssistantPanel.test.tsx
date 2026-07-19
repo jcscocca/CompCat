@@ -1,176 +1,104 @@
 // frontend/src/components/AssistantPanel.test.tsx
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../api/client", () => ({ streamAssistantChat: vi.fn() }));
-
 import { AssistantPanel } from "./AssistantPanel";
-import { streamAssistantChat } from "../api/client";
 import type { ThreadItem } from "../lib/threadItems";
-import type { AssistantDashboardState } from "../types";
 
-const dashboardState: AssistantDashboardState = {
-  selected_place_ids: [],
-  analysis_start_date: null,
-  analysis_end_date: null,
-  radii_m: [250],
-  offense_category: null,
-  offense_subcategory: null,
-  nibrs_group: null,
-  layer: "reported",
-};
+type PanelProps = React.ComponentProps<typeof AssistantPanel>;
 
-/** Harness owning thread + busy state the way MapWorkspace does. `withToggle` adds a
- * button that unmounts/remounts the panel, mirroring a mid-stream railView switch. */
-function Harness({ initial = [] as ThreadItem[], withToggle = false }) {
-  const [items, setItems] = useState<ThreadItem[]>(initial);
-  const [busy, setBusy] = useState(false);
-  const [hidden, setHidden] = useState(false);
-  return (
-    <>
-      {withToggle ? (
-        <button type="button" onClick={() => setHidden((h) => !h)}>Toggle panel</button>
-      ) : null}
-      {hidden ? null : (
-        <AssistantPanel
-          dashboardState={dashboardState}
-          items={items}
-          onAppend={(item) => setItems((current) => [...current, item])}
-          busy={busy}
-          onBusyChange={setBusy}
-          contextStrip={<div data-testid="ctx-slot" />}
-        />
-      )}
-    </>
-  );
+function setup(overrides: Partial<PanelProps> = {}) {
+  const onSend = vi.fn();
+  const onRetry = vi.fn();
+  const onRunCommand = vi.fn();
+  const props: PanelProps = {
+    items: [],
+    busy: false,
+    draft: "",
+    statusLine: "",
+    toolActivity: [],
+    offline: false,
+    onSend,
+    onRetry,
+    onRunCommand,
+    ...overrides,
+  };
+  render(<AssistantPanel {...props} />);
+  return { onSend, onRetry, onRunCommand };
 }
 
-beforeEach(() => {
-  vi.mocked(streamAssistantChat).mockReset();
-  localStorage.clear();
-});
+beforeEach(() => localStorage.clear());
 afterEach(cleanup);
 
 describe("AssistantPanel", () => {
-  it("renders items by kind, including receipts and notices", () => {
-    render(
-      <Harness
-        initial={[
-          { kind: "user_text", text: "hello" },
-          { kind: "tabby_text", text: "Hi there." },
-          { kind: "receipt", text: "Search radius → 500 m" },
-          { kind: "notice", text: "Something went sideways." },
-        ]}
-      />,
-    );
-    expect(screen.getByText("hello")).toBeInTheDocument();
-    expect(screen.getByText("Hi there.")).toBeInTheDocument();
-    const receipt = screen.getByText("Search radius → 500 m");
-    expect(receipt.closest(".mc-dock-msg")).toHaveClass("is-receipt");
+  it("renders items by kind, including receipts and notices, plus the contextStrip slot", () => {
+    setup({
+      items: [
+        { kind: "user_text", text: "hello" },
+        { kind: "tabby_text", text: "Hi there." },
+        { kind: "receipt", text: "Search radius → 500 m" },
+        { kind: "notice", text: "Something went sideways." },
+      ],
+      contextStrip: <div data-testid="ctx-slot" />,
+    });
+    expect(screen.getByText("hello").closest(".mc-dock-msg")).toHaveClass("is-user");
+    expect(screen.getByText("Hi there.").closest(".mc-dock-msg")).toHaveClass("is-assistant");
+    expect(screen.getByText("Search radius → 500 m").closest(".mc-dock-msg")).toHaveClass("is-receipt");
     expect(screen.getByText("Something went sideways.").closest(".mc-dock-msg")).toHaveClass("is-notice");
     expect(screen.getByTestId("ctx-slot")).toBeInTheDocument();
   });
 
-  it("appends the user turn and Tabby's reply on a successful stream", async () => {
-    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, { onEvent }) => {
-      onEvent({ event: "token", data: { delta: "On it." } });
-      onEvent({ event: "done", data: {} });
-    });
-    render(<Harness />);
-    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Home" } });
+  it("submit calls onSend with trimmed text and clears the input", () => {
+    const { onSend } = setup();
+    const textarea = screen.getByLabelText("Analyst message");
+    fireEvent.change(textarea, { target: { value: "  analyze Home  " } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByText("analyze Home")).toBeInTheDocument();
-    expect(await screen.findByText("On it.")).toBeInTheDocument();
-    const call = vi.mocked(streamAssistantChat).mock.calls[0][0];
-    expect(call.messages).toEqual([{ role: "user", content: "analyze Home" }]);
+    expect(onSend).toHaveBeenCalledWith("analyze Home");
+    expect(textarea).toHaveValue("");
   });
 
-  it("appends a notice with Retry on stream error, and Retry re-sends the same turn", async () => {
-    vi.mocked(streamAssistantChat).mockImplementationOnce(async (_payload, { onEvent }) => {
-      onEvent({ event: "error", data: { message: "LLM unreachable" } });
-    });
-    render(<Harness />);
-    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "hi" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByText("LLM unreachable")).toBeInTheDocument();
-
-    vi.mocked(streamAssistantChat).mockImplementationOnce(async (_payload, { onEvent }) => {
-      onEvent({ event: "token", data: { delta: "Back now." } });
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("Back now.")).toBeInTheDocument();
-    // Retry must not duplicate the user turn.
-    const retryCall = vi.mocked(streamAssistantChat).mock.calls[1][0];
-    expect(retryCall.messages).toEqual([{ role: "user", content: "hi" }]);
-    await waitFor(() => expect(screen.getAllByText("hi")).toHaveLength(1));
+  it("command chip runs a command; the prompt chip sends free text", () => {
+    const { onSend, onRunCommand } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Compare my places" }));
+    expect(onRunCommand).toHaveBeenCalledWith("Compare my places", "compare_places");
+    fireEvent.click(screen.getByRole("button", { name: "What's on file around here?" }));
+    expect(onSend).toHaveBeenCalledWith("What's on file around here?");
   });
 
-  it("keeps Retry on a notice that is only followed by receipts", () => {
-    render(
-      <Harness
-        initial={[
-          { kind: "user_text", text: "hi" },
-          { kind: "notice", text: "LLM unreachable" },
-          { kind: "receipt", text: "Search radius → 500 m" },
-        ]}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  it("offline disables the composer and prompt chip but keeps command chips live", () => {
+    const { onRunCommand } = setup({ offline: true });
+    expect(screen.getByLabelText("Analyst message")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "What's on file around here?" })).toBeDisabled();
+    expect(screen.getByText(/your filters and retry still work/i)).toBeInTheDocument();
+    // Command chips stay enabled — the degraded path still runs structured commands.
+    // (Offline + chips-on-screen only co-occurs today on an empty thread; the state
+    // becomes generally reachable when persistent chips land in slice 3.)
+    const compareChip = screen.getByRole("button", { name: "Compare my places" });
+    expect(compareChip).not.toBeDisabled();
+    fireEvent.click(compareChip);
+    expect(onRunCommand).toHaveBeenCalledWith("Compare my places", "compare_places");
   });
 
-  it("renders the streaming draft mid-stream and settles to a single committed node", async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    vi.mocked(streamAssistantChat).mockImplementationOnce(async (_payload, { onEvent }) => {
-      onEvent({ event: "token", data: { delta: "Working…" } });
-      await gate;
-    });
-    render(<Harness />);
-    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "go" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByText("Working…")).toBeInTheDocument();
-    release();
-    await waitFor(() => expect(screen.getAllByText("Working…")).toHaveLength(1));
-    await waitFor(() => expect(screen.getByText("At the desk")).toBeInTheDocument());
+  it("renders the draft prop as a single in-flight bubble alongside committed items", () => {
+    setup({ items: [{ kind: "user_text", text: "go" }], draft: "Working…" });
+    expect(screen.getByText("go")).toBeInTheDocument();
     expect(screen.getAllByText("Working…")).toHaveLength(1);
   });
 
-  it("keeps the composer locked across unmount/remount while a turn is in flight", async () => {
-    // Bridge effects flip the drawer to a legacy view mid-stream, unmounting the panel.
-    // The busy flag lives in the parent so the remounted panel cannot start a second
-    // concurrent stream while the first turn is still in flight.
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    vi.mocked(streamAssistantChat).mockImplementationOnce(async (_payload, { onEvent }) => {
-      onEvent({ event: "token", data: { delta: "Working…" } });
-      await gate;
+  it("shows Retry on a notice followed only by receipts and calls onRetry", () => {
+    const { onRetry } = setup({
+      items: [
+        { kind: "user_text", text: "hi" },
+        { kind: "notice", text: "LLM unreachable" },
+        { kind: "receipt", text: "Search radius → 500 m" },
+      ] as ThreadItem[],
     });
-    render(<Harness withToggle />);
-    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "go" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByText("Working…")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Toggle panel" }));
-    expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle panel" }));
-
-    // Remounted mid-stream: still locked, still reporting the in-flight turn.
-    expect(screen.getByText("Checking the files…")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "again" } });
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-
-    release();
-    await waitFor(() => expect(screen.getByText("At the desk")).toBeInTheDocument());
-    expect(streamAssistantChat).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows the empty state with suggested prompts and no collapse control", () => {
-    render(<Harness />);
-    expect(screen.getByText(/point me at a place/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Compare my places" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /collapse analyst/i })).not.toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect(retry).toBeInTheDocument();
+    fireEvent.click(retry);
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

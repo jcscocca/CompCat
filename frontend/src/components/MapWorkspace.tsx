@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, getMcppPolygons, updatePlace } from "../api/client";
+import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, getMcppPolygons, updatePlace, type AssistantCommandName } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
 import { describeAnalysisPatch } from "../lib/analysisReceipt";
@@ -17,6 +17,7 @@ import { useDrawer } from "../lib/useDrawer";
 import { usePersistedSelection } from "../lib/usePersistedSelection";
 import { usePinDraft } from "../lib/usePinDraft";
 import { useTheme } from "../lib/useTheme";
+import { useAssistantTurn } from "../lib/useAssistantTurn";
 import { useThread } from "../lib/useThread";
 import { AddressLookup } from "./AddressLookup";
 import { AssistantPanel } from "./AssistantPanel";
@@ -50,9 +51,6 @@ export function MapWorkspace() {
 
   const [railView, setRailView] = useState<RailView>("tabby");
   const thread = useThread();
-  // Lives here, not in AssistantPanel: bridge effects flip railView mid-stream, and the
-  // remounted panel must stay locked until the in-flight turn settles.
-  const [assistantBusy, setAssistantBusy] = useState(false);
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
   const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
@@ -372,6 +370,33 @@ export function MapWorkspace() {
     layer: analysis.layer,
   }), [analysis, savedIdSet]);
 
+  // Turn machinery lives here, not in AssistantPanel: bridge effects flip railView
+  // mid-stream, and the shared busy/draft/offline state must survive the panel unmounting.
+  const turn = useAssistantTurn({
+    dashboardState: assistantState,
+    items: thread.items,
+    append: thread.append,
+    onToolResult: applyAssistantToolResult,
+  });
+
+  // Slice-2 commands carry explicit args (no LLM to fill them from context): the two
+  // analysis chips send the saved-place ids plus the dashboard's current window —
+  // without dates and a radius the tools clarify instead of running.
+  function runPanelCommand(label: string, command: AssistantCommandName) {
+    const args: Record<string, unknown> = {};
+    if (command === "analyze_places" || command === "compare_places") {
+      args.place_ids = Array.from(savedIdSet);
+      args.analysis_start_date = analysis.startDate || null;
+      args.analysis_end_date = analysis.endDate || null;
+      args.layer = analysis.layer;
+      if (analysis.offenseCategory) args.offense_category = analysis.offenseCategory;
+      // analyze_places takes the list form; compare_places a single radius.
+      if (command === "analyze_places") args.radii_m = [analysis.radiusM];
+      else args.radius_m = analysis.radiusM;
+    }
+    void turn.runCommand(label, command, args);
+  }
+
   // Landing shows only on a truly fresh session: no saved data and no in-progress draft
   // (so a search preview or dropped pin reaches the chip strip + draft popover instead of
   // being hidden behind the landing).
@@ -517,12 +542,15 @@ export function MapWorkspace() {
             <div className="mc-rail-wrap">
               {drawerTopSlot}
               <AssistantPanel
-                dashboardState={assistantState}
                 items={thread.items}
-                onAppend={thread.append}
-                busy={assistantBusy}
-                onBusyChange={setAssistantBusy}
-                onToolResult={applyAssistantToolResult}
+                busy={turn.busy}
+                draft={turn.draft}
+                statusLine={turn.statusLine}
+                toolActivity={turn.toolActivity}
+                offline={turn.offline}
+                onSend={(text) => void turn.sendChat(text)}
+                onRetry={() => void turn.sendChat(null)}
+                onRunCommand={runPanelCommand}
                 contextStrip={
                   <ContextStrip analysis={analysis} availableRadii={data.availableRadii} onChange={handleAnalysisChange} />
                 }

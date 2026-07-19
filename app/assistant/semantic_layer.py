@@ -70,6 +70,15 @@ AVAILABLE_TOOLS = [
         "name": "suggest_followups",
         "description": "Suggest deterministic follow-up questions.",
     },
+    {
+        "name": "update_filters",
+        "description": (
+            "Change the dashboard's analysis filters WITHOUT running an analysis. "
+            "Pass any of: radius_m, analysis_start_date, analysis_end_date, "
+            "offense_category (PROPERTY/PERSON/SOCIETY, or ALL for all reported), "
+            "layer (reported/arrests/calls)."
+        ),
+    },
 ]
 
 

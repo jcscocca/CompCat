@@ -218,7 +218,7 @@ export type AssistantStreamEvent =
   | { event: "status"; data: { label?: string } }
   | { event: "replace"; data: { text?: string } }
   | { event: "done"; data: Record<string, unknown> }
-  | { event: "error"; data: { message?: string } };
+  | { event: "error"; data: { message?: string; code?: string } };
 
 export type TemporalProfile = {
   hour_counts: number[]; // length 24, local hour 0–23

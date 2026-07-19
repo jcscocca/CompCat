@@ -201,14 +201,12 @@ type AssistantHandlers = {
   onEvent: (event: AssistantStreamEvent) => void;
 };
 
-export async function streamAssistantChat(
-  payload: {
-    messages: AssistantMessage[];
-    dashboard_state: AssistantDashboardState;
-  },
+async function streamAssistantSse(
+  path: string,
+  payload: unknown,
   handlers: AssistantHandlers,
 ): Promise<void> {
-  const response = await fetch("/assistant/chat", {
+  const response = await fetch(path, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -234,6 +232,31 @@ export async function streamAssistantChat(
   }
   buffer += decoder.decode();
   flushAssistantEvents(buffer, handlers.onEvent, true);
+}
+
+export function streamAssistantChat(
+  payload: {
+    messages: AssistantMessage[];
+    dashboard_state: AssistantDashboardState;
+  },
+  handlers: AssistantHandlers,
+): Promise<void> {
+  return streamAssistantSse("/assistant/chat", payload, handlers);
+}
+
+export type AssistantCommandName =
+  | "analyze_places"
+  | "compare_places"
+  | "add_place"
+  | "select_places"
+  | "update_filters"
+  | "suggest_followups";
+
+export function streamAssistantCommand(
+  payload: { command: AssistantCommandName; arguments?: Record<string, unknown> },
+  handlers: AssistantHandlers,
+): Promise<void> {
+  return streamAssistantSse("/assistant/commands", payload, handlers);
 }
 
 function flushAssistantEvents(

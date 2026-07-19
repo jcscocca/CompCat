@@ -17,7 +17,17 @@ from app.assistant.llm_client import (
     FailoverLlmClient,
     OpenAiLlmClient,
 )
-from app.assistant.schemas import AssistantChatRequest, AssistantStreamEvent
+from app.assistant.schemas import (
+    AssistantChatRequest,
+    AssistantCommandRequest,
+    AssistantStreamEvent,
+)
+from app.assistant.summaries import build_tool_summary
+from app.assistant.tools import (
+    AssistantClarification,
+    AssistantToolError,
+    execute_tool,
+)
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.ratelimit import get_rate_limiter
@@ -106,7 +116,77 @@ async def assistant_chat(
         except Exception:
             logger.exception("assistant turn failed mid-stream")
             yield _sse_event(
-                AssistantStreamEvent(event="error", data={"message": _UNREACHABLE_MESSAGE})
+                AssistantStreamEvent(
+                    event="error", data={"message": _UNREACHABLE_MESSAGE, "code": "internal"}
+                )
+            )
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+_COMMAND_FAILED_MESSAGE = "That didn't go through. Try again in a moment."
+
+
+@router.post("/assistant/commands")
+async def assistant_command(
+    request: AssistantCommandRequest,
+    user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> StreamingResponse:
+    settings = get_settings()
+    if settings.rate_limit_enabled:
+        limiter = get_rate_limiter()
+        wait = limiter.try_take(
+            "assistant_commands",
+            user_id_hash,
+            capacity=settings.rate_limit_assistant_commands_per_hour,
+            per_seconds=3600.0,
+        )
+        if wait > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="Command request limit reached for this session — please retry later.",
+                headers={"Retry-After": str(max(1, int(wait)))},
+            )
+    # No global daily counter here: commands never touch the LLM, and the burst
+    # middleware already caps per-IP volume.
+
+    async def event_stream() -> AsyncIterator[str]:
+        yield _sse_event(
+            AssistantStreamEvent(
+                event="meta", data={"mode": "command", "command": request.command}
+            )
+        )
+        try:
+            try:
+                tool_result = execute_tool(
+                    session, user_id_hash, request.command, dict(request.arguments)
+                )
+            except AssistantClarification as exc:
+                yield _sse_event(AssistantStreamEvent(event="token", data={"delta": str(exc)}))
+                yield _sse_event(AssistantStreamEvent(event="done", data={}))
+                return
+            except (AssistantToolError, ValueError) as exc:
+                yield _sse_event(
+                    AssistantStreamEvent(
+                        event="error", data={"message": str(exc), "code": "tool_error"}
+                    )
+                )
+                return
+            yield _sse_event(AssistantStreamEvent(event="tool", data=tool_result))
+            yield _sse_event(
+                AssistantStreamEvent(
+                    event="token", data={"delta": build_tool_summary(tool_result)}
+                )
+            )
+            yield _sse_event(AssistantStreamEvent(event="done", data={}))
+        except Exception:
+            logger.exception("assistant command failed")
+            yield _sse_event(
+                AssistantStreamEvent(
+                    event="error",
+                    data={"message": _COMMAND_FAILED_MESSAGE, "code": "internal"},
+                )
             )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

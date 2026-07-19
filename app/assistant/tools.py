@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy.orm import Session
 
 from app.analysis.area_baselines import load_mcpp_areas, load_mcpp_polygons
@@ -107,6 +107,26 @@ class ComparePlacesByNameArgs(BaseModel):
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
     layer: str = "reported"
+
+
+class UpdateFiltersArgs(BaseModel):
+    radius_m: int | None = Field(default=None, ge=50, le=5000)
+    analysis_start_date: date | None = None
+    analysis_end_date: date | None = None
+    # "" or "ALL" clears to all-reported (echoed as None, matching _settings_used).
+    # ALL exists because the chat path (_tool_arguments) strips "" from arguments.
+    offense_category: Literal["", "ALL", "PROPERTY", "PERSON", "SOCIETY"] | None = None
+    layer: Literal["reported", "arrests", "calls"] | None = None
+
+    @model_validator(mode="after")
+    def _dates_ordered(self) -> UpdateFiltersArgs:
+        if (
+            self.analysis_start_date is not None
+            and self.analysis_end_date is not None
+            and self.analysis_start_date > self.analysis_end_date
+        ):
+            raise ValueError("start date must be on or before end date")
+        return self
 
 
 def _require_analysis_window(
@@ -312,13 +332,36 @@ def _compare_places(
     }
 
 
+def _update_filters(args: UpdateFiltersArgs) -> dict[str, Any]:
+    patch: dict[str, Any] = {}
+    if args.radius_m is not None:
+        patch["radius_m"] = args.radius_m
+    if args.analysis_start_date is not None:
+        patch["analysis_start_date"] = args.analysis_start_date.isoformat()
+    if args.analysis_end_date is not None:
+        patch["analysis_end_date"] = args.analysis_end_date.isoformat()
+    if args.offense_category is not None:
+        patch["offense_category"] = (
+            args.offense_category
+            if args.offense_category in ("PROPERTY", "PERSON", "SOCIETY")
+            else None
+        )
+    if args.layer is not None:
+        patch["layer"] = args.layer
+    if not patch:
+        raise AssistantClarification(
+            "Tell me which filter to change — radius, dates, categories, or layer."
+        )
+    return {"patch": patch}
+
+
 def execute_tool(
     session: Session,
     user_id_hash: str,
     tool_name: str,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    # The agent-advertised menu (semantic_layer.AVAILABLE_TOOLS) is the six PoC tools.
+    # The agent-advertised menu (semantic_layer.AVAILABLE_TOOLS) is the seven PoC tools.
     # The run_place_analysis / get_neighborhood_analysis / get_incident_details branches below
     # are intentionally retained-but-unadvertised: analyze_places folds them in for the agent,
     # while the granular branches stay callable for existing tests and non-agent paths.
@@ -401,6 +444,10 @@ def execute_tool(
         elif tool_name == "analyze_places":
             args = AnalyzePlacesArgs.model_validate(arguments)
             result = _analyze_places(session, user_id_hash, args)
+            validated_arguments = args.model_dump(mode="json")
+        elif tool_name == "update_filters":
+            args = UpdateFiltersArgs.model_validate(arguments)
+            result = _update_filters(args)
             validated_arguments = args.model_dump(mode="json")
         else:
             raise AssistantToolError(f"Unknown assistant tool: {tool_name}")
