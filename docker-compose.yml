@@ -38,7 +38,11 @@ services:
       MCA_SESSION_SECRET: ${MCA_SESSION_SECRET:-local-docker-session-secret}
       MCA_SESSION_COOKIE_SECURE: "${MCA_SESSION_COOKIE_SECURE:-false}"
       MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS: "${MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS:-false}"
-      MCA_ADMIN_INGEST_TOKEN: ${MCA_ADMIN_INGEST_TOKEN:-local-admin-token}
+      # No fallback on purpose: unset leaves the token empty, and the admin ingest
+      # route rejects every request when it is empty. A Compose stack that never
+      # sets it therefore ships with the endpoint closed rather than open behind a
+      # publicly-known string.
+      MCA_ADMIN_INGEST_TOKEN: ${MCA_ADMIN_INGEST_TOKEN:-}
       MCA_LLM_BASE_URL: ${MCA_LLM_BASE_URL:-http://127.0.0.1:8080/v1}
       MCA_LLM_MODEL: ${MCA_LLM_MODEL:-gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k}
       # Assistant failover (used only when both fallback vars are set).

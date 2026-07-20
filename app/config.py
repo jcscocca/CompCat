@@ -5,8 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_USER_HASH_SALT = "local-demo-salt"
 DEFAULT_SESSION_SECRET = "local-dashboard-session-secret"
-# Matches the guessable fallback baked into docker-compose.yml so the production
-# boot validator rejects exactly what the local Compose stack ships with.
+# Compose no longer defaults to this, but the string shipped publicly for long
+# enough to linger in older .env files — the production boot validator keeps
+# rejecting it.
 DEFAULT_ADMIN_INGEST_TOKEN = "local-admin-token"
 
 

@@ -216,12 +216,13 @@ docker compose up --build   # open http://127.0.0.1:8000
 
 ### Loading real Seattle crime data
 
-Ingest a recent window of real Seattle SPD open data through the admin endpoint (requires
-`MCA_ADMIN_INGEST_TOKEN`; the Compose stack sets it to `local-admin-token`):
+Ingest a recent window of real Seattle SPD open data through the admin endpoint. It requires
+`MCA_ADMIN_INGEST_TOKEN`, which has no default — the endpoint rejects every request until you
+set one (e.g. `export MCA_ADMIN_INGEST_TOKEN=$(openssl rand -hex 24)` before starting the stack):
 
 ```bash
 curl --fail --show-error -X POST \
-  -H "X-Admin-Token: local-admin-token" \
+  -H "X-Admin-Token: $MCA_ADMIN_INGEST_TOKEN" \
   "http://127.0.0.1:8000/admin/crime/ingest/socrata?limit=5000&offset=0&start_date=2026-04-01&end_date=2026-06-22"
 ```
 
@@ -250,7 +251,7 @@ salt/secret and forces secure cookies.
 | `MCA_STATIC_DASHBOARD_DIR` | `app/static/dashboard` | Where the built dashboard is served from. |
 | `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` | `false` | Surface the personal timeline upload mode (internal/demo). |
 | `MCA_RAW_UPLOAD_RETENTION` | `false` | Keep raw uploads instead of deleting them after normalization. |
-| `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. The guessable Compose default (`local-admin-token`) is rejected at boot in production. |
+| `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. No default anywhere, including Compose: while unset the endpoint rejects every request. The formerly-shipped `local-admin-token` is still rejected at boot in production. |
 | `MCA_CRIME_RADII_M` | `[250,500,1000]` | Default analysis radii in meters. |
 | `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL. |
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
