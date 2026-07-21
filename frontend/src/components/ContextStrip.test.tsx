@@ -18,29 +18,37 @@ afterEach(cleanup);
 
 function setup(overrides: Partial<AnalysisSettings> = {}) {
   const onChange = vi.fn();
-  render(
+  const result = render(
     <ContextStrip
       analysis={{ ...analysis, ...overrides }}
       availableRadii={[250, 500, 1000]}
       onChange={onChange}
+      locationControls={<div data-testid="location-controls">Saved location controls</div>}
     />,
   );
-  return { onChange };
+  return { ...result, onChange };
 }
 
 describe("ContextStrip", () => {
   it("summarizes the active context", () => {
-    setup({ offenseCategory: "PROPERTY", layer: "arrests" });
+    const { container } = setup({ offenseCategory: "PROPERTY", layer: "arrests" });
     const toggle = screen.getByRole("button", { name: /analysis context/i });
-    expect(toggle).toHaveTextContent("2026-01-01 – 2026-07-19");
-    expect(toggle).toHaveTextContent("250 m");
-    expect(toggle).toHaveTextContent("Property");
-    expect(toggle).toHaveTextContent("Arrests");
+    expect(toggle).toHaveTextContent("Edit");
+    const summary = container.querySelector(".mc-ctx-summary");
+    expect(summary).toHaveTextContent("Analysis filters");
+    expect(summary).toHaveTextContent("Saved location controls");
+    expect(summary).toHaveTextContent("2026-01-01 – 2026-07-19");
+    expect(summary).toHaveTextContent("250 m");
+    expect(summary).toHaveTextContent("Property");
+    expect(summary).toHaveTextContent("Arrests");
   });
 
   it("opens the editor on click and patches the radius", () => {
-    const { onChange } = setup();
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    const { onChange, container } = setup();
+    const toggle = screen.getByRole("button", { name: /analysis context/i });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveTextContent("Close");
+    expect(container.querySelector(".mc-ctx-summary-values")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(onChange).toHaveBeenCalledWith({ radiusM: 500 });
   });
@@ -120,6 +128,16 @@ describe("ContextStrip", () => {
   it("shows the calls layer disclosure", () => {
     setup({ layer: "calls" });
     expect(screen.getByRole("note")).toHaveTextContent(/requests for service, not confirmed incidents/);
+    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    expect(screen.queryByRole("group", { name: "Incident categories" })).not.toBeInTheDocument();
+    expect(screen.queryByText("All reported")).not.toBeInTheDocument();
+  });
+
+  it("uses arrest-specific category copy", () => {
+    setup({ layer: "arrests" });
+    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    expect(screen.getByRole("group", { name: "Arrest categories" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All arrests" })).toBeInTheDocument();
   });
 
   it("has no layer disclosure for the reported layer", () => {

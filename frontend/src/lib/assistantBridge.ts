@@ -37,10 +37,14 @@ export function interpretToolResult(data: {
     case "compare_places": {
       const placeIds = Array.isArray(result.place_ids) ? (result.place_ids as string[]) : [];
       const comparison = (result.comparison as SiteComparison) ?? null;
+      const neighborhood = (result.neighborhood as NeighborhoodAnalysis) ?? null;
+      const incidents = (result.incidents as IncidentDetailsResponse) ?? null;
       return {
         selection: { mode: "replace", ids: placeIds },
         settings: settingsFrom(result.settings_used as SettingsUsed),
         comparison,
+        neighborhood,
+        incidents,
         refetchSummary: true,
         ...(Array.isArray(result.badges) ? { badges: result.badges as BadgeDescriptor[] } : {}),
         card: {
@@ -49,8 +53,8 @@ export function interpretToolResult(data: {
           placeIds,
           settings: (result.settings_used as SettingsUsed) ?? {},
           comparison,
-          neighborhood: null,
-          incidents: null,
+          neighborhood,
+          incidents,
         },
       };
     }

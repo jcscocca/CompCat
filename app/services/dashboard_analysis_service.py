@@ -38,7 +38,7 @@ def analyze_selected_places(
     nibrs_group: str | None,
     sources: Sequence[str] | None = None,
     layer: str | None = None,
-) -> dict[str, int]:
+) -> dict[str, int | str | None]:
     validate_date_range(analysis_start_date, analysis_end_date)
     clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     incidents = _filtered_incidents(
@@ -59,6 +59,7 @@ def analyze_selected_places(
         analysis_start_date=analysis_start_date,
         analysis_end_date=analysis_end_date,
     )
+    run_id: str | None = None
     if points is None:
         # Points resolve to synthetic, non-persisted clusters (no real place_cluster_id),
         # so there is nothing valid to attach a PlaceCrimeSummary/AnalysisRun audit row to.
@@ -75,13 +76,17 @@ def analyze_selected_places(
             nibrs_group=nibrs_group,
             layer=layer,
         )
+        run_id = run.id
         models = [_summary_model(summary) for summary in summaries]
         for model in models:
             model.analysis_run_id = run.id
             model.layer = layer
         session.add_all(models)
         session.commit()
-    return {"summary_count": len(summaries)}
+    # Callers that need a run-scoped artifact must use the id created by this exact
+    # invocation. Looking up the user's "latest" run after commit is race-prone when
+    # two analysis requests overlap.
+    return {"summary_count": len(summaries), "analysis_run_id": run_id}
 
 
 def compare_selected_places(

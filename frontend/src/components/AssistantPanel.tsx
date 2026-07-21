@@ -32,12 +32,18 @@ type Props = {
   /** Keyed by card object identity, not thread index — the thread cap drops oldest items
    * and shifts indices, but card references survive the slice. */
   expandedCard: AnalysisCardData | null;
+  /** The card that still matches the live scope; older frozen cards remain readable but
+   * are labeled as previous analysis instead of looking current. */
+  currentCard?: AnalysisCardData | null;
   onCardExpandChange: (card: AnalysisCardData, expanded: boolean) => void;
   /** A badge-tap focus request. Wrapped in a fresh object per tap so re-focusing the SAME
    * card (object identity unchanged) still re-fires the scroll effect below. */
   focusCard?: { card: AnalysisCardData } | null;
   exportHrefBase: string;
   contextStrip?: ReactNode;
+  /** Desktop-only pane controls live with the pane identity instead of in a separate
+   * size-mode strip. Mobile continues to use the bottom-sheet grabber. */
+  paneActions?: ReactNode;
   /** Dashboard error string (run/rename/save/export failures) announced on the rail —
    * the retired Compare panel used to be the visible home for these. */
   errorLine?: string;
@@ -59,7 +65,7 @@ const ONBOARDING_ACTIONS: SuggestedAction[] = [
 
 const OFFLINE_COMPOSER_HINT = "Tabby can't reach the case files — chips and filters still work.";
 
-const GREETED_KEY = "wp-copper-greeted";
+const GREETED_KEY = "compcat.tabby.greeted";
 
 export function AssistantPanel({
   items,
@@ -76,10 +82,12 @@ export function AssistantPanel({
   followupChips,
   onFollowupChip,
   expandedCard,
+  currentCard,
   onCardExpandChange,
   focusCard,
   exportHrefBase,
   contextStrip,
+  paneActions,
   errorLine,
 }: Props) {
   const [input, setInput] = useState("");
@@ -133,6 +141,7 @@ export function AssistantPanel({
           <span className="mc-dock-role">case desk · analyst</span>
         </h3>
         <span className="mc-dock-status">{busy ? "Checking the files…" : "At the desk"}</span>
+        {paneActions}
       </div>
 
       <div className="mc-dock-log" aria-live="polite">
@@ -175,6 +184,7 @@ export function AssistantPanel({
                 <AnalysisCard
                   card={item.card}
                   expanded={expandedCard === item.card}
+                  historical={currentCard !== undefined && currentCard !== item.card}
                   onExpandChange={(next) => onCardExpandChange(item.card, next)}
                   exportHrefBase={exportHrefBase}
                 />

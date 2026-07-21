@@ -3,7 +3,7 @@ import type { SheetSnap } from "../types";
 export const DRAWER_MIN = 340;
 export const DRAWER_DEFAULT = 400;
 export const DRAWER_WIDE = 640;
-export const DRAWER_PEEK = 84;
+export const DRAWER_RAIL = 48;
 export const DRAWER_RESIZE_STEP = 24;
 // Focus mode (and manual drag) always leave this much live map at the left edge.
 export const MAP_STRIP_MIN = 96;
@@ -15,7 +15,7 @@ export const FOCUS_CHROME_MIN = 240;
 // Must match the `@media (max-width:760px)` breakpoint in styles/mapWorkspace.css.
 export const MOBILE_MAX_WIDTH = 760;
 
-export type DrawerPreset = "peek" | "default" | "wide" | "focus";
+export type DrawerPreset = "default" | "wide";
 
 export const SHEET_SNAPS = ["bar", "half", "full"] as const;
 

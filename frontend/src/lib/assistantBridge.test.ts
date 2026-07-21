@@ -14,12 +14,16 @@ describe("interpretToolResult", () => {
           offense_category: "PROPERTY",
         },
         comparison: { overview: { summary_text: "more incidents at a" } },
+        neighborhood: { radius_m: 500, places: [], pairwise: [] },
+        incidents: { incidents: [], returned_count: 0, total_count: 0, limit: 100, radius_m: 500 },
       },
     });
     expect(effect).toEqual({
       selection: { mode: "replace", ids: ["a", "b"] },
       settings: { radiusM: 500, startDate: "2026-01-01", endDate: "2026-06-30", offenseCategory: "PROPERTY" },
       comparison: { overview: { summary_text: "more incidents at a" } },
+      neighborhood: { radius_m: 500, places: [], pairwise: [] },
+      incidents: { incidents: [], returned_count: 0, total_count: 0, limit: 100, radius_m: 500 },
       refetchSummary: true,
       card: {
         runId: null,
@@ -32,8 +36,8 @@ describe("interpretToolResult", () => {
           offense_category: "PROPERTY",
         },
         comparison: { overview: { summary_text: "more incidents at a" } },
-        neighborhood: null,
-        incidents: null,
+        neighborhood: { radius_m: 500, places: [], pairwise: [] },
+        incidents: { incidents: [], returned_count: 0, total_count: 0, limit: 100, radius_m: 500 },
       },
     });
   });

@@ -1,6 +1,6 @@
 Reference for the CompCat Analyst — the optional chat assistant that is grounded in the user's current dashboard data and answers questions about reported SPD incident context.
 
-> Verified against `5641377` (2026-07-12).
+> Verified against `2d6d4f3` (2026-07-19).
 
 ## Persona — "Tabby, case desk"
 
@@ -17,6 +17,12 @@ never claims official status; "analyst" remains the product term (and the dock's
 ---
 
 ## 1. Decision-tree architecture
+
+There are two public execution paths. Free text uses the guarded, LLM-backed decision tree at
+`POST /assistant/chat`. Suggestion chips and explicit rail controls use
+`POST /assistant/commands`, whose fixed command enum dispatches directly to `execute_tool`
+without an LLM call. Both paths stream the same structured event vocabulary and converge in the
+frontend's `useAssistantTurn` reducer; when the LLM is offline, only free text is disabled.
 
 Every user turn follows a fixed three-phase path. There is exactly **one** *planning* LLM call
 per turn (a *classify-and-plan* call), and a deterministic summary or answer is always produced
@@ -164,7 +170,7 @@ given deployment.
 
 ## 3. Toolbox
 
-The six tools advertised to the LLM via `AVAILABLE_TOOLS` in `app/assistant/semantic_layer.py` are:
+The seven tools advertised to the LLM via `AVAILABLE_TOOLS` in `app/assistant/semantic_layer.py` are:
 
 | Tool name | Purpose |
 |---|---|
@@ -172,6 +178,7 @@ The six tools advertised to the LLM via `AVAILABLE_TOOLS` in `app/assistant/sema
 | `select_places` | Resolve one or more place names to saved places (creating missing ones) and set the dashboard selection; supports `replace`, `add`, `clear` modes |
 | `analyze_places` | Resolve names (or use the current selection), run the reported-incident analysis, and return neighborhood-vs-beat verdicts plus incident details |
 | `compare_places` | Resolve two or more names (or use the selection), run the analysis, and return a side-by-side comparison |
+| `update_filters` | Validate and return a client-owned radius/date/category/layer patch; never persists dashboard state |
 | `get_dashboard_summary` | Read current dashboard totals and the list of saved places (read-only) |
 | `suggest_followups` | Return a fixed list of deterministic follow-up suggestions |
 
@@ -191,19 +198,23 @@ Small local models frequently emit a `tool_call` with empty or partial `argument
 
 ---
 
-## 4. Agent-driven pane analysis
+## 4. Agent-driven rail analysis
 
-The agent influences the right-hand dashboard pane by emitting `tool` SSE events. The frontend translates these events into concrete UI state changes via `interpretToolResult` in `frontend/src/lib/assistantBridge.ts`.
+The agent influences the Tabby rail and map by emitting `tool` SSE events. The frontend translates these events into concrete UI state changes via `interpretToolResult` in `frontend/src/lib/assistantBridge.ts`.
 
 `interpretToolResult` receives the raw `{tool_name, result}` payload from a `tool` event and returns an `AssistantToolEffect` object (or `null` for read-only or unknown tools). The mapping is:
 
-- **`analyze_places`** → switches to the `"analyze"` tab, replaces the selection with the resolved place IDs, updates analysis settings (radius, date range, offense category), writes `neighborhood` and `incidents` data into the pane, and sets `refetchSummary: true`.
-- **`compare_places`** → switches to the `"compare"` tab, replaces the selection, updates settings, writes `comparison` data, and sets `refetchSummary: true`.
+- **`analyze_places`** → replaces the selection, updates analysis settings, freezes neighborhood + incident data into an inline analysis card, attaches neutral run badges, and sets `refetchSummary: true`.
+- **`compare_places`** → replaces the selection, updates settings, and freezes comparison + neighborhood + incident data into one inline comparison card so its expanded view retains baseline, trend, and incident-detail parity; it also attaches neutral run badges and refreshes the summary.
 - **`add_place`** → appends the new place ID to the selection (`mode: "add"`) and sets `refetchSummary: true`.
 - **`select_places`** → updates the selection with the mode returned by the tool (`replace`, `add`, or `clear`).
+- **`update_filters`** → applies the validated patch through the same client-owned settings reducer used by the context strip and appends a deterministic receipt.
 - **`get_dashboard_summary`, `suggest_followups`, and unknown tools** → return `null` (no pane change).
 
-`AssistantPanel.tsx` and `MapWorkspace.tsx` consume the `AssistantToolEffect` to apply these state updates.
+`useAssistantTurn` serializes chat and command streams with newest-intent-wins abort semantics.
+`AssistantPanel.tsx` renders the typed thread, while `MapWorkspace.tsx` applies
+`AssistantToolEffect`, reconciles late-arriving place IDs, owns live badge invalidation, and
+connects badge taps back to the newest matching card.
 
 ---
 
@@ -377,7 +388,7 @@ flowchart TD
     R3 -- guard trips --> R4[Stream replace event: redirect\n+ done]
     R3 -- unreachable / empty /\ndies mid-stream --> R5[Stream replace event: template summary\n+ done]
     R3 -- completes clean --> R6[Stream done event]
-    P --> Q([Frontend: interpretToolResult\nassistantBridge.ts updates pane + tab])
+    P --> Q([Frontend: interpretToolResult\nassistantBridge.ts appends card + updates map/selection])
     R4 --> Q
     R5 --> Q
     R6 --> Q

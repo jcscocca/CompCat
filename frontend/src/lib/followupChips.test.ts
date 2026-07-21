@@ -62,8 +62,8 @@ describe("followupChipsFor", () => {
 
   it("offers police reports when on another layer", () => {
     const chips = followupChipsFor("analyze", { ...settings, layer: "calls" }, [250, 500]);
-    expect(chips[2].label).toBe("Back to police reports");
-    expect(chips[2].argsPatch).toEqual({ layer: "reported" });
+    expect(chips.find((chip) => chip.label === "Back to police reports")?.argsPatch).toEqual({ layer: "reported" });
+    expect(chips.some((chip) => chip.label === "Property only")).toBe(false);
   });
 });
 

@@ -50,24 +50,23 @@ proxied.
 ## The dashboard
 
 The dashboard is the primary way to use CompCat. It is a single-page React app built around a
-full-screen MapLibre map of Seattle, with a resizable side drawer organized into three tabs —
-**Analyze**, **Compare**, and **Export** — plus a place chip strip that carries your saved places
-across the two analytic tabs.
+full-screen MapLibre map of Seattle and a persistent **Tabby rail** (a three-snap bottom sheet on
+phones). Analysis and comparison results appear as frozen cards in the rail instead of separate
+Analyze/Compare tabs.
 
-- **Place chips** — saved places appear as toggle chips at the top of the Analyze and Compare
-  tabs, each with an identity letter and color that matches its map pin (hovering a chip
-  highlights the pin). Click a chip to include or exclude a place; click **+ Add** to open the
-  manage-places dialog, where you add places four ways — search by name/address (OpenStreetMap
-  Nominatim geocoding), **Drop pin** on the map, enter latitude/longitude manually, or paste a
-  CSV — and rename or remove the places you already have.
-- **Analyze** (the default tab) — choose a date range, a radius, and an offense-category filter.
-  Analysis runs automatically for your selected places when the app loads, and re-runs on demand;
-  results include a findings summary, a crime-mix chart, the top offenses, and an incident-detail
-  table (date, category, distance, block address, incident id). Analyzed places show their radius
-  rings on the map.
-- **Compare** — with two or more places selected, compare reported-incident counts and the top
-  offense types side by side at one radius.
-- **Export** — download the Tableau-ready place-summary CSV for the current session.
+- **Place chips** — saved places appear as toggle chips at the top of the rail, each with an
+  identity letter and color that matches its map pin. Click a chip to include or exclude a place;
+  click **+ Add** to open the manage-places dialog, where you can search, drop a pin, enter
+  coordinates, paste a CSV, rename/remove places, and control export inclusion.
+- **Context strip** — the active dates, radius, offense category, and data layer stay visible
+  above Tabby's composer. Open it for exact controls, run the current selection, or copy a
+  generalized-coordinate share link.
+- **Inline analysis cards** — one selected place produces neighborhood/baseline context; two or
+  more produce the statistical comparison as well. Expanding a card reveals the frozen baseline
+  detail, monthly trend, category breakdown, incident rows, methods, and a run-scoped CSV link.
+  Neutral presence badges connect analyzed map pins back to their latest card.
+- **Exports** — card links export that exact stored run. The manage-places dialog also exposes the
+  current-session Tableau CSV and per-place privacy toggles.
 
 The map renders from a self-hosted Seattle vector-tile extract (Protomaps/OpenStreetMap data), so
 no third-party tile server ever sees where users look; if the tile artifact is missing the map
@@ -83,16 +82,18 @@ answers questions about your dashboard data. It is grounded in what you currentl
 (places, date range, radii, and offense filters) and is policy-constrained: it reports incident
 context and will refuse to label a place as safe or unsafe.
 
-Under the hood the assistant plans with a single LLM call and can invoke a small set of tools
-(`add_place`, `select_places`, `analyze_places`, `compare_places`, `get_dashboard_summary`,
-`suggest_followups`) that drive the dashboard pane. Responses stream back to the browser token by
-token.
+Under the hood free-text turns use an LLM planning call and a small tool set (`add_place`,
+`select_places`, `analyze_places`, `compare_places`, `update_filters`, `get_dashboard_summary`,
+`suggest_followups`). Chips and explicit rail controls use `POST /assistant/commands`, a
+deterministic no-LLM path that shares the same streamed tool-event contract. If the LLM endpoint
+is unavailable, free text pauses but commands, filters, cards, badges, and exports keep working.
 
 The assistant talks directly to an **OpenAI-compatible LLM endpoint** (any server exposing a
 `/chat/completions` API — llama.cpp/llama-swap, vLLM, etc.). CompCat reaches it at
 `MCA_LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`) using the model `MCA_LLM_MODEL`. If no
 endpoint is running, the rest of the dashboard works normally — only the Analyst panel is
-unavailable. See [Running the Analyst](#running-the-analyst-optional).
+limited to its deterministic controls; free-text questions pause while chips, filters, cards,
+badges, and exports continue to work. See [Running the Analyst](#running-the-analyst-optional).
 
 ## Input modes
 
@@ -287,10 +288,10 @@ design, and the roadmap — see [`docs/`](docs/README.md).
 | Sessions | `POST /sessions` |
 | Input modes | `GET /input-modes` |
 | Places | `GET /places` · `POST /places` · `POST /places/bulk` · `PATCH /places/{id}` · `DELETE /places/{id}` |
-| Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` |
-| Analyst | `POST /assistant/chat` (Server-Sent Events) |
+| Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` · `POST /dashboard/neighborhood` · `GET /dashboard/trends` · `GET /dashboard/freshness` · `GET /dashboard/beats` · `GET /dashboard/mcpp` · `POST /dashboard/incident-points` · `GET /dashboard/geocode` |
+| Analyst | `POST /assistant/chat` · `POST /assistant/commands` (Server-Sent Events) |
 | Statistical analysis (internal) | `POST /internal/analysis/sites/compare` · `GET /internal/analysis/comparisons/{id}` |
-| Exports | `GET /exports/tableau/place-summary.csv` · `statistical-comparisons.csv` |
+| Exports | `GET /exports/tableau/place-summary.csv` (optional `run_id`) |
 | Crime data | `POST /internal/crime/ingest/sample` · `POST /internal/crime/summarize` · `POST /admin/crime/ingest/socrata` |
 | Internal/demo | `POST /internal/imports` · `GET /internal/imports/{id}` · `POST /internal/imports/{id}/normalize` |
 

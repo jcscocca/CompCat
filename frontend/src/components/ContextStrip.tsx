@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { incidentNoun, layerDisclosure } from "../lib/layerCopy";
@@ -9,9 +9,12 @@ type Props = {
   analysis: AnalysisSettings;
   availableRadii: number[];
   onChange: (patch: Partial<AnalysisSettings>) => void;
-  /** Runs the deterministic analyze/compare command for the current saved places. */
+  /** Runs the deterministic analyze/compare command for the current locations. */
   onRun?: () => void;
   runDisabled?: boolean;
+  /** Saved-location selection belongs to the analysis context, so it is composed into
+   * this single control instead of living in a second toolbar at the top of the rail. */
+  locationControls?: ReactNode;
   /** Copies the share link and reports success/failure (the caller owns the URL + the
    * clipboard write); the strip only owns the transient status note. */
   onCopyLink?: () => Promise<boolean> | boolean;
@@ -19,10 +22,18 @@ type Props = {
 
 /** One-line active-context summary above Tabby's input. This is literally the
  * dashboard_state Tabby sees each turn — tapping it opens inline editors. */
-export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDisabled, onCopyLink }: Props) {
+export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDisabled, locationControls, onCopyLink }: Props) {
   const [open, setOpen] = useState(false);
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
   const disclosure = layerDisclosure(analysis.layer);
+  const showCategories = analysis.layer !== "calls";
+  const activeCategoryLabel = categoryLabel(analysis.offenseCategory, analysis.layer);
+  const contextLabel = [
+    `${analysis.startDate} – ${analysis.endDate}`,
+    `${analysis.radiusM} m`,
+    ...(showCategories ? [activeCategoryLabel] : []),
+    incidentNoun(analysis.layer).pluralCap,
+  ].join(", ");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyResetRef = useRef<number | null>(null);
   useEffect(() => () => { if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current); }, []);
@@ -37,19 +48,42 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
 
   return (
     <div className="mc-ctx">
-      <button
-        type="button"
-        className="mc-ctx-summary"
-        aria-expanded={open}
-        aria-label={`Analysis context: ${analysis.startDate} – ${analysis.endDate}, ${analysis.radiusM} m, ${categoryLabel(analysis.offenseCategory)}, ${incidentNoun(analysis.layer).pluralCap}`}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span>{analysis.startDate} – {analysis.endDate}</span>
-        <span>· {analysis.radiusM} m</span>
-        <span>· {categoryLabel(analysis.offenseCategory)}</span>
-        <span>· {incidentNoun(analysis.layer).pluralCap}</span>
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-      </button>
+      <div className={`mc-ctx-summary${open ? " is-open" : ""}`}>
+        <span className="mc-ctx-summary-head">
+          <span className="mc-ctx-summary-label">
+            <svg className="mc-ctx-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            Analysis filters
+          </span>
+          <button
+            type="button"
+            className="mc-ctx-summary-action"
+            aria-expanded={open}
+            aria-label={`Analysis context filters: ${contextLabel}`}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? "Close" : "Edit"}
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+            </svg>
+          </button>
+        </span>
+        {locationControls ? (
+          <span className="mc-ctx-locations">
+            <span className="mc-ctx-locations-label">Locations</span>
+            {locationControls}
+          </span>
+        ) : null}
+        {!open ? (
+          <span className="mc-ctx-summary-values">
+            <span className="mc-ctx-value">{analysis.startDate} – {analysis.endDate}</span>
+            <span className="mc-ctx-value">{analysis.radiusM} m</span>
+            {showCategories ? <span className="mc-ctx-value">{activeCategoryLabel}</span> : null}
+            <span className="mc-ctx-value">{incidentNoun(analysis.layer).pluralCap}</span>
+          </span>
+        ) : null}
+      </div>
 
       {disclosure ? <p className="mc-layer-note" role="note">{disclosure}</p> : null}
 
@@ -72,16 +106,18 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
               ))}
             </div>
           </div>
-          <div className="mc-field">
-            <label id="ctx-category-label">Incident categories</label>
-            <div className="mc-chips" role="group" aria-labelledby="ctx-category-label">
-              {CATEGORIES.map((category) => (
-                <button key={category.value || "all"} type="button" className={`mc-chip${analysis.offenseCategory === category.value ? " on" : ""}`} aria-pressed={analysis.offenseCategory === category.value} onClick={() => onChange({ offenseCategory: category.value })}>
-                  {category.label}
-                </button>
-              ))}
+          {showCategories ? (
+            <div className="mc-field">
+              <label id="ctx-category-label">{analysis.layer === "arrests" ? "Arrest categories" : "Incident categories"}</label>
+              <div className="mc-chips" role="group" aria-labelledby="ctx-category-label">
+                {CATEGORIES.map((category) => (
+                  <button key={category.value || "all"} type="button" className={`mc-chip${analysis.offenseCategory === category.value ? " on" : ""}`} aria-pressed={analysis.offenseCategory === category.value} onClick={() => onChange({ offenseCategory: category.value })}>
+                    {category.value ? category.label : activeCategoryLabel}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
           <div className="mc-ctx-actions">
             <button type="button" className="mc-cta" disabled={runDisabled} onClick={() => onRun?.()}>Run analysis</button>
             <button type="button" className="mc-link-copy" onClick={() => void handleCopyLink()}>Copy link</button>

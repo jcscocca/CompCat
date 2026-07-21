@@ -26,4 +26,17 @@ describe("LayerToggle", () => {
     expect(screen.getByRole("button", { name: /^arrests$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /911 calls/i })).toBeInTheDocument();
   });
+
+  it("disables layers confirmed to have no loaded data", () => {
+    render(
+      <LayerToggle
+        layer="reported"
+        onChange={vi.fn()}
+        availability={{ reported: true, arrests: false, calls: false }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /arrests/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /911 calls/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reported incidents/i })).toBeEnabled();
+  });
 });

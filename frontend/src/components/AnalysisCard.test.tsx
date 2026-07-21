@@ -133,14 +133,22 @@ describe("categoryCounts", () => {
 });
 
 describe("AnalysisCard", () => {
-  it("compact analyze card shows the settings line, one line per place, and no expanded sections", () => {
+  it("labels a frozen card that no longer matches the live scope as previous analysis", () => {
+    const { container } = render(
+      <AnalysisCard card={analyzeCard()} expanded={false} historical onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />,
+    );
+    expect(screen.getByText("Previous analysis")).toBeInTheDocument();
+    expect(container.querySelector(".mc-result-card")).toHaveClass("is-historical");
+  });
+
+  it("compact analyze card is a result summary without duplicated filters or analysis prose", () => {
     render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
-    const settings = screen.getByText(/250 m/);
-    expect(settings).toHaveTextContent("2021-07-01 – 2026-06-30");
-    expect(settings).toHaveTextContent("All reported");
-    expect(settings).toHaveTextContent("Reported incidents");
-    // one verdict line per neighborhood place (frozen verdict-copy helper)
-    expect(screen.getAllByText(/reported incident rate is/)).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "n0" })).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("reported incidents")).toBeInTheDocument();
+    expect(screen.queryByText(/2021-07-01/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reported incident rate is/)).not.toBeInTheDocument();
     // compact: no trend/incident/methods sections
     expect(screen.queryByTestId("trend-section")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/near selected places/)).not.toBeInTheDocument();
@@ -155,6 +163,21 @@ describe("AnalysisCard", () => {
     expect(callout).toHaveTextContent(/lowest/);
   });
 
+  it("renders comparison, neighborhood trends, and incident details together when expanded", async () => {
+    render(
+      <AnalysisCard
+        card={compareCard({ neighborhood: neighborhood("Test Hill", "North"), incidents: incidents() })}
+        expanded
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+    expect(screen.getAllByText("Pike").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/reported incident rate is/)).toHaveLength(2);
+    expect(await screen.findByTestId("trend-chart")).toBeInTheDocument();
+    expect(screen.getByLabelText(/near selected places/)).toBeInTheDocument();
+  });
+
   it("renders a run-scoped export link when runId is set and omits it when null", () => {
     render(<AnalysisCard card={analyzeCard({ runId: "run-9" })} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
     expect(screen.getByRole("link")).toHaveAttribute("href", `${EXPORT_BASE}?run_id=run-9`);
@@ -166,7 +189,7 @@ describe("AnalysisCard", () => {
   it("toggles expansion and renders MethodsAppendix + incident-details when expanded", () => {
     const onExpandChange = vi.fn();
     const { rerender } = render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={onExpandChange} exportHrefBase={EXPORT_BASE} />);
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
+    fireEvent.click(screen.getByRole("button", { name: /view details/i }));
     expect(onExpandChange).toHaveBeenCalledWith(true);
 
     rerender(<AnalysisCard card={analyzeCard()} expanded onExpandChange={onExpandChange} exportHrefBase={EXPORT_BASE} />);
@@ -192,7 +215,7 @@ describe("AnalysisCard", () => {
       incidents: { incidents: [incident(null, "i1"), incident(null, "i2")], returned_count: 2, total_count: 2, limit: 200, radius_m: 250 },
     });
     const { container } = render(<AnalysisCard card={card} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
-    expect(container.querySelector(".mc-card-minibar")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-result-minibar")).not.toBeInTheDocument();
     expect(screen.queryByText("Uncategorized")).not.toBeInTheDocument();
   });
 

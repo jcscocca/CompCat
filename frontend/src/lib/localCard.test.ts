@@ -41,7 +41,7 @@ function makeComparison(): SiteComparison {
 }
 
 describe("cardFromCompareResults", () => {
-  it("builds a compare card and nulls the neighborhood/incidents panes", () => {
+  it("builds a compare card with its frozen neighborhood and incident panes", () => {
     const card = cardFromCompareResults({
       comparison: makeComparison(),
       neighborhood: makeNeighborhood(),
@@ -54,9 +54,8 @@ describe("cardFromCompareResults", () => {
     expect(card!.runId).toBeNull();
     expect(card!.placeIds).toEqual(["p1", "p2"]);
     expect(card!.comparison).not.toBeNull();
-    // Compare cards carry only the ranking pane (mirrors the assistant bridge's shape).
-    expect(card!.neighborhood).toBeNull();
-    expect(card!.incidents).toBeNull();
+    expect(card!.neighborhood).toEqual(makeNeighborhood());
+    expect(card!.incidents).toEqual(makeIncidents());
   });
 
   it("builds an analyze card from neighborhood-only results", () => {

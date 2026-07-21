@@ -16,13 +16,18 @@ describe("IncidentDisclosure", () => {
   it("shows shown + citywide redacted counts", () => {
     render(<IncidentDisclosure returnedCount={42} totalCount={42} unmappableCitywideCount={6} limit={5000} />);
     const chip = screen.getByRole("status");
-    expect(chip).toHaveTextContent("42 incidents shown");
+    expect(chip).toHaveTextContent("42 incidents in current map view");
     expect(chip).toHaveTextContent("+6 citywide with redacted location — in beat stats only");
   });
 
   it("discloses truncation when the cap bites", () => {
     render(<IncidentDisclosure returnedCount={5000} totalCount={12340} unmappableCitywideCount={0} limit={5000} />);
-    expect(screen.getByRole("status")).toHaveTextContent("most recent 5,000 of 12,340 shown");
+    expect(screen.getByRole("status")).toHaveTextContent("most recent 5,000 of 12,340 incidents in current map view");
+  });
+
+  it("uses the active layer noun", () => {
+    render(<IncidentDisclosure returnedCount={8} totalCount={8} unmappableCitywideCount={0} limit={5000} itemLabel="911 calls" />);
+    expect(screen.getByRole("status")).toHaveTextContent("8 911 calls in current map view");
   });
 
   it("omits the redaction clause when nothing was redacted", () => {

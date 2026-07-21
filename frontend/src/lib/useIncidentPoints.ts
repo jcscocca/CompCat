@@ -51,9 +51,11 @@ function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
 export function useIncidentPoints({
   bounds,
   analysis,
+  enabled = true,
 }: {
   bounds: MapBounds | null;
   analysis: AnalysisSettings;
+  enabled?: boolean;
 }) {
   const [geojson, setGeojson] = useState<IncidentFeatureCollection>(EMPTY);
   const [counts, setCounts] = useState({ returned: 0, total: 0, unmappable: 0, limit: 0 });
@@ -64,7 +66,13 @@ export function useIncidentPoints({
   const { startDate, endDate, offenseCategory, layer } = analysis;
 
   useEffect(() => {
-    if (!bounds) {
+    if (!bounds || !enabled) {
+      if (!enabled) {
+        abortRef.current?.abort();
+        setGeojson(EMPTY);
+        setCounts({ returned: 0, total: 0, unmappable: 0, limit: 0 });
+        setError(null);
+      }
       return undefined;
     }
     if (timerRef.current) {
@@ -106,7 +114,7 @@ export function useIncidentPoints({
       }
       controller.abort();
     };
-  }, [bounds, startDate, endDate, offenseCategory, layer]);
+  }, [bounds, startDate, endDate, offenseCategory, layer, enabled]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 

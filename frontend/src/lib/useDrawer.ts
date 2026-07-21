@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { clampWidth, drawerMax, DRAWER_DEFAULT, DRAWER_WIDE, type DrawerPreset } from "./drawer";
+import { clampWidth, DRAWER_DEFAULT, DRAWER_WIDE, type DrawerPreset } from "./drawer";
 import { loadDrawerState, saveDrawerState } from "./drawerStorage";
 import type { DrawerState, SheetSnap } from "../types";
 
@@ -57,10 +57,8 @@ export function useDrawer(): DrawerController {
       }),
     onPreset: (preset) =>
       setDrawer((current) => {
-        if (preset === "peek") return { ...current, collapsed: true, snap: "bar" };
         const snap = current.snap === "bar" ? "half" : current.snap;
         lastExpandedRef.current = snap;
-        if (preset === "focus") return { collapsed: false, widthPx: drawerMax(), snap };
         return { collapsed: false, widthPx: clampWidth(preset === "wide" ? DRAWER_WIDE : DRAWER_DEFAULT), snap };
       }),
     onSnap: (snap) =>

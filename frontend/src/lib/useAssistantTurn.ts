@@ -10,6 +10,7 @@ import type { AssistantDashboardState, AssistantStreamEvent } from "../types";
 
 export const OFFLINE_MESSAGE =
   "Tabby can't reach the case files right now. Your data is unaffected — the rest of CompCat works.";
+export const COMMAND_FAILURE_MESSAGE = "That command didn't go through. Try again in a moment.";
 
 type Deps = {
   dashboardState: AssistantDashboardState;
@@ -105,7 +106,7 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
         // touches `offline`. Abort rejections vary by runtime, so check both the error
         // name and the controller's own aborted flag.
         if ((error as Error)?.name === "AbortError" || controller.signal.aborted || !live()) return;
-        append({ kind: "notice", text: OFFLINE_MESSAGE });
+        append({ kind: "notice", text: kind === "chat" ? OFFLINE_MESSAGE : COMMAND_FAILURE_MESSAGE });
         if (kind === "chat") setOffline(true);
       } finally {
         // Only the live turn clears shared busy/draft — a superseded turn must not wipe
