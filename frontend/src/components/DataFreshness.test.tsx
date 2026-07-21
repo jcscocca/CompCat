@@ -47,8 +47,13 @@ describe("DataFreshness", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders nothing when the active layer has no data", () => {
-    render(<DataFreshness freshness={{ reported: empty, arrests: empty, calls: empty }} layer="reported" />);
-    expect(screen.queryByText(/data through/i)).not.toBeInTheDocument();
+  it("states when the active layer has no loaded data", () => {
+    render(<DataFreshness freshness={{ reported: empty, arrests: empty, calls: empty }} layer="reported" loaded />);
+    expect(screen.getByText("No reported SPD incidents data loaded")).toBeInTheDocument();
+  });
+
+  it("distinguishes an availability request failure from an empty layer", () => {
+    render(<DataFreshness freshness={null} layer="reported" loaded />);
+    expect(screen.getByText("Data availability unavailable")).toBeInTheDocument();
   });
 });

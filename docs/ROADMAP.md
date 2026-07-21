@@ -1,7 +1,7 @@
 # CompCat — Roadmap
 
-**Last updated:** 2026-07-09 · **Status:** canonical, living document.
-**Verified against:** base commit `5fe1da0` (routes removal — backend excision + migration 0012).
+**Last updated:** 2026-07-20 · **Status:** canonical, living document.
+**Verified against:** base commit `2d6d4f3` (Tabby-central shipped; follow-up security/ops fixes).
 
 This is the single source of truth for *where CompCat is going*. It supersedes the dated
 drafts under `docs/superpowers/` (`2026-06-26-waypoint-next-steps-roadmap.md`,
@@ -28,7 +28,9 @@ engine, neighborhood baselines, exposure model) is genuinely production-grade an
 the public dashboard, places, geocoding, exports, and the Analyst are all real and wired. A
 repo-wide marker sweep found **essentially zero in-code TODO/FIXME debt**. All of the
 planned Phase 0–3 work has now landed — the sharp edges, the analytical-invariant hardening,
-the data/ops durability, and the product-breadth items are all closed. No queued work remains.
+the data/ops durability, and the core product-breadth items are closed. Remaining work is
+focused rather than foundational: the capstone write-up, first-device acceptance, the Postgres
+soak run, and the explicitly deferred performance/methodology follow-ups below.
 
 ## Maturity snapshot
 
@@ -137,6 +139,11 @@ the data/ops durability, and the product-breadth items are all closed. No queued
 *Placeholder for the address-first product's next chapter — not yet spec'd. This is phase 2 of
 the 2026-07 address-first pivot (the routes removal — see the note at the top): with routes
 removed, the flagship experience is comparing candidate addresses.*
+
+> Historical surface note: the Compare-first and Unified Compare slices below established the
+> data contracts and components, but their tabbed presentation was superseded by the
+> Tabby-central rail on 2026-07-19. Comparison remains a first-class inline card rather than a
+> standalone tab.
 
 - **Primary scenario:** choosing where to live — compare candidate addresses side by side.
 - **Secondary scenario:** knowing your own area — understand the reported-incident context
@@ -253,12 +260,11 @@ spec → plan → PR.*
   adjust radius / dates / category / layer conversationally ("increase radius to 500")
   and re-run; changes sync the dashboard controls so they stick across turns. Spec:
   `docs/superpowers/specs/2026-07-10-analyst-knob-control-design.md`.
-- [x] **Follow-up — Analyst persona "Copper" + upgraded dock:** the Analyst presents as
-  Copper, a fictional case-desk basset hound (noir bust; no SPD insignia, never claims
-  official status) — avatar header + in-voice status, greeting empty state with a third
-  deictic chip, one-time first-visit pulse (reduced-motion safe), reworded safety redirect,
-  and a "From the reports:" lead-in on analyze/compare summaries. Chrome + framing copy
-  only; guards, data content, and the planning prompt untouched. Spec:
+- [x] **Follow-up — Analyst persona, now Tabby:** the original Copper chrome shipped first;
+  Tabby-central renamed the case-desk persona to Tabby, a fictional records cat (no SPD
+  insignia, never claims official status). The avatar header, in-voice status, greeting,
+  first-visit pulse, safety redirect, and layer-aware analysis lead-ins remain chrome + framing
+  only; guards, data content, and the planning prompt are unchanged. Historical spec:
   `docs/superpowers/specs/2026-07-10-analyst-copper-persona-design.md`.
 - [ ] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
   baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
@@ -286,9 +292,9 @@ spec → plan → PR.*
   `docs/IOS.md` Build & run (pick signing: free Apple ID = 7-day re-sign vs $99
   account) and the 6-item on-device checklist. Item 4 is the empirical unknown:
   Tabby's SSE must stream token-by-token through `tailscale serve`, not buffer.
-- [ ] **Slice B — phone-first redesign:** first-class phone layout for the React app
-  (navigation model, per-tab layouts, safe areas, keyboard) — own brainstorm → spec →
-  plan; also upgrades mobile web for the public demo.
+- [x] **Slice B — phone-first redesign:** shipped through the Tabby-central mobile sheet:
+  bar/half/full snap heights, handle-only dragging with velocity-biased release, safe areas,
+  `visualViewport` keyboard handling, sheet-aware map padding, and a single thread scroll owner.
 - [ ] **Slice C — niceties:** friendly offline screen, haptics, share-sheet exports,
   app shortcuts.
 
@@ -315,12 +321,33 @@ surface. Methodology (anchored citywide indexing, rolling mean, inference limits
 durable reference: `docs/analysis/trend-indexing-method.md`.*
 
 - [x] **Trend section — reported volume over time:** monthly MCPP-vs-citywide series on the
-  unified Compare surface's per-address context (12-month rolling mean + anchored-indexed
+  expanded inline analysis/comparison cards (12-month rolling mean + anchored-indexed
   citywide overlay, neutral marks, layer-aware copy, suppression rules for short windows /
   degenerate anchors); lazy `GET /dashboard/trends` returning raw zero-filled series with a
   shared-citywide TTL cache; safety guard broadened for trend-flavored asks
   (`worse`/`empeorando` + place context). Spec/plan:
   `docs/superpowers/{specs,plans}/2026-07-16-analyze-trend-section*`. (2026-07-16)
+
+## Tabby-central rail (2026-07-19)
+*Seven shipped slices; spec: `docs/superpowers/specs/2026-07-19-tabby-central-redesign-design.md`;
+parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md`.*
+
+- [x] **Rail-first shell + typed thread:** Tabby is the persistent desktop rail / mobile sheet;
+  user text, narration, receipts, notices, and frozen analysis cards share a session-scoped
+  thread. The context strip owns exact settings, explicit run, and generalized share links.
+- [x] **Deterministic command path:** `POST /assistant/commands` validates a fixed command enum,
+  bypasses the LLM, and shares the chat SSE reducer. Free-text failure no longer disables chips,
+  filters, cards, badges, or exports.
+- [x] **Inline cards and map presence:** analyze/compare outputs render compact or expanded with
+  run-scoped exports; neutral badges connect analyzed pins to the newest matching card and clear
+  when live context changes.
+- [x] **Proactivity + mobile mechanics:** deterministic onboarding/place-added/follow-up chips;
+  three mobile snaps, keyboard handling, and sheet-aware camera padding.
+- [x] **Legacy surface retirement:** Compare/Export tabs and rail navigation were removed after
+  the written parity pass; export privacy moved to Manage Places and current-run export moved to
+  each stored card.
+- [ ] **Follow-up:** run the first on-device iPhone acceptance and the multi-hour Postgres soak;
+  reassess the older optional Compare backlog against the card-first interaction before building it.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

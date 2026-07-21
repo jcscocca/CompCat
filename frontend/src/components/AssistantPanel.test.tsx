@@ -63,6 +63,11 @@ beforeEach(() => localStorage.clear());
 afterEach(cleanup);
 
 describe("AssistantPanel", () => {
+  it("renders pane actions in the Tabby header", () => {
+    setup({ paneActions: <button type="button">Collapse Tabby pane</button> });
+    expect(screen.getByRole("button", { name: "Collapse Tabby pane" }).closest(".mc-dock-head")).toBeInTheDocument();
+  });
+
   it("renders items by kind, including receipts and notices, plus the contextStrip slot", () => {
     setup({
       items: [
@@ -125,9 +130,10 @@ describe("AssistantPanel", () => {
         { kind: "analysis_card", card: analyzeCard },
       ] as ThreadItem[],
     });
-    expect(screen.getByText("Analysis")).toBeInTheDocument();
-    expect(screen.getByText(/250 m/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(screen.getByText("Analysis result")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Location analysis" })).toBeInTheDocument();
+    expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(onCardExpandChange).toHaveBeenCalledWith(analyzeCard, true);
   });
 
@@ -154,7 +160,7 @@ describe("AssistantPanel", () => {
       items: [{ kind: "analysis_card", card: analyzeCard }] as ThreadItem[],
     });
     expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Expand" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
   });
 
   it("renders the follow-up chip row when chips are present and forwards clicks", () => {
@@ -186,7 +192,7 @@ describe("AssistantPanel", () => {
       ] as ThreadItem[],
       draft: "Working…",
     });
-    expect(screen.getByText("Analysis")).toBeInTheDocument();
+    expect(screen.getByText("Analysis result")).toBeInTheDocument();
     expect(screen.getAllByText("Working…")).toHaveLength(1);
   });
 

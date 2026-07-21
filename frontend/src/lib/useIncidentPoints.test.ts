@@ -68,6 +68,16 @@ describe("useIncidentPoints", () => {
     expect(result.current.unmappableCitywideCount).toBe(2);
   });
 
+  it("does not fetch and clears map counts while the active layer is unavailable", async () => {
+    const { result } = renderHook(() => useIncidentPoints({ bounds: BOUNDS, analysis: ANALYSIS, enabled: false }));
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(fetchPoints).not.toHaveBeenCalled();
+    expect(result.current.limit).toBe(0);
+    expect(result.current.geojson.features).toHaveLength(0);
+  });
+
   it("collapses rapid viewport changes into one trailing fetch", async () => {
     const { rerender } = renderHook(
       ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),

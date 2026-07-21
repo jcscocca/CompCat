@@ -69,7 +69,7 @@ def analyze_dashboard_places(
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, int]:
     try:
-        return analyze_selected_places(
+        result = analyze_selected_places(
             session=session,
             user_id_hash=user_id_hash,
             place_ids=request.place_ids,
@@ -83,6 +83,9 @@ def analyze_dashboard_places(
             sources=sources_for_layer(request.layer),
             layer=request.layer,
         )
+        # Keep the public analyze response stable. The service also returns its exact
+        # run id for internal callers that create run-scoped cards/exports.
+        return {"summary_count": int(result["summary_count"])}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

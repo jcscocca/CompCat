@@ -1,8 +1,6 @@
 import { titleCase } from "../lib/addressLabel";
 import { toCompareVerdict } from "../lib/compareVerdict";
 import { countNoun, incidentNoun, REVISED_CAVEAT } from "../lib/layerCopy";
-import { categoryLabel } from "../lib/offenseCategories";
-import { aggregateHeadline } from "../lib/verdictCopy";
 import type { AnalysisCardData, IncidentDetailsResponse, LayerKey } from "../types";
 import { plotDomainMax } from "./BaselineIntervalPlot";
 import { CompareRankedList } from "./CompareRankedList";
@@ -16,6 +14,7 @@ import { TrendSection } from "./TrendSection";
 type Props = {
   card: AnalysisCardData;
   expanded: boolean;
+  historical?: boolean;
   onExpandChange: (expanded: boolean) => void;
   exportHrefBase: string;
 };
@@ -40,7 +39,7 @@ function totalIncidentCount(card: AnalysisCardData): number | null {
   return null;
 }
 
-export function AnalysisCard({ card, expanded, onExpandChange, exportHrefBase }: Props) {
+export function AnalysisCard({ card, expanded, historical = false, onExpandChange, exportHrefBase }: Props) {
   const layer: LayerKey = card.settings.layer ?? "reported";
   const noun = incidentNoun(layer);
   const category = card.settings.offense_category ?? null;
@@ -57,67 +56,72 @@ export function AnalysisCard({ card, expanded, onExpandChange, exportHrefBase }:
   const maxCat = cats.reduce((m, c) => Math.max(m, c.count), 0);
   const total = totalIncidentCount(card);
   const capped = card.incidents !== null && card.incidents.returned_count < card.incidents.total_count;
+  const comparisonLabels = comparison?.analytical.options.map((option) => option.label) ?? [];
+  const resultTitle = card.kind === "compare"
+    ? comparisonLabels.length === 2
+      ? `${comparisonLabels[0]} vs ${comparisonLabels[1]}`
+      : `${comparisonLabels.length || card.placeIds.length} locations compared`
+    : neighborhood?.places[0]?.place_label ?? "Location analysis";
 
   const showCategory = layer !== "calls";
   const subcategoryHeader = layer === "calls" ? "Call type" : layer === "arrests" ? "Charge" : "Subcategory";
 
   return (
-    <div className={`mc-card${expanded ? " is-expanded" : ""}`}>
-      <div className="mc-card-head">
-        <span className="mc-card-kind">{card.kind === "compare" ? "Comparison" : "Analysis"}</span>
-        <p className="mc-card-settings">
-          {windowLabel ? `${windowLabel} · ` : ""}
-          {radiusM} m · {categoryLabel(card.settings.offense_category ?? "")} · {noun.pluralCap}
-        </p>
-        {card.runId ? (
-          <a className="mc-card-export" href={`${exportHrefBase}?run_id=${card.runId}`} download>
-            Export CSV
-          </a>
-        ) : null}
-        <button type="button" className="mc-card-expand" aria-expanded={expanded} onClick={() => onExpandChange(!expanded)}>
-          {expanded ? "Collapse" : "Expand"}
-        </button>
-      </div>
-
-      {verdict ? (
-        <>
-          <CompareVerdict callout={verdict.callout} noun={noun} />
-          <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={radiusM} />
-        </>
-      ) : neighborhood ? (
-        neighborhood.places.map((place) => (
-          <p className="mc-card-verdict" key={place.place_id}>
-            {aggregateHeadline(place, noun)}
-          </p>
-        ))
-      ) : null}
-
-      {total !== null ? (
-        <p className="mc-card-count">
-          {total} {countNoun(noun, total)}
-        </p>
-      ) : null}
-
-      {cats.length ? (
-        <div className="mc-card-minibars">
-          {cats.map((c) => (
-            <div className="mc-card-minibar" key={c.label}>
-              <span className="mc-card-minibar-label">{c.label}</span>
-              <span className="mc-card-minibar-track" aria-hidden="true">
-                <span className="mc-card-minibar-fill" style={{ width: `${Math.round((c.count / maxCat) * 100)}%` }} />
-              </span>
-              <span className="mc-card-minibar-count">{c.count}</span>
-            </div>
-          ))}
-          {capped ? <p className="mc-card-minibar-note">of the {card.incidents!.returned_count} nearest</p> : null}
+    <article className={`mc-result-card${expanded ? " is-expanded" : ""}${historical ? " is-historical" : ""}`}>
+      <header className="mc-result-head">
+        <div className="mc-result-heading">
+          <span className="mc-result-kind">{historical ? "Previous analysis" : card.kind === "compare" ? "Comparison" : "Analysis result"}</span>
+          <h4 className="mc-result-title">{resultTitle}</h4>
         </div>
-      ) : null}
+        <div className="mc-result-actions">
+          {card.runId ? (
+            <a className="mc-result-export" href={`${exportHrefBase}?run_id=${card.runId}`} download>
+              Export CSV
+            </a>
+          ) : null}
+          <button type="button" className="mc-result-toggle" aria-expanded={expanded} onClick={() => onExpandChange(!expanded)}>
+            {expanded ? "Collapse" : "View details"}
+          </button>
+        </div>
+      </header>
 
-      {expanded ? (
-        <div className="mc-card-expanded">
-          {verdict ? <CompareRankedList rows={verdict.rows} noun={noun} radiusM={radiusM} /> : null}
+      {!expanded ? (
+        <div className="mc-result-summary">
+          {total !== null ? (
+            <p className="mc-result-total">
+              <strong>{total}</strong>
+              <span>{countNoun(noun, total)}</span>
+            </p>
+          ) : null}
+
+          {verdict ? <CompareVerdict callout={verdict.callout} noun={noun} /> : null}
+
+          {cats.length ? (
+            <div className="mc-result-minibars">
+              {cats.map((c) => (
+                <div className="mc-result-minibar" key={c.label}>
+                  <span className="mc-result-minibar-label">{c.label}</span>
+                  <span className="mc-result-minibar-track" aria-hidden="true">
+                    <span className="mc-result-minibar-fill" style={{ width: `${Math.round((c.count / maxCat) * 100)}%` }} />
+                  </span>
+                  <span className="mc-result-minibar-count">{c.count}</span>
+                </div>
+              ))}
+              {capped ? <p className="mc-result-minibar-note">of the {card.incidents!.returned_count} nearest</p> : null}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mc-result-detail">
+          {verdict ? (
+            <section className="mc-result-comparison" aria-label="Comparison overview">
+              <CompareVerdict callout={verdict.callout} noun={noun} />
+              <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={radiusM} />
+              <CompareRankedList rows={verdict.rows} noun={noun} radiusM={radiusM} />
+            </section>
+          ) : null}
           {neighborhood ? (
-            <div className="mc-card-places">
+            <div className="mc-result-places">
               {neighborhood.places.map((place, index) => (
                 <PlaceContextCard
                   key={place.place_id}
@@ -140,7 +144,7 @@ export function AnalysisCard({ card, expanded, onExpandChange, exportHrefBase }:
           </div>
           <MethodsAppendix />
         </div>
-      ) : null}
-    </div>
+      )}
+    </article>
   );
 }

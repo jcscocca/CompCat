@@ -18,22 +18,31 @@ function formatDate(value: string): string {
 /**
  * A small persistent indicator of how current the shared SPD incident dataset is, so users
  * know the data isn't live. Reflects the active layer (reported incidents vs 911 calls).
- * Renders nothing until the freshness has loaded (or when the active layer has no data).
+ * Renders nothing while freshness is loading, then distinguishes current, empty, and
+ * unavailable data states instead of silently implying that every layer is usable.
  * Powered by GET /dashboard/freshness, which returns one entry per layer.
  */
 export function DataFreshness({
   freshness,
   layer = "reported",
+  loaded = false,
 }: {
   freshness: DashboardFreshness | null;
   layer?: LayerKey;
+  loaded?: boolean;
 }) {
   const entry = freshness?.[layer];
-  if (!entry || !entry.data_through) {
-    return null;
-  }
   const noun =
     layer === "calls" ? "911 calls" : layer === "arrests" ? "SPD arrests" : "reported SPD incidents";
+  if (!loaded && !entry) {
+    return null;
+  }
+  if (!freshness) {
+    return <div className="mc-status mc-freshness is-unavailable">Data availability unavailable</div>;
+  }
+  if (!entry?.data_through) {
+    return <div className="mc-status mc-freshness is-unavailable">No {noun} data loaded</div>;
+  }
   const detail = [
     `${entry.incident_count.toLocaleString()} ${noun}`,
     entry.earliest ? `from ${formatDate(entry.earliest)}` : null,

@@ -64,12 +64,12 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { snapHeightPx } from "../lib/drawer";
 import { encodeView } from "../lib/savedView";
 import { keyOf } from "../lib/useAddressList";
-import type { DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
+import type { DashboardFreshness, DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
 
 const home: Place = {
   id: "p1", display_label: "Home", latitude: 47.61, longitude: -122.33, visit_count: 5,
@@ -151,6 +151,7 @@ beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
   // jsdom has no scrollIntoView; the rail's focus-card effect calls it. Fresh stub per test.
   Element.prototype.scrollIntoView = vi.fn();
+  vi.mocked(getDashboardFreshness).mockResolvedValue(null as unknown as DashboardFreshness);
 });
 afterEach(() => {
   cleanup();
@@ -167,6 +168,49 @@ afterEach(() => {
 });
 
 describe("MapWorkspace", () => {
+  it("defaults to the freshest loaded year and disables layers with no rows", async () => {
+    localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getDashboardFreshness).mockResolvedValue({
+      reported: { incident_count: 386, earliest: "2018-01-01", data_through: "2025-10-27", last_ingested_at: "2026-07-20" },
+      arrests: { incident_count: 0, earliest: null, data_through: null, last_ingested_at: null },
+      calls: { incident_count: 0, earliest: null, data_through: null, last_ingested_at: null },
+    });
+
+    render(<MapWorkspace />);
+
+    await waitFor(() => expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({
+      analysis_start_date: "2025-01-01",
+      analysis_end_date: "2025-10-27",
+    })));
+    expect(screen.getByRole("button", { name: /arrests/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /911 calls/i })).toBeDisabled();
+  });
+
+  it("uses header actions for desktop width and collapse, then restores the prior width", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+
+    const { container } = render(<MapWorkspace />);
+    await screen.findByText("Home");
+    const panel = () => container.querySelector(".mc-workspace-panel") as HTMLElement;
+
+    expect(screen.queryByRole("group", { name: "Panel size" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use wide pane width" }));
+    expect(panel().style.width).toBe("640px");
+    expect(screen.getByRole("button", { name: "Use default pane width" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Tabby pane" }));
+    expect(panel()).toHaveClass("is-collapsed");
+    const restore = container.querySelector(".mc-pane-tab") as HTMLButtonElement;
+    expect(restore).toHaveAccessibleName("Expand Tabby pane");
+    fireEvent.click(restore);
+    expect(panel()).toHaveClass("is-open");
+    expect(panel().style.width).toBe("640px");
+  });
+
   it("theme toggle flips the document theme attribute", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
@@ -467,7 +511,7 @@ describe("MapWorkspace", () => {
       });
     });
     // Incident details render in the local card's expanded view on the rail.
-    fireEvent.click(await screen.findByRole("button", { name: "Expand" }));
+    fireEvent.click(await screen.findByRole("button", { name: "View details" }));
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
@@ -489,10 +533,7 @@ describe("MapWorkspace", () => {
     });
   });
 
-  it("appends exactly one receipt per filter change under StrictMode", async () => {
-    // Guards updater purity: StrictMode double-invokes setAnalysis updaters in dev, so a
-    // thread.append inside the updater would duplicate every receipt. The append must
-    // stay hoisted into the event handler (see handleAnalysisChange).
+  it("keeps filter changes out of the transcript under StrictMode", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
     vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
@@ -503,7 +544,8 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
-    expect(screen.getAllByText("Search radius → 500 m")).toHaveLength(1);
+    expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "500 m" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows an error when the session cannot start", async () => {
@@ -626,9 +668,8 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(comparePlaces).toHaveBeenCalledWith(
       expect.objectContaining({ points: expect.any(Array) })));
     // The shared compare auto-run lands as a local card on the rail (not the legacy Compare
-    // view): a compare verdict + its deterministic summary, and — runId null — no export link.
-    expect(await screen.findByText("Compared your 2 places — details in the card.")).toBeInTheDocument();
-    expect(screen.getByTestId("compare-callout")).toBeInTheDocument();
+    // view): the card itself is the receipt, and — runId null — has no export link.
+    expect(await screen.findByTestId("compare-callout")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
@@ -692,7 +733,7 @@ describe("MapWorkspace", () => {
     expect(analyzePlaces).not.toHaveBeenCalled();
     expect(createPlace).not.toHaveBeenCalled();
     // Incident details live in the local card's expanded view on the rail.
-    fireEvent.click(await screen.findByRole("button", { name: "Expand" }));
+    fireEvent.click(await screen.findByRole("button", { name: "View details" }));
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
@@ -827,7 +868,8 @@ describe("MapWorkspace", () => {
     });
     // The restored auto-run lands as a runId-null analyze card on the rail — no view switch,
     // and no run-scoped export link.
-    expect(await screen.findByText("Pulled the reports around your place — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
@@ -921,7 +963,8 @@ describe("MapWorkspace", () => {
     window.history.replaceState(null, "", `/?view=${legacy}`);
     render(<MapWorkspace />);
     // The auto-run lands as a runId-null analyze card on the rail — no legacy Compare view.
-    expect(await screen.findByText("Pulled the reports around your place — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledWith(expect.objectContaining({
       points: [expect.objectContaining({ label: "Shared spot" })],
@@ -1021,6 +1064,27 @@ describe("MapWorkspace", () => {
       expect(synthetic).toBeDefined();
       expect(last.selectedIds.has(synthetic!.id)).toBe(true);
     });
+    expect(screen.getByRole("button", { name: "Show 500 Pine St on map" })).toHaveTextContent("Unsaved");
+    expect(screen.getByRole("button", { name: "Remove 500 Pine St from analysis" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save pin/i })).toBeInTheDocument();
+  });
+
+  it("marks the current card as previous analysis when filters change", async () => {
+    localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+
+    render(<MapWorkspace />);
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(screen.getByText("Analysis result")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: "500 m" }));
+
+    expect(screen.getByText("Previous analysis")).toBeInTheDocument();
+    expect(document.querySelector(".mc-result-card")).toHaveClass("is-historical");
   });
 
   it("clicking an ad-hoc pin flies to it instead of removing the entry", async () => {
@@ -1152,7 +1216,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     // The restored two-place selection auto-runs and lands a compare card on the rail.
-    expect(await screen.findByText("Compared your 2 places — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "clear" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -1177,7 +1241,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     // The restored two-place selection auto-runs and lands a compare card on the rail.
-    expect(await screen.findByText("Compared your 2 places — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "just Work" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -1200,7 +1264,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     // The restored two-place selection auto-runs and lands a compare card on the rail.
-    expect(await screen.findByText("Compared your 2 places — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
 
     // Pin-save "Pin 9": createPlace resolves, but HOLD the save's summary refresh open so
     // p9 stays queued as pending (it isn't in data.places until that refresh lands).
@@ -1269,14 +1333,18 @@ describe("MapWorkspace", () => {
     // The refetch lands WITH p9's place: the queued id resolves and joins the address list,
     // so Pike Street shows as a checked chip on the rail.
     resolveSummary(makeSummary([home, work, pike]));
-    expect(await screen.findByRole("checkbox", { name: "Pike Street" })).toHaveAttribute("aria-checked", "true");
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: "Pike Street" })).toHaveAttribute("aria-checked", "true"),
+    );
   });
 
   it("runs the compare chip as a structured command and applies its effect on the rail", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
     vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
-    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    // Keep the restored-selection auto-run pending. If its card lands first it replaces
+    // the empty-state command chips with card follow-ups, making this test order-dependent.
+    vi.mocked(getNeighborhoodAnalysis).mockReturnValue(new Promise(() => {}));
     vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
     // The command stream returns an update_filters tool event regardless of the sent
     // command — pinning both the outgoing payload and the effect→receipt round-trip.
@@ -1308,9 +1376,10 @@ describe("MapWorkspace", () => {
       analysis_end_date: window.analysis_end_date,
     }));
 
-    // The update_filters effect lands as a receipt without leaving the rail (no tab effect),
-    // so the composer is still present.
-    expect(await screen.findByText("Search radius → 500 m")).toBeInTheDocument();
+    // The update_filters effect updates the single filter control without adding a
+    // duplicate transcript line or leaving the rail.
+    await waitFor(() => expect(screen.getByRole("button", { name: /analysis context filters/i })).toHaveAccessibleName(/500 m/));
+    expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
 
@@ -1340,10 +1409,11 @@ describe("MapWorkspace", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByText(/chips and filters still work/i)).toBeInTheDocument();
 
-    // Filters are not gated by offline: a radius change still records a receipt on the rail.
+    // Filters are not gated by offline, and the change stays in the single filter control.
     fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
-    expect(await screen.findByText("Search radius → 500 m")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "500 m" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
   });
 
   // --- Slice 3 Task 6: cards in the thread + follow-up chips + width toggle + export base ---
@@ -1392,7 +1462,7 @@ describe("MapWorkspace", () => {
     return view;
   }
 
-  it("appends an analysis card to the rail thread with its frozen settings and place line", async () => {
+  it("appends a concise analysis result to the rail without repeating the active filters", async () => {
     const neighborhood: NeighborhoodAnalysis = {
       ...makeNeighborhoodAnalysis(),
       places: [{
@@ -1405,9 +1475,10 @@ describe("MapWorkspace", () => {
     };
     const { container } = await renderWithAnalyzeCard(analyzeCardResult({ neighborhood }));
 
-    const settings = container.querySelector(".mc-card-settings");
-    expect(settings?.textContent).toMatch(/250 m/);
-    expect(container.querySelector(".mc-card-verdict")?.textContent).toMatch(/Alpha/);
+    const newestCard = Array.from(container.querySelectorAll(".mc-result-card")).at(-1);
+    expect(newestCard?.textContent).toMatch(/Alpha/);
+    expect(newestCard?.textContent).not.toMatch(/250 m/);
+    expect(newestCard?.textContent).not.toMatch(/no beat baseline/);
     // No view switch — the card lives in the thread and the composer stays on the rail.
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
     expect(screen.queryByRole("tabpanel", { name: "Compare" })).not.toBeInTheDocument();
@@ -1445,7 +1516,7 @@ describe("MapWorkspace", () => {
     expect(widthNow()).toBe("400px");
     // Two cards now sit on the rail (the restored auto-run's + the assistant's); expand the
     // newest. Only one card expands at a time, so Collapse is then unambiguous.
-    fireEvent.click(screen.getAllByRole("button", { name: "Expand" }).at(-1)!);
+    fireEvent.click(screen.getAllByRole("button", { name: "View details" }).at(-1)!);
     expect(widthNow()).toBe("640px");
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(widthNow()).toBe("400px");
@@ -1458,7 +1529,7 @@ describe("MapWorkspace", () => {
 
     expect(panel()).toHaveClass("is-half");
     // Two cards on the rail (restored auto-run + assistant); expand the newest.
-    fireEvent.click(screen.getAllByRole("button", { name: "Expand" }).at(-1)!);
+    fireEvent.click(screen.getAllByRole("button", { name: "View details" }).at(-1)!);
     expect(panel()).toHaveClass("is-full");
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(panel()).toHaveClass("is-half");
@@ -1646,7 +1717,7 @@ describe("MapWorkspace", () => {
       expect(screen.queryByTestId("badge-p1")).not.toBeInTheDocument();
       expect(screen.queryByTestId("badge-p2")).not.toBeInTheDocument();
     });
-    expect(await screen.findByText("Search radius → 1000 m")).toBeInTheDocument();
+    expect(screen.queryByText("Search radius → 1000 m")).not.toBeInTheDocument();
   });
 
   // --- Slice 5 Task 2: deterministic place-added offers + auto-run audit ---
@@ -1808,7 +1879,8 @@ describe("MapWorkspace", () => {
     expect(screen.queryByText(/want me to pull what's on file/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/want me to compare/i)).not.toBeInTheDocument();
     // It lands as a runId-null analyze card on the rail (no view switch, no export link).
-    expect(await screen.findByText("Pulled the reports around your place — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
@@ -1832,7 +1904,8 @@ describe("MapWorkspace", () => {
     expect(screen.queryByText(/want me to compare/i)).not.toBeInTheDocument();
     // The lookup's auto-run also lands as a runId-null card; step to the rail to read it —
     // an ad-hoc point (no saved place), so its export link is absent.
-    expect(await screen.findByText("Pulled the reports around your place — details in the card.")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
@@ -1855,7 +1928,7 @@ describe("MapWorkspace", () => {
 
     // The empty/error path appends nothing: no card and no summary reached the rail thread.
     expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
-    expect(document.querySelector(".mc-card")).not.toBeInTheDocument();
+    expect(document.querySelector(".mc-result-card")).not.toBeInTheDocument();
   });
 
   it("an assistant result after a failed auto-run lands only the bridge card (no stale local card)", async () => {
@@ -1894,7 +1967,7 @@ describe("MapWorkspace", () => {
     // The share-link auto-run fires and fails (both payload slices reject → no card lands).
     await screen.findByText(/shared view/i);
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
-    expect(document.querySelector(".mc-card")).not.toBeInTheDocument();
+    expect(document.querySelector(".mc-result-card")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -1902,7 +1975,7 @@ describe("MapWorkspace", () => {
     // Exactly ONE card — the bridge's — with only the assistant's summary line; the stale
     // auto-run arming appends no local card or summary.
     await screen.findByText("Analyzed Alpha.");
-    expect(document.querySelectorAll(".mc-card")).toHaveLength(1);
+    expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
     expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
   });
 

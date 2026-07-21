@@ -1,12 +1,12 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Verified against `d30235b` (2026-06-29).
+> Verified against `2d6d4f3` (2026-07-19).
 
 ---
 
 ## 1. Purpose & product invariant
 
-CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates for those places — organized into Analyze, Compare, and Export tabs, with saved places carried across the analytic tabs as a chip strip (a manage-places dialog handles add/rename/remove).
+CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates in a map-centered workspace. A persistent Tabby rail (three-snap bottom sheet on mobile) carries the place list, controls, assistant conversation, and frozen analysis/comparison cards; the manage-places dialog owns add/rename/remove and export privacy controls.
 
 ⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/agent.py` contains a regex guard (`_SAFETY_SCORE_PATTERN`) that intercepts any chat message matching safety-scoring language and returns a hard refusal before the LLM is ever called. Both enforcement points must be preserved in future changes.
 
@@ -38,7 +38,7 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 - `PlaceCluster` — the canonical saved-place record; carries display coordinates, visit statistics, sensitivity class
 - `CrimeIncident` — SPD reported-incident rows ingested from Seattle Socrata
 - `PlaceCrimeSummary`, `AnalysisRun` — per-place crime tallies and the run metadata that groups them
-- `StatisticalComparison`, `StatisticalComparisonOption`, `StatisticalPairwiseResult` — Compare-tab statistical results
+- `StatisticalComparison`, `StatisticalComparisonOption`, `StatisticalPairwiseResult` — persisted statistical comparison results
 - `GeocodeCache` — TTL-bounded cache keyed by `(provider, query_normalized)`
 
 ---
@@ -47,7 +47,7 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 
 See `./api.md` for full endpoint-by-endpoint detail. Summary:
 
-**Public** — in OpenAPI schema; require a real session token validated by `required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/exports/tableau/*`, and `/uploads` (additionally gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`; responds 404 when the flag is off).
+**Public** — in OpenAPI schema; require a real session token validated by `required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/uploads` (additionally gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`; responds 404 when the flag is off).
 
 **Internal** — `include_in_schema=False`; use the permissive `current_user_hash` dependency that accepts the demo-identity fallback header `X-Demo-User-Id`. Prefixed `/internal/...`. Covers `/internal/analysis/*`, `/internal/imports`, `/internal/crime/*`, `/internal/places`, `/internal/exports/*`.
 
@@ -61,7 +61,7 @@ See `./api.md` for full endpoint-by-endpoint detail. Summary:
 
 | Subsystem | Entry point | Role |
 |---|---|---|
-| Assistant | `app/assistant/agent.py` | Decision-tree chat: classify request → call one tool or return a final answer; safety-score guard lives here |
+| Assistant | `app/assistant/agent.py` + `app/api/routes_assistant.py` | Guarded decision-tree chat plus deterministic no-LLM commands; both stream the same event vocabulary into the Tabby rail |
 | LLM client | `app/assistant/llm_client.py` | `OpenAiLlmClient` POSTs to `MCA_LLM_BASE_URL`; `FailoverLlmClient` wraps two clients for automatic failover |
 | Statistical analysis | `app/analysis/comparison.py` | Exposure-adjusted rate tests (Poisson / quasi-Poisson), Benjamini-Hochberg correction, `DecisionClass` output |
 | Crime ingestion | `app/crime/` | `seattle_socrata.py` fetches from Socrata; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
@@ -101,9 +101,11 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 
 ## 6. Backend ↔ frontend
 
-`frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places`, `/places/bulk`, `/uploads`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/geocode`, `/assistant/chat`, `/exports/tableau/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
+`frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
 
-The assistant endpoint (`/assistant/chat`) is consumed as a Server-Sent Events stream: `streamAssistantChat` in `client.ts` reads `event:`/`data:` frames and dispatches them to caller-supplied handlers.
+The assistant endpoints are consumed as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips and explicit controls. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
+
+The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's single **Analysis filters** control owns both saved-place selection and unsaved search/share points; result cards are marked as previous analyses as soon as that context changes.
 
 **Serving modes:**
 
@@ -133,7 +135,7 @@ flowchart TD
         PD["routes_public_dashboard\n/dashboard/*"]
         PP["routes_public_places\n/places (write)"]
         PL["routes_places\n/places (read)"]
-        PA["routes_assistant\n/assistant/chat"]
+        PA["routes_assistant\n/assistant/chat + /assistant/commands"]
         PU["routes_uploads\n/uploads"]
         PE["routes_exports\n/exports/tableau/*"]
         PS["routes_sessions\n/sessions"]

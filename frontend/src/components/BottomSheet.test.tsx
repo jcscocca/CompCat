@@ -4,11 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BottomSheet } from "./BottomSheet";
-import { clampWidth, DRAWER_DEFAULT, DRAWER_WIDE } from "../lib/drawer";
-
-function setViewport(width: number) {
-  Object.defineProperty(window, "innerWidth", { value: width, configurable: true, writable: true });
-}
+import { DRAWER_DEFAULT } from "../lib/drawer";
 
 function setViewportHeight(height: number) {
   Object.defineProperty(window, "innerHeight", { value: height, configurable: true, writable: true });
@@ -30,7 +26,6 @@ function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {})
     widthPx: DRAWER_DEFAULT,
     onToggleCollapsed: vi.fn(),
     onResize: vi.fn(),
-    onPreset: vi.fn(),
     ...overrides,
   };
   const result = render(<BottomSheet {...props}><div>panel</div></BottomSheet>);
@@ -38,48 +33,21 @@ function renderSheet(overrides: Partial<Parameters<typeof BottomSheet>[0]> = {})
 }
 
 describe("BottomSheet", () => {
-  it("exposes Peek, Default, and Wide presets and marks the active one pressed", () => {
-    const { props } = renderSheet({ widthPx: DRAWER_DEFAULT });
-    expect(screen.getByRole("button", { name: /default/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /peek/i })).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(screen.getByRole("button", { name: /wide/i }));
-    expect(props.onPreset).toHaveBeenCalledWith("wide");
+  it("does not expose named desktop size modes", () => {
+    renderSheet();
+    expect(screen.queryByRole("button", { name: "Peek" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Default" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Wide" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Focus" })).not.toBeInTheDocument();
   });
 
-  it("offers a Focus preset and forwards it", () => {
-    const onPreset = vi.fn();
-    renderSheet({ onPreset });
-    fireEvent.click(screen.getByRole("button", { name: "Focus" }));
-    expect(onPreset).toHaveBeenCalledWith("focus");
-  });
-
-  it("keeps the Wide preset pressed when its width is clamped on a narrow viewport", () => {
-    setViewport(680); // drawerMax() == max(340, 680 - 96) == 584, so clampWidth(DRAWER_WIDE=640) == 584
-    try {
-      renderSheet({ widthPx: clampWidth(DRAWER_WIDE) });
-      expect(screen.getByRole("button", { name: /wide/i })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: /default/i })).toHaveAttribute("aria-pressed", "false");
-    } finally {
-      setViewport(1024);
-    }
-  });
-
-  it("never marks both Default and Wide pressed when their clamped widths collide", () => {
-    setViewport(460); // drawerMax() == max(340, 460 - 96) == 364, so clampWidth(DEFAULT) === clampWidth(WIDE) === 364
-    try {
-      renderSheet({ widthPx: clampWidth(DRAWER_WIDE) });
-      // A segmented control must have a single active option; the shared clamped width
-      // reads as "default" rather than lighting up both buttons at once.
-      expect(screen.getByRole("button", { name: /default/i })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: /wide/i })).toHaveAttribute("aria-pressed", "false");
-    } finally {
-      setViewport(1024);
-    }
-  });
-
-  it("marks Peek pressed when collapsed", () => {
-    renderSheet({ collapsed: true });
-    expect(screen.getByRole("button", { name: /peek/i })).toHaveAttribute("aria-pressed", "true");
+  it("renders a Tabby edge tab when collapsed and restores the pane from it", () => {
+    const { props } = renderSheet({ collapsed: true });
+    const restore = screen.getByRole("button", { name: "Expand Tabby pane" });
+    expect(restore).toHaveClass("mc-pane-tab");
+    fireEvent.click(restore);
+    expect(props.onToggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("separator", { name: /resize workspace panel/i })).not.toBeInTheDocument();
   });
 
   it("exposes the handle as a separator reflecting the current width", () => {
@@ -119,20 +87,13 @@ describe("BottomSheet", () => {
     expect(props.onToggleCollapsed).not.toHaveBeenCalled();
   });
 
-  it("does not resize with arrow keys while collapsed", () => {
-    const { props } = renderSheet({ collapsed: true });
-    const handle = screen.getByRole("separator", { name: /resize workspace panel/i });
-    fireEvent.keyDown(handle, { key: "ArrowLeft" });
-    expect(props.onResize).not.toHaveBeenCalled();
-  });
-
   it("renders the panel open with an inline width, collapsed without one", () => {
     const { container, rerender } = renderSheet({ collapsed: false, widthPx: 420 });
     const panel = () => container.querySelector(".mc-workspace-panel") as HTMLElement;
     expect(panel()).toHaveClass("is-open");
     expect(panel().style.width).toBe("420px");
     rerender(
-      <BottomSheet collapsed widthPx={420} onToggleCollapsed={vi.fn()} onResize={vi.fn()} onPreset={vi.fn()}>
+      <BottomSheet collapsed widthPx={420} onToggleCollapsed={vi.fn()} onResize={vi.fn()}>
         <div>panel</div>
       </BottomSheet>,
     );
@@ -167,7 +128,7 @@ describe("BottomSheet", () => {
     expect(panel()).toHaveClass("is-full");
     expect(panel()).not.toHaveClass("is-open");
     rerender(
-      <BottomSheet collapsed widthPx={DRAWER_DEFAULT} snap="bar" isMobile onToggleCollapsed={vi.fn()} onResize={vi.fn()} onPreset={vi.fn()}>
+      <BottomSheet collapsed widthPx={DRAWER_DEFAULT} snap="bar" isMobile onToggleCollapsed={vi.fn()} onResize={vi.fn()}>
         <div>panel</div>
       </BottomSheet>,
     );

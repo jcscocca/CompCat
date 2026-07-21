@@ -4,7 +4,7 @@ This document covers the auth model, tier contracts, enforcement invariant, and 
 notes for the CompCat API. The live `/openapi.json` (and Swagger UI at `/docs`) is the
 field-level source of truth; this document covers rules and tier structure only.
 
-> Verified against `d30235b` (2026-06-29).
+> Verified against `2d6d4f3` (2026-07-19).
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
@@ -83,9 +83,10 @@ which are unauthenticated or session-creating.
 | `/dashboard/geocode` | GET | `app/api/routes_public_dashboard.py` | `?q=` query param | `list[GeocodeResultSchema]` |
 | `/dashboard/trends` | GET | `app/api/routes_public_dashboard.py` | `?mcpp=` (normalized, 404 unknown), `?layer=` (400 unknown), `?category=` | `dict` (raw zero-filled monthly `area_counts`/`citywide_counts`, last complete month, TTL-cached with a shared citywide entry; math: `docs/analysis/trend-indexing-method.md`) |
 | `/assistant/chat` | POST | `app/api/routes_assistant.py` | `AssistantChatRequest` (`app/assistant/schemas.py`) | SSE stream (see §4) |
+| `/assistant/commands` | POST | `app/api/routes_assistant.py` | `AssistantCommandRequest` (fixed command enum) | SSE stream (no LLM; see §4) |
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
 | `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (gated — see §4) |
-| `/exports/tableau/place-summary.csv` | GET | `app/api/routes_exports.py` | — | CSV attachment |
+| `/exports/tableau/place-summary.csv` | GET | `app/api/routes_exports.py` | optional `?run_id=` | CSV attachment for the requested user-owned run, or the latest run when omitted |
 
 The `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, and
 `/dashboard/neighborhood` request bodies accept an optional `layer` field (`"reported"`
@@ -216,7 +217,7 @@ not at startup. The `/input-modes` response also reflects this flag via
 Default: `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is `false`; uploads are disabled in the
 default configuration.
 
-### Assistant chat (`/assistant/chat`)
+### Assistant streams (`/assistant/chat`, `/assistant/commands`)
 
 `POST /assistant/chat` responds with **Server-Sent Events** (`text/event-stream`). The
 handler returns a `StreamingResponse` yielding SSE-formatted events. Each event is shaped
@@ -233,12 +234,21 @@ optional failover node is configured via `MCA_LLM_FALLBACK_BASE_URL` / `MCA_LLM_
 If both are set, `FailoverLlmClient` is used. If the LLM is unreachable, only the chat panel is
 affected; the rest of the API is unaffected.
 
+`POST /assistant/commands` accepts only the fixed command enum declared by
+`AssistantCommandRequest`: `analyze_places`, `compare_places`, `add_place`, `select_places`,
+`update_filters`, and `suggest_followups`. It executes the validated tool directly, makes no LLM
+call, and emits the same `meta`/`tool`/`token`/`done`/`error` vocabulary so the frontend reducer is
+shared. It has its own per-session hourly limit and remains available when free-text chat is
+offline. Unadvertised internal tool handlers are rejected by request validation.
+
 ### Exports split
 
 `app/api/routes_exports.py` defines **both** public and internal export endpoints in the
 same router file:
 
 - **Public** (`required_public_user_hash`, in schema): `GET /exports/tableau/place-summary.csv`.
+  Supplying `run_id` scopes the CSV to that exact run after verifying the run belongs to the
+  session; unknown or foreign ids return 404. Omitting it preserves latest-run behavior.
 - **Internal** (`current_user_hash`, `include_in_schema=False`): `GET /internal/exports/tableau/place-summary.csv`.
 
 ---

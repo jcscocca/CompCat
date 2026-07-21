@@ -25,7 +25,6 @@ from app.config import get_settings
 from app.crime.sources import sources_for_layer
 from app.geocoding.providers import build_provider
 from app.models import PlaceCluster
-from app.services.analysis_runs import latest_analysis_run_id
 from app.services.dashboard_analysis_service import (
     analyze_selected_places,
     compare_selected_places,
@@ -273,7 +272,7 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
         sources=sources,
         layer=args.layer,
     )
-    run_id = latest_analysis_run_id(session, user_id_hash)
+    run_id = analysis.pop("analysis_run_id", None)
     neighborhood = neighborhood_analysis_for_places(
         session=session,
         user_id_hash=user_id_hash,
@@ -329,7 +328,7 @@ def _compare_places(
     _require_analysis_window(args.analysis_start_date, args.analysis_end_date, args.radius_m)
     sources = sources_for_layer(args.layer)
     # Persist an analysis run at this radius so the dashboard summary has rows for the cards.
-    analyze_selected_places(
+    analysis = analyze_selected_places(
         session=session,
         user_id_hash=user_id_hash,
         place_ids=resolved.place_ids,
@@ -342,9 +341,9 @@ def _compare_places(
         sources=sources,
         layer=args.layer,
     )
-    # Capture before compare_selected_places creates its own (category-less) run —
-    # the analyze run above is the one that carries the user's filters.
-    run_id = latest_analysis_run_id(session, user_id_hash)
+    # Use the exact analyze run, not a post-commit "latest" lookup that can race a
+    # concurrent request for the same session.
+    run_id = analysis.pop("analysis_run_id", None)
     comparison = compare_selected_places(
         session=session,
         user_id_hash=user_id_hash,
@@ -357,11 +356,42 @@ def _compare_places(
         nibrs_group=args.nibrs_group,
         sources=sources,
     )
+    neighborhood = neighborhood_analysis_for_places(
+        session=session,
+        user_id_hash=user_id_hash,
+        place_ids=resolved.place_ids,
+        radius_m=args.radius_m,
+        analysis_start_date=args.analysis_start_date,
+        analysis_end_date=args.analysis_end_date,
+        offense_category=args.offense_category,
+        offense_subcategory=args.offense_subcategory,
+        nibrs_group=args.nibrs_group,
+        area_lookup=_beat_areas(),
+        beat_polygons=_beat_polygons(),
+        mcpp_area_lookup=_mcpp_areas(),
+        mcpp_polygons=_mcpp_polygons(),
+        sources=sources,
+    )
+    incidents = incident_details_for_places(
+        session=session,
+        user_id_hash=user_id_hash,
+        place_ids=resolved.place_ids,
+        radii_m=[args.radius_m],
+        analysis_start_date=args.analysis_start_date,
+        analysis_end_date=args.analysis_end_date,
+        offense_category=args.offense_category,
+        offense_subcategory=args.offense_subcategory,
+        nibrs_group=args.nibrs_group,
+        limit=AGENT_INCIDENT_LIMIT,
+        sources=sources,
+    )
     settings_used = _settings_used(args, args.radius_m)
     return {
         "place_ids": resolved.place_ids,
         "settings_used": settings_used,
         "comparison": comparison,
+        "neighborhood": neighborhood,
+        "incidents": incidents,
         "matched": resolved.matched,
         "created": resolved.created,
         "unresolved": resolved.unresolved,
@@ -510,4 +540,3 @@ def _suggest_followups() -> list[str]:
         "Show the reported incident details behind the current summary.",
         "Narrow the analysis by offense category or date range.",
     ]
-

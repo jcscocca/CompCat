@@ -41,24 +41,26 @@ export function followupChipsFor(
     });
   }
 
-  if (settings.offense_category) {
-    chips.push({
-      label: "All categories",
-      command,
-      // AnalyzePlacesArgs / ComparePlacesByNameArgs (app/assistant/tools.py) don't accept
-      // the "ALL" sentinel — that only exists on UpdateFiltersArgs. Clearing the category
-      // here means omitting the field, so the patch carries an explicit null for the
-      // arg-builder (wired in a later slice) to strip before the command is sent.
-      argsPatch: { offense_category: null },
-      settingsPatch: { offense_category: null },
-    });
-  } else {
-    chips.push({
-      label: "Property only",
-      command,
-      argsPatch: { offense_category: "PROPERTY" },
-      settingsPatch: { offense_category: "PROPERTY" },
-    });
+  if (settings.layer !== "calls") {
+    if (settings.offense_category) {
+      chips.push({
+        label: "All categories",
+        command,
+        // AnalyzePlacesArgs / ComparePlacesByNameArgs (app/assistant/tools.py) don't accept
+        // the "ALL" sentinel — that only exists on UpdateFiltersArgs. Clearing the category
+        // here means omitting the field, so the patch carries an explicit null for the
+        // arg-builder (wired in a later slice) to strip before the command is sent.
+        argsPatch: { offense_category: null },
+        settingsPatch: { offense_category: null },
+      });
+    } else {
+      chips.push({
+        label: "Property only",
+        command,
+        argsPatch: { offense_category: "PROPERTY" },
+        settingsPatch: { offense_category: "PROPERTY" },
+      });
+    }
   }
 
   if (settings.layer === "reported" || settings.layer === undefined) {

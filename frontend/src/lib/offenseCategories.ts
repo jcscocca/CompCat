@@ -5,6 +5,7 @@ export const CATEGORIES: { value: string; label: string }[] = [
   { value: "SOCIETY", label: "Society" },
 ];
 
-export function categoryLabel(value: string): string {
-  return CATEGORIES.find((c) => c.value === value)?.label ?? "All reported";
+export function categoryLabel(value: string, layer: "reported" | "arrests" | "calls" = "reported"): string {
+  if (!value) return layer === "arrests" ? "All arrests" : layer === "calls" ? "All calls" : "All reported";
+  return CATEGORIES.find((c) => c.value === value)?.label ?? (layer === "arrests" ? "All arrests" : "All reported");
 }

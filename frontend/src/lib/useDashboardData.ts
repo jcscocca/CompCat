@@ -13,6 +13,7 @@ const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
 export interface DashboardData {
   summary: DashboardSummary | null;
   freshness: DashboardFreshness | null;
+  freshnessLoaded: boolean;
   personalUploadsEnabled: boolean;
   error: string;
   setError: (message: string) => void;
@@ -32,6 +33,7 @@ export interface DashboardData {
 export function useDashboardData(): DashboardData {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [freshness, setFreshness] = useState<DashboardFreshness | null>(null);
+  const [freshnessLoaded, setFreshnessLoaded] = useState(false);
   const [personalUploadsEnabled, setPersonalUploadsEnabled] = useState(false);
   const [error, setError] = useState("");
 
@@ -69,10 +71,16 @@ export function useDashboardData(): DashboardData {
     let active = true;
     getDashboardFreshness()
       .then((data) => {
-        if (active) setFreshness(data);
+        if (active) {
+          setFreshness(data);
+          setFreshnessLoaded(true);
+        }
       })
       .catch(() => {
-        if (active) setFreshness(null);
+        if (active) {
+          setFreshness(null);
+          setFreshnessLoaded(true);
+        }
       });
     return () => {
       active = false;
@@ -100,6 +108,7 @@ export function useDashboardData(): DashboardData {
   return {
     summary,
     freshness,
+    freshnessLoaded,
     personalUploadsEnabled,
     error,
     setError,

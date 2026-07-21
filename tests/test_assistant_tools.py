@@ -489,6 +489,8 @@ def test_compare_places_by_name_persists_analysis_and_compares(tmp_path, monkeyp
     assert sorted(payload["place_ids"]) == ["place-1", "place-2"]
     assert payload["settings_used"]["radius_m"] == 250
     assert "comparison" in payload
+    assert payload["neighborhood"]["radius_m"] == 250
+    assert payload["incidents"]["radius_m"] == 250
     assert payload["created"] == []
     assert payload["unresolved"] == []
 
@@ -635,4 +637,3 @@ def test_analyze_places_clarifies_without_place(tmp_path, monkeypatch):
             )
     finally:
         session.close()
-

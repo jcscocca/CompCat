@@ -85,6 +85,8 @@ vi.mock("maplibre-gl", () => {
       return this;
     }
     addTo() {
+      this.element.setAttribute("aria-label", "Map marker");
+      this.element.setAttribute("role", "button");
       document.body.appendChild(this.element);
       return this;
     }
@@ -305,7 +307,7 @@ describe("MapCanvas", () => {
     const onMarkerClick = vi.fn();
     renderCanvas({ onMarkerClick });
     await waitFor(() => expect(document.body.querySelectorAll(".mc-pin-icon")).toHaveLength(1));
-    (document.body.querySelector(".mc-pin-icon") as HTMLElement).click();
+    (document.body.querySelector(".mc-pin-main") as HTMLElement).click();
     expect(onMarkerClick).toHaveBeenCalledWith("p1");
   });
 
@@ -370,6 +372,8 @@ describe("presence badges", () => {
     const badge = document.body.querySelector(".mc-pin-presence");
     expect(badge).not.toBeNull();
     expect(badge).toHaveAttribute("aria-label", "Analyzed — view context");
+    expect(badge?.parentElement).not.toHaveAttribute("role", "button");
+    expect(badge?.parentElement?.querySelector(".mc-pin-main")).not.toContainElement(badge as HTMLElement);
   });
 
   it("renders no presence badge for a place outside badgedPlaceIds", async () => {
@@ -388,10 +392,7 @@ describe("presence badges", () => {
     expect(onMarkerClick).not.toHaveBeenCalled();
   });
 
-  it("keyboard-activating the badge never bubbles into the marker's keydown handler", async () => {
-    // The marker element fires onMarkerClick on any Enter/Space keydown; without
-    // isolation, a focused badge's Enter would fire BOTH callbacks (the bubbled keydown
-    // plus the browser's synthesized click on the button).
+  it("keeps badge keyboard activation separate from its sibling marker button", async () => {
     const onBadgeClick = vi.fn();
     const onMarkerClick = vi.fn();
     renderCanvas({ badgedPlaceIds: new Set(["p1"]), onBadgeClick, onMarkerClick });

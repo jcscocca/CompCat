@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 
-import { clampWidth, DRAWER_DEFAULT, DRAWER_MIN, DRAWER_PEEK, DRAWER_RESIZE_STEP, DRAWER_WIDE, drawerMax, SHEET_SNAPS, snapHeightPx, type DrawerPreset } from "../lib/drawer";
+import { DRAWER_MIN, DRAWER_RESIZE_STEP, drawerMax, SHEET_SNAPS, snapHeightPx } from "../lib/drawer";
 import type { SheetSnap } from "../types";
+import { TabbyAvatar } from "./TabbyAvatar";
 
 const GRABBER_TAP_SLOP = 6;
 // Fast flick past which the release biases one snap in the drag direction.
@@ -13,7 +14,6 @@ type Props = {
   widthPx: number;
   onToggleCollapsed: () => void;
   onResize: (px: number) => void;
-  onPreset: (preset: DrawerPreset) => void;
   isMobile?: boolean;
   peekHeader?: ReactNode;
   /** Mobile-only: current sheet snap; defaults to bar/half from `collapsed` until wired. */
@@ -22,13 +22,6 @@ type Props = {
   onSnap?: (snap: SheetSnap) => void;
   children: ReactNode;
 };
-
-const PRESETS: { preset: DrawerPreset; label: string }[] = [
-  { preset: "peek", label: "Peek" },
-  { preset: "default", label: "Default" },
-  { preset: "wide", label: "Wide" },
-  { preset: "focus", label: "Focus" },
-];
 
 function activateWithKeyboard(event: KeyboardEvent<HTMLElement>, action: () => void) {
   if (event.key === "Enter" || event.key === " ") {
@@ -42,7 +35,6 @@ export function BottomSheet({
   widthPx,
   onToggleCollapsed,
   onResize,
-  onPreset,
   isMobile = false,
   peekHeader,
   snap,
@@ -124,23 +116,6 @@ export function BottomSheet({
     };
   }, [isMobile]);
 
-  function presetPressed(preset: DrawerPreset) {
-    if (preset === "peek") return collapsed;
-    if (collapsed) return false;
-    if (preset === "default") return widthPx === clampWidth(DRAWER_DEFAULT);
-    // On narrow viewports the clamped widths can collide (drawerMax === wide === default);
-    // when they do the smaller preset wins and the larger ones suppress themselves, so a
-    // segmented control only ever marks a single active option.
-    if (preset === "wide") {
-      return widthPx === clampWidth(DRAWER_WIDE) && clampWidth(DRAWER_WIDE) !== clampWidth(DRAWER_DEFAULT);
-    }
-    return (
-      widthPx === drawerMax() &&
-      drawerMax() !== clampWidth(DRAWER_WIDE) &&
-      drawerMax() !== clampWidth(DRAWER_DEFAULT)
-    );
-  }
-
   function onHandlePointerDown(event: PointerEvent<HTMLDivElement>) {
     moved.current = false;
     if (collapsed) {
@@ -218,36 +193,30 @@ export function BottomSheet({
         </>
       ) : (
         <>
-          <div
-            className="mc-handle"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize workspace panel"
-            aria-valuemin={DRAWER_PEEK}
-            aria-valuemax={drawerMax()}
-            aria-valuenow={collapsed ? DRAWER_PEEK : widthPx}
-            tabIndex={0}
-            onPointerDown={onHandlePointerDown}
-            onPointerMove={onHandlePointerMove}
-            onPointerUp={onHandlePointerUp}
-            onPointerCancel={() => { dragging.current = false; }}
-            onKeyDown={onHandleKeyDown}
-          />
-          <div className="mc-snaps" role="group" aria-label="Panel size">
-            {PRESETS.map(({ preset, label }) => (
-              <button
-                key={preset}
-                type="button"
-                className={presetPressed(preset) ? "on" : undefined}
-                aria-pressed={presetPressed(preset)}
-                onClick={() => onPreset(preset)}
-                onKeyDown={(event) => activateWithKeyboard(event, () => onPreset(preset))}
-              >
-                <span>{label}</span>
-                <b />
-              </button>
-            ))}
-          </div>
+          {collapsed ? (
+            <button type="button" className="mc-pane-tab" aria-label="Expand Tabby pane" onClick={onToggleCollapsed}>
+              <TabbyAvatar variant="mark" size={22} />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+          ) : (
+            <div
+              className="mc-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize workspace panel"
+              aria-valuemin={DRAWER_MIN}
+              aria-valuemax={drawerMax()}
+              aria-valuenow={widthPx}
+              tabIndex={0}
+              onPointerDown={onHandlePointerDown}
+              onPointerMove={onHandlePointerMove}
+              onPointerUp={onHandlePointerUp}
+              onPointerCancel={() => { dragging.current = false; }}
+              onKeyDown={onHandleKeyDown}
+            />
+          )}
         </>
       )}
       <div className="mc-panels">{children}</div>

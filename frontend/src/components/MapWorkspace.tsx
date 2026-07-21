@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, updatePlace, type AssistantCommandName } from "../api/client";
-import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
+import { availableDataAnalysisWindow, currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
-import { describeAnalysisPatch } from "../lib/analysisReceipt";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { buildRerunArgs, followupChipsFor, type FollowupChip } from "../lib/followupChips";
 import { offerForPlaces, type SavedPlaceRef } from "../lib/offers";
-import { DRAWER_PEEK, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH, snapHeightPx } from "../lib/drawer";
+import { clampWidth, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH, snapHeightPx } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
-import { cardFromCompareResults, localSummaryLine } from "../lib/localCard";
+import { cardFromCompareResults } from "../lib/localCard";
+import { incidentNoun } from "../lib/layerCopy";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useIncidentPoints } from "../lib/useIncidentPoints";
@@ -36,7 +36,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
-import type { AnalysisCardData, AnalysisSettings, AssistantDashboardState, BadgeDescriptor, BeatFeatureCollection, GeocodeResult, LatLng, MapBounds, Place, PlaceCreate } from "../types";
+import type { AnalysisCardData, AnalysisSettings, AssistantDashboardState, BadgeDescriptor, BeatFeatureCollection, GeocodeResult, LatLng, LayerKey, MapBounds, Place, PlaceCreate } from "../types";
 
 export function MapWorkspace() {
   const { theme, setTheme } = useTheme();
@@ -55,6 +55,7 @@ export function MapWorkspace() {
   const [offer, setOffer] = useState<{ text: string; chips: FollowupChip[] } | null>(null);
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
   const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
+  const [savingEntryKey, setSavingEntryKey] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
     if (initialView) {
       return {
@@ -68,6 +69,7 @@ export function MapWorkspace() {
     const window = currentYearAnalysisWindow();
     return { startDate: window.analysis_start_date, endDate: window.analysis_end_date, radiusM: 250, offenseCategory: "", layer: "reported" };
   });
+  const analysisEditedRef = useRef(Boolean(initialView));
   const [beats, setBeats] = useState<BeatFeatureCollection | null>(null);
   const [viewport, setViewport] = useState<MapBounds | null>(null);
 
@@ -75,9 +77,34 @@ export function MapWorkspace() {
     getBeatPolygons().then(setBeats).catch(() => setBeats(null)); // outline layer is optional chrome
   }, []);
 
-  const incidentLayer = useIncidentPoints({ bounds: viewport, analysis });
-
   const data = useDashboardData();
+  const layerAvailability = useMemo<Partial<Record<LayerKey, boolean>> | undefined>(() => {
+    if (!data.freshness) return undefined;
+    return {
+      reported: Boolean(data.freshness.reported?.data_through),
+      arrests: Boolean(data.freshness.arrests?.data_through),
+      calls: Boolean(data.freshness.calls?.data_through),
+    };
+  }, [data.freshness]);
+  const activeLayerAvailable = layerAvailability?.[analysis.layer] !== false;
+  const incidentLayer = useIncidentPoints({ bounds: viewport, analysis, enabled: activeLayerAvailable });
+
+  // The freshness request resolves after initial render. Before an untouched returning
+  // session auto-runs, move its default window onto the latest calendar year that actually
+  // has rows. Share links and any user edit keep their explicit dates.
+  useEffect(() => {
+    if (initialView || analysisEditedRef.current || !data.freshnessLoaded) return;
+    analysisEditedRef.current = true;
+    const available = data.freshness?.reported
+      ? availableDataAnalysisWindow(data.freshness.reported)
+      : null;
+    if (!available) return;
+    setAnalysis((current) => ({
+      ...current,
+      startDate: available.analysis_start_date,
+      endDate: available.analysis_end_date,
+    }));
+  }, [data.freshness, data.freshnessLoaded, initialView]);
   const { selectedIds, setSelectedIds, restored } = usePersistedSelection(data.places);
   const [pendingAutoRun, setPendingAutoRun] = useState(false);
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset, onSnap } = useDrawer();
@@ -85,6 +112,7 @@ export function MapWorkspace() {
   // card references survive), plus the drawer width to restore when it collapses (null
   // means the drawer was collapsed/peeked when we widened, so there's nothing to restore).
   const [expandedCard, setExpandedCard] = useState<AnalysisCardData | null>(null);
+  const [currentCard, setCurrentCard] = useState<AnalysisCardData | null>(null);
   const prevWidthRef = useRef<number | null>(null);
 
   // The single address list: seeded from the restored saved selection (share links replace
@@ -184,13 +212,13 @@ export function MapWorkspace() {
   // links own their first run above; landing lookups arm pendingAutoRun themselves.
   const autoRunArmedRef = useRef(false);
   useEffect(() => {
-    if (autoRunArmedRef.current || initialView || !restored || list.edited) return;
+    if (autoRunArmedRef.current || initialView || !restored || list.edited || !data.freshnessLoaded) return;
     if (list.entries.length > 0) {
       autoRunArmedRef.current = true;
       setPendingAutoRun(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restored, list.entries.length]);
+  }, [restored, list.entries.length, data.freshnessLoaded]);
 
   // An armed auto-run (share link / lookup / restored session) lands its result as a LOCAL,
   // runId-null card on the rail — cards, not the legacy Compare view (no export link, no
@@ -199,11 +227,17 @@ export function MapWorkspace() {
   const pendingCardRef = useRef(false);
   useEffect(() => {
     if (!pendingAutoRun || list.entries.length === 0) return;
+    if (!data.freshnessLoaded) return;
+    if (!activeLayerAvailable) {
+      setPendingAutoRun(false);
+      data.setError("That data layer is not loaded yet. Choose an available layer to run analysis.");
+      return;
+    }
     setPendingAutoRun(false);
     pendingCardRef.current = true;
     void compare.run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAutoRun, list.entries]);
+  }, [pendingAutoRun, list.entries, activeLayerAvailable, data.freshnessLoaded]);
 
   // Synthesize the armed auto-run's payload into a card once its results land. Keyed on the
   // result slices (not `running`): it can't fire on the arming commit — the slices are
@@ -225,7 +259,7 @@ export function MapWorkspace() {
     if (!card) return;
     pendingCardRef.current = false;
     thread.append({ kind: "analysis_card", card });
-    thread.append({ kind: "tabby_text", text: localSummaryLine(card, list.entries.length) });
+    setCurrentCard(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compare.comparison, compare.neighborhood]);
 
@@ -237,6 +271,7 @@ export function MapWorkspace() {
     // Filter/selection changes detach presence badges — they describe a specific run's
     // results, which no longer reflect the current context once it changes.
     setLiveBadges(new Map());
+    setCurrentCard(null);
     // A stale offer references the pre-change window/selection — drop it. selectPlaceIds
     // re-sets the offer AFTER this call (batched, last write wins), so its own add survives.
     setOffer(null);
@@ -351,12 +386,57 @@ export function MapWorkspace() {
     }
   }
 
-  function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
+  function handleFocusEntry(entry: AddressEntry) {
+    setChipFlyTo({ lat: entry.latitude, lng: entry.longitude });
+  }
+
+  function handleRemoveEntry(index: number) {
+    const entry = list.entries[index];
+    if (!entry) return;
     invalidateAnalysisContext();
-    // Receipt append stays OUTSIDE the updater: StrictMode double-invokes updaters,
-    // so a side effect inside would duplicate every receipt in dev.
-    const receipt = describeAnalysisPatch(analysis, patch);
-    if (receipt) thread.append({ kind: "receipt", text: receipt });
+    if (entry.savedPlaceId) {
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(entry.savedPlaceId as string);
+        return next;
+      });
+    }
+    if (pinDraft.draft && keyOf({ latitude: Number(pinDraft.draft.latitude.toFixed(3)), longitude: Number(pinDraft.draft.longitude.toFixed(3)) }) === keyOf(entry)) {
+      pinDraft.setDraft(null);
+    }
+    list.removeAt(index);
+  }
+
+  async function handleSaveEntry(entry: AddressEntry) {
+    if (entry.savedPlaceId) return;
+    const entryKey = keyOf(entry);
+    setSavingEntryKey(entryKey);
+    data.setError("");
+    try {
+      const created = await createPlace({
+        display_label: entry.label,
+        latitude: entry.latitude,
+        longitude: entry.longitude,
+        visit_count: 0,
+        sensitivity_class: "normal",
+      });
+      list.markSaved(entryKey, created.id);
+      setSelectedIds((current) => new Set([...current, created.id]));
+      await data.refreshWithFallback("Saved, but dashboard places could not refresh.");
+    } catch {
+      data.setError("Unable to save this location. Try again.");
+    } finally {
+      setSavingEntryKey(null);
+    }
+  }
+
+  function handleAnalysisChange(patch: Partial<AnalysisSettings>) {
+    if (patch.layer && layerAvailability?.[patch.layer] === false) {
+      data.setError("That data layer is not loaded yet.");
+      return;
+    }
+    analysisEditedRef.current = true;
+    invalidateAnalysisContext();
     setAnalysis((current) => ({ ...current, ...patch }));
   }
 
@@ -400,10 +480,6 @@ export function MapWorkspace() {
       setSharedBanner(false);
     }
     if (effect.settings) {
-      // Same hoist as handleAnalysisChange (updater purity under StrictMode); reading
-      // render-scope `analysis` for the receipt text is an accepted trade-off.
-      const receipt = describeAnalysisPatch(analysis, effect.settings);
-      if (receipt) thread.append({ kind: "receipt", text: receipt });
       setAnalysis((current) => ({ ...current, ...effect.settings }));
       // Assistant filter changes detach results like user edits do; analyze/compare
       // effects re-apply panes and badges right below.
@@ -439,11 +515,12 @@ export function MapWorkspace() {
         .filter((p): p is Place => Boolean(p && p.latitude != null && p.longitude != null))
         .map((p) => ({ lat: p.latitude as number, lng: p.longitude as number }));
       if (points.length > 0) {
-        const rightInset = isMobile ? 40 : (drawer.collapsed ? DRAWER_PEEK : drawer.widthPx) + 40;
+        const rightInset = isMobile ? 40 : (drawer.collapsed ? DRAWER_RAIL : drawer.widthPx) + 40;
         const bottomInset = isMobile ? snapHeightPx(drawer.snap === "bar" ? "bar" : "half", window.innerHeight) : 40;
         setFitTo({ points, padding: { top: 90, left: 40, right: rightInset, bottom: bottomInset } });
       }
       thread.append({ kind: "analysis_card", card });
+      setCurrentCard(card);
     }
   }
 
@@ -523,6 +600,10 @@ export function MapWorkspace() {
   // analysis chips send the saved-place ids plus the dashboard's current window —
   // without dates and a radius the tools clarify instead of running.
   function runPanelCommand(label: string, command: AssistantCommandName) {
+    if (!activeLayerAvailable) {
+      data.setError("That data layer is not loaded yet.");
+      return;
+    }
     setOffer(null); // a command chip supersedes any pending place-added offer
     const args: Record<string, unknown> = {};
     if (command === "analyze_places" || command === "compare_places") {
@@ -541,6 +622,12 @@ export function MapWorkspace() {
   // ContextStrip's Run analysis button: same deterministic command path as the panel's own
   // chips, choosing compare vs. analyze from the saved-place count (2+ compares, 1 analyzes).
   function handleContextStripRun() {
+    if (!activeLayerAvailable || list.entries.length === 0) return;
+    if (list.entries.some((entry) => !entry.savedPlaceId)) {
+      pendingCardRef.current = true;
+      void compare.run();
+      return;
+    }
     runPanelCommand("Run analysis", savedIdSet.size >= 2 ? "compare_places" : "analyze_places");
   }
 
@@ -577,7 +664,10 @@ export function MapWorkspace() {
   );
   // A pending place-added offer owns the chip row until it's consumed; otherwise the newest
   // card's re-run chips show.
-  const chipRow = offer?.chips ?? followupChips;
+  const chipRow = (offer?.chips ?? followupChips).filter((chip) => {
+    const targetLayer = chip.settingsPatch.layer;
+    return !targetLayer || layerAvailability?.[targetLayer] !== false;
+  });
   function handleFollowupChip(chip: FollowupChip) {
     setOffer(null); // any chip use consumes the offer
     if (chip.args) {
@@ -622,40 +712,54 @@ export function MapWorkspace() {
   // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
   const layerControls = (
     <>
-      <LayerToggle layer={analysis.layer} onChange={(layer) => handleAnalysisChange({ layer })} />
-      <DataFreshness freshness={data.freshness} layer={analysis.layer} />
+      <LayerToggle layer={analysis.layer} availability={layerAvailability} onChange={(layer) => handleAnalysisChange({ layer, offenseCategory: "" })} />
+      <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
     </>
   );
+  const paneIsWide = drawer.widthPx === clampWidth(DRAWER_WIDE);
+  const paneActions = !isMobile ? (
+    <div className="mc-pane-actions">
+      <button
+        type="button"
+        className="mc-pane-action"
+        aria-label={paneIsWide ? "Use default pane width" : "Use wide pane width"}
+        aria-pressed={paneIsWide}
+        title={paneIsWide ? "Use default pane width" : "Use wide pane width"}
+        onClick={() => onPreset(paneIsWide ? "default" : "wide")}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M8 8 4 12l4 4M16 8l4 4-4 4M4 12h16" />
+        </svg>
+      </button>
+      <button type="button" className="mc-pane-action" aria-label="Collapse Tabby pane" title="Collapse Tabby pane" onClick={onToggleCollapsed}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+    </div>
+  ) : null;
 
-  // Rendered at the top of the rail (above the assistant thread): the saved-place chip
-  // strip and the in-progress pin-draft popover.
-  const drawerTopSlot = (
-    <>
-      <PlaceChipStrip
-        places={data.places}
-        identityByPlaceId={identityByPlaceId}
-        onToggle={handleToggleSelect}
-        onHoverPlace={setHoveredPlaceId}
-        onAdd={() => setManagePlaces("manage")}
-      />
-      {pinDraft.draft ? (
-        <PinDraftPopover
-          draft={pinDraft.draft}
-          saving={pinDraft.draftSaving}
-          error={pinDraft.draftError}
-          onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
-          onSave={pinDraft.saveDraft}
-          onCancel={() => pinDraft.setDraft(null)}
-        />
-      ) : null}
-    </>
+  const locationControls = (
+    <PlaceChipStrip
+      places={data.places}
+      entries={list.entries}
+      identityByPlaceId={identityByPlaceId}
+      savingKey={savingEntryKey}
+      saveHiddenKey={pinDraft.draft ? keyOf({ latitude: Number(pinDraft.draft.latitude.toFixed(3)), longitude: Number(pinDraft.draft.longitude.toFixed(3)) }) : null}
+      onToggle={handleToggleSelect}
+      onFocus={handleFocusEntry}
+      onHoverPlace={setHoveredPlaceId}
+      onRemove={handleRemoveEntry}
+      onSave={(entry) => void handleSaveEntry(entry)}
+      onAdd={() => setManagePlaces("manage")}
+    />
   );
 
   return (
     <div className="mc-scope">
       <div
         className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}${isFocus ? " is-focus" : ""}`}
-        style={{ "--panel-width": `${drawer.collapsed ? DRAWER_PEEK : drawer.widthPx}px` } as CSSProperties}
+        style={{ "--panel-width": `${drawer.collapsed ? DRAWER_RAIL : drawer.widthPx}px` } as CSSProperties}
       >
         <MapCanvas
           places={mapPlaces}
@@ -709,6 +813,7 @@ export function MapWorkspace() {
           totalCount={incidentLayer.totalCount}
           unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
           limit={incidentLayer.limit}
+          itemLabel={incidentNoun(analysis.layer).plural}
         />
 
         {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (
@@ -746,14 +851,22 @@ export function MapWorkspace() {
           widthPx={drawer.widthPx}
           onToggleCollapsed={onToggleCollapsed}
           onResize={onDrawerResize}
-          onPreset={onPreset}
           isMobile={isMobile}
           snap={drawer.snap}
           onSnap={onSnap}
           peekHeader={isMobile ? layerControls : undefined}
         >
           <div className="mc-rail-wrap">
-            {drawerTopSlot}
+            {pinDraft.draft ? (
+              <PinDraftPopover
+                draft={pinDraft.draft}
+                saving={pinDraft.draftSaving}
+                error={pinDraft.draftError}
+                onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
+                onSave={pinDraft.saveDraft}
+                onCancel={() => pinDraft.setDraft(null)}
+              />
+            ) : null}
             <AssistantPanel
               items={thread.items}
               busy={turn.busy}
@@ -769,9 +882,11 @@ export function MapWorkspace() {
               followupChips={chipRow}
               onFollowupChip={handleFollowupChip}
               expandedCard={expandedCard}
+              currentCard={currentCard}
               onCardExpandChange={handleCardExpandChange}
               focusCard={focusCard}
               exportHrefBase={exportHrefBase}
+              paneActions={paneActions}
               errorLine={data.error}
               contextStrip={
                 <ContextStrip
@@ -779,7 +894,8 @@ export function MapWorkspace() {
                   availableRadii={data.availableRadii}
                   onChange={handleAnalysisChange}
                   onRun={handleContextStripRun}
-                  runDisabled={savedIdSet.size === 0}
+                  runDisabled={list.entries.length === 0 || !activeLayerAvailable}
+                  locationControls={locationControls}
                   onCopyLink={handleCopyLink}
                 />
               }

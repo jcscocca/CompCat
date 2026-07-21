@@ -8,7 +8,7 @@ vi.mock("../api/client", () => ({
 }));
 
 import { streamAssistantChat, streamAssistantCommand } from "../api/client";
-import { useAssistantTurn, OFFLINE_MESSAGE } from "./useAssistantTurn";
+import { COMMAND_FAILURE_MESSAGE, useAssistantTurn, OFFLINE_MESSAGE } from "./useAssistantTurn";
 import type { ThreadItem } from "./threadItems";
 import type { AssistantDashboardState, AssistantStreamEvent } from "../types";
 
@@ -126,6 +126,15 @@ describe("useAssistantTurn", () => {
     await act(() => hook.result.current.sendChat("hi"));
     expect(append).toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
     expect(hook.result.current.offline).toBe(true);
+  });
+
+  it("a thrown command transport uses a command notice and leaves chat online", async () => {
+    vi.mocked(streamAssistantCommand).mockRejectedValue(new Error("rate limited"));
+    const { hook, append } = setup();
+    await act(() => hook.result.current.runCommand("Analyze", "analyze_places", {}));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: COMMAND_FAILURE_MESSAGE });
+    expect(append).not.toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
+    expect(hook.result.current.offline).toBe(false);
   });
 
   it("aborts the in-flight turn and runs the new one (newest intent wins)", async () => {

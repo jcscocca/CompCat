@@ -292,19 +292,16 @@ export function MapCanvas({
       const count = incidentCountForPlace(summary, place.id, radiusM);
       const el = document.createElement("div");
       el.className = "mc-pin-icon";
-      el.innerHTML = iconHtml(kind, { count, label: place.display_label, identity: identityByPlaceId?.get(place.id) });
-      el.tabIndex = 0;
-      el.setAttribute("role", "button");
-      el.setAttribute("aria-label", place.display_label);
-      el.addEventListener("click", (event) => {
+      const markerButton = document.createElement("button");
+      markerButton.type = "button";
+      markerButton.className = "mc-pin-main";
+      markerButton.innerHTML = iconHtml(kind, { count, label: place.display_label, identity: identityByPlaceId?.get(place.id) });
+      markerButton.setAttribute("aria-label", place.display_label);
+      markerButton.addEventListener("click", (event) => {
         event.stopPropagation();
         onMarkerClickRef.current(place.id);
       });
-      el.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        if (event.key === " ") event.preventDefault();
-        onMarkerClickRef.current(place.id);
-      });
+      el.appendChild(markerButton);
       if (badgedPlaceIds?.has(place.id)) {
         const badge = document.createElement("button");
         badge.type = "button";
@@ -314,27 +311,30 @@ export function MapCanvas({
           event.stopPropagation();
           onBadgeClickRef.current?.(place.id);
         });
-        // Enter/Space on the focused badge must not reach the marker's keydown handler
-        // (which would fire onMarkerClick alongside the button's synthesized click).
-        badge.addEventListener("keydown", (event) => event.stopPropagation());
         el.appendChild(badge);
       }
       markerElsRef.current.set(place.id, el);
-      markersRef.current.push(
-        new maplibregl.Marker({ element: el, anchor: "bottom" })
-          .setLngLat([place.longitude, place.latitude])
-          .addTo(map),
-      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([place.longitude, place.latitude])
+        .addTo(map);
+      // MapLibre makes every custom marker wrapper a role=button. The wrapper here is
+      // only positional; its independently labelled marker and presence controls are
+      // the interactive elements. Remove the generated semantics after addTo so the
+      // accessibility tree does not contain nested buttons.
+      el.removeAttribute("aria-label");
+      el.removeAttribute("role");
+      markersRef.current.push(marker);
     }
     if (draft) {
       const el = document.createElement("div");
       el.className = "mc-pin-icon mc-pin-draft";
       el.innerHTML = teardrop("var(--accent-deep)", DOT);
-      markersRef.current.push(
-        new maplibregl.Marker({ element: el, anchor: "bottom" })
-          .setLngLat([draft.longitude, draft.latitude])
-          .addTo(map),
-      );
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        .setLngLat([draft.longitude, draft.latitude])
+        .addTo(map);
+      el.removeAttribute("aria-label");
+      el.removeAttribute("role");
+      markersRef.current.push(marker);
     }
   }, [places, selectedIds, summary, radiusM, draft, mapReady, identityByPlaceId, badgedPlaceIds]);
 

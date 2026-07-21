@@ -24,8 +24,11 @@ export function cardFromCompareResults(input: {
       layer: analysis.layer,
     },
     comparison,
-    neighborhood: comparison ? null : neighborhood,
-    incidents: comparison ? null : incidents,
+    // A comparison run also fetched the per-address context and incident rows. Keep
+    // that frozen payload so expanding the inline card preserves the retired Compare
+    // surface's baseline, trend, and incident-detail parity.
+    neighborhood,
+    incidents,
   };
 }
 
