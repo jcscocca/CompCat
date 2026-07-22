@@ -31,10 +31,3 @@ export function cardFromCompareResults(input: {
     incidents,
   };
 }
-
-export function localSummaryLine(card: AnalysisCardData, placeCount: number): string {
-  const noun = placeCount === 1 ? "place" : "places";
-  return card.kind === "compare"
-    ? `Compared your ${placeCount} ${noun} — details in the card.`
-    : `Pulled the reports around your ${noun} — details in the card.`;
-}

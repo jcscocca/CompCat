@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cardFromCompareResults, localSummaryLine } from "./localCard";
+import { cardFromCompareResults } from "./localCard";
 import type { AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
 
 const analysis: AnalysisSettings = {
@@ -106,21 +106,5 @@ describe("cardFromCompareResults", () => {
       placeIds: ["p1"],
     });
     expect(card!.settings.offense_category).toBeNull();
-  });
-});
-
-describe("localSummaryLine", () => {
-  it("summarizes a compare card with the place count", () => {
-    const card = cardFromCompareResults({
-      comparison: makeComparison(), neighborhood: null, incidents: null, analysis, placeIds: ["p1", "p2"],
-    })!;
-    expect(localSummaryLine(card, 2)).toBe("Compared your 2 places — details in the card.");
-  });
-
-  it("summarizes an analyze card with a singular noun", () => {
-    const card = cardFromCompareResults({
-      comparison: null, neighborhood: makeNeighborhood(), incidents: null, analysis, placeIds: ["p1"],
-    })!;
-    expect(localSummaryLine(card, 1)).toBe("Pulled the reports around your place — details in the card.");
   });
 });
