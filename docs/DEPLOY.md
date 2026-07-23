@@ -169,9 +169,12 @@ hidden when it is false.
 The AI panel (chat assistant) calls an **OpenAI-compatible** model gateway (e.g. a
 [llama-swap](https://github.com/mostlygeek/llama-swap) server) directly via
 `POST /v1/chat/completions`. The old LocalAgent `/api/llm/stream` gateway is no longer
-used.
+used. Alternatively, point the assistant at a **hosted model** via its official SDK — set
+`MCA_LLM_PROVIDER=anthropic` (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`) for Claude, or
+`openai_native` (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI — no gateway needed.
+`MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently.
 
-Set two variables in `.env.deploy`:
+For the default OpenAI-compatible gateway, set two variables in `.env.deploy`:
 
 ```
 MCA_LLM_BASE_URL=http://<llm-host-lan-ip>:8080/v1   # reachable from container (LAN IP or host.docker.internal:PORT)

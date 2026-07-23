@@ -88,9 +88,11 @@ Under the hood free-text turns use an LLM planning call and a small tool set (`a
 deterministic no-LLM path that shares the same streamed tool-event contract. If the LLM endpoint
 is unavailable, free text pauses but commands, filters, cards, badges, and exports keep working.
 
-The assistant talks directly to an **OpenAI-compatible LLM endpoint** (any server exposing a
-`/chat/completions` API — llama.cpp/llama-swap, vLLM, etc.). CompCat reaches it at
-`MCA_LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`) using the model `MCA_LLM_MODEL`. If no
+The assistant backend is selectable with `MCA_LLM_PROVIDER`: an **OpenAI-compatible LLM
+endpoint** (the default — any server exposing a `/chat/completions` API: llama.cpp/llama-swap,
+vLLM, Groq, or OpenAI), **OpenAI's own API** (`openai_native`), or **Claude** (`anthropic`) —
+the last two via their official SDKs. By default CompCat reaches a local endpoint at
+`MCA_LLM_BASE_URL` (`http://127.0.0.1:8080/v1`) using the model `MCA_LLM_MODEL`. If no
 endpoint is running, the rest of the dashboard works normally — only the Analyst panel is
 limited to its deterministic controls; free-text questions pause while chips, filters, cards,
 badges, and exports continue to work. See [Running the Analyst](#running-the-analyst-optional).
@@ -204,6 +206,11 @@ export MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 make run
 ```
 
+To use a hosted model instead of a local endpoint, set `MCA_LLM_PROVIDER=anthropic`
+(`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`) for Claude, or `openai_native`
+(`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI's API — both via their official SDKs.
+See `.env.example` for the full set of knobs.
+
 Without an LLM endpoint the dashboard still works; the Analyst panel is simply disabled.
 
 ### Running with Postgres/PostGIS
@@ -257,8 +264,11 @@ salt/secret and forces secure cookies.
 | `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL. |
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
 | `SOCRATA_APP_TOKEN` | _unset_ | Optional Socrata app token for higher rate limits. |
-| `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL for the Analyst. |
-| `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent to the LLM endpoint. |
+| `MCA_LLM_PROVIDER` | `openai` | Analyst backend: `openai` (OpenAI-compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK). `MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently. |
+| `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL (provider `openai`). |
+| `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent to the endpoint (provider `openai`). |
+| `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | _unset_ / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`). |
+| `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | _unset_ / `gpt-4o` | OpenAI credentials + model (provider `openai_native`). |
 | `MCA_ASSISTANT_ROLE` | `compcat_analyst` | Analyst role label included in assistant responses. |
 
 Normalization thresholds for the internal upload pipeline are also configurable:

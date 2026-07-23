@@ -238,11 +238,12 @@ The active **layer** flows through the assistant the same way the other dashboar
 
 ## 6. LLM client
 
-`app/assistant/llm_client.py` provides three classes:
+`app/assistant/llm_client.py` provides the backends and their composition:
 
 - **`AssistantLlmClient`** — a `Protocol` defining two interfaces: `complete` (non-streaming,
   used for the single planning call) and `stream` (an `AsyncIterator[str]` of content deltas,
-  used for the narration call — §2).
+  used for the narration call — §2). All backends below implement it, so they are
+  interchangeable and composable behind `FailoverLlmClient`.
 - **`OpenAiLlmClient`** — an OpenAI-compatible HTTP client. `complete` posts to
   `{base_url}/chat/completions` with `stream: false` and a 5-second connect timeout / 120-second
   read timeout (the short connect timeout allows fast failover when an endpoint is offline; the
@@ -254,7 +255,19 @@ The active **layer** flows through the assistant the same way the other dashboar
   methods accept an optional `extra_body` for llama.cpp options such as
   `{"chat_template_kwargs": {"enable_thinking": False}}` to suppress chain-of-thought on thinking
   models.
-- **`FailoverLlmClient`** — wraps a list of `OpenAiLlmClient` instances and tries each in order.
+- **`OpenAiNativeLlmClient`** — first-class OpenAI via the official `openai` SDK (native auth,
+  built-in retries, typed errors). Messages pass through unchanged (OpenAI takes `system` inline);
+  it sends `max_completion_tokens` and forwards `temperature` unless `MCA_OPENAI_SEND_TEMPERATURE`
+  is off (reasoning models reject a non-default temperature). `stream` iterates the SDK
+  `AsyncStream` inside `async with` so an abandoned turn closes it. Distinct from `OpenAiLlmClient`,
+  which is the generic compatible client for local/Groq hosts.
+- **`AnthropicLlmClient`** — first-class Claude via the official `anthropic` SDK. Hoists `system`
+  turns into Anthropic's top-level field, drops a leading assistant turn (Anthropic requires the
+  array to start with `user`), does not forward `temperature` (current Claude models reject it),
+  and disables thinking by default (`MCA_ANTHROPIC_DISABLE_THINKING`) so the tight `max_tokens`
+  budget isn't spent on reasoning. Both first-class clients map errors to the same
+  `LlmUnavailable` / `LlmStreamInterrupted` contract as `OpenAiLlmClient`.
+- **`FailoverLlmClient`** — wraps a list of backends (any `AssistantLlmClient`) and tries each in order.
   For `complete`, it falls back to the next client on any `LlmUnavailable`. For `stream`, failover
   is only possible *before the first delta*: once a client has yielded any text, a subsequent
   `LlmUnavailable` from it is a contract violation and is re-raised rather than silently retried
@@ -266,14 +279,23 @@ The active **layer** flows through the assistant the same way the other dashboar
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Primary endpoint (OpenAI-compatible) |
-| `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent in each request |
+| `MCA_LLM_PROVIDER` | `openai` | Primary backend: `openai` (compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK) |
+| `MCA_LLM_FALLBACK_PROVIDER` | `openai` | Backend for the optional failover slot (chosen independently) |
+| `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Primary endpoint (provider `openai`) |
+| `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent in each request (provider `openai`) |
 | `MCA_LLM_DISABLE_THINKING` | `false` | Suppress chain-of-thought on thinking models |
-| `MCA_LLM_FALLBACK_BASE_URL` | `""` | Second endpoint; failover activates only when this and `MCA_LLM_FALLBACK_MODEL` are both set |
+| `MCA_LLM_FALLBACK_BASE_URL` | `""` | Second endpoint; the `openai` fallback activates only when this and `MCA_LLM_FALLBACK_MODEL` are both set |
 | `MCA_LLM_FALLBACK_MODEL` | `""` | Model for the fallback endpoint |
 | `MCA_LLM_FALLBACK_DISABLE_THINKING` | `false` | Suppress thinking on the fallback model |
+| `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | `""` / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`) |
+| `MCA_ANTHROPIC_DISABLE_THINKING` | `true` | Disable Claude thinking so it doesn't consume the token budget; set false for `claude-fable-5` |
+| `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | `""` / `gpt-4o` | OpenAI credentials + model (provider `openai_native`); `MCA_OPENAI_BASE_URL` optional |
+| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward temperature; set false for reasoning models (o-series / gpt-5) |
 
-The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_assistant_llm_client` on each request.
+The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_assistant_llm_client`
+on each request, which selects the primary and fallback backends from `MCA_LLM_PROVIDER` /
+`MCA_LLM_FALLBACK_PROVIDER` (a key-based backend without its key raises on the primary and is
+skipped on the fallback).
 
 > ⚠ Invariant: when the LLM endpoint is offline or returns no content during the **planning**
 > call, `LlmUnavailable` is raised, the agent emits an `error` SSE event with a user-readable

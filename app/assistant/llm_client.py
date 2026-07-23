@@ -7,9 +7,14 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Protocol
 
+import anthropic
 import httpx
+import openai
 
 logger = logging.getLogger(__name__)
+
+_ANTHROPIC_DEFAULT_MAX_TOKENS = 1024
+_OPENAI_NATIVE_DEFAULT_MAX_TOKENS = 1024
 
 
 class AssistantLlmClient(Protocol):
@@ -189,6 +194,265 @@ class OpenAiLlmClient:
                 "token budget on reasoning_content — disable thinking or use an "
                 "instruct model)."
             )
+
+
+def _split_anthropic_messages(
+    messages: list[dict[str, str]],
+) -> tuple[str, list[dict[str, str]]]:
+    """Convert OpenAI-shaped messages to Anthropic's split form: system turns are hoisted
+    out of the array (Anthropic takes them as a top-level ``system`` field), and any leading
+    non-user turns are dropped so the array starts with ``user`` — the narration prompt sends
+    ``[system, ...history..., user]`` and the history can begin with an assistant turn, which
+    Anthropic rejects."""
+    system_parts: list[str] = []
+    converted: list[dict[str, str]] = []
+    for message in messages:
+        role = message.get("role", "")
+        content = message.get("content", "")
+        if role == "system":
+            if content:
+                system_parts.append(content)
+        else:
+            converted.append({"role": role, "content": content})
+    while converted and converted[0]["role"] != "user":
+        converted.pop(0)
+    return "\n\n".join(system_parts), converted
+
+
+def _anthropic_text(response: object) -> str:
+    blocks = getattr(response, "content", None) or []
+    return "".join(
+        getattr(block, "text", "")
+        for block in blocks
+        if getattr(block, "type", None) == "text"
+    )
+
+
+class AnthropicLlmClient:
+    """Claude backend for Tabby, honoring the same :class:`AssistantLlmClient` contract as
+    :class:`OpenAiLlmClient` via the official Anthropic SDK. ``temperature`` is accepted but
+    not forwarded — current Claude models reject non-default sampling parameters. Errors are
+    mapped to :class:`LlmUnavailable` / :class:`LlmStreamInterrupted` so this composes with
+    :class:`FailoverLlmClient` exactly like the OpenAI client."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        *,
+        disable_thinking: bool = True,
+        max_tokens_default: int = _ANTHROPIC_DEFAULT_MAX_TOKENS,
+        timeout_s: float = 120.0,
+        connect_timeout_s: float = 5.0,
+        client: object | None = None,
+    ) -> None:
+        self.model = model
+        self.api_key = api_key
+        # A base_url-shaped label so FailoverLlmClient's failover log lines name this backend.
+        self.base_url = f"anthropic:{model}"
+        self._disable_thinking = disable_thinking
+        self._max_tokens_default = max_tokens_default
+        self._timeout = httpx.Timeout(timeout_s, connect=connect_timeout_s)
+        # Built lazily on first use so construction stays cheap and loop-free; tests inject a fake.
+        self._client = client
+
+    def _ensure_client(self):
+        if self._client is None:
+            self._client = anthropic.AsyncAnthropic(api_key=self.api_key, timeout=self._timeout)
+        return self._client
+
+    def _request_kwargs(
+        self, messages: list[dict[str, str]], max_tokens: int | None
+    ) -> dict[str, object]:
+        system, converted = _split_anthropic_messages(messages)
+        kwargs: dict[str, object] = {
+            "model": self.model,
+            "max_tokens": max_tokens or self._max_tokens_default,
+            "messages": converted,
+        }
+        if system:
+            kwargs["system"] = system
+        if self._disable_thinking:
+            # Claude models (e.g. Sonnet 5) run adaptive thinking by default, and thinking
+            # tokens count against max_tokens — which the agent caps tightly (256 for
+            # narration). Off by default so the budget goes to the answer, not to reasoning.
+            kwargs["thinking"] = {"type": "disabled"}
+        return kwargs
+
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        try:
+            response = await self._ensure_client().messages.create(
+                **self._request_kwargs(messages, max_tokens)
+            )
+        except anthropic.APIError as exc:
+            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        content = _anthropic_text(response)
+        if not content or not content.strip():
+            raise LlmUnavailable(
+                "LLM returned empty content (the model may have refused or spent its token "
+                "budget on reasoning)."
+            )
+        return content
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[str]:
+        yielded = False
+        try:
+            async with self._ensure_client().messages.stream(
+                **self._request_kwargs(messages, max_tokens)
+            ) as stream:
+                async for text in stream.text_stream:
+                    if text:
+                        yielded = True
+                        yield text
+        except Exception as exc:  # API, transport, or decode failure — degrade uniformly
+            if yielded:
+                raise LlmStreamInterrupted(
+                    f"LLM stream died mid-generation: {exc}"
+                ) from exc
+            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        if not yielded:
+            raise LlmUnavailable(
+                "LLM returned an empty stream (the model may have refused or produced no text)."
+            )
+
+
+def _openai_message_text(response: object) -> str:
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return ""
+    message = getattr(choices[0], "message", None)
+    return getattr(message, "content", None) or ""
+
+
+def _openai_delta_text(chunk: object) -> str:
+    choices = getattr(chunk, "choices", None) or []
+    if not choices:
+        return ""
+    delta = getattr(choices[0], "delta", None)
+    return getattr(delta, "content", None) or ""
+
+
+class OpenAiNativeLlmClient:
+    """First-class OpenAI backend using the official ``openai`` SDK — native auth, built-in
+    retries, and typed errors. Distinct from :class:`OpenAiLlmClient`, which is a generic
+    /chat/completions HTTP client for any OpenAI-compatible host (local llama-swap, Groq, …).
+    OpenAI takes ``system`` in the messages array and accepts ``temperature``, so messages pass
+    through unchanged. Errors map to :class:`LlmUnavailable` / :class:`LlmStreamInterrupted` so
+    this composes with :class:`FailoverLlmClient` like the other backends."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        *,
+        base_url: str = "",
+        send_temperature: bool = True,
+        max_tokens_default: int = _OPENAI_NATIVE_DEFAULT_MAX_TOKENS,
+        timeout_s: float = 120.0,
+        connect_timeout_s: float = 5.0,
+        client: object | None = None,
+    ) -> None:
+        self.model = model
+        self.api_key = api_key
+        self.base_url = base_url or "https://api.openai.com/v1"
+        self._send_temperature = send_temperature
+        self._max_tokens_default = max_tokens_default
+        self._timeout = httpx.Timeout(timeout_s, connect=connect_timeout_s)
+        # Built lazily on first use so construction stays cheap and loop-free; tests inject a fake.
+        self._client = client
+
+    def _ensure_client(self):
+        if self._client is None:
+            self._client = openai.AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self._timeout,
+            )
+        return self._client
+
+    def _request_kwargs(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float | None,
+        max_tokens: int | None,
+        *,
+        stream: bool,
+    ) -> dict[str, object]:
+        kwargs: dict[str, object] = {
+            "model": self.model,
+            "messages": messages,
+            # max_completion_tokens (not the deprecated max_tokens) so current OpenAI chat
+            # models — including reasoning models — accept it.
+            "max_completion_tokens": max_tokens or self._max_tokens_default,
+        }
+        if self._send_temperature and temperature is not None:
+            kwargs["temperature"] = temperature
+        if stream:
+            kwargs["stream"] = True
+        return kwargs
+
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        try:
+            response = await self._ensure_client().chat.completions.create(
+                **self._request_kwargs(messages, temperature, max_tokens, stream=False)
+            )
+        except openai.APIError as exc:
+            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        content = _openai_message_text(response)
+        if not content or not content.strip():
+            raise LlmUnavailable("LLM returned empty content.")
+        return content
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[str]:
+        yielded = False
+        try:
+            chunks = await self._ensure_client().chat.completions.create(
+                **self._request_kwargs(messages, temperature, max_tokens, stream=True)
+            )
+            # async with so an abandoned generator (disconnect, guard trip) closes the SDK
+            # stream instead of leaking the connection and server-side generation.
+            async with chunks:
+                async for chunk in chunks:
+                    text = _openai_delta_text(chunk)
+                    if text:
+                        yielded = True
+                        yield text
+        except Exception as exc:  # API, transport, or decode failure — degrade uniformly
+            if yielded:
+                raise LlmStreamInterrupted(
+                    f"LLM stream died mid-generation: {exc}"
+                ) from exc
+            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        if not yielded:
+            raise LlmUnavailable("LLM returned an empty stream.")
 
 
 class FailoverLlmClient:

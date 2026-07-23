@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import required_public_user_hash
 from app.assistant.agent import _UNREACHABLE_MESSAGE, run_assistant_turn
 from app.assistant.llm_client import (
+    AnthropicLlmClient,
     AssistantLlmClient,
     FailoverLlmClient,
     OpenAiLlmClient,
+    OpenAiNativeLlmClient,
 )
 from app.assistant.schemas import (
     AssistantChatRequest,
@@ -46,24 +48,83 @@ def _no_think_body(disable_thinking: bool) -> dict[str, object] | None:
     return None
 
 
-def build_assistant_llm_client(settings: Settings) -> AssistantLlmClient:
-    """Build the assistant LLM client: the primary endpoint, wrapped in
-    automatic failover to a second node when both fallback values are set."""
-    primary = OpenAiLlmClient(
+def _require_anthropic(settings: Settings) -> AnthropicLlmClient:
+    if not settings.anthropic_api_key:
+        raise ValueError(
+            "Assistant LLM provider 'anthropic' requires MCA_ANTHROPIC_API_KEY."
+        )
+    return AnthropicLlmClient(
+        api_key=settings.anthropic_api_key,
+        model=settings.anthropic_model,
+        disable_thinking=settings.anthropic_disable_thinking,
+    )
+
+
+def _require_openai_native(settings: Settings) -> OpenAiNativeLlmClient:
+    if not settings.openai_api_key:
+        raise ValueError(
+            "Assistant LLM provider 'openai_native' requires MCA_OPENAI_API_KEY."
+        )
+    return OpenAiNativeLlmClient(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        base_url=settings.openai_base_url,
+        send_temperature=settings.openai_send_temperature,
+    )
+
+
+def _build_primary(settings: Settings) -> AssistantLlmClient:
+    if settings.llm_provider == "anthropic":
+        return _require_anthropic(settings)
+    if settings.llm_provider == "openai_native":
+        return _require_openai_native(settings)
+    return OpenAiLlmClient(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
         extra_body=_no_think_body(settings.llm_disable_thinking),
         api_key=settings.llm_api_key,
     )
-    fallback_base_url = settings.llm_fallback_base_url.strip()
-    fallback_model = settings.llm_fallback_model.strip()
-    if fallback_base_url and fallback_model:
-        fallback = OpenAiLlmClient(
-            base_url=fallback_base_url,
-            model=fallback_model,
-            extra_body=_no_think_body(settings.llm_fallback_disable_thinking),
-            api_key=settings.effective_llm_fallback_api_key,
+
+
+def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
+    """The optional failover backend. Key-based backends (anthropic, openai_native) activate
+    whenever their key is set; the OpenAI-compatible fallback keeps its original gate — both
+    base URL and model configured."""
+    provider = settings.llm_fallback_provider
+    if provider == "anthropic":
+        if settings.anthropic_api_key:
+            return _require_anthropic(settings)
+        logger.warning(
+            "llm_fallback_provider is 'anthropic' but MCA_ANTHROPIC_API_KEY is unset; "
+            "assistant failover is disabled."
         )
+        return None
+    if provider == "openai_native":
+        if settings.openai_api_key:
+            return _require_openai_native(settings)
+        logger.warning(
+            "llm_fallback_provider is 'openai_native' but MCA_OPENAI_API_KEY is unset; "
+            "assistant failover is disabled."
+        )
+        return None
+    base_url = settings.llm_fallback_base_url.strip()
+    model = settings.llm_fallback_model.strip()
+    if not (base_url and model):
+        return None
+    return OpenAiLlmClient(
+        base_url=base_url,
+        model=model,
+        extra_body=_no_think_body(settings.llm_fallback_disable_thinking),
+        api_key=settings.effective_llm_fallback_api_key,
+    )
+
+
+def build_assistant_llm_client(settings: Settings) -> AssistantLlmClient:
+    """Build the assistant LLM client: the primary backend (OpenAI-compatible or Claude),
+    wrapped in automatic failover to a second backend when one is configured."""
+    primary = _build_primary(settings)
+    fallback = _build_fallback(settings)
+    if fallback is not None:
         return FailoverLlmClient([primary, fallback])
     return primary
 

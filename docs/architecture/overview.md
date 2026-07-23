@@ -62,7 +62,7 @@ See `./api.md` for full endpoint-by-endpoint detail. Summary:
 | Subsystem | Entry point | Role |
 |---|---|---|
 | Assistant | `app/assistant/agent.py` + `app/api/routes_assistant.py` | Guarded decision-tree chat plus deterministic no-LLM commands; both stream the same event vocabulary into the Tabby rail |
-| LLM client | `app/assistant/llm_client.py` | `OpenAiLlmClient` POSTs to `MCA_LLM_BASE_URL`; `FailoverLlmClient` wraps two clients for automatic failover |
+| LLM client | `app/assistant/llm_client.py` | Backend selected by `MCA_LLM_PROVIDER` — OpenAI-compatible endpoint, OpenAI SDK, or Claude SDK; `FailoverLlmClient` wraps two for automatic failover |
 | Statistical analysis | `app/analysis/comparison.py` | Exposure-adjusted rate tests (Poisson / quasi-Poisson), Benjamini-Hochberg correction, `DecisionClass` output |
 | Crime ingestion | `app/crime/` | `seattle_socrata.py` fetches from Socrata; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
 | Upload pipeline | `app/parsers/` + `app/normalization/` | Parsers (`google_timeline`, `gpx_points`, `csv_points`, `geojson_points`, `recurring_places`) normalize raw uploads into `StagingLocationObservation` rows |
@@ -166,7 +166,7 @@ flowchart TD
     subgraph Subsystems["Subsystems"]
         ANAL["analysis/comparison.py\nStatistical rate tests"]
         ASST["assistant/agent.py\nDecision-tree + LLM"]
-        LLM["assistant/llm_client.py\nOpenAI-compat endpoint"]
+        LLM["assistant/llm_client.py\nLLM backends: compat / OpenAI / Claude"]
         CRIME["crime/ summaries.py\nSocrata ingestion"]
         PARSE["parsers/ + normalization/\nUpload pipeline"]
         EXP["exports/\nTableau CSV"]

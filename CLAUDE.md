@@ -31,10 +31,18 @@ copy.
 
 ## Assistant LLM
 
-The assistant calls an OpenAI-compatible endpoint directly: `MCA_LLM_BASE_URL`,
-`MCA_LLM_MODEL`. If unreachable, only the chat panel is affected — the rest of the app
-works. (The old LocalAgent gateway and its `MCA_LOCALAGENT_BASE_URL` env var have been
-retired; the client module is `app/assistant/llm_client.py`.)
+The assistant backend is selectable via `MCA_LLM_PROVIDER` (client module
+`app/assistant/llm_client.py`, wired in `build_assistant_llm_client`):
+
+- `openai` (default) — any OpenAI-compatible `/chat/completions` endpoint (`MCA_LLM_BASE_URL`,
+  `MCA_LLM_MODEL`): the local llama-swap default, Groq, or OpenAI itself.
+- `openai_native` — OpenAI's own API via the official SDK (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`).
+- `anthropic` — Claude via the official SDK (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`).
+
+`MCA_LLM_FALLBACK_PROVIDER` picks the optional failover backend independently, so any pair
+composes (e.g. Claude primary + local fallback). If the active backend is unreachable, only the
+chat panel is affected — the rest of the app works. (The old LocalAgent gateway and its
+`MCA_LOCALAGENT_BASE_URL` env var have been retired.)
 
 ## Verification gate
 

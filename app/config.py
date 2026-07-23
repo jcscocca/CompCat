@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -75,6 +76,27 @@ class Settings(BaseSettings):
     # key unless overridden.
     llm_api_key: str = ""
     llm_fallback_api_key: str = ""
+
+    # Assistant LLM backend selection. "openai" = any OpenAI-compatible endpoint (the local
+    # llama-swap default, or a hosted host like Groq); "anthropic" = Claude via the official
+    # SDK. Primary and fallback are chosen independently, so either side can be Claude.
+    llm_provider: Literal["openai", "openai_native", "anthropic"] = "openai"
+    llm_fallback_provider: Literal["openai", "openai_native", "anthropic"] = "openai"
+    # Claude (Anthropic) credentials + model, used whenever either provider is "anthropic".
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-5"
+    # Claude runs adaptive thinking by default and thinking tokens count against max_tokens,
+    # which Tabby caps tightly (256 for narration) — so keep it off. Set False only for
+    # claude-fable-5, which rejects an explicit thinking:disabled.
+    anthropic_disable_thinking: bool = True
+    # First-class OpenAI via the official SDK (provider "openai_native"), distinct from the
+    # generic "openai" compatible client above. openai_base_url empty = api.openai.com.
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    openai_base_url: str = ""
+    # Reasoning models (o-series / gpt-5-family) reject a non-default temperature; set False
+    # when openai_model is one of those. Standard chat models (the gpt-4o default) want it on.
+    openai_send_temperature: bool = True
 
     # Demo/public rate limiting (see docs/superpowers/specs/2026-07-10-demo-on-demand-design.md).
     # All enforcement is OFF unless rate_limit_enabled — dev and tests are unaffected.

@@ -227,12 +227,14 @@ as `AssistantStreamEvent` (`app/assistant/schemas.py`), with `event` in
 text (holdback-guard trip or narrated-answer fallback). See `docs/architecture/assistant.md`
 §2 for the full per-event breakdown and turn flow.
 
-The LLM backing the assistant is called via `MCA_LLM_BASE_URL` / `MCA_LLM_MODEL`
-(OpenAI-compatible), both for the single planning call and for the second, streamed narration
-call that writes the model-authored final (kill switch: `MCA_ASSISTANT_NARRATION_ENABLED`). An
-optional failover node is configured via `MCA_LLM_FALLBACK_BASE_URL` / `MCA_LLM_FALLBACK_MODEL`.
-If both are set, `FailoverLlmClient` is used. If the LLM is unreachable, only the chat panel is
-affected; the rest of the API is unaffected.
+The LLM backing the assistant is selected by `MCA_LLM_PROVIDER` — an OpenAI-compatible endpoint
+(`MCA_LLM_BASE_URL` / `MCA_LLM_MODEL`, default), OpenAI's API (`openai_native`), or Claude
+(`anthropic`) — and drives both the single planning call and the second, streamed narration call
+that writes the model-authored final (kill switch: `MCA_ASSISTANT_NARRATION_ENABLED`). An optional
+failover backend is chosen independently via `MCA_LLM_FALLBACK_PROVIDER` (and, for the compatible
+path, `MCA_LLM_FALLBACK_BASE_URL` / `MCA_LLM_FALLBACK_MODEL`); when configured, `FailoverLlmClient`
+wraps the two. If the LLM is unreachable, only the chat panel is affected; the rest of the API is
+unaffected.
 
 `POST /assistant/commands` accepts only the fixed command enum declared by
 `AssistantCommandRequest`: `analyze_places`, `compare_places`, `add_place`, `select_places`,
