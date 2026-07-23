@@ -77,7 +77,7 @@ class DashboardIncidentPointsRequest(BaseModel):
 
 
 class DashboardAnalyzeRequest(BaseModel):
-    place_ids: list[str] | None = Field(default=None, min_length=1)
+    place_ids: list[str] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
     analysis_start_date: date
     analysis_end_date: date
@@ -110,7 +110,7 @@ class DashboardAnalyzeRequest(BaseModel):
 
 
 class DashboardCompareRequest(BaseModel):
-    place_ids: list[str] | None = Field(default=None, min_length=2)
+    place_ids: list[str] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
     analysis_start_date: date
     analysis_end_date: date

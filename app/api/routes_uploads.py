@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import required_public_user_hash
+from app.api.deps import read_upload_within_limit, required_public_user_hash
 from app.config import get_settings
 from app.db import get_session
 from app.parsers.base import UnsupportedFormatError
@@ -23,7 +23,7 @@ async def create_upload(
     settings = get_settings()
     if not settings.public_enable_personal_uploads:
         raise HTTPException(status_code=404, detail="Not found")
-    payload = await file.read()
+    payload = await read_upload_within_limit(file, settings.max_upload_bytes)
     try:
         return run_personal_upload(
             session, payload, file.filename or "upload", user_id_hash, settings

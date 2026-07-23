@@ -63,6 +63,28 @@ def test_production_settings_reject_default_secret_material():
         )
 
 
+def test_unrecognized_environment_fails_closed():
+    # Fail closed: an environment that is neither a known local/dev/CI name nor "production"
+    # (e.g. a mistyped or custom deploy name) is still treated as production-strength, so it
+    # rejects default secrets and defaults cookies to Secure rather than silently shipping
+    # dev defaults.
+    with pytest.raises(ValidationError, match="Production deployments must override"):
+        Settings(
+            environment="staging",
+            user_hash_salt=DEFAULT_USER_HASH_SALT,
+            session_secret=DEFAULT_SESSION_SECRET,
+        )
+    secure_deploy = Settings(
+        environment="staging",
+        user_hash_salt="real-salt",
+        session_secret="real-secret",
+        geocoder_contact_email="ops@example.com",
+    )
+    assert secure_deploy.is_production_like is True
+    assert secure_deploy.effective_session_cookie_secure is True
+    assert secure_deploy.internal_tier_accessible is False
+
+
 def _prod_settings_overrides() -> dict[str, str]:
     """Non-default secret/contact material so only the field under test can fail."""
     return {

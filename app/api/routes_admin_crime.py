@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from datetime import date
 from typing import Annotated
 
@@ -26,7 +27,11 @@ def require_admin_ingest_token(
     x_admin_token: Annotated[str | None, Header()] = None,
 ) -> None:
     settings = get_settings()
-    if not settings.admin_ingest_token or x_admin_token != settings.admin_ingest_token:
+    # Constant-time compare (matches app.sessions) so a configured token can't be probed
+    # by response-timing. An unset token fails closed: no request is ever accepted.
+    if not settings.admin_ingest_token or not hmac.compare_digest(
+        x_admin_token or "", settings.admin_ingest_token
+    ):
         raise HTTPException(status_code=403, detail="Admin token required")
 
 

@@ -294,16 +294,25 @@ def _is_nonnegative_integer(value: object) -> bool:
     return type(value) is int and value >= 0
 
 
+# The exact conditional-Poisson p-value is O(total) lgamma/exp evaluations and is only ever
+# a supplementary statistic (never decided on). For a sector/citywide baseline `count_b` can
+# be tens of thousands, so skip it above this size — the Wald p-value already drives the
+# verdict, and exact vs Wald agree closely once total is this large anyway.
+_EXACT_POISSON_MAX_TOTAL = 5000
+
+
 def _exact_conditional_poisson_p_value(
     *,
     count_a: int,
     exposure_a: float,
     count_b: int,
     exposure_b: float,
-) -> float:
+) -> float | None:
     total = count_a + count_b
     if total == 0:
         return 1.0
+    if total > _EXACT_POISSON_MAX_TOTAL:
+        return None
     probability_a = exposure_a / (exposure_a + exposure_b)
     observed = _binomial_probability(total, count_a, probability_a)
     p_value = 0.0

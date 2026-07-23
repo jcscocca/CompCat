@@ -72,6 +72,11 @@ class AssistantClarification(Exception):
     """
 
 
+# Cap the list-valued tool args so a single LLM plan can't drive an unbounded number of
+# geocoder calls or O(n^2) pairwise comparisons. Mirrors the dashboard schema's _MAX_POINTS.
+_MAX_TOOL_ITEMS = 10
+
+
 class EmptyArgs(BaseModel):
     pass
 
@@ -81,13 +86,13 @@ class AddPlaceArgs(BaseModel):
 
 
 class SelectPlacesArgs(BaseModel):
-    queries: list[str] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     mode: str = "replace"
 
 
 class AnalyzePlacesArgs(BaseModel):
-    queries: list[str] = Field(default_factory=list)
-    place_ids: list[str] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
+    place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     # Optional so a missing date range / radius surfaces as a clarification (see
     # _require_analysis_window) instead of a raw ValidationError -> hard error.
     analysis_start_date: date | None = None
@@ -100,8 +105,8 @@ class AnalyzePlacesArgs(BaseModel):
 
 
 class ComparePlacesByNameArgs(BaseModel):
-    queries: list[str] = Field(default_factory=list)
-    place_ids: list[str] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
+    place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     # Optional so a missing window surfaces as a clarification, not a ValidationError.
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -51,10 +52,16 @@ class OpenAiLlmClient:
         connect_timeout_s: float = 5.0,
         extra_body: dict[str, object] | None = None,
         api_key: str = "",
+        max_stream_seconds: float = 300.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_s = timeout_s
+        # Overall wall-clock budget for a streamed completion. The httpx read timeout only
+        # bounds the gap *between* chunks, so an upstream dripping one token just under that
+        # gap forever would hold the SSE connection open indefinitely; this caps the whole
+        # stream. Generous — a normal narration finishes in a few seconds.
+        self.max_stream_seconds = max_stream_seconds
         # A short connect timeout lets failover react quickly when an endpoint is
         # offline, while the longer read timeout still allows for model load and
         # generation latency once a connection is established.
@@ -134,32 +141,36 @@ class OpenAiLlmClient:
         timeout = httpx.Timeout(self.timeout_s, connect=self.connect_timeout_s)
         yielded = False
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/chat/completions",
-                    json=payload,
-                    headers=self.request_headers(),
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        data = line[len("data:") :].strip()
-                        if data == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data)
-                        except ValueError:
-                            continue
-                        try:
-                            delta = chunk["choices"][0].get("delta") or {}
-                        except (KeyError, IndexError, TypeError):
-                            continue
-                        content = delta.get("content")
-                        if content:
-                            yielded = True
-                            yield content
+            # asyncio.timeout bounds the total stream duration (see max_stream_seconds); on
+            # expiry it raises TimeoutError, handled by the generic except below (degrades to
+            # LlmStreamInterrupted once text has been emitted, else LlmUnavailable).
+            async with asyncio.timeout(self.max_stream_seconds):
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        json=payload,
+                        headers=self.request_headers(),
+                    ) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            data = line[len("data:") :].strip()
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data)
+                            except ValueError:
+                                continue
+                            try:
+                                delta = chunk["choices"][0].get("delta") or {}
+                            except (KeyError, IndexError, TypeError):
+                                continue
+                            content = delta.get("content")
+                            if content:
+                                yielded = True
+                                yield content
         except httpx.HTTPError as exc:
             if yielded:
                 raise LlmStreamInterrupted(

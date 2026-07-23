@@ -86,8 +86,10 @@ def client_ip_from(request, *, trust_proxy_headers: bool) -> str:
     return getattr(client, "host", None) or "unknown"
 
 
-# Paths exempt from the burst tier: static assets, the SPA shell, health, docs, and
-# internal/admin surfaces (not tunnel-exposed concerns; admin has its own token).
+# Paths exempt from the burst tier: static assets, the SPA shell, health, and docs.
+# /internal and /admin are deliberately NOT exempt — they are unauthenticated (internal)
+# or single-token (admin) mutating surfaces, so a per-IP burst cap is a cheap brute-force /
+# DoS backstop when rate limiting is on.
 _BURST_EXEMPT_PREFIXES = (
     "/health",
     "/tiles",
@@ -97,9 +99,22 @@ _BURST_EXEMPT_PREFIXES = (
     "/dashboard-app",
     "/docs",
     "/openapi.json",
-    "/internal",
-    "/admin",
 )
+
+
+async def _send_json(send, status: int, payload: dict) -> None:
+    body = json.dumps(payload).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
 
 
 class BurstLimitMiddleware:
@@ -116,6 +131,12 @@ class BurstLimitMiddleware:
             return
         settings = self._get_settings()
         path = scope.get("path", "")
+        # Internal-tier edge gate (independent of rate_limit_enabled): the /internal/* surface
+        # is unauthenticated and must not be reachable in a prod-like deployment unless
+        # explicitly opted in via MCA_INTERNAL_TIER_ENABLED.
+        if path.startswith("/internal") and not settings.internal_tier_accessible:
+            await _send_json(send, 403, {"detail": "Internal endpoint not accessible"})
+            return
         if (
             not settings.rate_limit_enabled
             or path == "/"

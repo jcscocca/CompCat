@@ -38,6 +38,9 @@ services:
       MCA_SESSION_SECRET: ${MCA_SESSION_SECRET:-local-docker-session-secret}
       MCA_SESSION_COOKIE_SECURE: "${MCA_SESSION_COOKIE_SECURE:-false}"
       MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS: "${MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS:-false}"
+      # The unauthenticated /internal/* tier is blocked at the app edge in a prod-like
+      # environment. Leave false unless a trusted boundary fronts this instance.
+      MCA_INTERNAL_TIER_ENABLED: "${MCA_INTERNAL_TIER_ENABLED:-false}"
       # No fallback on purpose: unset leaves the token empty, and the admin ingest
       # route rejects every request when it is empty. A Compose stack that never
       # sets it therefore ships with the endpoint closed rather than open behind a

@@ -117,6 +117,31 @@ def test_agent_returns_final_answer_without_tool(tmp_path):
     assert len(client.calls) == 1
 
 
+def test_agent_soft_falls_back_on_unrecognized_plan_type(tmp_path):
+    # A syntactically valid plan whose type is neither tool_call nor final (small local models
+    # occasionally emit this) must degrade to a gentle clarify token, not an "internal" error.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"clarify","message":"hmm"}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="do the thing")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    kinds = [event.event for event in events]
+    assert "error" not in kinds
+    assert kinds[-1] == "done"
+    tokens = [e.data["delta"] for e in events if e.event == "token"]
+    assert any("rephrase" in t for t in tokens)
+
+
 def test_agent_runs_workflow_tool_with_deterministic_summary(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
     # Planning returns a compare_places tool_call; there is NO second model call.

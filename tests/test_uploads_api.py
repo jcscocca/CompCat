@@ -44,3 +44,12 @@ def test_uploads_creates_clusters_when_enabled(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["place_cluster_count"] == 1
     assert client.delete("/uploads").status_code == 200
+
+
+def test_uploads_reject_oversize_body(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS", "true")
+    monkeypatch.setenv("MCA_MAX_UPLOAD_BYTES", "1024")  # 1 KiB cap for the test
+    client = _client(tmp_path)
+    client.post("/sessions")
+    oversize = {"file": ("big.json", b"x" * 4096, "application/json")}
+    assert client.post("/uploads", files=oversize).status_code == 413

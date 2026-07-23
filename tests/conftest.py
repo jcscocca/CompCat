@@ -2,9 +2,19 @@ from __future__ import annotations
 
 import pytest
 
+from app.config import get_settings
 from app.ratelimit import reset_rate_limiter
 from app.services.crime_service import reset_freshness_cache
 from app.services.trends_service import reset_trends_cache
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings_cache():
+    """get_settings() is @lru_cache'd; clear it before each test so a test that monkeypatches
+    the environment (then builds an app / calls get_settings) sees its own values, not a
+    Settings object cached from an earlier test."""
+    get_settings.cache_clear()
+    yield
 
 
 @pytest.fixture(autouse=True)

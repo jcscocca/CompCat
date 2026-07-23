@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.crime.seattle_socrata import load_crime_csv
-from app.crime.sources import LAYERS, SOURCE_SPD_CRIME
+from app.crime.sources import LAYER_CALLS, LAYERS, SOURCE_SPD_CRIME
 from app.crime.summaries import summarize_place_crime
 from app.models import CrimeIncident, PlaceCluster, PlaceCrimeSummary
 from app.schemas import CrimeIncidentData, PlaceClusterData, PlaceCrimeSummaryData
@@ -38,9 +38,18 @@ def _as_iso(value: object) -> str | None:
 # defeats the offense_start_utc index; snapshot_at is unindexed) and the dashboard calls it on
 # every load. Cache it in-process: the dataset updates ~daily via backfill and the pill exists to
 # signal the data is NOT live, so a short staleness window is invisible.
+# The genuine fix for the scan is a functional index on coalesce(offense_start_utc, report_utc)
+# plus one on snapshot_at, but that needs a migration (deferred — see docs/ROADMAP.md); until
+# then the TTLs below keep the post-expiry recompute rare, and the calls layer (an order of
+# magnitude more rows than reported) gets a longer TTL so its scan runs far less often.
 FRESHNESS_CACHE_TTL_S = 300.0
+_CALLS_FRESHNESS_CACHE_TTL_S = 1800.0
 _freshness_cache: dict[str, dict[str, object]] = {}
 _freshness_expires: dict[str, float] = {}
+
+
+def _freshness_ttl_for_layer(layer: str) -> float:
+    return _CALLS_FRESHNESS_CACHE_TTL_S if layer == LAYER_CALLS else FRESHNESS_CACHE_TTL_S
 
 
 def reset_freshness_cache() -> None:
@@ -113,7 +122,7 @@ def dashboard_freshness_by_layer(
             continue
         value = _compute_freshness_for_sources(session, sources)
         _freshness_cache[cache_key] = value
-        _freshness_expires[cache_key] = now() + FRESHNESS_CACHE_TTL_S
+        _freshness_expires[cache_key] = now() + _freshness_ttl_for_layer(layer)
         result[layer] = value
     return result
 

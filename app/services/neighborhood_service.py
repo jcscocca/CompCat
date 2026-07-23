@@ -650,7 +650,10 @@ def neighborhood_analysis_for_places(
             overdispersion_phi=dispersion.phi,
             dispersion_periods=dispersion.n_periods,
         )
-        p_values.append(place_test.p_value)
+        # Carry each full-analysis entry's index into p_values on the entry itself, so the
+        # second loop can look up its BH-adjusted p-value by position rather than pulling from
+        # a shared iterator. That decouples the two loops: a future edit to either loop's
+        # branch guards can no longer silently misalign p-values or raise StopIteration.
         raw.append(
             {
                 "cluster": cluster,
@@ -664,15 +667,19 @@ def neighborhood_analysis_for_places(
                 "rest_area": rest_area,
                 "place_monthly": place_monthly,
                 "combined_monthly": combined_monthly,
+                "adjusted_p_index": len(p_values),
             }
         )
+        p_values.append(place_test.p_value)
 
     adjusted = benjamini_hochberg(p_values) if p_values else []
-    adjusted_iter = iter(adjusted)
 
     places = []
     # Sector/city baselines are place-independent; compute each once per request.
     baseline_query_cache: dict[tuple, dict[tuple[int, int], int]] = {}
+    # Coordinate-coverage is per-beat and filter-constant across this request, so several
+    # selected places sharing a beat would otherwise re-run the same count query. Memoize it.
+    coverage_by_beat: dict[str, tuple[int, int]] = {}
     for entry in raw:
         cluster = entry["cluster"]
         place_stats = (
@@ -726,17 +733,19 @@ def neighborhood_analysis_for_places(
         # coordinates and so can enter buffer counts / the map. Omitted when no beat resolves.
         beat = entry.get("beat")
         if beat is not None:
-            total, with_coords = _coordinate_coverage(
-                session,
-                CrimeIncident.beat,
-                [beat],
-                analysis_start_date,
-                analysis_end_date,
-                offense_category,
-                offense_subcategory,
-                nibrs_group,
-                sources=sources,
-            )
+            if beat not in coverage_by_beat:
+                coverage_by_beat[beat] = _coordinate_coverage(
+                    session,
+                    CrimeIncident.beat,
+                    [beat],
+                    analysis_start_date,
+                    analysis_end_date,
+                    offense_category,
+                    offense_subcategory,
+                    nibrs_group,
+                    sources=sources,
+                )
+            total, with_coords = coverage_by_beat[beat]
             base["coordinate_coverage"] = {
                 "total": total,
                 "with_coordinates": with_coords,
@@ -780,7 +789,7 @@ def neighborhood_analysis_for_places(
             beat_exposure=entry["beat_exposure"],
             combined_monthly_counts=entry["combined_monthly"],
             analysis_days=days,
-            adjusted_p_value=next(adjusted_iter),
+            adjusted_p_value=adjusted[entry["adjusted_p_index"]],
         )
         nearest = min(
             (

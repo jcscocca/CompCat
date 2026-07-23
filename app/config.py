@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,6 +11,14 @@ DEFAULT_SESSION_SECRET = "local-dashboard-session-secret"
 # enough to linger in older .env files — the production boot validator keeps
 # rejecting it.
 DEFAULT_ADMIN_INGEST_TOKEN = "local-admin-token"
+
+# Only these environment names are treated as trusted local/dev/CI contexts. Anything
+# else is a real deployment and must meet production-strength requirements — see
+# Settings.is_production_like. Failing closed here means a deploy that forgets
+# MCA_ENVIRONMENT (or sets it to "deploy"/"staging"/"demo") still gets the secret
+# validators, Secure cookies, and the /internal edge block rather than silently shipping
+# the known dev defaults.
+LOCAL_ENVIRONMENTS = frozenset({"local", "test", "ci", "dev", "development"})
 
 
 class Settings(BaseSettings):
@@ -23,6 +33,11 @@ class Settings(BaseSettings):
     tiles_dir: str = "app/data/tiles"
     public_enable_personal_uploads: bool = False
     admin_ingest_token: str | None = None
+    # The /internal/* tier is unauthenticated by design (demo-identity fallback) and meant to
+    # sit behind a trusted boundary. In a prod-like environment it is blocked at the app edge
+    # (see BurstLimitMiddleware) unless this is explicitly set, since we cannot assume an
+    # external reverse proxy is present to block it.
+    internal_tier_enabled: bool = False
     minimum_stop_duration_minutes: int = 10
     stop_radius_m: float = 75
     cluster_radius_m: float = 100
@@ -35,6 +50,10 @@ class Settings(BaseSettings):
     socrata_calls_dataset_id: str = "33kz-ixgy"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
     raw_upload_retention: bool = False
+    # Hard ceiling on personal-upload / import request bodies, read into memory before
+    # parsing. Bounds a memory-exhaustion DoS; generous enough for real location-history
+    # exports. 100 MiB default.
+    max_upload_bytes: int = 100 * 1024 * 1024
     assistant_role: str = "compcat_analyst"
     # Streamed Tabby narration finals + turn status events. Off = the pre-streaming
     # behavior (deterministic template finals, no status events) — a deploy-side kill
@@ -85,10 +104,24 @@ class Settings(BaseSettings):
     geocoder_bounded: bool = True
 
     @property
+    def is_production_like(self) -> bool:
+        """True for any environment that is not an explicit local/dev/CI context.
+
+        Fails closed: the secret validators, Secure-cookie default, and /internal edge
+        block all key off this, so an unrecognized MCA_ENVIRONMENT is treated as a real
+        deployment rather than silently inheriting dev defaults.
+        """
+        return self.environment.lower() not in LOCAL_ENVIRONMENTS
+
+    @property
+    def internal_tier_accessible(self) -> bool:
+        return not self.is_production_like or self.internal_tier_enabled
+
+    @property
     def effective_session_cookie_secure(self) -> bool:
         if self.session_cookie_secure is not None:
             return self.session_cookie_secure
-        return self.environment.lower() in {"prod", "production"}
+        return self.is_production_like
 
     @property
     def effective_llm_fallback_api_key(self) -> str:
@@ -96,7 +129,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_production_secret_overrides(self) -> Settings:
-        if self.environment.lower() not in {"prod", "production"}:
+        if not self.is_production_like:
             return self
 
         default_names = []
@@ -115,7 +148,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_production_geocoder_contact(self) -> Settings:
-        if self.environment.lower() not in {"prod", "production"}:
+        if not self.is_production_like:
             return self
         if not self.geocoder_contact_email.strip():
             raise ValueError(
@@ -125,5 +158,10 @@ class Settings(BaseSettings):
         return self
 
 
+@lru_cache
 def get_settings() -> Settings:
+    """Process-wide settings, parsed once. Called on every request (rate-limit middleware)
+    and in hot service paths, so it is cached rather than re-reading .env and re-running the
+    validators each time. Tests reset it via get_settings.cache_clear() (see tests/conftest.py)
+    so a monkeypatched environment takes effect."""
     return Settings()

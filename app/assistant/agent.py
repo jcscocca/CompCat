@@ -43,6 +43,13 @@ from app.config import get_settings
 # keeps legitimate substrings ("safely", "Safeway", "incident rate") and allowed count
 # framing ("which area has the most crime") from false-triggering. The guard runs on BOTH
 # the incoming user text and the model's final answer (see run_assistant_turn).
+#
+# SCOPE: this deterministic guard covers English and Spanish only, by design. It is a
+# best-effort *backstop*, not the primary defense — the invariant is enforced first at the
+# prompt level (app/assistant/prompts.py instructs the model to refuse safety labeling/ranking
+# in any language), and mid-stream by the holdback stream guard. Requests in other languages
+# (or non-Latin scripts) rely on those layers; extending deterministic coverage would need
+# language-agnostic classification (deferred — see docs/ROADMAP.md, "Open — invariant risk").
 _UNAMBIGUOUS_SAFETY_PATTERN = re.compile(
     r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|hazard(?:ous)?|peril(?:ous)?"
     r"|risk(?:y|ier|iest)?)\b"
@@ -158,6 +165,12 @@ SELECTION_TOOLS = (
 _UNREACHABLE_MESSAGE = (
     "Couldn't reach the analyst to interpret your request. The rest of CompCat still works."
 )
+# A syntactically valid plan whose shape we don't recognize (e.g. a small local model emits
+# {"type": "clarify"}) is a soft failure, not an internal error: ask the user to rephrase.
+_CLARIFY_FALLBACK = (
+    "I didn't quite catch what you'd like me to look at — could you rephrase that? "
+    "You can ask me to analyze a place, compare a few addresses, or adjust the filters."
+)
 _NARRATION_TEMPERATURE = 0.4
 _NARRATION_MAX_TOKENS = 256
 _STATUS_INTERPRETING = "interpreting your request…"
@@ -191,6 +204,13 @@ async def run_assistant_turn(
     narrate = settings.assistant_narration_enabled
     if narrate:
         yield AssistantStreamEvent(event="status", data={"label": _STATUS_INTERPRETING})
+
+    # End the read txn opened by build_semantic_context before the long planning await —
+    # planning needs no DB, and holding it idle-in-transaction across the LLM latency would
+    # pin a pooled connection (and block vacuum) on Postgres for every in-flight chat. The
+    # session auto-begins a fresh txn when execute_tool queries below. Mirrors the two
+    # narration-await rollbacks further down.
+    session.rollback()
 
     try:
         raw_plan = await llm_client.complete(
@@ -255,8 +275,11 @@ async def run_assistant_turn(
 
     try:
         message = _final_message(plan)
-    except ValueError as exc:
-        yield AssistantStreamEvent(event="error", data={"message": str(exc), "code": "internal"})
+    except ValueError:
+        # Unrecognized/empty plan shape: degrade to a gentle clarification instead of a hard
+        # "internal" error the UI renders as a failure. Streams as a normal answer.
+        yield AssistantStreamEvent(event="token", data={"delta": _CLARIFY_FALLBACK})
+        yield AssistantStreamEvent(event="done", data={})
         return
     # Output-side invariant guard: a model answer that slipped past the input guard must not
     # stream safety-ranking language, place-ranking/livability prose, or a claim that the user

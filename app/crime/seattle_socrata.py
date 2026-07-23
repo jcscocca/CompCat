@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from collections.abc import Callable
 from datetime import date
 from io import StringIO
@@ -16,6 +17,25 @@ from app.parsers.base import parse_datetime
 from app.schemas import CrimeIncidentData
 
 CRIME_DATA_FLOOR = date(2018, 1, 1)
+
+# SoQL has no parameter binding, so the $where clause is assembled by interpolation. Every
+# interpolated piece is validated first: field names against a strict identifier pattern
+# (they come from the fixed source registry, but this keeps a future refactor from ever
+# feeding user input into a column position) and timestamp cursors against an ISO-8601 shape.
+_SOQL_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_SOQL_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}:\d{2}(\.\d+)?)?$")
+
+
+def _safe_soql_field(field: str) -> str:
+    if not _SOQL_FIELD_RE.match(field):
+        raise ValueError(f"Unsafe SoQL field name: {field!r}")
+    return field
+
+
+def _safe_soql_timestamp(value: str) -> str:
+    if not _SOQL_TIMESTAMP_RE.match(value):
+        raise ValueError(f"Unsafe SoQL timestamp literal: {value!r}")
+    return value
 
 # The SPD Call Data set is ~24x the size of the reported-crime set (10.9M rows back to 2009),
 # so it gets a rolling, much-later floor instead of the full history. Lower CALLS_WINDOW_MONTHS
@@ -61,7 +81,7 @@ class SeattleSocrataClient:
         self.dataset_id = dataset_id
         self.app_token = app_token
         self.mapper = mapper or crime_incident_from_mapping
-        self.date_field = date_field
+        self.date_field = _safe_soql_field(date_field)
         self.data_floor = data_floor
 
     def _fetch_rows(self, query_params: dict[str, Any]) -> list[dict[str, Any]]:
@@ -109,7 +129,7 @@ class SeattleSocrataClient:
         floor_iso = f"{self.data_floor.isoformat()}T00:00:00"
         if since_iso is None or since_iso < floor_iso:
             since_iso = floor_iso
-        where = f"{self.date_field} >= '{since_iso}'"
+        where = f"{self.date_field} >= '{_safe_soql_timestamp(since_iso)}'"
         if end_date is not None:
             where += f" and {self.date_field} <= '{end_date.isoformat()}T23:59:59'"
         rows = self._fetch_rows(
@@ -266,6 +286,7 @@ def load_calls_csv(path: Path) -> list[CrimeIncidentData]:
 def _date_window_where(
     start_date: date | None, end_date: date | None, field: str = "offense_date"
 ) -> str:
+    field = _safe_soql_field(field)
     if start_date and end_date:
         return (
             f"{field} between '{start_date.isoformat()}T00:00:00' "
