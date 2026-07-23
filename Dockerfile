@@ -27,4 +27,9 @@ COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY --from=frontend /app/static/dashboard ./app/static/dashboard
 
+# Drop root: the runtime needs no privileges. Own /app so a SQLite-fallback boot (no
+# MCA_DATABASE_URL) can still create its dev-output dir; the deploy path uses Postgres.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
