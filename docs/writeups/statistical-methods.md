@@ -269,8 +269,8 @@ test as the decisional statistic (bought deliberately, to keep one variance mode
 density rather than population-at-risk exposure, and no empirical-Bayes shrinkage.
 
 And it left genuine gaps on the board. There is no aoristic handling of interval-timed offenses
-— burglary-style offenses with a start/end window get point-stamped at `offense_start`, biasing
-the hour-of-day profile toward window-opening times. There is no per-analysis
+— burglary-style offenses with a start/end window get point-stamped at `offense_start_utc`,
+biasing the hour-of-day profile toward window-opening times. There is no per-analysis
 geocoding-completeness disclosure; Ratcliffe's 85% minimum-hit-rate benchmark is the standard,
 and a line reading "N of M incidents in this area had usable coordinates" would close it.
 Neither is written yet. That the audit was allowed to find things, and that its findings sit
