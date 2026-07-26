@@ -37,9 +37,9 @@ denominators produce *materially different* pictures, so there is no single corr
 denominator to reach for even if one were available. Dividing a buffer count by a number I
 don't trust would manufacture precision the underlying data cannot support.
 
-The other honest disclosure is scale. Any areal-unit analysis is subject to the Modifiable
-Areal Unit Problem, and CompCat's areal units are the buffers themselves, so results are
-radius-dependent by construction. A 250 m buffer and a 1000 m buffer around the same point
+The other thing the model owes a reader is scale. Any areal-unit analysis is subject to the
+Modifiable Areal Unit Problem, and CompCat's areal units are the buffers themselves, so results
+are radius-dependent by construction. A 250 m buffer and a 1000 m buffer around the same point
 measure different things — a tight micro-place versus a neighbourhood-ish catchment, roughly
 16× the area. I chose to surface that rather than hide it: the radius control belongs to the
 reader, and re-running at another radius is the intended way to check whether a result is
@@ -55,7 +55,7 @@ Full detail: [the exposure model](../analysis/exposure-model.md).
 A density on its own means nothing. The comparison is the product, and there are two kinds:
 the other addresses a reader entered, and the area surrounding a single address.
 
-For the second kind the honest local comparator is the **rest of the beat**. The place's beat
+For the second kind the right local comparator is the **rest of the beat**. The place's beat
 comes from a ray-casting point-in-polygon test of its display point against the vendored SPD
 beat polygons (the published "Seattle Police Beats 2018-Present" layer) — real geography, not a
 nearest-name guess. Then the place's own buffer is carved out of it, on both sides of the
@@ -133,7 +133,7 @@ estimated from the same handful of monthly bins where its MLE is noisy and bound
 Fragility for no fit gain.
 
 So the engine is quasi-Poisson everywhere. The pairwise standard error is
-`se(log RR) = sqrt(φ·(1/kₐ + 1/k_b))`, and the per-address interval is the same expression with
+`se(log RR) = sqrt(φ·(1/k_a + 1/k_b))`, and the per-address interval is the same expression with
 one term, `sqrt(φ/k)`. That sameness is the point: one variance model feeds both the verdict
 and the number line, so the interval a reader sees can never visually contradict the label
 beside it. φ itself is the index of dispersion over the monthly counts, floored at 1.0 before
@@ -141,7 +141,7 @@ it enters the SE — an estimated φ < 1 on a dozen small bins is almost always 
 flooring can only ever widen an interval. The method *label* still reflects the raw estimate
 (above 1.2 reads as quasi-Poisson), so flooring never mislabels anything.
 
-The honest coda is that these Wald forms use φ as if it were known, and it isn't. A seeded
+The caveat is that these Wald forms use φ as if it were known, and it isn't. A seeded
 Monte-Carlo calibration (`tests/test_rate_calibration.py`) found the consequence: with φ
 estimated from a 12-month split and the normal quantile, the 95% single-rate interval
 *under-covers* — down to 0.827 at true φ = 7, μ = 10, and about 0.90 at φ = 3. With the *true*
@@ -188,10 +188,8 @@ family at a time: across the *k* − 1 pairwise tests; within a place across its
 baselines; and across places, over each place's primary place-vs-rest-of-beat test. The
 comparison is against α = 0.05, so the effective FDR level is q = 0.05. The nested-baseline
 family is emphatically *not* independent — MCPP ⊂ beat ⊂ sector ⊂ city, all sharing the same
-place numerator — but BH controls FDR under positive regression dependence, not merely
-independence (Benjamini & Yekutieli 2001), and a nested containment family of rate comparisons
-with a shared numerator is a canonical PRDS case. So BH holds without the more conservative
-`Σ1/i` penalty.
+place numerator — but BH tolerates the positive dependence a nested family with a shared
+numerator produces (Benjamini & Yekutieli 2001), so the harsher Yekutieli penalty isn't needed.
 
 The second hazard is subtler and BH does nothing about it. Selecting the minimum of several
 noisy rates and then testing that same minimum is selective inference: the minimum is biased
@@ -206,15 +204,15 @@ p-value, is where the conservatism lives:
   cannot win anything.
 - The minimum-data floors must hold on every pair.
 
-The selective-inference review reached the conclusion I needed: selection alone cannot
-manufacture a winner. It can only nominate a candidate that still has to clear all three gates
-against every comparator. That acknowledgment lives in code, directly above
+The selective-inference review is what makes the non-correction defensible: selection alone
+cannot manufacture a winner. It can only nominate a candidate that still has to clear all three
+gates against every comparator. That acknowledgment lives in code, directly above
 `candidate = min(...)`, with the condition attached: if CompCat ever presented a *ranked*
 surface instead of one conservative verdict, this bias would need explicit correction. A
 precondition, not a gap I'm hoping nobody notices.
 
 For transparency the engine also computes an exact conditional-Poisson p-value: conditioning on
-the total *kₐ* + *k_b*, the candidate's count is Binomial(*n*, Eₐ/(Eₐ + E_b)) under the
+the total `k_a + k_b`, the candidate's count is Binomial(*n*, `E_a/(E_a + E_b)`) under the
 equal-rate null. It is reported and never decisional — deciding on it would break the duality
 with the Wald interval that keeps the label and the number line consistent. In the overdispersed
 regime it isn't even computed, because a test that assumes away the overdispersion I just
@@ -258,15 +256,15 @@ non-positive area are omitted; places whose baseline can't be resolved surface a
 degenerate or fewer than thirteen complete months exist, because an under-12-month "trend" is
 not a trend.
 
-I had all of this audited against the literature — a three-track sweep of the docs, a
-line-level inventory of the implemented statistics, and a benchmark drawn from quantitative
-criminology, spatial epidemiology, and risk communication. The scorecard is useful precisely
-because it is mixed. It marks the overdispersion work as *exceeding* standard practice, since
-most applied work assumes NB by default while this measured the mean–variance relationship and
-rejected NB2 on fit, and marks the effect-size floors and FDR control as meeting the benchmark.
-It accepts three divergences as documented trade-offs: Wald-with-φ rather than an exact or mid-p
-test as the decisional statistic (bought deliberately, to keep one variance model), spatial
-density rather than population-at-risk exposure, and no empirical-Bayes shrinkage.
+I had the whole methodology — not just these refusal paths — audited against the literature: a
+three-track sweep of the docs, a line-level inventory of the implemented statistics, and a
+benchmark drawn from quantitative criminology, spatial epidemiology, and risk communication.
+The scorecard is useful precisely because it is mixed. It marks the overdispersion work as
+*exceeding* standard practice for measuring the mean–variance relationship rather than assuming
+it, and marks the effect-size floors and FDR control as meeting the benchmark. It accepts three
+divergences as documented trade-offs: Wald-with-φ rather than an exact or mid-p test as the
+decisional statistic (bought deliberately, to keep one variance model), spatial density rather
+than population-at-risk exposure, and no empirical-Bayes shrinkage.
 
 And it left genuine gaps on the board. There is no aoristic handling of interval-timed offenses
 — burglary-style offenses with a start/end window get point-stamped at `offense_start_utc`,
