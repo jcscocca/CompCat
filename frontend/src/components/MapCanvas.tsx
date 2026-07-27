@@ -1,4 +1,5 @@
 import * as maplibregl from "maplibre-gl";
+import type { FeatureCollection, Point } from "geojson";
 import { Protocol } from "pmtiles";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -257,7 +258,7 @@ export function MapCanvas({
         const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
         if (clusterId === undefined || !source) return;
         source.getClusterExpansionZoom(clusterId).then((zoom) => {
-          map.easeTo({ center: (feature!.geometry as GeoJSON.Point).coordinates as [number, number], zoom });
+          map.easeTo({ center: (feature!.geometry as Point).coordinates as [number, number], zoom });
         }).catch(() => {});
       });
       for (const hoverable of ["mc-incident-dot", "mc-incident-cluster"]) {
@@ -369,7 +370,7 @@ export function MapCanvas({
     const map = mapRef.current;
     if (!map || !mapReady || !beats) return;
     (map.getSource(BEATS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
-      beats as unknown as GeoJSON.FeatureCollection,
+      beats as unknown as FeatureCollection,
     );
   }, [beats, mapReady, styleEpoch]);
 
