@@ -128,21 +128,22 @@ vi.mock("maplibre-gl", () => {
       this.content?.remove();
     }
   }
+  // maplibre-gl v6 is ESM-only with named exports (`import * as maplibregl`),
+  // so the mock exposes them at the top level rather than under `default`.
   return {
-    default: {
-      Map: MockMap,
-      Marker: MockMarker,
-      Popup: MockPopup,
-      LngLatBounds: MockLngLatBounds,
-      NavigationControl: class {},
-      addProtocol: vi.fn(),
-    },
+    Map: MockMap,
+    Marker: MockMarker,
+    Popup: MockPopup,
+    LngLatBounds: MockLngLatBounds,
+    NavigationControl: class {},
+    addProtocol: vi.fn(),
+    setWorkerUrl: vi.fn(),
   };
 });
 
 vi.mock("pmtiles", () => ({ Protocol: class { tile = vi.fn(); } }));
 
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 import { MapCanvas, iconHtml, markerKindFor, ringsGeoJSON } from "./MapCanvas";
 import { placeIdentity } from "../lib/placeIdentity";

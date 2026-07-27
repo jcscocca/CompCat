@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 import { formatIncidentAddress, titleCase } from "./addressLabel";
 import type { MapTheme } from "./mapStyle";
