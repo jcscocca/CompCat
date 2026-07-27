@@ -81,9 +81,9 @@ provokes banned-lexicon output is still caught on the way out.
 an incident — and runs on both sides for the same reason: it matches a first- or second-person
 subject tied to a victimization word, or to a presence/witness word followed by an incident
 noun, so it catches the model asserting it *and* the user asking for it ("was I present at any
-of these?" short-circuits before the LLM, exactly like a safety-ranking ask). It is narrow on
-purpose, so ordinary phrasing like "a place you visit" or "incidents reported near you" passes
-untouched.
+of these incidents?" short-circuits before the LLM, exactly like a safety-ranking ask). It is
+narrow on purpose, so ordinary phrasing like "a place you visit" or "incidents reported near
+you" passes untouched.
 
 Exactly one pattern is genuinely output-only. `_OUTPUT_RANKING_PROSE_PATTERN` catches the
 harder case: ranking and livability prose carrying no banned word at all — *a bad area to
