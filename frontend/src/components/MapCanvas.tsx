@@ -1,4 +1,4 @@
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -121,6 +121,11 @@ export function ringsGeoJSON(
 let pmtilesProtocolRegistered = false;
 function ensurePmtilesProtocol(): void {
   if (!pmtilesProtocolRegistered) {
+    // v6's default worker URL is a sibling of the bundled chunk, which vite does
+    // not emit; point it at the copy shipped by the maplibre-worker-assets plugin.
+    if (import.meta.env.PROD) {
+      maplibregl.setWorkerUrl("/assets/maplibre/maplibre-gl-worker.mjs");
+    }
     maplibregl.addProtocol("pmtiles", new Protocol().tile);
     pmtilesProtocolRegistered = true;
   }
@@ -172,6 +177,7 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const markerElsRef = useRef(new Map<string, HTMLElement>());
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
@@ -258,11 +264,19 @@ export function MapCanvas({
         map.on("mouseenter", hoverable, () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", hoverable, () => { map.getCanvas().style.cursor = ""; });
       }
+      // maplibre-gl v6.0.0's trackResize observer never fires (manual resize()
+      // works), so follow container size changes ourselves.
+      if (typeof ResizeObserver !== "undefined") {
+        resizeObserverRef.current = new ResizeObserver(() => map.resize());
+        resizeObserverRef.current.observe(containerRef.current);
+      }
       mapRef.current = map;
     }
     init();
     return () => {
       cancelled = true;
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       mapRef.current?.remove();
