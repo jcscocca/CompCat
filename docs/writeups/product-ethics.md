@@ -71,21 +71,26 @@ places.
 
 The guard runs on both sides of the model. On input, `_asks_for_safety_score` scans the last
 eight user messages — the same window the model itself sees — so an ask split across turns, or
-carried by a short "yes, do that" follow-up, still trips it. On a hit the turn short-circuits
-before the LLM is contacted at all: a pre-written redirect streams, telling the user they can
-ask for reported-incident counts or exposure-adjusted rates instead. On output, the same
-predicate re-runs against the model's own answer, so a paraphrase that slips past the input
-side and provokes banned-lexicon output is still caught on the way out.
+carried by a short "yes, do that" follow-up, still trips it, and the turn short-circuits before
+the LLM is contacted at all: a pre-written redirect streams, telling the user they can ask for
+reported-incident counts or exposure-adjusted rates instead. On output, the same predicate
+re-runs against the model's own answer, so a paraphrase that slips past the input side and
+provokes banned-lexicon output is still caught on the way out.
 
-Two further patterns run on the answer. `_PRESENCE_CLAIM_PATTERN` enforces the invariant's
-third prong — never assert the user was at an incident — by matching a first- or second-person
+`_PRESENCE_CLAIM_PATTERN` enforces the invariant's third prong — never assert the user was at
+an incident — and runs on both sides for the same reason: it matches a first- or second-person
 subject tied to a victimization word, or to a presence/witness word followed by an incident
-noun. It is narrow on purpose, so ordinary phrasing like "a place you visit" or "incidents
-reported near you" passes untouched. `_OUTPUT_RANKING_PROSE_PATTERN` catches the harder case:
-ranking and livability prose carrying no banned word at all — *a bad area to live*, *the worst
-of the three*, *a high-crime area*, *I wouldn't recommend living here*. Those words are far too
-common in legitimate questions to gate input on, so this one is output-only, anchored to place
-nouns and living context so "the most reported thefts" and "the worst month for theft" pass.
+noun, so it catches the model asserting it *and* the user asking for it ("was I present at any
+of these?" short-circuits before the LLM, exactly like a safety-ranking ask). It is narrow on
+purpose, so ordinary phrasing like "a place you visit" or "incidents reported near you" passes
+untouched.
+
+Exactly one pattern is genuinely output-only. `_OUTPUT_RANKING_PROSE_PATTERN` catches the
+harder case: ranking and livability prose carrying no banned word at all — *a bad area to
+live*, *the worst of the three*, *a high-crime area*, *I wouldn't recommend living here*. Those
+words are far too common in legitimate questions to gate input on, so this one runs against the
+model's answer only, anchored to place nouns and living context so "the most reported thefts"
+and "the worst month for theft" pass.
 
 Then narration started streaming, and a guard that only inspects a finished answer became
 worthless — by the time the answer is finished, the user has already read it. The fix is
@@ -130,20 +135,20 @@ statistical verdict — all of it merged to main, working, and tested. In July 2
 The reason recorded in the removal spec is plain: the commute premise had not yielded results
 proportional to the investment, and the product's real scenarios are choosing where to live
 (primary) and understanding your own area over time (secondary). Places, analysis, comparison,
-and exports already served those; routes did not. The spec also notes the thing that made
-deletion safe rather than reckless — every route PR was merged to main, so removal deleted
-recoverable history, not work in flight.
+and exports already served those; routes did not. The spec also notes what made deletion safe
+rather than reckless — every route PR was merged, so removal deleted recoverable history, not
+work in flight.
 
 The deletion was not partial. The entire `app/routing/` package, two routers, two services, an
 export module, four models, and a migration that dropped four tables and a foreign-key column —
 and that also deleted the stored comparison rows sourced from route requests, because a
-comparison belonging to a dead feature is not an asset. On the frontend, a tab, three modules,
-and every wiring point that referenced them. Ten test files deleted, four edited. The
-OpenTripPlanner compose service and both of its setup scripts. A route-methodology doc and its
-diagram. Three PRs, each gated on the full test suite, with the frontend excised first so there
-was never a window where the UI called a backend that no longer existed. The acceptance
-criterion was a repo-wide grep in which the word "route" survived only in HTTP vocabulary and
-in one other place.
+comparison belonging to a dead feature is not an asset. On the frontend, the Routes tab, its
+two modules (`useRoutes.ts`, `routeGeometry.ts`), and every wiring point that referenced them.
+Ten test files deleted, four edited. The OpenTripPlanner compose service and its setup scripts.
+A route-methodology doc and its diagram. Three PRs, each gated on the full test suite, with the
+frontend excised first so there was never a window where the UI called a backend that no longer
+existed. The acceptance criterion was a repo-wide grep in which "route" survived only in HTTP
+vocabulary and in one other place.
 
 That other place is where the invariant enters the record. The removal spec lists as an
 explicit non-goal: the safety-guard lexicon **keeps** its route wording — "what's the safest
@@ -195,9 +200,9 @@ to match, so an arrests turn is never phrased as reported incidents.
 The 911 layer gets the same treatment for the same reason: calls are *requests for service, not
 confirmed incidents* — one event can generate several calls, and many are proactive officer
 activity. And where the public data is redacted rather than merely coarse, the map says so
-instead of quietly dropping rows: arrests with an unknown-location sentinel are excluded
-structurally from the incident-points layer, counted, and surfaced as a disclosed
-`unmappable_citywide_count` with a chip in the UI.
+instead of quietly dropping rows: arrests carrying an unknown-location sentinel are excluded
+structurally from the incident-points layer, counted, and disclosed as an
+`unmappable_citywide_count`.
 
 ## What does privacy-first mean concretely?
 
