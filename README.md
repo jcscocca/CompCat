@@ -16,6 +16,11 @@ overdispersion handling) and an optional AI analyst grounded in your dashboard.
 > happened. The AI analyst refuses safety-scoring requests by design. This constraint shapes
 > the whole product — see [docs/](docs/README.md) for how.
 
+Two long-form write-ups tell the full story: [the statistics](docs/writeups/statistical-methods.md)
+(exposure, overdispersion, quasi-Poisson vs. negative binomial, multiple comparisons) and
+[the product ethics](docs/writeups/product-ethics.md) (why CompCat refuses to score safety,
+and what that refusal cost).
+
 | Light | Night |
 | --- | --- |
 | ![CompCat dashboard, light theme](docs/images/dashboard-light.png) | ![CompCat dashboard, night theme](docs/images/dashboard-night.png) |

@@ -29,7 +29,7 @@ the public dashboard, places, geocoding, exports, and the Analyst are all real a
 repo-wide marker sweep found **essentially zero in-code TODO/FIXME debt**. All of the
 planned Phase 0–3 work has now landed — the sharp edges, the analytical-invariant hardening,
 the data/ops durability, and the core product-breadth items are closed. Remaining work is
-focused rather than foundational: the capstone write-up, first-device acceptance, the Postgres
+focused rather than foundational: first-device acceptance, the Postgres
 soak run, and the explicitly deferred performance/methodology follow-ups below.
 
 ## Maturity snapshot
@@ -266,9 +266,12 @@ spec → plan → PR.*
   first-visit pulse, safety redirect, and layer-aware analysis lead-ins remain chrome + framing
   only; guards, data content, and the planning prompt are unchanged. Historical spec:
   `docs/superpowers/specs/2026-07-10-analyst-copper-persona-design.md`.
-- [ ] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
+- [x] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
   baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
-  de-merge, privacy posture) as long-form pieces linked from the README.
+  de-merge, privacy posture) as long-form pieces linked from the README. **Shipped
+  2026-07-26:** two first-person essays under `docs/writeups/` (statistical methods,
+  product ethics). Spec: `docs/superpowers/specs/2026-07-26-capstone-writeup-design.md`.
+  **This closes Phase 7.**
 - [x] **Copper streamed finals + turn progress:** model-authored replies in Copper's
   voice streamed token-by-token (second, streamed narration call grounded on the tool
   result + deterministic template), honest `status` phase events during the planning,

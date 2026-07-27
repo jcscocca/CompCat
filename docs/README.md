@@ -13,6 +13,7 @@ update its doc in the same PR.
 | [API contract](architecture/api.md) | Auth model (session cookie, demo identity, admin token), the three-tier endpoint reference, the internal-surface invariant, and upload/SSE transport notes. |
 | [Assistant / agent design](architecture/assistant.md) | The CompCat Analyst: the single-LLM-call decision-tree turn, the tool toolbox + frontend bridge, deterministic summaries, and the safety-refusal guard. |
 | [Roadmap](ROADMAP.md) | Where CompCat is going: a subsystem maturity snapshot and phased work, refreshed against current `main`. |
+| [Write-ups](writeups/statistical-methods.md) | The two long-form capstone essays: [statistical methods](writeups/statistical-methods.md) and [product ethics](writeups/product-ethics.md) — the narrative layer over `analysis/`. |
 
 ## Also under `docs/`
 
