@@ -37,7 +37,8 @@ services:
       MCA_DATA_STALENESS_DAYS:
     restart: unless-stopped
 
-  # Nightly ingest automation. Only starts with an explicit profile:
+  # Nightly ops automation: SPD ingest at 03:10 and a pg_dump backup at 03:40. Only starts
+  # with an explicit profile:
   #
   #   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile ops up -d --build
   #
@@ -53,10 +54,16 @@ services:
     command: ["crond", "-f", "-d", "8"]
     environment:
       - MCA_ADMIN_INGEST_TOKEN
+      # The backup job dumps over the compose network and needs the same password the db
+      # service was initialized with. List form (no interpolation) so a non-ops render never
+      # requires it.
+      - POSTGRES_PASSWORD
       - TZ=America/Los_Angeles
     volumes:
       - ./deploy/ingest-cron.crontab:/etc/crontabs/root:ro
       - ./deploy/ingest-daily.sh:/etc/ingest/run.sh:ro
+      - ./deploy/backup-daily.sh:/etc/ingest/backup.sh:ro
+      - backups:/backups
     depends_on:
       api:
         condition: service_healthy
@@ -85,3 +92,7 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  # Database dumps written nightly by deploy/backup-daily.sh. A named volume, not a bind
+  # mount: `docker compose down` keeps it and `down -v` deliberately destroys it along with
+  # the database it came from.
+  backups:

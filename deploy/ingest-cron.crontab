@@ -2,3 +2,7 @@
 # update daily; this hour is quiet and local to the data. The job's own output goes to PID 1's
 # stdout (crond), which is the container log — `docker logs <stack>-ingest-cron-1`.
 10 3 * * * /bin/sh /etc/ingest/run.sh >> /proc/1/fd/1 2>&1
+
+# Nightly logical backup, 03:40 — after the ingest above, so the dump holds the fresh data.
+# Prunes itself to 7 daily + 4 weekly archives in the "backups" volume.
+40 3 * * * /bin/sh /etc/ingest/backup.sh >> /proc/1/fd/1 2>&1

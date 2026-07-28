@@ -102,6 +102,8 @@ jobs:
             -f docker-compose.yml -f docker-compose.prod.yml config > rendered-ops.yml
           grep -q 'ingest-cron' rendered-ops.yml
           grep -q 'target: /etc/crontabs/root' rendered-ops.yml
+          grep -q 'target: /etc/ingest/backup.sh' rendered-ops.yml
+          grep -q 'target: /backups' rendered-ops.yml
           # rendered.yml is the previous step's no-profile render: the sidecar must be absent.
           if grep -q 'ingest-cron' rendered.yml; then
             echo "sidecar must not render without --profile ops" >&2

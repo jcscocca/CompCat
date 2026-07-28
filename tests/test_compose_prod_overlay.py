@@ -19,6 +19,7 @@ _CRONTAB = _DEPLOY / "ingest-cron.crontab"
 _JOB = _DEPLOY / "ingest-daily.sh"
 _DOCKERFILE = _DEPLOY / "ingest-cron.Dockerfile"
 _CADDYFILE = _DEPLOY / "Caddyfile"
+_BACKUP = _DEPLOY / "backup-daily.sh"
 
 
 def test_overlay_documents_its_own_usage_and_sources_secrets_from_env() -> None:
@@ -190,20 +191,50 @@ def test_sidecar_renders_under_the_ops_profile() -> None:
     assert "MCA_ADMIN_INGEST_TOKEN: ci-not-a-real-token" in rendered
     assert "TZ: America/Los_Angeles" in rendered
     assert "target: /etc/crontabs/root" in rendered
+    assert "target: /etc/ingest/backup.sh" in rendered
+    assert "target: /backups" in rendered
+    assert "POSTGRES_PASSWORD" in rendered
     assert 'published: "5432"' not in rendered  # the overlay's own guarantee still holds
 
 
-def test_crontab_fires_once_daily_and_holds_no_secret() -> None:
+def test_crontab_fires_ingest_then_backup_nightly_and_holds_no_secret() -> None:
     text = _CRONTAB.read_text(encoding="utf-8")
     schedule_lines = [
         line for line in text.splitlines() if line.strip() and not line.startswith("#")
     ]
-    assert len(schedule_lines) == 1
+    assert len(schedule_lines) == 2
+    # Ingest at 03:10, backup at 03:40 — the dump captures the night's fresh data, and the
+    # half-hour gap keeps the two jobs off each other's database connections.
     assert schedule_lines[0].startswith("10 3 * * *")
-    # The token is an env reference resolved at run time; it is never written into this file.
+    assert "/etc/ingest/run.sh" in schedule_lines[0]
+    assert schedule_lines[1].startswith("40 3 * * *")
+    assert "/etc/ingest/backup.sh" in schedule_lines[1]
+    # Secrets are env references resolved at run time; never written into this file.
     assert "MCA_ADMIN_INGEST_TOKEN" not in text
     assert "X-Admin-Token" not in text
+    assert "POSTGRES_PASSWORD" not in text
     assert text.endswith("\n")  # crond ignores a crontab without a trailing newline
+
+
+def test_backup_script_dumps_over_the_network_and_refuses_without_a_password() -> None:
+    text = _BACKUP.read_text(encoding="utf-8")
+    assert "pg_dump" in text
+    assert "-Fc" in text  # custom format: pg_restore can select/parallelize
+    assert "-h db -U mca -d mca" in text  # over the compose network, not a local socket
+    assert "/backups" in text
+    # Refuse-and-log rather than writing an unusable empty dump.
+    assert "POSTGRES_PASSWORD" in text
+    assert "refusing to run" in text
+
+
+def test_backup_script_keeps_seven_daily_and_four_weekly_archives() -> None:
+    text = _BACKUP.read_text(encoding="utf-8")
+    assert "KEEP_DAILY=${KEEP_DAILY:-7}" in text
+    assert "KEEP_WEEKLY=${KEEP_WEEKLY:-4}" in text
+    # Sunday's dump is additionally linked under a weekly- name, so pruning the dailies
+    # cannot take the weekly set with it.
+    assert "weekly" in text
+    assert "date +%u" in text
 
 
 def test_job_script_posts_every_layer_in_order_using_the_env_token() -> None:
@@ -220,9 +251,11 @@ def test_job_script_posts_every_layer_in_order_using_the_env_token() -> None:
     assert "-sS --fail" in text  # non-2xx cause lands in docker logs
 
 
-def test_sidecar_image_is_pinned_and_installs_tzdata() -> None:
+def test_sidecar_image_is_pinned_and_installs_its_tools() -> None:
     text = _DOCKERFILE.read_text(encoding="utf-8")
     assert "FROM alpine:3.22" in text
     # tzdata is load-bearing: without it musl resolves TZ=America/Los_Angeles to UTC.
     assert "tzdata" in text
     assert "curl" in text
+    # Client major must match the postgres:16 server image in docker-compose.yml.
+    assert "postgresql16-client" in text
