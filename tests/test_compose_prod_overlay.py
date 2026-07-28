@@ -348,3 +348,29 @@ def test_rendered_overlay_caps_log_growth_on_every_service() -> None:
     assert rendered.count("driver: json-file") == 4
     assert rendered.count('max-size: 10m') == 4
     assert rendered.count('max-file: "5"') == 4
+
+
+# ---------- repo automation ----------
+
+_DEPENDABOT = _ROOT / ".github" / "dependabot.yml"
+
+
+def test_dependabot_watches_both_dockerfiles() -> None:
+    # Base images are pinned, so without this they only move when someone remembers to
+    # bump them — which is how a deployed image quietly accumulates CVEs.
+    import yaml
+
+    config = yaml.safe_load(_DEPENDABOT.read_text(encoding="utf-8"))
+    docker = [
+        entry for entry in config["updates"] if entry["package-ecosystem"] == "docker"
+    ]
+    assert {entry["directory"] for entry in docker} == {"/", "/deploy"}
+    assert all(entry["schedule"]["interval"] == "weekly" for entry in docker)
+
+
+def test_sidecar_documents_why_it_stays_root() -> None:
+    # busybox crond needs privileges to run a job as the crontab's named user; as nobody it
+    # silently fires nothing. The reasoning must survive in the file, not just in review.
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+    assert "crond" in text
+    assert "nobody" in text
