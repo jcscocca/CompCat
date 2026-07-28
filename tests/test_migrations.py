@@ -182,6 +182,45 @@ def test_crime_filter_indexes_exist_after_migration(tmp_path, monkeypatch):
     }.issubset(crime_indexes)
 
 
+def test_retention_created_at_indexes_are_added_and_reversible(tmp_path, monkeypatch):
+    # The sweep filters every table it touches by created_at; analysis_runs was already
+    # indexed, these three were not. 0014 must also come back off cleanly.
+    db_path = tmp_path / "retention-indexes.sqlite3"
+    database_url = f"sqlite+pysqlite:///{db_path}"
+    monkeypatch.setenv("MCA_DATABASE_URL", database_url)
+    cfg = Config("alembic.ini")
+
+    command.upgrade(cfg, "head")
+
+    expected = {
+        "place_clusters": "ix_place_clusters_created_at",
+        "place_crime_summaries": "ix_place_crime_summaries_created_at",
+        "statistical_comparisons": "ix_statistical_comparisons_created_at",
+        "analysis_runs": "ix_analysis_runs_created_at",
+    }
+
+    def _index_names(table: str) -> set[str]:
+        engine = create_engine(database_url)
+        try:
+            return {index["name"] for index in inspect(engine).get_indexes(table)}
+        finally:
+            engine.dispose()
+
+    for table, index in expected.items():
+        assert index in _index_names(table)
+
+    command.downgrade(cfg, "0013_option_rate_ci")
+    for table, index in expected.items():
+        if table == "analysis_runs":
+            continue  # predates 0014; the downgrade must leave it alone
+        assert index not in _index_names(table)
+    assert expected["analysis_runs"] in _index_names("analysis_runs")
+
+    command.upgrade(cfg, "head")
+    for table, index in expected.items():
+        assert index in _index_names(table)
+
+
 @pytest.mark.skipif(
     not _PG_URL.startswith("postgresql"),
     reason="Route-comparison cleanup FK guard runs only on Postgres (SQLite doesn't enforce FKs).",

@@ -20,6 +20,7 @@ _JOB = _DEPLOY / "ingest-daily.sh"
 _DOCKERFILE = _DEPLOY / "ingest-cron.Dockerfile"
 _CADDYFILE = _DEPLOY / "Caddyfile"
 _BACKUP = _DEPLOY / "backup-daily.sh"
+_RETENTION = _DEPLOY / "retention-sweep.sh"
 
 
 def test_overlay_documents_its_own_usage_and_sources_secrets_from_env() -> None:
@@ -259,23 +260,27 @@ def test_sidecar_renders_under_the_ops_profile() -> None:
     assert "TZ: America/Los_Angeles" in rendered
     assert "target: /etc/crontabs/root" in rendered
     assert "target: /etc/ingest/backup.sh" in rendered
+    assert "target: /etc/ingest/retention.sh" in rendered
     assert "target: /backups" in rendered
     assert "POSTGRES_PASSWORD" in rendered
     assert 'published: "5432"' not in rendered  # the overlay's own guarantee still holds
 
 
-def test_crontab_fires_ingest_then_backup_nightly_and_holds_no_secret() -> None:
+def test_crontab_fires_ingest_backup_then_retention_nightly_and_holds_no_secret() -> None:
     text = _CRONTAB.read_text(encoding="utf-8")
     schedule_lines = [
         line for line in text.splitlines() if line.strip() and not line.startswith("#")
     ]
-    assert len(schedule_lines) == 2
+    assert len(schedule_lines) == 3
     # Ingest at 03:10, backup at 03:40 — the dump captures the night's fresh data, and the
-    # half-hour gap keeps the two jobs off each other's database connections.
+    # half-hour gap keeps the two jobs off each other's database connections. The retention
+    # sweep runs last at 03:50, so the night's backup predates the deletions.
     assert schedule_lines[0].startswith("10 3 * * *")
     assert "/etc/ingest/run.sh" in schedule_lines[0]
     assert schedule_lines[1].startswith("40 3 * * *")
     assert "/etc/ingest/backup.sh" in schedule_lines[1]
+    assert schedule_lines[2].startswith("50 3 * * *")
+    assert "/etc/ingest/retention.sh" in schedule_lines[2]
     # Secrets are env references resolved at run time; never written into this file.
     assert "MCA_ADMIN_INGEST_TOKEN" not in text
     assert "X-Admin-Token" not in text
@@ -316,6 +321,31 @@ def test_job_script_posts_every_layer_in_order_using_the_env_token() -> None:
     assert "http://api:8000" in text  # reached over the compose network, not the host
     assert "mode=backfill" in text  # incremental from the stored watermark
     assert "-sS --fail" in text  # non-2xx cause lands in docker logs
+
+
+def test_retention_script_posts_the_sweep_over_the_network_using_the_env_token() -> None:
+    text = _RETENTION.read_text(encoding="utf-8")
+    assert "/admin/maintenance/retention-sweep" in text
+    assert '"X-Admin-Token: ${MCA_ADMIN_INGEST_TOKEN}"' in text
+    assert "http://api:8000" in text  # over the compose network, not the host
+    assert "-sS --fail" in text  # non-2xx cause lands in docker logs
+    # An unset token would otherwise sweep nothing and look like a successful run.
+    assert "refusing to run" in text
+
+
+def test_rendered_overlay_forwards_the_retention_window_when_set() -> None:
+    # Null-value passthrough, like MCA_DATA_STALENESS_DAYS: set it and it reaches the api,
+    # leave it unset and the app default (30 days) applies.
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    with_window = _render({**_BASE_ENV, "MCA_SESSION_DATA_RETENTION_DAYS": "45"})
+    assert with_window.returncode == 0, with_window.stderr
+    assert 'MCA_SESSION_DATA_RETENTION_DAYS: "45"' in with_window.stdout
+
+    without_window = _render(_BASE_ENV, drop=("MCA_SESSION_DATA_RETENTION_DAYS",))
+    assert without_window.returncode == 0, without_window.stderr
+    # null = never set in the container, so nothing overrides the app default.
+    assert "MCA_SESSION_DATA_RETENTION_DAYS: null" in without_window.stdout
 
 
 def test_sidecar_image_is_pinned_and_installs_its_tools() -> None:

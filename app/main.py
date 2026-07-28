@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_admin_crime import router as admin_crime_router
+from app.api.routes_admin_maintenance import router as admin_maintenance_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_assistant import router as assistant_router
 from app.api.routes_crime import router as crime_router
@@ -130,6 +131,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(uploads_router)
     app.include_router(crime_router)
     app.include_router(admin_crime_router)
+    app.include_router(admin_maintenance_router)
     app.include_router(dashboard_router)
     app.include_router(public_dashboard_router)
     app.include_router(assistant_router)
