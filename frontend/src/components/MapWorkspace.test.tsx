@@ -282,7 +282,7 @@ describe("MapWorkspace", () => {
 
     await waitFor(() => {
       expect(createPlace).toHaveBeenCalledWith({
-        display_label: "Test location",
+        display_label: "Pin at 47.600, -122.300",
         latitude: 47.6,
         longitude: -122.3,
         visit_count: 1,

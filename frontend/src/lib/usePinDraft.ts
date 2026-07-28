@@ -98,7 +98,7 @@ export function usePinDraft({
     setDraftError("");
     try {
       const created = await createPlace({
-        display_label: labelOrDefault(draft.display_label),
+        display_label: labelOrDefault(draft.display_label, draft),
         latitude: draft.latitude,
         longitude: draft.longitude,
         visit_count: 1,
