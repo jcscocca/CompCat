@@ -526,6 +526,24 @@ describe("themed map", () => {
     expect((ringLine?.paint as Record<string, unknown>)["line-color"]).toBe("#3FBF8F");
   });
 
+  // Regression: under maplibre-gl v6 the default (diffing) setStyle applies a theme swap in
+  // place and leaves the canvas one toggle behind — the map keeps painting the previous
+  // style until the next setStyle. v5 rebuilt instead, because it rejected setSprite/
+  // setGlyphs as unimplemented diff operations. Pin the explicit rebuild.
+  it("swaps the basemap with a full rebuild, not an in-place style diff", async () => {
+    const view = renderCanvas({ theme: "light" });
+    await waitFor(() => expect(MockedMap.last!.sources.get("mc-rings")).toBeTruthy());
+    view.rerender(
+      <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
+        summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
+        incidentPoints={null} theme="dark" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
+    );
+    await waitFor(() => expect(MockedMap.last!.setStyle).toHaveBeenCalledTimes(1));
+    const [style, options] = MockedMap.last!.setStyle.mock.calls[0]!;
+    expect(options).toEqual({ diff: false });
+    expect((style as { sprite: string }).sprite).toMatch(/\/dark$/);
+  });
+
   it("passes the theme to the style builder", async () => {
     renderCanvas({ theme: "dark" });
     await waitFor(() => expect(MockedMap.lastOptions).not.toBeNull());
