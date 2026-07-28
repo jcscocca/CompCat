@@ -315,3 +315,36 @@ def test_sidecar_image_is_pinned_and_installs_its_tools() -> None:
     assert "curl" in text
     # Client major must match the postgres:16 server image in docker-compose.yml.
     assert "postgresql16-client" in text
+
+
+# ---------- log posture ----------
+
+_APP_DOCKERFILE = _ROOT / "Dockerfile"
+
+
+def test_uvicorn_access_log_is_off() -> None:
+    # Access logs record every request line, and /dashboard/geocode carries the user's
+    # typed address in the query string — that would persist real location data to disk on
+    # a privacy-first app. Application logs (warnings, errors) are unaffected.
+    text = _APP_DOCKERFILE.read_text(encoding="utf-8")
+    assert "--no-access-log" in text
+
+
+def test_overlay_documents_why_access_logs_are_off() -> None:
+    text = _PROD.read_text(encoding="utf-8")
+    assert "access log" in text.lower()
+
+
+def test_rendered_overlay_caps_log_growth_on_every_service() -> None:
+    # Unbounded json-file logs fill the VPS disk and take the database down with it.
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    result = _render(
+        {**_BASE_ENV, "MCA_ADMIN_INGEST_TOKEN": "ci-not-a-real-token"}, profiles=("ops",)
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = result.stdout
+    # api, db, caddy and the ops sidecar.
+    assert rendered.count("driver: json-file") == 4
+    assert rendered.count('max-size: 10m') == 4
+    assert rendered.count('max-file: "5"') == 4

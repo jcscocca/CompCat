@@ -8,7 +8,14 @@
 #     only ingress; the app is reachable solely over the compose network at api:8000;
 #   - POSTGRES_PASSWORD and MCA_DATABASE_URL are required from the environment with no default,
 #     so compose refuses to render — let alone start — if either is missing;
-#   - api and db restart automatically (unless-stopped) so a host reboot brings the stack back.
+#   - api and db restart automatically (unless-stopped) so a host reboot brings the stack back;
+#   - every service caps its json-file log at 10 MB x 5 files, so logs cannot fill the VPS disk
+#     and take the database down with them.
+#
+# Log posture: uvicorn runs with --no-access-log (see the Dockerfile CMD). The access log
+# records every request line, and /dashboard/geocode carries the user's typed address in the
+# query string — writing that to disk would persist real location data on a privacy-first app.
+# Application logs (warnings, errors, tracebacks) are untouched.
 # Supply the values from an env file, e.g. `--env-file .env.prod`; the full production posture
 # (.env.prod.example) ships with the VPS bring-up slice.
 services:
@@ -19,6 +26,11 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (no default in production)}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   api:
     build:
@@ -46,6 +58,11 @@ services:
       # overlay rule).
       MCA_DATA_STALENESS_DAYS:
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # Nightly ops automation: SPD ingest at 03:10 and a pg_dump backup at 03:40. Only starts
   # with an explicit profile:
@@ -78,6 +95,11 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # TLS edge. Caddy obtains and renews the Let's Encrypt certificate for the site name in
   # deploy/Caddyfile on its own; 80 must stay open for the ACME HTTP challenge and the
@@ -98,6 +120,11 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   caddy-data:
