@@ -19,6 +19,11 @@ class RateLimiterState:
         self._buckets: dict[tuple[str, str], list[float]] = {}
         self._global_day_key: str = ""
         self._global_count: int = 0
+        # Second UTC-day counter, same mechanics: LLM tokens (prompt + completion) spent across
+        # every assistant call today. Fed by app/assistant/llm_client.record_llm_tokens; read by
+        # the assistant turn before each upstream call.
+        self._token_day_key: str = ""
+        self._token_count: int = 0
 
     def try_take(
         self,
@@ -62,6 +67,29 @@ class RateLimiterState:
                 return False
             self._global_count += 1
             return True
+
+    def add_tokens(self, tokens: int, *, day_key: str | None = None) -> int:
+        """Charge LLM tokens against the current UTC day; returns the new day total."""
+        day_key = day_key or datetime.now(UTC).strftime("%Y-%m-%d")
+        with self._lock:
+            if day_key != self._token_day_key:
+                self._token_day_key = day_key
+                self._token_count = 0
+            if tokens > 0:
+                self._token_count += tokens
+            return self._token_count
+
+    def budget_exceeded(self, *, limit: int, day_key: str | None = None) -> bool:
+        """True when today's recorded tokens have reached a positive limit. A limit <= 0 means
+        no budget is configured, so nothing is ever exceeded."""
+        if limit <= 0:
+            return False
+        day_key = day_key or datetime.now(UTC).strftime("%Y-%m-%d")
+        with self._lock:
+            if day_key != self._token_day_key:
+                self._token_day_key = day_key
+                self._token_count = 0
+            return self._token_count >= limit
 
 
 _state = RateLimiterState()

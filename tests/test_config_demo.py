@@ -28,3 +28,13 @@ def test_effective_fallback_api_key_inherits_primary() -> None:
     assert s.effective_llm_fallback_api_key == "gsk_primary"
     s2 = _settings(llm_api_key="gsk_primary", llm_fallback_api_key="gsk_other")
     assert s2.effective_llm_fallback_api_key == "gsk_other"
+
+
+def test_assistant_token_budget_defaults_disabled() -> None:
+    s = _settings()
+    assert s.assistant_token_budget_per_day == 0
+
+
+def test_assistant_token_budget_reads_the_env_var(monkeypatch) -> None:
+    monkeypatch.setenv("MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY", "250000")
+    assert Settings(_env_file=None).assistant_token_budget_per_day == 250000

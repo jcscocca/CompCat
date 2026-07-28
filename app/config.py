@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     rate_limit_assistant_global_per_day: int = 100
     rate_limit_assistant_commands_per_hour: int = 120
     rate_limit_burst_per_minute: int = 120
+    # Shared daily LLM token budget (prompt + completion, all assistant calls, UTC day).
+    # 0 = disabled. Enforced only when rate_limit_enabled — and the boot guard above makes the
+    # limiter mandatory whenever a hosted LLM key is configured in a prod-like environment.
+    assistant_token_budget_per_day: int = 0
 
     geocoder_provider: str = "nominatim"
     geocoder_base_url: str = "https://nominatim.openstreetmap.org/search"

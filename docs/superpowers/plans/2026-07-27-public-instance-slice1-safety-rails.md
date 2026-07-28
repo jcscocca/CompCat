@@ -300,7 +300,7 @@ git commit -m "feat(config): refuse prod boot when a hosted LLM key runs without
 - Modify: `tests/test_ratelimit.py`
 - Modify: `tests/test_config_demo.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/test_ratelimit.py`:
 
@@ -351,14 +351,14 @@ def test_assistant_token_budget_reads_the_env_var(monkeypatch) -> None:
     assert Settings(_env_file=None).assistant_token_budget_per_day == 250000
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_ratelimit.py tests/test_config_demo.py -v`
 Expected: FAIL — `AttributeError: 'RateLimiterState' object has no attribute 'budget_exceeded'`
 (4 tests) and `AttributeError: 'Settings' object has no attribute 'assistant_token_budget_per_day'`
 (2 tests). The pre-existing tests in both files still pass.
 
-- [ ] **Step 3: Add the token counter**
+- [x] **Step 3: Add the token counter**
 
 In `app/ratelimit.py`, extend `RateLimiterState.__init__` (currently lines 16-21) — add the two
 fields after `self._global_count`:
@@ -401,7 +401,7 @@ module-level `_state = RateLimiterState()`:
             return self._token_count >= limit
 ```
 
-- [ ] **Step 4: Add the setting**
+- [x] **Step 4: Add the setting**
 
 In `app/config.py`, insert after `rate_limit_burst_per_minute: int = 120` (line 111), inside the
 same demo/public rate-limiting block:
@@ -413,12 +413,12 @@ same demo/public rate-limiting block:
     assistant_token_budget_per_day: int = 0
 ```
 
-- [ ] **Step 5: Run to verify they pass**
+- [x] **Step 5: Run to verify they pass**
 
 Run: `.venv/bin/python -m pytest tests/test_ratelimit.py tests/test_config_demo.py tests/test_ratelimit_api.py -v`
 Expected: PASS (6 new tests; the existing limiter and rate-limit API suites unchanged and green).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/ratelimit.py app/config.py tests/test_ratelimit.py tests/test_config_demo.py
