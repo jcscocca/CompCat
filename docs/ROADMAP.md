@@ -379,6 +379,26 @@ as the registered domain, "Built by Jacob Scocca" + GitHub link as the in-app op
   real keys, run the start script, rehearse the restore, create the uptime monitor, run the soak
   (closes the pending H2 run), then add the live link to the README.
 
+## Phase 9 — Pre-launch audit & fixes (2026-07-28)
+*Seven-lane audit (live UX walkthrough, 16-turn assistant battery on Groq, frontend, backend
+with reproduced measurements, statistical communication, security + DoS/robustness sub-audits),
+then four review-gated fix batches. Report: `docs/reviews/2026-07-28-pre-launch-audit.md`.*
+
+- [x] **Assistant quality (#173):** output guard on every emission path, compact grounding,
+  honest data-floor summaries, deterministic relative dates, bilingual refusals, arg bounds.
+- [x] **Backend hardening (#174):** DoS caps (radii/date/absolute/filters/body), event-loop
+  offloads, delete-after-analyze fix, CSV formula escaping, per-IP assistant bucket, sliding
+  session expiry, access-log privacy + rotation, /docs off in prod.
+- [x] **Frontend (#183):** save-searched-address contract fix, Enter-in-search, chat
+  auto-scroll, theme-toggle maplibre-6 regression, session-expiry surfacing, "no clear
+  difference" + Methods-sheet corrections, contrast/a11y/mobile fixes.
+- [x] **Retention (#184):** identity-scoped nightly sweep for abandoned session data +
+  geocode-cache eviction (a live visitor's data is never touched), created_at indexes.
+- [ ] **Fast-follow backlog** (from the audit, not launch-blocking): combobox ARIA pattern,
+  tab order/aria-live restructure, mobile keyboard-crush snap, numeric-score guard patterns,
+  ranked-surface selective-inference disclosure line, Python lockfile, ErrorBoundary,
+  share-link fragment migration, dead-locator + naming product decisions.
+
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.
