@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_admin_crime import router as admin_crime_router
@@ -42,6 +45,27 @@ def log_posture_warnings(settings: Settings) -> None:
         logger.warning(
             "MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true in a production-like environment: "
             "personal uploads store real location data — keep OFF on shared instances."
+        )
+
+
+def _install_validation_error_handler(app: FastAPI) -> None:
+    """Render 422s with ensure_ascii=True.
+
+    FastAPI's default handler echoes the offending input back. JSON accepts lone
+    surrogates (\\ud800), so an invalid field carrying one is parsed fine, rejected by
+    pydantic, then echoed — and Starlette's JSONResponse renders with ensure_ascii=False,
+    which raises UnicodeEncodeError inside the handler. The client got a 500 for what is a
+    plain bad request. Escaping non-ASCII makes any input round-trip safely; the error
+    detail (loc/msg/type) is otherwise unchanged.
+    """
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(_request: Request, exc: RequestValidationError):
+        body = json.dumps(
+            {"detail": jsonable_encoder(exc.errors())}, ensure_ascii=True, default=str
+        )
+        return Response(
+            content=body, status_code=422, media_type="application/json"
         )
 
 
@@ -96,6 +120,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
         redoc_url="/redoc" if docs_enabled else None,
         openapi_url="/openapi.json" if docs_enabled else None,
     )
+    _install_validation_error_handler(app)
     app.include_router(health_router)
     app.include_router(sessions_router)
     app.include_router(imports_router)
