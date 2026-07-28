@@ -234,6 +234,7 @@ export function ManagePlacesModal({
                 })}
               </ul>
             )}
+            <p className="mc-places-expiry">Saved places last for this session (about a day). Keep a result with a share link.</p>
             <div className="mc-places-note"><Notice /></div>
           </div>
         ) : view === "manual" ? (

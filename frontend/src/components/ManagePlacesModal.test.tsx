@@ -153,6 +153,13 @@ describe("ManagePlacesModal", () => {
     expect(onToggleExport).toHaveBeenCalledWith("p2", true);
   });
 
+  it("warns that saved places expire with the session", () => {
+    render(<ManagePlacesModal {...baseProps} initialView="manage" />);
+    expect(
+      screen.getByText("Saved places last for this session (about a day). Keep a result with a share link."),
+    ).toBeInTheDocument();
+  });
+
   it("renders the Download Tableau CSV link with the given href", () => {
     render(<ManagePlacesModal {...baseProps} exportHref="/exports/session.csv" initialView="manage" />);
     expect(screen.getByRole("link", { name: /download tableau csv/i })).toHaveAttribute("href", "/exports/session.csv");

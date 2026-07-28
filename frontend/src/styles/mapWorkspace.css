@@ -648,6 +648,8 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-trend-readout{margin:0;font-size:11px;color:var(--text-dim);font-family:var(--f-mono,ui-monospace);min-height:15px;}
 .mc-trend-note{margin:0;font-size:10.5px;color:var(--text-dim);}
 .mc-copy-status{font-size:12px;color:var(--text-dim);margin-top:2px;}
+.mc-copy-hint{margin:2px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
+.mc-places-expiry{margin:10px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
 
 /* Dark theme — token overrides only. Data-mark constants (--graphite/--slate/
    --slate-soft) are deliberately NOT overridden: the calm neutral marks stay

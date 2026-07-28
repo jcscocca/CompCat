@@ -831,7 +831,7 @@ git commit -m "fix(a11y): allow pinch zoom by dropping maximum-scale/user-scalab
 - Modify: `frontend/src/components/ManagePlacesModal.test.tsx`
 - Modify: `frontend/src/styles/mapWorkspace.css`
 
-- [ ] **Step 1: Add the failing tests**
+- [x] **Step 1: Add the failing tests**
 
 In `frontend/src/components/ContextStrip.test.tsx`, add inside the existing describe block:
 
@@ -869,12 +869,12 @@ In `frontend/src/components/ManagePlacesModal.test.tsx`, add inside the existing
   });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx vitest run src/components/ContextStrip.test.tsx src/components/ManagePlacesModal.test.tsx --environment jsdom`
 Expected: FAIL — three new tests fail on missing text; every existing test still passes.
 
-- [ ] **Step 3: Add the share-toast hint**
+- [x] **Step 3: Add the share-toast hint**
 
 In `frontend/src/components/ContextStrip.tsx`, replace the copy-status span (lines 126-128) with a sibling hint that only renders on success — the existing `copy-status` region keeps its exact "Copied" / failure strings so `ContextStrip.test.tsx:95-118` stay green:
 
@@ -887,7 +887,7 @@ In `frontend/src/components/ContextStrip.tsx`, replace the copy-status span (lin
           ) : null}
 ```
 
-- [ ] **Step 4: Add the manage-places note**
+- [x] **Step 4: Add the manage-places note**
 
 In `frontend/src/components/ManagePlacesModal.tsx`, replace the note slot (line 237) with:
 
@@ -896,7 +896,7 @@ In `frontend/src/components/ManagePlacesModal.tsx`, replace the note slot (line 
             <div className="mc-places-note"><Notice /></div>
 ```
 
-- [ ] **Step 5: Style both hints**
+- [x] **Step 5: Style both hints**
 
 In `frontend/src/styles/mapWorkspace.css`, immediately after the `.mc-copy-status{…}` rule (currently line 644), append:
 
@@ -905,12 +905,12 @@ In `frontend/src/styles/mapWorkspace.css`, immediately after the `.mc-copy-statu
 .mc-places-expiry{margin:10px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
 ```
 
-- [ ] **Step 6: Run both suites**
+- [x] **Step 6: Run both suites**
 
 Run: `cd frontend && npx vitest run src/components/ContextStrip.test.tsx src/components/ManagePlacesModal.test.tsx --environment jsdom`
 Expected: PASS (3 new + all existing).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/components/ContextStrip.tsx frontend/src/components/ContextStrip.test.tsx frontend/src/components/ManagePlacesModal.tsx frontend/src/components/ManagePlacesModal.test.tsx frontend/src/styles/mapWorkspace.css
