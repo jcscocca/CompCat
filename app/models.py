@@ -294,4 +294,6 @@ class GeocodeCache(Base):
     provider: Mapped[str] = mapped_column(Text)
     query_normalized: Mapped[str] = mapped_column(Text)
     results_json: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
