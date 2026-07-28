@@ -38,7 +38,11 @@ def _session(tmp_path, name: str = "retention"):
     return get_sessionmaker()()
 
 
-def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD, owner: str = "user-dormant") -> PlaceCluster:
+def _cluster(
+    created_at: datetime,
+    method: str = MANUAL_CLUSTER_METHOD,
+    owner: str = "user-dormant",
+) -> PlaceCluster:
     return PlaceCluster(
         user_id_hash=owner,
         cluster_version="manual-1",
@@ -54,7 +58,9 @@ def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD, owner: s
     )
 
 
-def _summary(cluster_id: str, created_at: datetime, owner: str = "user-dormant") -> PlaceCrimeSummary:
+def _summary(
+    cluster_id: str, created_at: datetime, owner: str = "user-dormant"
+) -> PlaceCrimeSummary:
     return PlaceCrimeSummary(
         user_id_hash=owner,
         place_cluster_id=cluster_id,
@@ -76,7 +82,9 @@ def _run(created_at: datetime, owner: str = "user-dormant") -> AnalysisRun:
     )
 
 
-def _comparison(created_at: datetime, owner: str = "user-dormant") -> StatisticalComparison:
+def _comparison(
+    created_at: datetime, owner: str = "user-dormant"
+) -> StatisticalComparison:
     return StatisticalComparison(
         user_id_hash=owner,
         comparison_type="site",
@@ -92,7 +100,9 @@ def _comparison(created_at: datetime, owner: str = "user-dormant") -> Statistica
     )
 
 
-def _option(comparison_id: str, created_at: datetime, owner: str = "user-dormant") -> StatisticalComparisonOption:
+def _option(
+    comparison_id: str, created_at: datetime, owner: str = "user-dormant"
+) -> StatisticalComparisonOption:
     return StatisticalComparisonOption(
         comparison_id=comparison_id,
         user_id_hash=owner,
@@ -108,7 +118,9 @@ def _option(comparison_id: str, created_at: datetime, owner: str = "user-dormant
     )
 
 
-def _pairwise(comparison_id: str, created_at: datetime, owner: str = "user-dormant") -> StatisticalPairwiseResult:
+def _pairwise(
+    comparison_id: str, created_at: datetime, owner: str = "user-dormant"
+) -> StatisticalPairwiseResult:
     return StatisticalPairwiseResult(
         comparison_id=comparison_id,
         user_id_hash=owner,
@@ -228,7 +240,8 @@ def test_sweep_never_touches_upload_derived_clusters(tmp_path):
     manual_cluster = _cluster(OLD)
     session.add_all([upload_cluster, direct_cluster, manual_cluster])
     session.commit()
-    upload_id, direct_id, manual_id = upload_cluster.id, direct_cluster.id, manual_cluster.id
+    upload_id, direct_id = upload_cluster.id, direct_cluster.id
+    manual_id = manual_cluster.id
 
     counts = sweep_retention(session, get_settings(), now=NOW)
 
