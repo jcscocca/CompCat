@@ -200,3 +200,17 @@ def test_policy_caveats_frame_the_three_layers_including_arrests():
     assert "enforcement" in text
     assert "911 calls" in text or "calls for service" in text
 
+
+
+def test_dashboard_state_coerces_an_unknown_layer_to_reported():
+    # The layer decides what every count MEANS (reports vs arrests vs calls), so an
+    # unrecognized value must never reach the tools and silently mislabel results.
+    from app.assistant.agent import _tool_arguments
+
+    assert AssistantDashboardState(layer="calls").layer == "calls"
+    assert AssistantDashboardState(layer="pwned").layer == "reported"
+    assert AssistantDashboardState(layer=None).layer == "reported"
+    assert AssistantDashboardState(layer=17).layer == "reported"
+
+    state = AssistantDashboardState(selected_place_ids=["p1"], radii_m=[250], layer="bogus")
+    assert _tool_arguments("analyze_places", state, {})["layer"] == "reported"

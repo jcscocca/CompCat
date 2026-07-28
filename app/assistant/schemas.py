@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 # Abuse ceilings on the assistant request. The endpoint is session-gated, but sessions are
 # free and anonymous, so the payload itself is bounded to keep one caller from stuffing the
@@ -29,7 +32,23 @@ class AssistantDashboardState(BaseModel):
     nibrs_group: str | None = None
     # Active analysis layer ("reported" = SPD crime reports, "arrests" = SPD arrest
     # records (enforcement activity), "calls" = 911 calls for service).
-    layer: str = "reported"
+    layer: Literal["reported", "arrests", "calls"] = "reported"
+
+    @field_validator("layer", mode="before")
+    @classmethod
+    def _known_layer(cls, value: Any) -> Any:
+        """Fall back to "reported" rather than 422 on an unrecognized layer.
+
+        The layer decides what every count MEANS, so an unknown value must not reach the
+        tools — but a bad layer is a client bug, and rejecting the request would take the
+        whole chat turn down with it. Degrade to the default (as _select_places does for
+        an unknown mode) and note it server-side.
+        """
+        if value in ("reported", "arrests", "calls"):
+            return value
+        if value is not None:
+            logger.warning("assistant dashboard_state carried an unknown layer %r", value)
+        return "reported"
 
 
 class SemanticContextPacket(BaseModel):
