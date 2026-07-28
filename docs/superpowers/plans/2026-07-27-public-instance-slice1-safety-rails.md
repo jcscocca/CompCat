@@ -161,7 +161,7 @@ Read from this worktree at plan time.
 - Modify: `app/config.py`
 - Create: `tests/test_config_llm_guard.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_config_llm_guard.py`:
 
@@ -236,13 +236,13 @@ def test_blank_key_does_not_trip_the_guard() -> None:
     assert settings.rate_limit_enabled is False
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_config_llm_guard.py -v`
 Expected: FAIL — the four parametrized cases and `test_error_names_every_configured_key` fail with
 `DID NOT RAISE <class 'pydantic_core.ValidationError'>`. The three "boots cleanly" tests already pass.
 
-- [ ] **Step 3: Add the validator**
+- [x] **Step 3: Add the validator**
 
 In `app/config.py`, insert directly after `require_production_geocoder_contact` (which ends with
 `return self` at line 180) and before the `@lru_cache`/`get_settings` block:
@@ -277,13 +277,13 @@ In `app/config.py`, insert directly after `require_production_geocoder_contact` 
         return self
 ```
 
-- [ ] **Step 4: Run to verify it passes, plus the neighbouring config/secret suites**
+- [x] **Step 4: Run to verify it passes, plus the neighbouring config/secret suites**
 
 Run: `.venv/bin/python -m pytest tests/test_config_llm_guard.py tests/test_config_demo.py tests/test_public_sessions.py tests/test_internal_surface.py -v`
 Expected: PASS (9 new tests; every existing config/production-boot test still green — the prod-like
 tests in those files set no LLM key, so the new validator is inert for them).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/config.py tests/test_config_llm_guard.py

@@ -179,6 +179,34 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def require_production_llm_rate_limit(self) -> Settings:
+        """A configured hosted-LLM key is the spend signal — the provider name alone cannot tell a
+        paid endpoint from a free one (Groq and OpenAI both ride the "openai" provider). Prod-like
+        + any hosted key + the limiter off would leave metered spend exposed to an open URL, so
+        refuse to boot. The keyless LAN llama-swap path is untouched."""
+        if not self.is_production_like or self.rate_limit_enabled:
+            return self
+
+        key_names = [
+            name
+            for name, value in (
+                ("MCA_LLM_API_KEY", self.llm_api_key),
+                ("MCA_LLM_FALLBACK_API_KEY", self.llm_fallback_api_key),
+                ("MCA_OPENAI_API_KEY", self.openai_api_key),
+                ("MCA_ANTHROPIC_API_KEY", self.anthropic_api_key),
+            )
+            if value.strip()
+        ]
+        if key_names:
+            joined_names = ", ".join(key_names)
+            raise ValueError(
+                f"Production deployments with a hosted LLM key ({joined_names}) must set "
+                "MCA_RATE_LIMIT_ENABLED=true — an unmetered key behind a public URL can run up "
+                "real spend. Set it to true, or unset the key to use a keyless endpoint."
+            )
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:
