@@ -62,8 +62,11 @@ def months_between(start: date, end: date) -> list[tuple[int, int]]:
 
 
 def _monthly_counts(incidents: list[CrimeIncidentData], start: date, end: date) -> list[int]:
-    keys = [_month_key(i) for i in incidents]
-    return [keys.count(m) for m in months_between(start, end)]
+    # One pass over the incidents, not one scan per month: the old list.count() per month
+    # was O(months x incidents). The span cap bounds months at ~100, but a busy citywide
+    # baseline still carries tens of thousands of incidents through this.
+    keys = Counter(_month_key(i) for i in incidents)
+    return [keys[m] for m in months_between(start, end)]
 
 
 def _incidents_in_radius(

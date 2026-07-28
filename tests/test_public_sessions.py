@@ -210,8 +210,10 @@ def test_post_sessions_preserves_valid_session(tmp_path):
 
     assert second_response.status_code == 200
     assert second_response.json()["session_state"] == "resumed"
-    assert "set-cookie" not in second_response.headers
-    assert client.cookies.get("mca_session") == cookie_value
+    # The cookie is re-issued to slide the 24h expiry forward, but it re-signs the SAME
+    # session id — so the identity, and everything saved under it, is preserved.
+    refreshed = client.cookies.get("mca_session")
+    assert session_id_from_token(refreshed) == session_id_from_token(cookie_value)
 
     list_response = client.get("/places")
     assert list_response.status_code == 200

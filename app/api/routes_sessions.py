@@ -11,6 +11,7 @@ from app.sessions import (
     SESSION_MAX_AGE_SECONDS,
     new_session_token,
     session_id_from_token,
+    token_for_session_id,
 )
 
 router = APIRouter()
@@ -22,10 +23,16 @@ def create_public_session(
     response: Response,
     session_token: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
 ) -> dict[str, str]:
-    if session_id_from_token(session_token) is not None:
+    settings = get_settings()
+    resumed_session_id = session_id_from_token(session_token)
+    if resumed_session_id is not None:
+        # Sliding window: re-sign the same id with a fresh 24h expiry so an actively-used
+        # session is not logged out mid-analysis exactly 24h after it started. The identity
+        # (and every place saved under it) is derived from the id, which does not change.
+        # No rate-limit charge — a resume is not a new session.
+        _set_session_cookie(response, token_for_session_id(resumed_session_id), settings)
         return {"session_state": "resumed"}
 
-    settings = get_settings()
     if settings.rate_limit_enabled:
         ip = client_ip_from(request, trust_proxy_headers=settings.trust_proxy_headers)
         wait = get_rate_limiter().try_take(
@@ -40,12 +47,16 @@ def create_public_session(
                 detail="Session request limit reached — please retry later.",
                 headers={"Retry-After": str(max(1, int(wait)))},
             )
+    _set_session_cookie(response, new_session_token(), settings)
+    return {"session_state": "created"}
+
+
+def _set_session_cookie(response: Response, token: str, settings) -> None:
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
-        value=new_session_token(),
+        value=token,
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=True,
         secure=settings.effective_session_cookie_secure,
         samesite="lax",
     )
-    return {"session_state": "created"}

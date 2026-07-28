@@ -13,6 +13,10 @@ async def read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
 
     Reads one byte past the limit so an oversize body is detected and rejected (HTTP 413)
     without buffering the whole thing — a memory-exhaustion backstop for the upload paths.
+
+    This is a backstop, not the real bound: it runs after FastAPI has already parsed the
+    multipart body and spooled it to disk. What actually caps an upload end-to-end is the
+    edge — see request_body max_size in deploy/Caddyfile.
     """
     payload = await file.read(max_bytes + 1)
     if len(payload) > max_bytes:

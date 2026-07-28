@@ -134,3 +134,65 @@ def test_rate_gate_disabled_when_interval_zero():
     gate = RateGate()
     gate.wait(0.0, now=lambda: 0.0, sleep=lambda s: sleeps.append(s))
     assert sleeps == []
+
+
+def test_rate_gate_releases_the_lock_while_sleeping():
+    # The gate used to sleep while holding its mutex, so every concurrent geocode blocked
+    # on the lock instead of on its own delay — N callers pinned N threadpool workers for
+    # N x interval. The wait must be reserved under the lock and served outside it.
+    import threading
+    import time as time_module
+
+    gate = RateGate()
+    interval = 0.4
+    gate.wait(interval)  # prime it, so the next caller has to wait a full interval
+
+    sleeper_done = threading.Event()
+
+    def sleeper():
+        gate.wait(interval)
+        sleeper_done.set()
+
+    thread = threading.Thread(target=sleeper)
+    thread.start()
+    time_module.sleep(0.05)  # let the sleeper claim its slot and start waiting
+
+    started = time_module.monotonic()
+    acquired = gate._lock.acquire(timeout=interval)
+    lock_wait = time_module.monotonic() - started
+    if acquired:
+        gate._lock.release()
+
+    assert acquired, "gate held its lock for the whole sleep"
+    assert lock_wait < interval / 2, f"lock was held for {lock_wait:.3f}s during the sleep"
+    thread.join(timeout=interval * 4)
+    assert sleeper_done.is_set()
+
+
+def test_rate_gate_preserves_upstream_cadence_under_concurrency():
+    # Releasing the lock must not let concurrent callers stampede upstream: the slot each
+    # one claims still has to be at least min_interval after the previous claim.
+    import threading
+    import time as time_module
+
+    gate = RateGate()
+    interval = 0.15
+    releases: list[float] = []
+    releases_lock = threading.Lock()
+
+    def caller():
+        gate.wait(interval)
+        with releases_lock:
+            releases.append(time_module.monotonic())
+
+    threads = [threading.Thread(target=caller) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=interval * 10)
+
+    assert len(releases) == 4
+    ordered = sorted(releases)
+    gaps = [b - a for a, b in zip(ordered, ordered[1:], strict=False)]
+    # One caller goes straight through (nothing pending); the rest are spaced by the gate.
+    assert all(gap >= interval * 0.8 for gap in gaps), gaps

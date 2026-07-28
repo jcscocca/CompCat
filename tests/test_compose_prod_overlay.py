@@ -89,6 +89,7 @@ def test_rendered_overlay_publishes_only_the_caddy_edge() -> None:
             "POSTGRES_PASSWORD": _TEST_PASSWORD,
             "MCA_DATABASE_URL": _TEST_DATABASE_URL,
             "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+            "MCA_RATE_LIMIT_ENABLED": "true",
         }
     )
     assert result.returncode == 0, result.stderr
@@ -109,6 +110,7 @@ def test_rendered_caddy_mounts_the_repo_caddyfile_read_only() -> None:
             "POSTGRES_PASSWORD": _TEST_PASSWORD,
             "MCA_DATABASE_URL": _TEST_DATABASE_URL,
             "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+            "MCA_RATE_LIMIT_ENABLED": "true",
         }
     )
     assert result.returncode == 0, result.stderr
@@ -140,10 +142,21 @@ def test_caddyfile_terminates_tls_for_the_registered_domain_and_proxies_the_api(
     assert directives == [
         "compcat.app {",
         "encode gzip",
+        "request_body {",
+        "max_size 1MB",
         "reverse_proxy api:8000 {",
         "header_up -CF-Connecting-IP",
         "header_up X-Forwarded-For {client_ip}",
     ]
+
+
+def test_caddyfile_caps_the_request_body_at_the_edge() -> None:
+    # The largest legitimate body is the 200 KB bulk-places CSV; personal uploads are off
+    # on the public instance. The app's own 413 only fires after FastAPI has spooled the
+    # multipart body to disk, so this edge cap is what actually bounds an upload.
+    text = _CADDYFILE.read_text(encoding="utf-8")
+    assert "request_body" in text
+    assert "max_size 1MB" in text
 
 
 def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:
@@ -153,6 +166,7 @@ def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:
         "POSTGRES_PASSWORD": _TEST_PASSWORD,
         "MCA_DATABASE_URL": _TEST_DATABASE_URL,
         "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        "MCA_RATE_LIMIT_ENABLED": "true",
     }
     with_origin = _render({**env, "VITE_CANONICAL_ORIGIN": "https://compcat.app"})
     assert with_origin.returncode == 0, with_origin.stderr
@@ -170,6 +184,7 @@ def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
         {
             "MCA_DATABASE_URL": _TEST_DATABASE_URL,
             "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+            "MCA_RATE_LIMIT_ENABLED": "true",
         },
         drop=("POSTGRES_PASSWORD",),
     )
@@ -177,12 +192,33 @@ def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
     assert "POSTGRES_PASSWORD" in result.stderr
 
 
+def test_rendered_overlay_requires_the_rate_limiter_posture() -> None:
+    # The base file defaults the limiter to false. In production that silently ships an
+    # unmetered public surface, so the overlay makes the posture explicit.
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    result = _render(
+        {
+            "POSTGRES_PASSWORD": _TEST_PASSWORD,
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        },
+        drop=("MCA_RATE_LIMIT_ENABLED",),
+    )
+    assert result.returncode != 0
+    assert "MCA_RATE_LIMIT_ENABLED" in result.stderr
+
+
 def test_rendered_overlay_requires_an_explicit_token_budget() -> None:
     # The production spend posture must be stated, not inherited silently (0 disables).
     if not _compose_available():
         pytest.skip("docker compose plugin not available")
     result = _render(
-        {"POSTGRES_PASSWORD": _TEST_PASSWORD, "MCA_DATABASE_URL": _TEST_DATABASE_URL},
+        {
+            "POSTGRES_PASSWORD": _TEST_PASSWORD,
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_RATE_LIMIT_ENABLED": "true",
+        },
         drop=("MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY",),
     )
     assert result.returncode != 0
@@ -195,6 +231,7 @@ _BASE_ENV = {
     "POSTGRES_PASSWORD": _TEST_PASSWORD,
     "MCA_DATABASE_URL": _TEST_DATABASE_URL,
     "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+    "MCA_RATE_LIMIT_ENABLED": "true",
 }
 
 
@@ -289,3 +326,62 @@ def test_sidecar_image_is_pinned_and_installs_its_tools() -> None:
     assert "curl" in text
     # Client major must match the postgres:16 server image in docker-compose.yml.
     assert "postgresql16-client" in text
+
+
+# ---------- log posture ----------
+
+_APP_DOCKERFILE = _ROOT / "Dockerfile"
+
+
+def test_uvicorn_access_log_is_off() -> None:
+    # Access logs record every request line, and /dashboard/geocode carries the user's
+    # typed address in the query string — that would persist real location data to disk on
+    # a privacy-first app. Application logs (warnings, errors) are unaffected.
+    text = _APP_DOCKERFILE.read_text(encoding="utf-8")
+    assert "--no-access-log" in text
+
+
+def test_overlay_documents_why_access_logs_are_off() -> None:
+    text = _PROD.read_text(encoding="utf-8")
+    assert "access log" in text.lower()
+
+
+def test_rendered_overlay_caps_log_growth_on_every_service() -> None:
+    # Unbounded json-file logs fill the VPS disk and take the database down with it.
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    result = _render(
+        {**_BASE_ENV, "MCA_ADMIN_INGEST_TOKEN": "ci-not-a-real-token"}, profiles=("ops",)
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = result.stdout
+    # api, db, caddy and the ops sidecar.
+    assert rendered.count("driver: json-file") == 4
+    assert rendered.count('max-size: 10m') == 4
+    assert rendered.count('max-file: "5"') == 4
+
+
+# ---------- repo automation ----------
+
+_DEPENDABOT = _ROOT / ".github" / "dependabot.yml"
+
+
+def test_dependabot_watches_both_dockerfiles() -> None:
+    # Base images are pinned, so without this they only move when someone remembers to
+    # bump them — which is how a deployed image quietly accumulates CVEs.
+    import yaml
+
+    config = yaml.safe_load(_DEPENDABOT.read_text(encoding="utf-8"))
+    docker = [
+        entry for entry in config["updates"] if entry["package-ecosystem"] == "docker"
+    ]
+    assert {entry["directory"] for entry in docker} == {"/", "/deploy"}
+    assert all(entry["schedule"]["interval"] == "weekly" for entry in docker)
+
+
+def test_sidecar_documents_why_it_stays_root() -> None:
+    # busybox crond needs privileges to run a job as the crontab's named user; as nobody it
+    # silently fires nothing. The reasoning must survive in the file, not just in review.
+    text = _DOCKERFILE.read_text(encoding="utf-8")
+    assert "crond" in text
+    assert "nobody" in text

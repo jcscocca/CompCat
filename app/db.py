@@ -30,9 +30,15 @@ def configure_database(database_url: str | None = None) -> None:
         sqlite_path = url.split(":///", 1)[1]
         if sqlite_path != ":memory:":
             Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    _engine = create_engine(url, connect_args=connect_args, future=True)
-    if url.startswith("sqlite"):
+    is_sqlite = url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    # pool_pre_ping on Postgres only: pooled connections die between requests (a server
+    # restart, the nightly backup bouncing it, a firewall reaping an idle socket), and
+    # without the ping the pool hands out the dead one and the request 500s. SQLite has no
+    # such pool to guard, and the ping would just be overhead on a local file.
+    pool_args = {} if is_sqlite else {"pool_pre_ping": True}
+    _engine = create_engine(url, connect_args=connect_args, future=True, **pool_args)
+    if is_sqlite:
         event.listen(_engine, "connect", _enable_sqlite_foreign_keys)
     _session_local = sessionmaker(_engine, autoflush=False, autocommit=False, future=True)
 

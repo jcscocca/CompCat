@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -26,6 +27,17 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+SEATTLE_TZ = ZoneInfo("America/Los_Angeles")
+
+
+def _local_today(now: datetime | None = None) -> date:
+    """Today in Seattle. The SPD parsers stamp naive local wall-clock times as UTC, so a
+    layer's data_through is a Seattle date — comparing it against the UTC date would add a
+    spurious day of lag for the 7-8 hours after 17:00 local, which is enough to page on a
+    dataset sitting exactly at the staleness threshold."""
+    return (now or datetime.now(UTC)).astimezone(SEATTLE_TZ).date()
+
+
 def _lag_days(data_through: object, today: date) -> int | None:
     """Days between a layer's newest incident date and today, or None when that date is
     missing or unparseable (which the caller treats as stale)."""
@@ -49,7 +61,7 @@ def health_data() -> JSONResponse:
     expired anyway. Unknown counts as stale.
     """
     threshold = get_settings().data_staleness_days
-    today = datetime.now(UTC).date()
+    today = _local_today()
     try:
         with get_sessionmaker()() as session:
             freshness = dashboard_freshness_by_layer(session)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -8,6 +8,28 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.crime.sources import LAYER_REPORTED, LAYERS
 
 DashboardRadiusMeters = Annotated[int, Field(gt=0, le=5000)]
+
+# Every analysis endpoint fans out over radii x date-window, so both are capped: the
+# product offers three radii (config.crime_radii_m) and the UI only ever sends one, and
+# ~8 years of window is far past the SPD dataset's useful span. Without these an
+# unauthenticated-cheap POST can request an arbitrarily expensive scan.
+MAX_ANALYSIS_RADII = 3
+MAX_ANALYSIS_SPAN_DAYS = 3000
+# Absolute bounds, which the span cap alone does not give: a window can be short and still
+# sit at date.max, where exposure.trim_partial_edge_months' `end + timedelta(days=1)`
+# raises OverflowError and the request 500s. The floor predates any SPD data; the ceiling
+# allows a modest lookahead for windows that run to "today".
+MIN_ANALYSIS_DATE = date(2008, 1, 1)
+MAX_ANALYSIS_FUTURE_DAYS = 366
+
+
+def _max_analysis_date() -> date:
+    return datetime.now(UTC).date() + timedelta(days=MAX_ANALYSIS_FUTURE_DAYS)
+
+
+# Offense filters are persisted verbatim onto AnalysisRun, so an unbounded value is a
+# multi-MB write per request. 80 matches the /dashboard/trends query cap.
+OffenseFilter = Annotated[str | None, Field(default=None, max_length=80)]
 
 # Seattle-metro bounds (lon W/E, lat S/N) — mirrors config.geocoder_viewbox and
 # frontend SEATTLE_BBOX. A shared-view point must resolve inside Seattle.
@@ -39,6 +61,32 @@ class AnalysisPoint(BaseModel):
         return self
 
 
+class AnalysisWindow(BaseModel):
+    """The date window shared by every analysis request, ordered and length-capped."""
+
+    analysis_start_date: date
+    analysis_end_date: date
+
+    @model_validator(mode="after")
+    def window_must_be_ordered_and_bounded(self) -> AnalysisWindow:
+        if self.analysis_end_date < self.analysis_start_date:
+            raise ValueError("analysis_end_date must be on or after analysis_start_date")
+        latest = _max_analysis_date()
+        for value in (self.analysis_start_date, self.analysis_end_date):
+            if not MIN_ANALYSIS_DATE <= value <= latest:
+                raise ValueError(
+                    f"dates must fall between {MIN_ANALYSIS_DATE.isoformat()} and "
+                    f"{latest.isoformat()}"
+                )
+        span_days = (self.analysis_end_date - self.analysis_start_date).days
+        if span_days > MAX_ANALYSIS_SPAN_DAYS:
+            raise ValueError(
+                f"date range is too long — choose a window of at most "
+                f"{MAX_ANALYSIS_SPAN_DAYS} days"
+            )
+        return self
+
+
 class MapBounds(BaseModel):
     """A map viewport; must intersect the Seattle area the data covers."""
 
@@ -61,13 +109,11 @@ class MapBounds(BaseModel):
         return self
 
 
-class DashboardIncidentPointsRequest(BaseModel):
+class DashboardIncidentPointsRequest(AnalysisWindow):
     bounds: MapBounds
-    analysis_start_date: date
-    analysis_end_date: date
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
+    offense_category: OffenseFilter = None
+    offense_subcategory: OffenseFilter = None
+    nibrs_group: OffenseFilter = None
     layer: str = LAYER_REPORTED
 
     @field_validator("layer")
@@ -76,15 +122,13 @@ class DashboardIncidentPointsRequest(BaseModel):
         return _validate_layer(value)
 
 
-class DashboardAnalyzeRequest(BaseModel):
+class DashboardAnalyzeRequest(AnalysisWindow):
     place_ids: list[str] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
-    analysis_start_date: date
-    analysis_end_date: date
-    radii_m: list[DashboardRadiusMeters] = Field(min_length=1)
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
+    radii_m: list[DashboardRadiusMeters] = Field(min_length=1, max_length=MAX_ANALYSIS_RADII)
+    offense_category: OffenseFilter = None
+    offense_subcategory: OffenseFilter = None
+    nibrs_group: OffenseFilter = None
     # Which incident-context layer to query: "reported" (SPD crime reports), "arrests" (SPD
     # arrest records — enforcement activity, kept separate from reported incidents), or
     # "calls" (911 calls for service). The layers are mutually exclusive by design.
@@ -109,15 +153,13 @@ class DashboardAnalyzeRequest(BaseModel):
         return _validate_layer(value)
 
 
-class DashboardCompareRequest(BaseModel):
+class DashboardCompareRequest(AnalysisWindow):
     place_ids: list[str] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
-    analysis_start_date: date
-    analysis_end_date: date
     radius_m: DashboardRadiusMeters
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
+    offense_category: OffenseFilter = None
+    offense_subcategory: OffenseFilter = None
+    nibrs_group: OffenseFilter = None
     layer: str = LAYER_REPORTED
 
     @model_validator(mode="after")

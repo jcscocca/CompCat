@@ -36,4 +36,8 @@ COPY --from=frontend /app/static/dashboard ./app/static/dashboard
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
 USER appuser
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# --no-access-log: the access log records every request line, and /dashboard/geocode
+# carries the user's typed address in the query string — writing that to disk would
+# persist real location data on a privacy-first app. Application logs (warnings, errors,
+# tracebacks) are unaffected; the Caddy edge still has request-level visibility if needed.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]

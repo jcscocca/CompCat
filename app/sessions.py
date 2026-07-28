@@ -12,12 +12,18 @@ SESSION_COOKIE_NAME = "mca_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24
 
 
-def new_session_token() -> str:
-    session_id = str(uuid4())
+def token_for_session_id(session_id: str) -> str:
+    """Sign ``session_id`` with a fresh expiry window. Re-signing an existing id is how the
+    resume path slides the window: the identity (and so the user hash, and so every saved
+    place) is derived from the id alone, which is unchanged."""
     expires_at = int(time.time()) + SESSION_MAX_AGE_SECONDS
     payload = f"{session_id}:{expires_at}"
     signature = _sign(payload)
     return f"{payload}.{signature}"
+
+
+def new_session_token() -> str:
+    return token_for_session_id(str(uuid4()))
 
 
 def session_id_from_token(token: str | None) -> str | None:

@@ -205,10 +205,12 @@ def test_incident_points_rejects_non_seattle_bbox_as_422(tmp_path) -> None:
     assert "outside the Seattle area" in response.text
 
 
-def test_incident_points_reversed_dates_are_400(tmp_path) -> None:
+def test_incident_points_reversed_dates_are_422(tmp_path) -> None:
+    # Ordering is now a schema-level guard (alongside the span cap), so the request is
+    # rejected at validation as a 422 rather than reaching the service for a 400.
     client = _client_with_incidents(tmp_path)
     client.post("/sessions")
     payload = dict(_API_PAYLOAD, analysis_start_date="2025-10-31", analysis_end_date="2025-01-01")
     response = client.post("/dashboard/incident-points", json=payload)
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "analysis_start_date" in response.text
