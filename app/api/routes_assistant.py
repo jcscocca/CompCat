@@ -213,11 +213,12 @@ _COMMAND_INVALID_MESSAGE = "That command didn't validate — check the values an
 
 
 def _is_validation_failure(exc: BaseException) -> bool:
-    """execute_tool re-raises a pydantic ValidationError as AssistantToolError(str(exc)),
-    keeping the original as __cause__ — so the wrapper's message is the raw pydantic text.
-    Deliberately authored AssistantToolError copy has no ValidationError cause and is
-    passed through unchanged."""
-    return isinstance(exc, ValidationError) or isinstance(exc.__cause__, ValidationError)
+    """execute_tool re-raises wrapped exceptions as AssistantToolError(str(exc)), keeping
+    the original as __cause__ — so the wrapper's message can be raw internal text.
+    Pydantic dumps and codec errors are never user-authored copy; service-raised
+    ValueErrors ("Unknown layer: ...") are, and keep passing through unchanged."""
+    internal = (ValidationError, UnicodeError)
+    return isinstance(exc, internal) or isinstance(exc.__cause__, internal)
 
 
 @router.post("/assistant/commands")

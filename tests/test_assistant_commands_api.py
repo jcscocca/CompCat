@@ -203,6 +203,48 @@ def test_validation_failure_returns_fixed_copy_without_internals(session_client)
         assert leaked not in body
 
 
+def test_commands_path_enforces_the_dashboard_payload_caps(session_client):
+    # The commands path validates tool arg models, not the dashboard schemas — the
+    # review found it was the one public route where a 9999 end date (OverflowError in
+    # exposure math), a century span, or a megabyte category slipped through.
+    hostile = [
+        {"analysis_start_date": "9991-10-16", "analysis_end_date": "9999-12-31"},
+        {"analysis_start_date": "1900-01-01", "analysis_end_date": "2026-01-01"},
+        {"offense_category": "x" * 200_000},
+    ]
+    for arguments in hostile:
+        for command in ("analyze_places", "compare_places"):
+            response = session_client.post(
+                "/assistant/commands",
+                json={"command": command, "arguments": arguments},
+            )
+            assert response.status_code == 200, (command, arguments.keys())
+            events = parse_sse(response.text)
+            errors = [e for e in events if e["event"] == "error"]
+            assert len(errors) == 1, (command, list(arguments.keys()))
+            # The fixed validation copy, never an internal/OverflowError frame.
+            assert errors[0]["data"]["message"] == (
+                "That command didn't validate — check the values and try again."
+            )
+
+
+def test_codec_internals_never_reach_the_user(session_client):
+    # A lone surrogate inside a tool argument raises UnicodeEncodeError deep in the
+    # geocode path; its message ("'utf-8' codec can't encode…") is internals, not copy.
+    # The surrogate must arrive as a JSON escape in the raw body — json.loads accepts it
+    # server-side even though it can't be UTF-8 encoded (a real client can send this).
+    raw = '{"command": "select_places", "arguments": {"queries": ["a\\ud800b"]}}'
+    response = session_client.post(
+        "/assistant/commands",
+        content=raw.encode("ascii"),
+        headers={"Content-Type": "application/json"},
+    )
+    body = response.text.lower()
+    assert "codec" not in body
+    assert "surrogate" not in body
+    assert "\\ud800" not in body
+
+
 def test_commands_summary_is_output_guarded(session_client):
     # A hostile place label must not reach the user wrapped in a safety framing: the
     # command path's deterministic summary runs through the same output guard the chat
