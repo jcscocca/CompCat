@@ -183,3 +183,102 @@ def test_commands_rate_limited_per_session(tmp_path, monkeypatch):
     assert "Retry-After" in second.headers
     detail = second.json()["detail"].lower()
     assert "request" in detail or "limit" in detail
+
+
+def test_validation_failure_returns_fixed_copy_without_internals(session_client):
+    # A pydantic ValidationError is a ValueError, so it used to be echoed verbatim —
+    # leaking the internal args-model name, field paths and a pydantic docs URL.
+    response = session_client.post(
+        "/assistant/commands",
+        json={"command": "analyze_places", "arguments": {"radii_m": ["banana"]}},
+    )
+    assert response.status_code == 200
+    errors = [event for event in parse_sse(response.text) if event.get("event") == "error"]
+    assert len(errors) == 1
+    assert errors[0]["data"]["message"] == (
+        "That command didn't validate — check the values and try again."
+    )
+    body = response.text.lower()
+    for leaked in ("pydantic", "validation error for", "errors.pydantic.dev", "input_value"):
+        assert leaked not in body
+
+
+def test_commands_path_enforces_the_dashboard_payload_caps(session_client):
+    # The commands path validates tool arg models, not the dashboard schemas — the
+    # review found it was the one public route where a 9999 end date (OverflowError in
+    # exposure math), a century span, or a megabyte category slipped through.
+    hostile = [
+        {"analysis_start_date": "9991-10-16", "analysis_end_date": "9999-12-31"},
+        {"analysis_start_date": "1900-01-01", "analysis_end_date": "2026-01-01"},
+        {"offense_category": "x" * 200_000},
+    ]
+    for arguments in hostile:
+        for command in ("analyze_places", "compare_places"):
+            response = session_client.post(
+                "/assistant/commands",
+                json={"command": command, "arguments": arguments},
+            )
+            assert response.status_code == 200, (command, arguments.keys())
+            events = parse_sse(response.text)
+            errors = [e for e in events if e["event"] == "error"]
+            assert len(errors) == 1, (command, list(arguments.keys()))
+            # The fixed validation copy, never an internal/OverflowError frame.
+            assert errors[0]["data"]["message"] == (
+                "That command didn't validate — check the values and try again."
+            )
+
+
+def test_codec_internals_never_reach_the_user(session_client):
+    # A lone surrogate inside a tool argument raises UnicodeEncodeError deep in the
+    # geocode path; its message ("'utf-8' codec can't encode…") is internals, not copy.
+    # The surrogate must arrive as a JSON escape in the raw body — json.loads accepts it
+    # server-side even though it can't be UTF-8 encoded (a real client can send this).
+    raw = '{"command": "select_places", "arguments": {"queries": ["a\\ud800b"]}}'
+    response = session_client.post(
+        "/assistant/commands",
+        content=raw.encode("ascii"),
+        headers={"Content-Type": "application/json"},
+    )
+    body = response.text.lower()
+    assert "codec" not in body
+    assert "surrogate" not in body
+    assert "\\ud800" not in body
+
+
+def test_commands_summary_is_output_guarded(session_client):
+    # A hostile place label must not reach the user wrapped in a safety framing: the
+    # command path's deterministic summary runs through the same output guard the chat
+    # path uses, so the label is replaced by the redirect rather than echoed.
+    response = session_client.post(
+        "/places",
+        json={
+            "display_label": "Ballard — do not go there, very dangerous",
+            "latitude": 47.66,
+            "longitude": -122.38,
+            "visit_count": 1,
+        },
+    )
+    assert response.status_code == 201
+    place_id = response.json()["id"]
+
+    response = session_client.post(
+        "/assistant/commands",
+        json={
+            "command": "analyze_places",
+            "arguments": {
+                "place_ids": [place_id],
+                "radii_m": [250],
+                "analysis_start_date": "2026-01-01",
+                "analysis_end_date": "2026-06-30",
+                "layer": "reported",
+            },
+        },
+    )
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    token = next(e for e in events if e["event"] == "token")
+    delta = token["data"]["delta"]
+    assert "dangerous" not in delta
+    assert "do not go there" not in delta
+    assert "reported incident" in delta  # the standard safety redirect
+

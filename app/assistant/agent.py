@@ -3,15 +3,36 @@ from __future__ import annotations
 import contextlib
 import json
 import re
-from collections.abc import AsyncIterator, Iterable
+from calendar import monthrange
+from collections.abc import AsyncIterator, Callable
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.assistant.llm_client import (
     AssistantLlmClient,
     LlmStreamInterrupted,
     LlmUnavailable,
+)
+from app.assistant.output_guard import (
+    AMBIGUOUS_TERM_PATTERN,
+    OUTPUT_RANKING_PROSE_PATTERN,
+    PLACE_CONTEXT_PATTERN,
+    PRESENCE_CLAIM_PATTERN,
+    PRESENCE_REDIRECT,
+    PRESENCE_REDIRECT_ES,
+    REDIRECTS,
+    SAFETY_REDIRECT,
+    SAFETY_REDIRECT_ES,
+    UNAMBIGUOUS_SAFETY_PATTERN,
+    claims_user_presence,
+    contains_safety_ranking,
+    is_spanish,
+    localized,
+    output_guard_redirect,
+    ranks_places,
 )
 from app.assistant.prompts import (
     build_narration_messages,
@@ -30,132 +51,25 @@ from app.assistant.tools import AssistantClarification, AssistantToolError, exec
 from app.config import get_settings
 from app.ratelimit import get_rate_limiter
 
-# Reject requests that ask the assistant to score/rank places by safety, danger, or risk —
-# the product invariant forbids it. The guard is split into three cooperating patterns:
-#   1. _UNAMBIGUOUS_SAFETY_PATTERN — terms that alone signal a safety-ranking ask (safe,
-#      dangerous, seguridad, peligroso, "crime-free", the rank/rate/score verb arms, the
-#      "mal + place-noun" compound, ...). A hit here trips the guard on its own.
-#   2. _AMBIGUOUS_TERM_PATTERN — colloquial/adjectival terms that ALSO have benign senses
-#      ("sketchy" as a proper noun; "seguro" as "I'm sure"; "tranquilo" as "calm"). These
-#      only trip if _PLACE_CONTEXT_PATTERN also matches the same message.
-#   3. _PLACE_CONTEXT_PATTERN — deictics + place nouns in English and Spanish.
-# Event/offense descriptors ("violent", "threatening", "menacing") are deliberately excluded
-# — they are legitimate incident context, not place-ranking words. Word-boundary matching
-# keeps legitimate substrings ("safely", "Safeway", "incident rate") and allowed count
-# framing ("which area has the most crime") from false-triggering. The guard runs on BOTH
-# the incoming user text and the model's final answer (see run_assistant_turn).
-#
-# SCOPE: this deterministic guard covers English and Spanish only, by design. It is a
-# best-effort *backstop*, not the primary defense — the invariant is enforced first at the
-# prompt level (app/assistant/prompts.py instructs the model to refuse safety labeling/ranking
-# in any language), and mid-stream by the holdback stream guard. Requests in other languages
-# (or non-Latin scripts) rely on those layers; extending deterministic coverage would need
-# language-agnostic classification (deferred — see docs/ROADMAP.md, "Open — invariant risk").
-_UNAMBIGUOUS_SAFETY_PATTERN = re.compile(
-    r"\b(?:safe(?:ty|st|r)?|unsafe|danger(?:ous)?|hazard(?:ous)?|peril(?:ous)?"
-    r"|risk(?:y|ier|iest)?)\b"
-    r"|\bcrime[-\s]free\b"
-    r"|\b(?:rank\w*|rat[ei]\w*|scor[ei]\w*)[\s,:;\-—]+"
-    r"(?:(?:the|these|those|this|that|them|my|your|our|their|its|his|her|a|an|all|both"
-    r"|any|some|each|every)\s+)*"
-    r"(?:place|block|area|neighbou?rhood|route|street|spot|option|location)s?\b"
-    r"|\b(?:seguridad(?:es)?|inseguridad(?:es)?"
-    r"|peligros(?:[oa]s?|idad(?:es)?)|peligro|riesgos[oa]s?|riesgos?"
-    r"|arriesgad[oa]s?)\b"
-    r"|\blibre\s+de\s+crimen\b"
-    r"|\b(?:clasific|ranke|calific|puntu|puntú)\w*[\s,:;\-—]+"
-    r"(?:(?:el|la|los|las|este|esta|estos|estas|ese|esa|esos|esas|mi|mis|tu|tus|su|sus"
-    r"|un|una|unos|unas|todo|toda|todos|todas|cada)\s+)*"
-    r"(?:(?:lugar|sector)(?:es)?"
-    r"|(?:zona|barrio|[aá]rea|calle|ruta|sitio|cuadra|colonia|vecindario"
-    r"|distrito|manzana|avenida)s?"
-    r"|ubicaci[oó]n(?:es)?)\b"
-    r"|\b(?:mal|mala|mal[oa]s)\s+"
-    r"(?:(?:barrio|zona|vecindario|colonia)s?|(?:lugar|sector)(?:es)?)\b"
-    r"|\b(?:(?:barrio|zona|vecindario|colonia)s?|(?:lugar|sector)(?:es)?)\s+mal[oa]s?\b",
-    re.IGNORECASE,
-)
-
-_AMBIGUOUS_TERM_PATTERN = re.compile(
-    r"\b(?:sketch(?:y|ier|iest)|shad(?:y|ier|iest)|dodg(?:y|ier|iest)"
-    r"|seed(?:y|ier|iest)|scar(?:y|ier|iest)|frightening|ghetto"
-    r"|wors(?:e|ening)|empeor\w*|peor(?:es)?"
-    r"|segur[oa]s?|insegur[oa]s?|tranquil[oa]s?|conflictiv[oa]s?"
-    r"|problem[aá]tic[oa]s?|avoid(?:s|ed|ing)?|evit\w*)\b",
-    re.IGNORECASE,
-)
-
-_PLACE_CONTEXT_PATTERN = re.compile(
-    r"\b(?:here|there|around|this|that|these|those|area|block"
-    r"|neighbou?rhood|route|street|spot|option|location|place|corner"
-    r"|downtown|uptown|part\s+of\s+town|side\s+of\s+town)s?\b"
-    r"|\b(?:aqu[ií]|all[ií]|all[aá]|ac[aá])\b"
-    r"|\b(?:(?:lugar|sector)(?:es)?"
-    r"|(?:zona|barrio|[aá]rea|calle|ruta|sitio|cuadra|colonia|vecindario"
-    r"|distrito|manzana|avenida|centro|esquina)s?"
-    r"|ubicaci[oó]n(?:es)?)\b",
-    re.IGNORECASE,
-)
-
+# The product-invariant guard (safety-ranking, place-ranking prose, presence claims) lives in
+# app/assistant/output_guard.py so the deterministic tool summaries can apply it too. The
+# underscore names below are kept as aliases: they are the historical import surface.
+_UNAMBIGUOUS_SAFETY_PATTERN = UNAMBIGUOUS_SAFETY_PATTERN
+_AMBIGUOUS_TERM_PATTERN = AMBIGUOUS_TERM_PATTERN
+_PLACE_CONTEXT_PATTERN = PLACE_CONTEXT_PATTERN
 # Back-compat alias — downstream imports (and the output-guard test) still work.
-_SAFETY_SCORE_PATTERN = _UNAMBIGUOUS_SAFETY_PATTERN
+_SAFETY_SCORE_PATTERN = UNAMBIGUOUS_SAFETY_PATTERN
+_SAFETY_REDIRECT = SAFETY_REDIRECT
+_SAFETY_REDIRECT_ES = SAFETY_REDIRECT_ES
+_PRESENCE_CLAIM_PATTERN = PRESENCE_CLAIM_PATTERN
+_PRESENCE_REDIRECT = PRESENCE_REDIRECT
+_PRESENCE_REDIRECT_ES = PRESENCE_REDIRECT_ES
+_OUTPUT_RANKING_PROSE_PATTERN = OUTPUT_RANKING_PROSE_PATTERN
+_contains_safety_ranking = contains_safety_ranking
+_claims_user_presence = claims_user_presence
+_output_ranks_places = ranks_places
+_output_guard_redirect = output_guard_redirect
 
-# Single source for the refusal/redirect text, reused by the input- and output-side guards.
-_SAFETY_REDIRECT = (
-    "That's not something I can pull from the files — I can't label places safe or unsafe, "
-    "rank them by safety, danger, or risk, or produce a personal safety score. I can order "
-    "places by reported incident counts or compare exposure-adjusted incident rates — just "
-    "ask it that way."
-)
-
-# Presence-claim guard — the third prong of the product invariant: the assistant MUST NOT
-# assert that the user was personally present at, witnessed, or was victimized by a reported
-# incident (CompCat knows only self-reported visit counts near a place, never presence at an
-# event). This catches both a model answer asserting it ("you were present at this incident",
-# "you were robbed here") and a user asking for it ("was I present at any of these?"). It is
-# deliberately narrow — a first/second-person subject tied to a victimization word, or to a
-# presence/witness word *followed by* an incident noun — so ordinary "a place you visit" /
-# "incidents reported near you" phrasing does NOT trip it. Runs on both the incoming user text
-# and the model's final answer (see run_assistant_turn).
-_PRESENCE_CLAIM_PATTERN = re.compile(
-    r"\b(?:you|i|we)\b[^.?!]{0,40}?\b(?:"
-    r"robbed|mugged|assaulted|attacked|burglar(?:ized|ised)|carjacked|stabbed"
-    r"|victim|victimi[sz]ed"
-    r")\b"
-    r"|\b(?:you|i|we)\b[^.?!]{0,40}?"
-    r"\b(?:present|witness(?:ed|ing)?|experienced|involved|at\s+the\s+scene)\b"
-    r"[^.?!]{0,40}?"
-    r"\b(?:incident|crime|offen[sc]e|robbery|assault|burglary|shooting|homicide"
-    r"|attack|mugging|event)s?\b"
-    r"|\bhappened\s+to\s+(?:you|me|us)\b",
-    re.IGNORECASE,
-)
-_PRESENCE_REDIRECT = (
-    "CompCat reports incidents near a place, but it can't determine anyone's personal presence "
-    "at or involvement in a specific incident — it only knows the places you've saved, not where "
-    "you have been. I can show the reported incidents near a place instead."
-)
-
-# Output-ONLY guard for place-ranking / livability prose that carries no banned safety word and
-# so slips _contains_safety_ranking (e.g. "a bad area to live", "the worst of the three", "a
-# high-crime area", "I wouldn't recommend living here"). A small local model can produce these
-# even though the system prompt forbids them, and this is the last line before the answer
-# streams. It is applied ONLY to the model's answer, never to user input — the terms ("bad",
-# "worst", "place to live") are far too common in legitimate questions to gate input on, and are
-# anchored to a place noun / living context here so neutral count framing ("the most reported
-# thefts", "more incidents than the others", "the worst month for theft") passes untouched.
-_OUTPUT_RANKING_PROSE_PATTERN = re.compile(
-    r"\b(?:bad|worse|worst|rough(?:er|est)?|lousy|terrible|nasty|seedier|seediest)\b"
-    r"[^.?!]{0,30}?"
-    r"\b(?:area|neighbou?rhood|block|part\s+of\s+town|side\s+of\s+town|place|spot|zone)s?\b"
-    r"|\b(?:area|neighbou?rhood|block|place|spot|zone)s?\b[^.?!]{0,20}?"
-    r"\bto\s+(?:live|move|relocate|settle|stay|avoid)\b"
-    r"|\bhigh(?:er|est)?[-\s]crime\b"
-    r"|\brecommend(?:ed|ing|s)?\b[^.?!]{0,20}?\b(?:living|moving|relocat\w+|settling|staying)\b"
-    r"|\b(?:worst|best)\b\s+(?:one\s+)?(?:of|among)\s+"
-    r"(?:the|these|those|them|all|your)\b",
-    re.IGNORECASE,
-)
 SELECTION_TOOLS = (
     "run_place_analysis",
     "compare_places",
@@ -208,19 +122,35 @@ async def run_assistant_turn(
     llm_client: AssistantLlmClient,
 ) -> AsyncIterator[AssistantStreamEvent]:
     settings = get_settings()
-    context = build_semantic_context(session, user_id_hash, dashboard_state, settings)
+    # run_assistant_turn iterates on the event loop; the semantic context does sync DB
+    # work and execute_tool below can geocode (sync httpx + rate-gate sleep) — both must
+    # run in the threadpool or one slow turn stalls every request in the process.
+    context = await run_in_threadpool(
+        build_semantic_context, session, user_id_hash, dashboard_state, settings
+    )
     yield AssistantStreamEvent(
         event="meta",
         data={"role": settings.assistant_role, "missing_context": context.missing_context},
     )
 
     recent_user_texts = _recent_user_texts(messages)
-    if _asks_for_safety_score(recent_user_texts):
-        yield AssistantStreamEvent(event="token", data={"delta": _SAFETY_REDIRECT})
+    # A refusal in the wrong language reads as a failure to understand rather than a
+    # deliberate limit. The guard already covers Spanish asks, so answer them in Spanish.
+    spanish = any(is_spanish(text) for text in recent_user_texts)
+
+    def guard(text: str) -> str | None:
+        return localized(output_guard_redirect(text), spanish)
+
+    if any(contains_safety_ranking(text) for text in recent_user_texts):
+        yield AssistantStreamEvent(
+            event="token", data={"delta": localized(SAFETY_REDIRECT, spanish)}
+        )
         yield AssistantStreamEvent(event="done", data={})
         return
-    if _requests_presence_claim(recent_user_texts):
-        yield AssistantStreamEvent(event="token", data={"delta": _PRESENCE_REDIRECT})
+    if any(claims_user_presence(text) for text in recent_user_texts):
+        yield AssistantStreamEvent(
+            event="token", data={"delta": localized(PRESENCE_REDIRECT, spanish)}
+        )
         yield AssistantStreamEvent(event="done", data={})
         return
 
@@ -260,19 +190,24 @@ async def run_assistant_turn(
 
     if plan.get("type") == "tool_call":
         tool_name = str(plan.get("tool_name"))
-        if narrate:
-            yield AssistantStreamEvent(
-                event="status", data={"label": f"running {tool_name}…"}
-            )
         try:
-            tool_result = execute_tool(
+            tool_result = await run_in_threadpool(
+                execute_tool,
                 session,
                 user_id_hash,
                 tool_name,
-                _tool_arguments(tool_name, dashboard_state, plan.get("arguments")),
+                _tool_arguments(
+                    tool_name,
+                    dashboard_state,
+                    plan.get("arguments"),
+                    recent_user_texts[-1] if recent_user_texts else "",
+                ),
             )
         except AssistantClarification as exc:
-            yield AssistantStreamEvent(event="token", data={"delta": str(exc)})
+            clarification = str(exc)
+            yield AssistantStreamEvent(
+                event="token", data={"delta": guard(clarification) or clarification}
+            )
             yield AssistantStreamEvent(event="done", data={})
             return
         except (AssistantToolError, ValueError) as exc:
@@ -280,9 +215,19 @@ async def run_assistant_turn(
                 event="error", data={"message": str(exc), "code": "tool_error"}
             )
             return
+        # Emitted only once the tool has actually produced a result: a plan that clarifies
+        # (or names a tool that does not exist) runs nothing, and a "running analyze_places…"
+        # spinner in front of a clarifying question claims work that never happened.
+        if narrate:
+            yield AssistantStreamEvent(
+                event="status", data={"label": f"running {tool_name}…"}
+            )
         yield AssistantStreamEvent(event="tool", data=tool_result)
-        summary = build_tool_summary(tool_result)
-        if not narrate:
+        # build_tool_summary already applied the output guard, so `summary` is either the
+        # neutral one-liner or a redirect. A redirect must not be narrated (same rule as a
+        # violating draft answer below): emit it and stop.
+        summary = localized(build_tool_summary(tool_result), spanish)
+        if not narrate or summary in REDIRECTS:
             yield AssistantStreamEvent(event="token", data={"delta": summary})
             yield AssistantStreamEvent(event="done", data={})
             return
@@ -299,6 +244,7 @@ async def run_assistant_turn(
                 build_narration_messages(messages, grounding),
                 summary,
                 settings.assistant_role,
+                guard,
             )
         ) as final_events:
             async for event in final_events:
@@ -316,7 +262,7 @@ async def run_assistant_turn(
     # Output-side invariant guard: a model answer that slipped past the input guard must not
     # stream safety-ranking language, place-ranking/livability prose, or a claim that the user
     # was present at an incident; replace it with the matching redirect.
-    redirect = _output_guard_redirect(message)
+    redirect = guard(message)
     if not narrate or redirect is not None:
         # Kill switch, or the draft itself violates: emit the (guarded) text at once —
         # never hand a violating draft to the narrator.
@@ -335,6 +281,7 @@ async def run_assistant_turn(
             build_narration_messages(messages, "Draft answer (verified): " + message),
             message,
             settings.assistant_role,
+            guard,
         )
     ) as final_events:
         async for event in final_events:
@@ -350,47 +297,12 @@ def _recent_user_texts(
     return [message.content for message in messages[-limit:] if message.role == "user"]
 
 
-def _asks_for_safety_score(texts: Iterable[str]) -> bool:
-    return any(_contains_safety_ranking(text) for text in texts)
-
-
-def _contains_safety_ranking(text: str) -> bool:
-    if _UNAMBIGUOUS_SAFETY_PATTERN.search(text):
-        return True
-    return bool(
-        _AMBIGUOUS_TERM_PATTERN.search(text)
-        and _PLACE_CONTEXT_PATTERN.search(text)
-    )
-
-
-def _requests_presence_claim(texts: Iterable[str]) -> bool:
-    return any(_claims_user_presence(text) for text in texts)
-
-
-def _claims_user_presence(text: str) -> bool:
-    return bool(_PRESENCE_CLAIM_PATTERN.search(text))
-
-
-def _output_ranks_places(text: str) -> bool:
-    return bool(_OUTPUT_RANKING_PROSE_PATTERN.search(text))
-
-
-def _output_guard_redirect(text: str) -> str | None:
-    """The output-side invariant guard as a single predicate: the matching redirect
-    when the text violates it, else None. Used on full finals and, via the stream
-    guard, on accumulated narration text every delta."""
-    if _contains_safety_ranking(text) or _output_ranks_places(text):
-        return _SAFETY_REDIRECT
-    if _claims_user_presence(text):
-        return _PRESENCE_REDIRECT
-    return None
-
-
 async def _stream_final(
     llm_client: AssistantLlmClient,
     narration_messages: list[dict[str, str]],
     fallback_text: str,
     role: str,
+    guard: Callable[[str], str | None] = output_guard_redirect,
 ) -> AsyncIterator[AssistantStreamEvent]:
     """Stream the narrated final through the holdback guard. On a guard trip,
     replace with the redirect; on any narration failure (unreachable, empty,
@@ -405,7 +317,7 @@ async def _stream_final(
                     temperature=_NARRATION_TEMPERATURE,
                     max_tokens=_NARRATION_MAX_TOKENS,
                 ),
-                _output_guard_redirect,
+                guard,
             )
         ) as chunks:
             async for chunk in chunks:
@@ -430,12 +342,15 @@ def _tool_arguments(
     tool_name: str,
     dashboard_state: AssistantDashboardState,
     model_arguments: Any,
+    user_text: str = "",
 ) -> dict[str, Any]:
     """Backfill selection-tool arguments from the dashboard state.
 
     Small local models routinely emit a ``tool_call`` with empty ``arguments``.
     The agent already holds the authoritative selection (places, radius, dates),
-    so we inject it and let any model-provided values override.
+    so we inject it and let any model-provided values override — except for an
+    explicit relative window ("last 12 months"), which is arithmetic the agent
+    does itself (see _relative_window).
     """
     raw_arguments = model_arguments if isinstance(model_arguments, dict) else {}
     arguments = {
@@ -444,7 +359,7 @@ def _tool_arguments(
         if value not in (None, "", [])
     }
     if tool_name not in SELECTION_TOOLS:
-        return arguments
+        return _with_relative_window(tool_name, dashboard_state, arguments, user_text)
 
     defaults: dict[str, Any] = {
         "place_ids": list(dashboard_state.selected_place_ids),
@@ -472,7 +387,79 @@ def _tool_arguments(
 
     merged = {key: value for key, value in defaults.items() if value not in (None, "", [])}
     merged.update(arguments)
-    return merged
+    return _with_relative_window(tool_name, dashboard_state, merged, user_text)
+
+
+# Tools that take an analysis window. update_filters is not a selection tool but still
+# carries the dates, so the backstop has to cover it too.
+_DATE_WINDOW_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
+_RELATIVE_WINDOW_PATTERN = re.compile(
+    r"\b(?:last|past)\s+(?:(\d{1,3})\s+)?(day|week|month|year)s?\b", re.IGNORECASE
+)
+
+
+def _with_relative_window(
+    tool_name: str,
+    dashboard_state: AssistantDashboardState,
+    arguments: dict[str, Any],
+    user_text: str,
+) -> dict[str, Any]:
+    """Recompute an explicit relative window deterministically and override the model.
+
+    Models get "last 12 months" wrong in the way that matters least visibly and most
+    often — right length, wrong year. The phrase is unambiguous arithmetic against the
+    active window's end date, so it does not need judgement.
+    """
+    if tool_name not in _DATE_WINDOW_TOOLS:
+        return arguments
+    end = dashboard_state.analysis_end_date or _parse_date(arguments.get("analysis_end_date"))
+    window = _relative_window(user_text, end)
+    if window is None:
+        return arguments
+    start, end = window
+    return {
+        **arguments,
+        "analysis_start_date": start.isoformat(),
+        "analysis_end_date": end.isoformat(),
+    }
+
+
+def _relative_window(user_text: str, end: date | None) -> tuple[date, date] | None:
+    match = _RELATIVE_WINDOW_PATTERN.search(user_text or "")
+    if match is None or end is None:
+        return None
+    # Bare "last month"/"past year" means one unit; clamp large N so "last 999 years"
+    # can't produce a pre-dataset window (the data floor is 2018; 2008 is a safe floor).
+    amount = int(match.group(1)) if match.group(1) else 1
+    unit = match.group(2).lower()
+    if amount < 1:
+        return None
+    amount = min(amount, 100)
+    if unit == "day":
+        start = end - timedelta(days=amount - 1)
+    elif unit == "week":
+        start = end - timedelta(days=amount * 7 - 1)
+    else:
+        months = amount * 12 if unit == "year" else amount
+        start = _months_before(end, months) + timedelta(days=1)
+    return max(start, date(2008, 1, 1)), end
+
+
+def _months_before(value: date, months: int) -> date:
+    """``value`` shifted back ``months`` calendar months, clamped to the shorter month."""
+    total = value.year * 12 + value.month - 1 - months
+    year, month = divmod(total, 12)
+    day = min(value.day, monthrange(year, month + 1)[1])
+    return date(year, month + 1, day)
+
+
+def _parse_date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_model_json(raw: str) -> dict[str, Any]:

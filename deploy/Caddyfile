@@ -5,6 +5,13 @@
 # Deliberately three directives. Anything more is another thing to review before a deploy.
 compcat.app {
 	encode gzip
+	# Hard body cap at the edge. The largest legitimate request is the 200 KB bulk-places
+	# CSV (personal uploads are off on the public instance), so 1 MB is generous. This is
+	# also the only real bound on an upload: the app's own 413 fires from a dependency that
+	# runs after FastAPI has already spooled the multipart body to disk.
+	request_body {
+		max_size 1MB
+	}
 	reverse_proxy api:8000 {
 		# The limiter consults CF-Connecting-IP before X-Forwarded-For when
 		# MCA_TRUST_PROXY_HEADERS is on. Caddy manages only X-Forwarded-* — a

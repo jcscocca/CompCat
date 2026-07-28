@@ -291,3 +291,141 @@ def test_reports_lead_in_absent_on_empty_results_and_other_tools():
         build_tool_summary(_envelope("get_dashboard_summary", {"totals": {"place_count": 2}}))
         == "You have 2 saved places."
     )
+
+
+def test_summary_runs_through_the_output_guard():
+    from app.assistant.output_guard import SAFETY_REDIRECT
+
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Ballard — do not go there, very dangerous",
+                    "baseline_available": False,
+                    "decision": "baseline_unavailable",
+                    "place_incident_count": 4,
+                }
+            ]
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    assert build_tool_summary(_envelope("analyze_places", result)) == SAFETY_REDIRECT
+
+
+def test_analyze_summary_refuses_ratio_when_place_has_insufficient_data():
+    # Live miss: a place whose own decision is insufficient_data still carried a citywide
+    # baseline entry with a huge ratio, and the summary asserted "88.9× — above Citywide's
+    # rate". The place-level verdict is authoritative; the ratio must not be stated.
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "baseline_available": True,
+                    "decision": "insufficient_data",
+                    "minimum_data_status": "place_count_too_low",
+                    "place_incident_count": 2,
+                    "baselines": [
+                        {
+                            "kind": "city",
+                            "label": "Citywide",
+                            "rate_ratio": 88.9,
+                            "ci_lower": 21.0,
+                            "ci_upper": 376.0,
+                            "relation": "above",
+                        }
+                    ],
+                }
+            ]
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    text = build_tool_summary(_envelope("analyze_places", result))
+    assert "88.9" not in text
+    assert "×" not in text
+    assert "Citywide" not in text
+    assert "not enough data for a surrounding-area comparison" in text
+
+
+def test_analyze_summary_refuses_ratio_when_minimum_data_unmet():
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "baseline_available": True,
+                    "decision": "above_clear",
+                    "minimum_data_status": "date_range_too_short",
+                    "place_incident_count": 9,
+                    "baselines": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Capitol Hill",
+                            "rate_ratio": 4.2,
+                            "ci_lower": 1.9,
+                            "ci_upper": 9.1,
+                            "relation": "above",
+                        }
+                    ],
+                }
+            ]
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    text = build_tool_summary(_envelope("analyze_places", result))
+    assert "4.2" not in text
+    assert "×" not in text
+
+
+def test_compare_summary_reports_untested_pairs_instead_of_placeholder_stats():
+    # _not_tested_pairwise fills rate_ratio/CI/p with 1.0 placeholders so the row is
+    # storable. Those are not findings — the summary must say the pair was not tested.
+    result = {
+        "settings_used": {"radius_m": 250},
+        "comparison": {
+            "overview": {
+                "summary_text": "",
+                "options": [
+                    {"label": "Pike Place", "incident_count": 3},
+                    {"label": "Capitol Hill", "incident_count": 1},
+                ],
+            },
+            "analytical": {
+                "pairwise_results": [
+                    {
+                        "option_a_label": "Pike Place",
+                        "option_b_label": "Capitol Hill",
+                        "method": "not_tested_minimum_data",
+                        "minimum_data_status": "option_count_too_low",
+                        "rate_ratio": 1.0,
+                        "ci_lower": 1.0,
+                        "ci_upper": 1.0,
+                        "adjusted_p_value": 1.0,
+                    }
+                ]
+            },
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    text = build_tool_summary(_envelope("compare_places", result))
+    assert "Not tested (below the data floor): Pike Place vs Capitol Hill." in text
+    assert "1.0×" not in text
+    assert "1.0–1.0" not in text
+
+
+def test_followups_render_as_a_markdown_list():
+    result = {"suggestions": ["Compare the selected places.", "Try a different radius."]}
+    text = build_tool_summary(_envelope("suggest_followups", result))
+    assert text == (
+        "You could:\n"
+        "- Compare the selected places.\n"
+        "- Try a different radius."
+    )
+    assert "•" not in text

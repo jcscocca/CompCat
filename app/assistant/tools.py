@@ -4,7 +4,7 @@ import json
 from datetime import date
 from functools import lru_cache
 from hashlib import sha256
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import select
@@ -17,9 +17,13 @@ from app.analysis.beat_baselines import (
     load_beat_polygons,
 )
 from app.api.dashboard_schemas import (
+    MAX_ANALYSIS_SPAN_DAYS,
+    MIN_ANALYSIS_DATE,
     DashboardAnalyzeRequest,
     DashboardIncidentDetailsRequest,
+    _max_analysis_date,
 )
+from app.assistant.output_guard import guarded
 from app.assistant.place_resolution import ResolvedPlaces, resolve_place_queries
 from app.config import get_settings
 from app.crime.sources import sources_for_layer
@@ -75,6 +79,44 @@ class AssistantClarification(Exception):
 # Cap the list-valued tool args so a single LLM plan can't drive an unbounded number of
 # geocoder calls or O(n^2) pairwise comparisons. Mirrors the dashboard schema's _MAX_POINTS.
 _MAX_TOOL_ITEMS = 10
+_MAX_FILTER_CHARS = 80
+
+
+class _BoundedWindowArgs(BaseModel):
+    """Shared bounds for tool args reachable straight from POST /assistant/commands.
+
+    The dashboard request models enforce these same limits; without this mixin the
+    commands path was the one public route where a 9999-12-31 end date (OverflowError in
+    the exposure math), a century-long span, or a megabyte offense_category slipped
+    through. Dates stay optional — a missing window is a clarification, not an error.
+    """
+
+    analysis_start_date: date | None = None
+    analysis_end_date: date | None = None
+    offense_category: str | None = Field(default=None, max_length=_MAX_FILTER_CHARS)
+    offense_subcategory: str | None = Field(default=None, max_length=_MAX_FILTER_CHARS)
+    nibrs_group: str | None = Field(default=None, max_length=_MAX_FILTER_CHARS)
+
+    @model_validator(mode="after")
+    def window_within_analysis_bounds(self) -> _BoundedWindowArgs:
+        latest = _max_analysis_date()
+        for value in (self.analysis_start_date, self.analysis_end_date):
+            if value is not None and not MIN_ANALYSIS_DATE <= value <= latest:
+                raise ValueError(
+                    f"dates must fall between {MIN_ANALYSIS_DATE.isoformat()} and "
+                    f"{latest.isoformat()}"
+                )
+        if (
+            self.analysis_start_date is not None
+            and self.analysis_end_date is not None
+            and (self.analysis_end_date - self.analysis_start_date).days
+            > MAX_ANALYSIS_SPAN_DAYS
+        ):
+            raise ValueError(
+                f"date range is too long — choose a window of at most "
+                f"{MAX_ANALYSIS_SPAN_DAYS} days"
+            )
+        return self
 
 
 class EmptyArgs(BaseModel):
@@ -90,37 +132,30 @@ class SelectPlacesArgs(BaseModel):
     mode: str = "replace"
 
 
-class AnalyzePlacesArgs(BaseModel):
+class AnalyzePlacesArgs(_BoundedWindowArgs):
     queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
-    # Optional so a missing date range / radius surfaces as a clarification (see
-    # _require_analysis_window) instead of a raw ValidationError -> hard error.
-    analysis_start_date: date | None = None
-    analysis_end_date: date | None = None
-    radii_m: list[int] = Field(default_factory=list)
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
+    # Dates/filters inherit _BoundedWindowArgs (optional dates -> clarification path).
+    # Bounded per item and in length, mirroring ComparePlacesByNameArgs.radius_m: this is
+    # reachable straight from POST /assistant/commands with arbitrary arguments, where a
+    # 10^9 radius means a planet-sized bounding box and a long list multiplies the scan.
+    # The dashboard only ever offers three radii (Settings.crime_radii_m).
+    radii_m: list[Annotated[int, Field(gt=0, le=5000)]] = Field(
+        default_factory=list, max_length=3
+    )
     layer: str = "reported"
 
 
-class ComparePlacesByNameArgs(BaseModel):
+class ComparePlacesByNameArgs(_BoundedWindowArgs):
     queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
-    # Optional so a missing window surfaces as a clarification, not a ValidationError.
-    analysis_start_date: date | None = None
-    analysis_end_date: date | None = None
+    # Dates/filters inherit _BoundedWindowArgs (optional window -> clarification path).
     radius_m: int | None = Field(default=None, gt=0, le=5000)
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
     layer: str = "reported"
 
 
-class UpdateFiltersArgs(BaseModel):
+class UpdateFiltersArgs(_BoundedWindowArgs):
     radius_m: int | None = Field(default=None, ge=50, le=5000)
-    analysis_start_date: date | None = None
-    analysis_end_date: date | None = None
     # "" or "ALL" clears to all-reported (echoed as None, matching _settings_used).
     # ALL exists because the chat path (_tool_arguments) strips "" from arguments.
     offense_category: Literal["", "ALL", "PROPERTY", "PERSON", "SOCIETY"] | None = None
@@ -184,8 +219,13 @@ def _add_place(session: Session, user_id_hash: str, query: str) -> dict[str, Any
     provider = build_provider(get_settings())
     resolved = resolve_place_queries(session, user_id_hash, [query], provider)
     if not resolved.place_ids:
+        # guarded(): the echoed query is user text and this message reaches the client
+        # verbatim on the commands path, which has no downstream guard of its own.
         raise AssistantClarification(
-            f"Could not find a place for '{query}'. Try a more specific address or landmark name."
+            guarded(
+                f"Could not find a place for '{query}'. "
+                "Try a more specific address or landmark name."
+            )
         )
     place_id = resolved.place_ids[0]
     place = session.get(PlaceCluster, place_id)

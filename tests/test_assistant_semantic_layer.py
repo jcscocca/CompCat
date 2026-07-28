@@ -200,3 +200,58 @@ def test_policy_caveats_frame_the_three_layers_including_arrests():
     assert "enforcement" in text
     assert "911 calls" in text or "calls for service" in text
 
+
+
+def test_dashboard_state_coerces_an_unknown_layer_to_reported():
+    # The layer decides what every count MEANS (reports vs arrests vs calls), so an
+    # unrecognized value must never reach the tools and silently mislabel results.
+    from app.assistant.agent import _tool_arguments
+
+    assert AssistantDashboardState(layer="calls").layer == "calls"
+    assert AssistantDashboardState(layer="pwned").layer == "reported"
+    assert AssistantDashboardState(layer=None).layer == "reported"
+    assert AssistantDashboardState(layer=17).layer == "reported"
+
+    state = AssistantDashboardState(selected_place_ids=["p1"], radii_m=[250], layer="bogus")
+    assert _tool_arguments("analyze_places", state, {})["layer"] == "reported"
+
+
+def test_dashboard_state_bounds_every_field():
+    """dashboard_state was entirely unbounded, so a multi-megabyte one validated and was
+    interpolated into the planning prompt and sent upstream BEFORE any budget accounting —
+    a bypass of the per-message ceiling by orders of magnitude. It also overflowed SQL bind
+    parameters in semantic_layer's .in_() lookup."""
+    import pytest
+    from pydantic import ValidationError
+
+    # A realistic state still validates.
+    state = AssistantDashboardState(
+        selected_place_ids=["3f2a71c4-1f0e-4a55-9b31-5c9d0f7e2a11"],
+        radii_m=[250],
+        offense_category="PROPERTY",
+        layer="calls",
+    )
+    assert state.radii_m == [250]
+
+    oversized = [
+        {"selected_place_ids": [f"place-{index}" for index in range(30_000)]},
+        {"selected_place_ids": ["x" * 5_000]},
+        {"radii_m": [250, 500, 750, 1000]},
+        {"radii_m": [10**9]},
+        {"offense_category": "x" * 5_000},
+        {"offense_subcategory": "x" * 5_000},
+        {"nibrs_group": "x" * 5_000},
+    ]
+    for payload in oversized:
+        with pytest.raises(ValidationError):
+            AssistantDashboardState(**payload)
+
+
+def test_multi_megabyte_dashboard_state_is_rejected():
+    import pytest
+    from pydantic import ValidationError
+
+    # ~30 MB, the shape measured in the audit: enough ids, each long enough, to blow the
+    # planning prompt past seven million tokens.
+    with pytest.raises(ValidationError):
+        AssistantDashboardState(selected_place_ids=["x" * 10_000] * 3_000)

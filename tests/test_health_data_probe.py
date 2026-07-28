@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,17 +22,28 @@ def _client(tmp_path) -> TestClient:
     return TestClient(app)
 
 
+def _seattle_today() -> date:
+    return datetime.now(UTC).astimezone(health_module.SEATTLE_TZ).date()
+
+
 def _seed(layer_ages: dict[str, int]) -> None:
-    """One incident per layer, `age` days before today (UTC) — the probe reads
-    max(coalesce(offense_start_utc, report_utc)) per layer."""
-    today = datetime.now(UTC)
+    """One incident per layer, `age` days before today in Seattle — the probe reads
+    max(coalesce(offense_start_utc, report_utc)) per layer.
+
+    Anchored on the Seattle date, not the UTC one, because that is what real rows carry:
+    the SPD parsers stamp naive Seattle wall-clock times as UTC. Anchoring on UTC would
+    make every boundary case here flip during the 17:00-24:00 Seattle window.
+    """
+    base = _seattle_today()
     session = get_sessionmaker()()
     for layer, age in layer_ages.items():
         session.add(
             CrimeIncident(
                 id=f"{layer}-{age}",
                 source_dataset=_SOURCES[layer],
-                offense_start_utc=today - timedelta(days=age),
+                offense_start_utc=datetime.combine(
+                    base - timedelta(days=age), time(12, 0), tzinfo=UTC
+                ),
                 offense_category="PROPERTY",
                 latitude=47.6,
                 longitude=-122.3,
@@ -43,7 +54,7 @@ def _seed(layer_ages: dict[str, int]) -> None:
 
 
 def _iso_days_ago(age: int) -> str:
-    return (datetime.now(UTC).date() - timedelta(days=age)).isoformat()
+    return (_seattle_today() - timedelta(days=age)).isoformat()
 
 
 def test_all_layers_fresh_returns_200(tmp_path) -> None:
@@ -168,6 +179,24 @@ def test_liveness_probe_is_unchanged(tmp_path) -> None:
     _seed({"reported": 400, "arrests": 400, "calls": 400})
     assert client.get("/health").json() == {"status": "ok"}
     assert client.get("/health/data").status_code == 503
+
+
+def test_today_is_seattle_local_not_utc_in_the_evening_window() -> None:
+    # 19:00 Seattle on 2026-07-27 is already 2026-07-28 in UTC. data_through is a Seattle
+    # wall-clock date (the parsers stamp naive local times as UTC), so taking today from
+    # UTC overstates every layer's lag by a full day for the 7-8 hours after 17:00 local
+    # — enough to page on a dataset sitting exactly at the staleness threshold.
+    evening = datetime(2026, 7, 28, 2, 0, tzinfo=UTC)
+    assert evening.date() == date(2026, 7, 28)
+    assert health_module._local_today(evening) == date(2026, 7, 27)
+    # Data landed the same Seattle day reads as zero lag, not one.
+    assert health_module._lag_days("2026-07-27", health_module._local_today(evening)) == 0
+
+
+def test_local_today_matches_utc_outside_the_offset_window() -> None:
+    # Mid-morning Seattle is the same calendar day either way; the fix must not shift it.
+    morning = datetime(2026, 7, 27, 17, 0, tzinfo=UTC)  # 10:00 Seattle
+    assert health_module._local_today(morning) == morning.date() == date(2026, 7, 27)
 
 
 def test_lag_days_helper_handles_unparseable_values() -> None:

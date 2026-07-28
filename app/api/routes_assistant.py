@@ -6,9 +6,11 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import required_public_user_hash
 from app.assistant.agent import _UNREACHABLE_MESSAGE, run_assistant_turn
@@ -32,7 +34,7 @@ from app.assistant.tools import (
 )
 from app.config import Settings, get_settings
 from app.db import get_session
-from app.ratelimit import get_rate_limiter
+from app.ratelimit import client_ip_from, get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +136,7 @@ def build_assistant_llm_client(settings: Settings) -> AssistantLlmClient:
 @router.post("/assistant/chat")
 async def assistant_chat(
     request: AssistantChatRequest,
+    http_request: Request,
     user_id_hash: Annotated[str, Depends(required_public_user_hash)],
     session: Annotated[Session, Depends(get_session)],
 ) -> StreamingResponse:
@@ -154,6 +157,21 @@ async def assistant_chat(
                 status_code=429,
                 detail="Analyst request limit reached for this session — please retry later.",
                 headers={"Retry-After": str(max(1, int(wait)))},
+            )
+        # Per-IP bucket beside it: the per-session tier is reset by simply asking for a new
+        # session cookie, so on its own it bounds a conversation rather than a caller. Also
+        # checked before the global counter, for the same reason the session bucket is.
+        ip_wait = limiter.try_take(
+            "assistant_ip",
+            client_ip_from(http_request, trust_proxy_headers=settings.trust_proxy_headers),
+            capacity=settings.rate_limit_assistant_per_ip_per_hour,
+            per_seconds=3600.0,
+        )
+        if ip_wait > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="Analyst request limit reached — please retry later.",
+                headers={"Retry-After": str(max(1, int(ip_wait)))},
             )
         if not limiter.try_count_global(limit=settings.rate_limit_assistant_global_per_day):
             raise HTTPException(
@@ -188,6 +206,19 @@ async def assistant_chat(
 
 
 _COMMAND_FAILED_MESSAGE = "That didn't go through. Try again in a moment."
+# AssistantToolError carries deliberate user-facing copy. Any other ValueError reaching
+# here is a raw pydantic ValidationError from building the tool's args model, whose str()
+# leaks the internal model name, field paths and a pydantic docs URL.
+_COMMAND_INVALID_MESSAGE = "That command didn't validate — check the values and try again."
+
+
+def _is_validation_failure(exc: BaseException) -> bool:
+    """execute_tool re-raises wrapped exceptions as AssistantToolError(str(exc)), keeping
+    the original as __cause__ — so the wrapper's message can be raw internal text.
+    Pydantic dumps and codec errors are never user-authored copy; service-raised
+    ValueErrors ("Unknown layer: ...") are, and keep passing through unchanged."""
+    internal = (ValidationError, UnicodeError)
+    return isinstance(exc, internal) or isinstance(exc.__cause__, internal)
 
 
 @router.post("/assistant/commands")
@@ -222,17 +253,26 @@ async def assistant_command(
         )
         try:
             try:
-                tool_result = execute_tool(
-                    session, user_id_hash, request.command, dict(request.arguments)
+                # execute_tool is fully synchronous — sync DB work, sync httpx, and a
+                # geocoder that time.sleep()s to hold its 1 req/s cadence. Awaiting it on
+                # the event loop froze the whole process for the duration: one
+                # select_places with several address lookups took health checks, static
+                # files and every other user's request down with it.
+                tool_result = await run_in_threadpool(
+                    execute_tool, session, user_id_hash, request.command, dict(request.arguments)
                 )
             except AssistantClarification as exc:
                 yield _sse_event(AssistantStreamEvent(event="token", data={"delta": str(exc)}))
                 yield _sse_event(AssistantStreamEvent(event="done", data={}))
                 return
             except (AssistantToolError, ValueError) as exc:
+                message = str(exc)
+                if _is_validation_failure(exc):
+                    logger.debug("assistant command failed validation", exc_info=exc)
+                    message = _COMMAND_INVALID_MESSAGE
                 yield _sse_event(
                     AssistantStreamEvent(
-                        event="error", data={"message": str(exc), "code": "tool_error"}
+                        event="error", data={"message": message, "code": "tool_error"}
                     )
                 )
                 return

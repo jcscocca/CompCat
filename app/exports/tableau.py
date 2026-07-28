@@ -14,6 +14,20 @@ SENSITIVE_CLASSES = {
     "suppress_from_public_export",
 }
 
+# Spreadsheet apps evaluate a cell starting with one of these as a formula, so a
+# user-supplied display_label (or an upstream Socrata offense name) can turn an export
+# into code execution on the analyst's machine. A leading apostrophe makes the cell
+# literal text. A bare "-" is deliberately NOT included: it would mangle every negative
+# number, and numeric cells are written as floats/ints that never reach this escape.
+_FORMULA_PREFIXES = ("=", "+", "@", "\t", "\r")
+
+
+def _escape_formula(value: object) -> object:
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
+
 TABLEAU_COLUMNS = [
     "user_id_hash",
     "place_cluster_id",
@@ -57,7 +71,8 @@ def build_place_summary_csv(
             continue
         cluster_summaries = summaries_by_cluster.get(cluster.id) or [None]
         for summary in cluster_summaries:
-            writer.writerow(_row_for_cluster(cluster, summary))
+            row = _row_for_cluster(cluster, summary)
+            writer.writerow({key: _escape_formula(value) for key, value in row.items()})
     return output.getvalue()
 
 

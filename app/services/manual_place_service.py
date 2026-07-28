@@ -4,10 +4,10 @@ import csv
 import math
 from io import StringIO
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import PlaceCluster
+from app.models import PlaceCluster, PlaceCrimeSummary
 from app.normalization.geo import is_valid_coordinate, snap_to_grid
 from app.places.schemas import (
     BulkPlaceCreateResponse,
@@ -15,6 +15,7 @@ from app.places.schemas import (
     ManualPlaceResponse,
     ManualPlaceUpdate,
 )
+from app.schemas import new_id
 
 MANUAL_CLUSTER_VERSION = "manual-1"
 MANUAL_CLUSTER_METHOD = "manual_public_dashboard"
@@ -27,8 +28,17 @@ def create_manual_place(
     user_id_hash: str,
     payload: ManualPlaceCreate,
 ) -> ManualPlaceResponse:
+    place = _place_model(user_id_hash, payload)
+    session.add(place)
+    session.commit()
+    session.refresh(place)
+    return _place_response(place)
+
+
+def _place_model(user_id_hash: str, payload: ManualPlaceCreate) -> PlaceCluster:
     display_latitude, display_longitude = snap_to_grid(payload.latitude, payload.longitude)
-    place = PlaceCluster(
+    return PlaceCluster(
+        id=new_id(),
         user_id_hash=user_id_hash,
         cluster_version=MANUAL_CLUSTER_VERSION,
         cluster_method=MANUAL_CLUSTER_METHOD,
@@ -47,10 +57,6 @@ def create_manual_place(
         display_label=payload.display_label.strip(),
         label_source="manual",
     )
-    session.add(place)
-    session.commit()
-    session.refresh(place)
-    return _place_response(place)
 
 
 def update_manual_place(
@@ -97,6 +103,16 @@ def delete_manual_place(session: Session, user_id_hash: str, place_id: str) -> b
     place = _get_user_place(session, user_id_hash, place_id)
     if place is None:
         return False
+    # A saved-place analyze writes PlaceCrimeSummary rows whose FK to place_clusters.id
+    # carries no ON DELETE, so they must go first or the delete raises IntegrityError.
+    # Cleared explicitly rather than via a schema migration so existing deploys need no
+    # DDL. StopVisit is the only other FK to place_clusters and cannot reference a manual
+    # place (those come from imports). StatisticalComparisonOption stores the cluster id
+    # as plain text on an immutable comparison record that may span other places, so it is
+    # deliberately left intact.
+    session.execute(
+        delete(PlaceCrimeSummary).where(PlaceCrimeSummary.place_cluster_id == place_id)
+    )
     session.delete(place)
     session.commit()
     return True
@@ -109,7 +125,7 @@ def create_bulk_manual_places(
 ) -> BulkPlaceCreateResponse:
     _ensure_bulk_csv_field_size_limit()
     reader = csv.DictReader(StringIO(csv_text))
-    created: list[ManualPlaceResponse] = []
+    created: list[PlaceCluster] = []
     skipped_count = 0
 
     if not reader.fieldnames or not REQUIRED_BULK_PLACE_COLUMNS.issubset(reader.fieldnames):
@@ -144,12 +160,19 @@ def create_bulk_manual_places(
             skipped_count += 1
             continue
 
-        created.append(create_manual_place(session, user_id_hash, payload))
+        created.append(_place_model(user_id_hash, payload))
+
+    # One transaction for the whole batch: the previous per-row commit turned a paste of
+    # N places into N transactions. Ids are assigned up front and the responses are read
+    # off the in-memory models before the commit expires them, so this adds no SELECTs.
+    session.add_all(created)
+    responses = [_place_response(place) for place in created]
+    session.commit()
 
     return BulkPlaceCreateResponse(
         created_count=len(created),
         skipped_count=skipped_count,
-        places=created,
+        places=responses,
     )
 
 
