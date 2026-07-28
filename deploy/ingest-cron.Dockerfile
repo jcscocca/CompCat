@@ -16,5 +16,5 @@
 # pg_dump would fail even if crond cooperated. The container publishes no ports and makes
 # only outbound calls (Socrata via the api, pg_dump over the compose network), so root
 # here buys an attacker nothing that reaching the container did not already.
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache curl tzdata postgresql16-client
