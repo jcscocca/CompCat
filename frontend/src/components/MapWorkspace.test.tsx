@@ -57,7 +57,6 @@ vi.mock("../api/client", async (importOriginal) => ({
   getIncidentPoints: vi.fn().mockResolvedValue({
     points: [], returned_count: 0, total_count: 0, unmappable_citywide_count: 0, limit: 5000,
   }),
-  getMcppPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getNeighborhoodAnalysis: vi.fn(),
   getDashboardSummary: vi.fn(),
   getDashboardFreshness: vi.fn().mockResolvedValue(null),
@@ -359,11 +358,11 @@ describe("MapWorkspace", () => {
     await screen.findByRole("button", { name: "Add places manually" });
 
     fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
-    fireEvent.change(screen.getByLabelText("CSV rows"), {
+    fireEvent.click(screen.getByRole("button", { name: "Paste list" }));
+    fireEvent.change(screen.getByLabelText("Place rows (label, lat, lon)"), {
       target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+    fireEvent.click(screen.getByRole("button", { name: /import places/i }));
 
     expect(await screen.findByRole("checkbox", { name: "Select Home" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("checkbox", { name: "Select Work" })).toHaveAttribute("aria-checked", "true");
@@ -1952,11 +1951,11 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByRole("button", { name: "Add places manually" });
     fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
-    fireEvent.change(screen.getByLabelText("CSV rows"), {
+    fireEvent.click(screen.getByRole("button", { name: "Paste list" }));
+    fireEvent.change(screen.getByLabelText("Place rows (label, lat, lon)"), {
       target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+    fireEvent.click(screen.getByRole("button", { name: /import places/i }));
 
     await screen.findByRole("checkbox", { name: "Select Home" }); // import landed on the manage list
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -1983,11 +1982,11 @@ describe("MapWorkspace", () => {
       expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-bar");
 
       fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-      fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
-      fireEvent.change(screen.getByLabelText("CSV rows"), {
+      fireEvent.click(screen.getByRole("button", { name: "Paste list" }));
+      fireEvent.change(screen.getByLabelText("Place rows (label, lat, lon)"), {
         target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+      fireEvent.click(screen.getByRole("button", { name: /import places/i }));
 
       await screen.findByRole("checkbox", { name: "Select Home" });
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -2322,5 +2321,55 @@ describe("MapWorkspace", () => {
     const right = container.querySelector(".mc-topbar-right")!;
     expect(within(right as HTMLElement).getByRole("button", { name: "About CompCat" })).toBeInTheDocument();
     expect(within(right as HTMLElement).getByRole("button", { name: /Switch to .* theme/ })).toBeInTheDocument();
+  });
+
+  // The legend was display:none under the mobile breakpoint, so phone users had no way to
+  // read what the pins, rings and dots meant.
+  async function renderForMapKey(innerWidth: number) {
+    window.innerWidth = innerWidth;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+  }
+
+  it("narrow viewport: the map key sits behind a toggle that opens and closes it", async () => {
+    await renderForMapKey(375);
+
+    const toggle = screen.getByRole("button", { name: "Map key" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-controls", "mc-map-legend");
+    expect(screen.getByText("Saved place")).not.toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // Same legend, unchanged: every marker row is there once opened.
+    expect(screen.getByText("Saved place")).toBeVisible();
+    expect(screen.getByText("Selected")).toBeVisible();
+    expect(screen.getByText("Low data")).toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Saved place")).not.toBeVisible();
+  });
+
+  it("narrow viewport: Escape closes the open map key and returns focus to its toggle", async () => {
+    await renderForMapKey(375);
+
+    const toggle = screen.getByRole("button", { name: "Map key" });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveFocus();
+  });
+
+  it("wide viewport: the map key stays on screen with no toggle", async () => {
+    await renderForMapKey(1024);
+
+    expect(screen.queryByRole("button", { name: "Map key" })).toBeNull();
+    expect(screen.getByText("Saved place")).toBeVisible();
   });
 });

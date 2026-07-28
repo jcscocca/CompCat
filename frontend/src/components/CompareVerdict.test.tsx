@@ -20,7 +20,7 @@ describe("CompareVerdict", () => {
 
   it("partial: says lower than N of the M others", () => {
     render(<CompareVerdict callout={{ ...base, kind: "partial", loweredCount: 1, otherCount: 3 }} noun={incidentNoun("reported")} />);
-    expect(screen.getByText(/lower than 1 of the 3 other addresses/i)).toBeInTheDocument();
+    expect(screen.getByText(/lower than 1 of the 3 other places/i)).toBeInTheDocument();
   });
 
   // "within normal variation" told the reader the remaining gaps were established as

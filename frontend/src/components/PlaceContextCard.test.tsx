@@ -44,8 +44,6 @@ function renderCard(place: NeighborhoodPlace = homePlace) {
       windowLabel="2026-01-01 – 2026-06-30"
       noun={noun}
       domainMax={6}
-      locator={null}
-      coords={{ latitude: 47.61, longitude: -122.33 }}
     />,
   );
 }

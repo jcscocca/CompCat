@@ -20,7 +20,7 @@ type Props = {
 export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey = null, saveHiddenKey = null, onToggle, onFocus, onHoverPlace, onRemove, onSave, onAdd }: Props) {
   const adHocEntries = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => !entry.savedPlaceId);
   return (
-    <div className="mc-chipstrip mc-scope-locations" role="group" aria-label="Locations">
+    <div className="mc-chipstrip mc-scope-locations" role="group" aria-label="Places">
       {places.map((place) => {
         const identity = identityByPlaceId.get(place.id);
         const selected = identity !== undefined;
@@ -68,7 +68,7 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
                 className="mc-scope-location-action"
                 disabled={savingKey === id}
                 // While saving, the visible "Saving…" is the whole name; idle needs the
-                // location so several Save buttons are distinguishable.
+                // place so several Save buttons are distinguishable.
                 aria-label={savingKey === id ? undefined : `Save ${entry.label}`}
                 onClick={() => onSave(entry)}
               >
@@ -88,7 +88,7 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
       })}
       <button type="button" className="mc-chip mc-chip-add" aria-label="Add or manage places" onClick={onAdd}>
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-        Add location
+        Add place
       </button>
     </div>
   );

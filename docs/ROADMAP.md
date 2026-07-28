@@ -397,7 +397,12 @@ then four review-gated fix batches. Report: `docs/reviews/2026-07-28-pre-launch-
 - [ ] **Fast-follow backlog** (from the audit, not launch-blocking): combobox ARIA pattern,
   tab order/aria-live restructure, mobile keyboard-crush snap, numeric-score guard patterns,
   ranked-surface selective-inference disclosure line, Python lockfile, ErrorBoundary,
-  share-link fragment migration, dead-locator + naming product decisions.
+  share-link fragment migration.
+- [x] **Product decisions from the audit:** the dead MCPP locator subsystem is deleted (it
+  never rendered); **place** is the primary noun in user-facing copy, with "address" kept
+  only where the user literally types or searches one and "pin" kept for the map-drop
+  gesture; the mobile map key is no longer `display:none` but a toggle-opened overlay. The
+  assistant caps shipped with #173/#174.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

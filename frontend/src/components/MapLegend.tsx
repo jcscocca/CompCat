@@ -4,16 +4,20 @@ import type { LayerKey } from "../types";
 type Props = {
   /** The active data layer, so the dot/cluster rows name what is actually plotted. */
   layer: LayerKey;
+  /** Target of the mobile "Map key" toggle's aria-controls. */
+  id?: string;
+  /** Set on mobile, where the legend is an overlay the toggle opens; never on desktop. */
+  hidden?: boolean;
 };
 
 function sentenceCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export function MapLegend({ layer }: Props) {
+export function MapLegend({ layer, id, hidden }: Props) {
   const noun = incidentNoun(layer);
   return (
-    <div className="mc-legend" aria-label="Map key">
+    <div className="mc-legend" id={id} hidden={hidden} aria-label="Map key">
       <h3>Map key</h3>
       <div className="mc-leg-row">
         <span className="g">

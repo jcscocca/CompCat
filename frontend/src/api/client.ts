@@ -8,7 +8,6 @@ import type {
   IncidentDetailsResponse,
   IncidentPointsResponse,
   MapBounds,
-  McppFeatureCollection,
   NeighborhoodAnalysis,
   Place,
   PlaceCreate,
@@ -219,10 +218,6 @@ export function getIncidentDetails(
 
 export function getBeatPolygons(): Promise<BeatFeatureCollection> {
   return request<BeatFeatureCollection>("/dashboard/beats");
-}
-
-export function getMcppPolygons(): Promise<McppFeatureCollection> {
-  return request<McppFeatureCollection>("/dashboard/mcpp");
 }
 
 export function getIncidentPoints(

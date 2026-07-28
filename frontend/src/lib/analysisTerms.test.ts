@@ -14,7 +14,7 @@ describe("minimumDataStatusLabel", () => {
     // The full set from app/analysis/beat_baselines.py and app/analysis/comparison.py.
     expect(minimumDataStatusLabel("met")).toBe("met");
     expect(minimumDataStatusLabel("place_count_too_low")).toBe("fewer than 3 incidents at this place");
-    expect(minimumDataStatusLabel("option_count_too_low")).toBe("fewer than 3 incidents at this location");
+    expect(minimumDataStatusLabel("option_count_too_low")).toBe("fewer than 3 incidents at this place");
     expect(minimumDataStatusLabel("combined_count_too_low")).toBe("fewer than 10 incidents combined");
     expect(minimumDataStatusLabel("date_range_too_short")).toBe("window shorter than 30 days");
     expect(minimumDataStatusLabel("non_positive_exposure")).toBe("no area-time to compare against");

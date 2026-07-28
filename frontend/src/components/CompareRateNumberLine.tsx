@@ -2,9 +2,9 @@ import { annualIncidentsWithin, formatPerYear } from "../lib/rateFormat";
 import type { IncidentNoun } from "../lib/layerCopy";
 import type { CompareVerdictRow } from "../lib/compareVerdict";
 
-// One shared axis of expected reported incidents per year within the buffer. Each address is a
+// One shared axis of expected reported incidents per year within the buffer. Each place is a
 // dot at its rate with a horizontal 95% interval bar; overlapping bars = no clear difference. A
-// dashed line marks the lowest address's rate (with a fainter guide at the 1.25× effect floor),
+// dashed line marks the lowest place's rate (with a fainter guide at the 1.25× effect floor),
 // folding the "vs the lowest" comparison onto the same plot. The ranked verdict stays authoritative.
 type PlotRow = { row: CompareVerdictRow; perYear: number; ciLow: number | null; ciHigh: number | null };
 
@@ -59,7 +59,7 @@ export function CompareRateNumberLine({ rows, noun, radiusM }: { rows: CompareVe
           <span className="val" />
         </div>
       </div>
-      <p className="mc-plot-foot">Bars are raw 95% intervals on each address’s {noun.singular} rate; the dashed line marks the lowest address’s rate. When intervals overlap, the ranked verdict above is authoritative.</p>
+      <p className="mc-plot-foot">Bars are raw 95% intervals on each place’s {noun.singular} rate; the dashed line marks the lowest place’s rate. When intervals overlap, the ranked verdict above is authoritative.</p>
     </div>
   );
 }
