@@ -32,6 +32,7 @@ def test_overlay_documents_its_own_usage_and_sources_secrets_from_env() -> None:
     assert "${MCA_DATABASE_URL:?" in text
     # db, api, the ops-profile ingest sidecar, and caddy.
     assert text.count("restart: unless-stopped") == 4
+    assert "- VITE_CANONICAL_ORIGIN" in text  # list form: no ":-" default, see below
     assert ":-" not in text  # no dev fallback defaults anywhere in the production overlay
 
 
@@ -131,6 +132,23 @@ def test_caddyfile_terminates_tls_for_the_registered_domain_and_proxies_the_api(
         if line.strip() and not line.strip().startswith("#") and line.strip() != "}"
     ]
     assert directives == ["compcat.app {", "encode gzip", "reverse_proxy api:8000"]
+
+
+def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    env = {
+        "POSTGRES_PASSWORD": _TEST_PASSWORD,
+        "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+        "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+    }
+    with_origin = _render({**env, "VITE_CANONICAL_ORIGIN": "https://compcat.app"})
+    assert with_origin.returncode == 0, with_origin.stderr
+    assert "VITE_CANONICAL_ORIGIN: https://compcat.app" in with_origin.stdout
+    # Unset is a valid render too — the arg simply disappears and the build stays relative.
+    without_origin = _render(env, drop=("VITE_CANONICAL_ORIGIN",))
+    assert without_origin.returncode == 0, without_origin.stderr
+    assert "VITE_CANONICAL_ORIGIN" not in without_origin.stdout
 
 
 def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:

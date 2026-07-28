@@ -4,6 +4,10 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend ./
+# Absolute og:url / og:image in link previews. Empty (the default, and every CI build) keeps
+# index.html's relative form; the production stack passes https://compcat.app.
+ARG VITE_CANONICAL_ORIGIN=""
+ENV VITE_CANONICAL_ORIGIN=$VITE_CANONICAL_ORIGIN
 RUN npm run build
 
 FROM python:3.11-slim

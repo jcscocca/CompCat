@@ -21,6 +21,12 @@ services:
     restart: unless-stopped
 
   api:
+    build:
+      # List form: a passthrough from the operator's environment / --env-file, with no
+      # inline fallback default (this overlay allows none, and asserts as much on its own
+      # text). Unset simply drops the arg and the frontend keeps relative metadata.
+      args:
+        - VITE_CANONICAL_ORIGIN
     # Same !reset mechanic as db above: drop the base file's "8000:8000" publish. In production
     # the only listener on the host is caddy; nothing should be able to reach uvicorn directly
     # and bypass TLS, the edge, and the real client IP that the limiter keys on.
