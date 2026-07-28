@@ -662,7 +662,7 @@ git commit -m "feat(brand): favicon set, OG card, and web manifest under the mou
 - Modify: `frontend/index.html`
 - Modify: `frontend/tests/indexHtml.test.ts`
 
-- [ ] **Step 1: Add the failing head tests**
+- [x] **Step 1: Add the failing head tests**
 
 In `frontend/tests/indexHtml.test.ts`, append these two describe blocks after the existing `describe("index.html privacy guard", …)`:
 
@@ -724,12 +724,12 @@ describe("index.html link metadata", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx vitest run tests/indexHtml.test.ts`
 Expected: FAIL — description/og/twitter/theme-color/icon assertions all fail (head has only charset, viewport, title).
 
-- [ ] **Step 3: Write the head**
+- [x] **Step 3: Write the head**
 
 Replace the `<head>` block of `frontend/index.html` with (viewport untouched here — that is Task 4):
 
@@ -762,12 +762,12 @@ Replace the `<head>` block of `frontend/index.html` with (viewport untouched her
 
 The image URLs are root-relative on purpose: the existing privacy guard test forbids any absolute host in `index.html`, and the deployed origin is not known at build time. Unfurlers resolve relative `og:image` against the page URL — confirm with a real unfurler in Manual verification.
 
-- [ ] **Step 4: Run the index tests**
+- [x] **Step 4: Run the index tests**
 
 Run: `cd frontend && npx vitest run tests/indexHtml.test.ts`
 Expected: PASS — the 3 original privacy-guard tests plus the 6 new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/index.html frontend/tests/indexHtml.test.ts
