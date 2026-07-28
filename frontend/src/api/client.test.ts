@@ -235,6 +235,25 @@ describe("api client", () => {
     expect(events).toContain("error");
   });
 
+  it("maps a failing assistant stream response to friendly copy, never the body", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ detail: "leaky-internal-detail" }), { status: 429 }),
+    );
+
+    const failure = await streamAssistantChat(
+      { messages: [{ role: "user", content: "hi" }], dashboard_state: emptyDashboardState },
+      { onEvent: () => {} },
+    ).then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
+
+    expect(failure?.message).toBe(RATE_LIMITED_MESSAGE);
+    expect(failure?.message).not.toContain("leaky-internal-detail");
+    expect(debug).toHaveBeenCalled();
+  });
+
   it("passes the abort signal through to fetch", async () => {
     const controller = new AbortController();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse("event: done\ndata: {}\n\n"));

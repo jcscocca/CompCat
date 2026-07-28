@@ -255,8 +255,8 @@ async function streamAssistantSse(
     signal,
   });
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+    console.debug("assistant stream failed", response.status, await response.text());
+    throw new Error(friendlyRequestError(response.status));
   }
   if (!response.body) {
     throw new Error("Assistant response did not include a stream.");
