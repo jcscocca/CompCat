@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -15,6 +15,16 @@ DashboardRadiusMeters = Annotated[int, Field(gt=0, le=5000)]
 # unauthenticated-cheap POST can request an arbitrarily expensive scan.
 MAX_ANALYSIS_RADII = 3
 MAX_ANALYSIS_SPAN_DAYS = 3000
+# Absolute bounds, which the span cap alone does not give: a window can be short and still
+# sit at date.max, where exposure.trim_partial_edge_months' `end + timedelta(days=1)`
+# raises OverflowError and the request 500s. The floor predates any SPD data; the ceiling
+# allows a modest lookahead for windows that run to "today".
+MIN_ANALYSIS_DATE = date(2008, 1, 1)
+MAX_ANALYSIS_FUTURE_DAYS = 366
+
+
+def _max_analysis_date() -> date:
+    return datetime.now(UTC).date() + timedelta(days=MAX_ANALYSIS_FUTURE_DAYS)
 
 # Seattle-metro bounds (lon W/E, lat S/N) — mirrors config.geocoder_viewbox and
 # frontend SEATTLE_BBOX. A shared-view point must resolve inside Seattle.
@@ -56,6 +66,13 @@ class AnalysisWindow(BaseModel):
     def window_must_be_ordered_and_bounded(self) -> AnalysisWindow:
         if self.analysis_end_date < self.analysis_start_date:
             raise ValueError("analysis_end_date must be on or after analysis_start_date")
+        latest = _max_analysis_date()
+        for value in (self.analysis_start_date, self.analysis_end_date):
+            if not MIN_ANALYSIS_DATE <= value <= latest:
+                raise ValueError(
+                    f"dates must fall between {MIN_ANALYSIS_DATE.isoformat()} and "
+                    f"{latest.isoformat()}"
+                )
         span_days = (self.analysis_end_date - self.analysis_start_date).days
         if span_days > MAX_ANALYSIS_SPAN_DAYS:
             raise ValueError(
