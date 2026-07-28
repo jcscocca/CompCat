@@ -1484,7 +1484,7 @@ The About panel is the one surface that **states** the invariant, so it necessar
 **Files:**
 - Modify: `frontend/src/components/AboutModal.test.tsx`
 
-- [ ] **Step 1: Add the failing sweep**
+- [x] **Step 1: Add the failing sweep**
 
 Append to `frontend/src/components/AboutModal.test.tsx` — extend the import line to pull the constants in:
 
@@ -1530,12 +1530,12 @@ describe("AboutModal invariant sweep", () => {
 });
 ```
 
-- [ ] **Step 2: Run the sweep**
+- [x] **Step 2: Run the sweep**
 
 Run: `cd frontend && npx vitest run src/components/AboutModal.test.tsx --environment jsdom`
 Expected: PASS (10 tests). If the sweep fails on a leftover banned word, **fix the About copy**, not the sweep — the only sanctioned occurrences are the three constants.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/components/AboutModal.test.tsx

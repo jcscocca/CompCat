@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { AboutModal } from "./AboutModal";
+import { AboutModal, ABOUT_DATA_CAVEAT, ABOUT_INVARIANT, ABOUT_RELIANCE_LIMIT } from "./AboutModal";
 
 // jsdom implements no layout, so every element reports offsetParent === null and the dialog's
 // visibility filter (shared verbatim with ManagePlacesModal) would find nothing focusable.
@@ -128,5 +128,39 @@ describe("AboutModal", () => {
     first.focus();
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(last);
+  });
+});
+
+// The standing invariant sweep (mirrors CompareVerdict / PlaceContextCard / CompareRankedList).
+// About is the one surface that STATES the invariant, so the fixed caveat constants are
+// removed first — exactly as the other sweeps stay clean by scoping around REVISED_CAVEAT.
+const BANNED = ["safe", "unsafe", "safety", "danger", "dangerous", "risk", "risky"];
+const FIXED_CAVEATS = [ABOUT_INVARIANT, ABOUT_RELIANCE_LIMIT, ABOUT_DATA_CAVEAT];
+
+describe("AboutModal invariant sweep", () => {
+  it("confines safety/risk vocabulary to the three fixed caveat constants", () => {
+    const { container } = render(<AboutModal onClose={vi.fn()} />);
+    const rendered = (container.textContent ?? "").toLowerCase();
+
+    let remaining = rendered;
+    for (const caveat of FIXED_CAVEATS) {
+      const lowered = caveat.toLowerCase();
+      expect(remaining).toContain(lowered); // the caveat must actually be on screen
+      remaining = remaining.split(lowered).join(" ");
+    }
+
+    for (const banned of BANNED) {
+      expect(remaining).not.toContain(banned);
+    }
+  });
+
+  it("keeps the fixed caveats stating — never scoring — the invariant", () => {
+    expect(ABOUT_INVARIANT).toMatch(/does not score safety/);
+    expect(ABOUT_INVARIANT).toMatch(/rank places as safe, unsafe, or dangerous/);
+    expect(ABOUT_INVARIANT).toMatch(/claim that anyone was present at an incident/);
+    expect(ABOUT_RELIANCE_LIMIT).toMatch(/Don't rely on CompCat for safety or legal decisions/);
+    // The only "risk" occurrence in the panel is the shipped per-card caveat.
+    expect(ABOUT_DATA_CAVEAT).toMatch(/not a personal risk prediction/);
+    expect(FIXED_CAVEATS.filter((text) => /risk/i.test(text))).toEqual([ABOUT_DATA_CAVEAT]);
   });
 });
