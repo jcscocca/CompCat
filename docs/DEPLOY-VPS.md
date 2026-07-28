@@ -23,7 +23,7 @@ Four containers under one `docker compose` project, three open ports:
 | `caddy` | `caddy:2-alpine` | host :80, :443, :443/udp | TLS termination + reverse proxy. The **only** ingress. |
 | `api` | built from this repo | compose network only | FastAPI + the built React UI on `api:8000`. |
 | `db` | `postgres:16` | compose network only | Data. Never published on the host. |
-| `ingest-cron` | built from `deploy/ingest-cron.Dockerfile` | compose network only | 03:10 SPD ingest, 03:40 `pg_dump` backup. `ops` profile. |
+| `ingest-cron` | built from `deploy/ingest-cron.Dockerfile` | compose network only | 03:10 SPD ingest, 03:40 `pg_dump` backup, 03:50 retention sweep. `ops` profile. |
 
 Every command below uses one compose invocation. Define it once per shell session:
 
@@ -306,12 +306,12 @@ Pass conditions:
 - `curl -s -o /dev/null -w '%{http_code}\n' https://compcat.app/health/data` → `200`
 - the dashboard's "Data through" pill shows a recent date.
 
-From here it is automatic: **03:10** ingest and **03:40** backup, every night, America/Los_Angeles
-(the sidecar sets `TZ` and ships `tzdata`, so the times do not drift across DST). Both jobs log to
-the container log:
+From here it is automatic: **03:10** ingest, **03:40** backup and **03:50** retention sweep, every
+night, America/Los_Angeles (the sidecar sets `TZ` and ships `tzdata`, so the times do not drift
+across DST). All three jobs log to the container log:
 
 ```bash
-compose logs ingest-cron | grep -E 'ingest-cron:|backup-daily:'
+compose logs ingest-cron | grep -E 'ingest-cron:|backup-daily:|retention-sweep:'
 ```
 
 ---
@@ -500,8 +500,23 @@ cd /opt/compcat && git pull && scripts/prod/start-compcat.sh
 ```bash
 compose logs -f api          # application
 compose logs -f caddy        # TLS, certificate renewal, HTTP errors
-compose logs ingest-cron     # nightly ingest (03:10) and backup (03:40)
+compose logs ingest-cron     # nightly ingest (03:10), backup (03:40), retention sweep (03:50)
 compose logs db
+```
+
+**Data retention:** a CompCat session is a 24-hour anonymous token, but the rows an analysis
+writes — entered-place clusters, analysis runs, crime summaries, statistical comparisons and
+their options/pairwise children — outlive it, and once the token expires nobody (visitor or
+operator) can address them again. The 03:50 sidecar job posts
+`/admin/maintenance/retention-sweep`, which deletes those rows past
+`MCA_SESSION_DATA_RETENTION_DAYS` (default 30, `0` disables the sweep) in foreign-key order and
+in bounded batches, and evicts `geocode_cache` entries past their own
+`MCA_GEOCODER_CACHE_TTL_DAYS`. It never touches personal-upload clusters — those have their own
+delete path — nor SPD incident data. It runs after the backup, so each night's dump still
+contains what that night removed. To run it by hand and read the per-table row counts:
+
+```bash
+compose exec ingest-cron /bin/sh /etc/ingest/retention.sh
 ```
 
 **After a host reboot:** nothing to do. `restart: unless-stopped` brings `db`, `api`, `caddy` and
