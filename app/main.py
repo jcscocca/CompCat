@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -20,9 +21,28 @@ from app.api.routes_public_dashboard import router as public_dashboard_router
 from app.api.routes_public_places import router as public_places_router
 from app.api.routes_sessions import router as sessions_router
 from app.api.routes_uploads import router as uploads_router
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db import configure_database, init_db
 from app.ratelimit import BurstLimitMiddleware
+
+logger = logging.getLogger(__name__)
+
+
+def log_posture_warnings(settings: Settings) -> None:
+    """Loud boot-time warnings for prod-like postures that are one env var away from real
+    exposure. Warn, never block — both toggles have legitimate single-host uses."""
+    if not settings.is_production_like:
+        return
+    if settings.internal_tier_enabled:
+        logger.warning(
+            "MCA_INTERNAL_TIER_ENABLED=true in a production-like environment: the "
+            "internal tier is unauthenticated — keep it behind a trusted boundary."
+        )
+    if settings.public_enable_personal_uploads:
+        logger.warning(
+            "MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true in a production-like environment: "
+            "personal uploads store real location data — keep OFF on shared instances."
+        )
 
 
 def mount_dashboard(app: FastAPI) -> None:
@@ -60,6 +80,7 @@ def mount_dashboard(app: FastAPI) -> None:
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
+    log_posture_warnings(get_settings())
     configure_database(database_url)
     init_db()
     app = FastAPI(

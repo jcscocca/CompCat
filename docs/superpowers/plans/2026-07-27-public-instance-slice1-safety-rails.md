@@ -1295,7 +1295,7 @@ git commit -m "feat(assistant): refuse free-text turns once the daily token budg
 - Modify: `app/main.py`
 - Create: `tests/test_startup_posture.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_startup_posture.py`:
 
@@ -1371,13 +1371,13 @@ def test_create_app_emits_the_posture_warning(
     assert "internal tier is unauthenticated" in caplog.text
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_startup_posture.py -v`
 Expected: FAIL — collection error, `ImportError: cannot import name 'log_posture_warnings' from
 'app.main'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `app/main.py`, add `import logging` to the stdlib imports (above `from pathlib import Path`),
 change the config import to `from app.config import Settings, get_settings` (line 23), and add the
@@ -1413,12 +1413,12 @@ def create_app(database_url: str | None = None) -> FastAPI:
     init_db()
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `.venv/bin/python -m pytest tests/test_startup_posture.py tests/test_health.py tests/test_internal_surface.py -v`
 Expected: PASS (5 new tests; app construction unchanged everywhere else).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/main.py tests/test_startup_posture.py
