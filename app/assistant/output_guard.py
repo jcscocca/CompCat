@@ -83,6 +83,16 @@ SAFETY_REDIRECT = (
     "ask it that way."
 )
 
+# The guard already covers Spanish asks; refusing them in English reads as a failure to
+# understand rather than a deliberate limit, which is exactly the wrong impression for a
+# refusal. Same three beats as the English text: what it can't do, why, what it can do.
+SAFETY_REDIRECT_ES = (
+    "Eso no puedo sacarlo de los archivos: no puedo etiquetar lugares como seguros o "
+    "inseguros, ni clasificarlos por seguridad, peligro o riesgo, ni generar una puntuación "
+    "de seguridad personal. Sí puedo ordenar lugares por número de incidentes reportados o "
+    "comparar tasas de incidentes ajustadas por exposición — pídemelo así."
+)
+
 # Presence-claim guard — the third prong of the product invariant: the assistant MUST NOT
 # assert that the user was personally present at, witnessed, or was victimized by a reported
 # incident (CompCat knows only self-reported visit counts near a place, never presence at an
@@ -122,6 +132,45 @@ PRESENCE_REDIRECT = (
     "at or involvement in a specific incident — it only knows the places you've saved, not where "
     "you have been. I can show the reported incidents near a place instead."
 )
+
+PRESENCE_REDIRECT_ES = (
+    "CompCat informa de incidentes cerca de un lugar, pero no puede determinar la presencia ni "
+    "la participación de nadie en un incidente concreto: solo conoce los lugares que has "
+    "guardado, no dónde has estado. En su lugar puedo mostrarte los incidentes reportados "
+    "cerca de un lugar."
+)
+
+# Best-effort Spanish detector, used only to pick the language of a refusal that has already
+# been decided — never to decide whether to refuse. Deliberately built from tokens with no
+# English homograph: articles and pronouns (el, la, un, es, mi, por, con) are excluded because
+# "Is LA safe?" and similar would false-positive.
+SPANISH_MARKER_PATTERN = re.compile(
+    r"[¿¡áéíóúüñ]"
+    r"|\b(?:est[aá]|este|esta|estos|estas|qu[eé]|c[oó]mo|d[oó]nde|donde|cu[aá]l(?:es)?"
+    r"|cu[aá]nt[oa]s?|muy|seguro|segura|inseguro|insegura|seguridad|inseguridad"
+    r"|peligro|peligros[oa]|peligrosidad|riesgoso|barrio|barrios|zona|zonas|vecindario"
+    r"|colonia|lugar|lugares|sector|sectores|calle|cuadra|ruta|sitio|aqu[ií]|all[ií]|ac[aá]"
+    r"|debo|debe|deber[ií]a|puedo|evitar|caminar|mal[oa]s?|tranquil[oa]|conflictiv[oa]"
+    r"|problem[aá]tic[oa]|empeorando|peor|clasifica|califica|compara)\b",
+    re.IGNORECASE,
+)
+
+_SPANISH_BY_ENGLISH = {
+    SAFETY_REDIRECT: SAFETY_REDIRECT_ES,
+    PRESENCE_REDIRECT: PRESENCE_REDIRECT_ES,
+}
+REDIRECTS = frozenset(_SPANISH_BY_ENGLISH) | frozenset(_SPANISH_BY_ENGLISH.values())
+
+
+def is_spanish(text: str) -> bool:
+    return bool(SPANISH_MARKER_PATTERN.search(text))
+
+
+def localized(redirect: str | None, spanish: bool) -> str | None:
+    """``redirect`` in Spanish when the conversation is in Spanish, else unchanged."""
+    if redirect is None or not spanish:
+        return redirect
+    return _SPANISH_BY_ENGLISH.get(redirect, redirect)
 
 # Output-ONLY guard for place-ranking / livability prose that carries no banned safety word and
 # so slips contains_safety_ranking (e.g. "a bad area to live", "the worst of the three", "a

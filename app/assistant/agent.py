@@ -4,7 +4,7 @@ import contextlib
 import json
 import re
 from calendar import monthrange
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Callable
 from datetime import date, timedelta
 from typing import Any
 
@@ -21,11 +21,15 @@ from app.assistant.output_guard import (
     PLACE_CONTEXT_PATTERN,
     PRESENCE_CLAIM_PATTERN,
     PRESENCE_REDIRECT,
+    PRESENCE_REDIRECT_ES,
+    REDIRECTS,
     SAFETY_REDIRECT,
+    SAFETY_REDIRECT_ES,
     UNAMBIGUOUS_SAFETY_PATTERN,
     claims_user_presence,
     contains_safety_ranking,
-    guarded,
+    is_spanish,
+    localized,
     output_guard_redirect,
     ranks_places,
 )
@@ -55,15 +59,16 @@ _PLACE_CONTEXT_PATTERN = PLACE_CONTEXT_PATTERN
 # Back-compat alias — downstream imports (and the output-guard test) still work.
 _SAFETY_SCORE_PATTERN = UNAMBIGUOUS_SAFETY_PATTERN
 _SAFETY_REDIRECT = SAFETY_REDIRECT
+_SAFETY_REDIRECT_ES = SAFETY_REDIRECT_ES
 _PRESENCE_CLAIM_PATTERN = PRESENCE_CLAIM_PATTERN
 _PRESENCE_REDIRECT = PRESENCE_REDIRECT
+_PRESENCE_REDIRECT_ES = PRESENCE_REDIRECT_ES
 _OUTPUT_RANKING_PROSE_PATTERN = OUTPUT_RANKING_PROSE_PATTERN
 _contains_safety_ranking = contains_safety_ranking
 _claims_user_presence = claims_user_presence
 _output_ranks_places = ranks_places
 _output_guard_redirect = output_guard_redirect
 
-_REDIRECTS = frozenset({SAFETY_REDIRECT, PRESENCE_REDIRECT})
 SELECTION_TOOLS = (
     "run_place_analysis",
     "compare_places",
@@ -123,12 +128,23 @@ async def run_assistant_turn(
     )
 
     recent_user_texts = _recent_user_texts(messages)
-    if _asks_for_safety_score(recent_user_texts):
-        yield AssistantStreamEvent(event="token", data={"delta": _SAFETY_REDIRECT})
+    # A refusal in the wrong language reads as a failure to understand rather than a
+    # deliberate limit. The guard already covers Spanish asks, so answer them in Spanish.
+    spanish = any(is_spanish(text) for text in recent_user_texts)
+
+    def guard(text: str) -> str | None:
+        return localized(output_guard_redirect(text), spanish)
+
+    if any(contains_safety_ranking(text) for text in recent_user_texts):
+        yield AssistantStreamEvent(
+            event="token", data={"delta": localized(SAFETY_REDIRECT, spanish)}
+        )
         yield AssistantStreamEvent(event="done", data={})
         return
-    if _requests_presence_claim(recent_user_texts):
-        yield AssistantStreamEvent(event="token", data={"delta": _PRESENCE_REDIRECT})
+    if any(claims_user_presence(text) for text in recent_user_texts):
+        yield AssistantStreamEvent(
+            event="token", data={"delta": localized(PRESENCE_REDIRECT, spanish)}
+        )
         yield AssistantStreamEvent(event="done", data={})
         return
 
@@ -185,7 +201,9 @@ async def run_assistant_turn(
                 ),
             )
         except AssistantClarification as exc:
-            yield AssistantStreamEvent(event="token", data={"delta": guarded(str(exc))})
+            yield AssistantStreamEvent(
+                event="token", data={"delta": guard(str(exc)) or str(exc)}
+            )
             yield AssistantStreamEvent(event="done", data={})
             return
         except (AssistantToolError, ValueError) as exc:
@@ -197,8 +215,8 @@ async def run_assistant_turn(
         # build_tool_summary already applied the output guard, so `summary` is either the
         # neutral one-liner or a redirect. A redirect must not be narrated (same rule as a
         # violating draft answer below): emit it and stop.
-        summary = build_tool_summary(tool_result)
-        if not narrate or summary in _REDIRECTS:
+        summary = localized(build_tool_summary(tool_result), spanish)
+        if not narrate or summary in REDIRECTS:
             yield AssistantStreamEvent(event="token", data={"delta": summary})
             yield AssistantStreamEvent(event="done", data={})
             return
@@ -215,6 +233,7 @@ async def run_assistant_turn(
                 build_narration_messages(messages, grounding),
                 summary,
                 settings.assistant_role,
+                guard,
             )
         ) as final_events:
             async for event in final_events:
@@ -232,7 +251,7 @@ async def run_assistant_turn(
     # Output-side invariant guard: a model answer that slipped past the input guard must not
     # stream safety-ranking language, place-ranking/livability prose, or a claim that the user
     # was present at an incident; replace it with the matching redirect.
-    redirect = _output_guard_redirect(message)
+    redirect = guard(message)
     if not narrate or redirect is not None:
         # Kill switch, or the draft itself violates: emit the (guarded) text at once —
         # never hand a violating draft to the narrator.
@@ -251,6 +270,7 @@ async def run_assistant_turn(
             build_narration_messages(messages, "Draft answer (verified): " + message),
             message,
             settings.assistant_role,
+            guard,
         )
     ) as final_events:
         async for event in final_events:
@@ -266,19 +286,12 @@ def _recent_user_texts(
     return [message.content for message in messages[-limit:] if message.role == "user"]
 
 
-def _asks_for_safety_score(texts: Iterable[str]) -> bool:
-    return any(contains_safety_ranking(text) for text in texts)
-
-
-def _requests_presence_claim(texts: Iterable[str]) -> bool:
-    return any(claims_user_presence(text) for text in texts)
-
-
 async def _stream_final(
     llm_client: AssistantLlmClient,
     narration_messages: list[dict[str, str]],
     fallback_text: str,
     role: str,
+    guard: Callable[[str], str | None] = output_guard_redirect,
 ) -> AsyncIterator[AssistantStreamEvent]:
     """Stream the narrated final through the holdback guard. On a guard trip,
     replace with the redirect; on any narration failure (unreachable, empty,
@@ -293,7 +306,7 @@ async def _stream_final(
                     temperature=_NARRATION_TEMPERATURE,
                     max_tokens=_NARRATION_MAX_TOKENS,
                 ),
-                _output_guard_redirect,
+                guard,
             )
         ) as chunks:
             async for chunk in chunks:

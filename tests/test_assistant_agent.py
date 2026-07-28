@@ -41,6 +41,12 @@ class FakeClient:
         return self.responses.pop(0)
 
 
+# The safety/presence guards answer a Spanish ask in Spanish (see output_guard.localized),
+# so tests that exercise the Spanish arms assert "a redirect was returned", not its language.
+def _redirected(delta: str) -> bool:
+    return "reported incident" in delta or "incidentes reportados" in delta
+
+
 async def _collect(*args: Any):
     return [event async for event in run_assistant_turn(*args)]
 
@@ -902,7 +908,7 @@ def test_agent_redirects_spanish_safety_phrasings(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -932,7 +938,7 @@ def test_agent_redirects_spanish_bare_rank_requests(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -991,7 +997,7 @@ def test_agent_redirects_spanish_safety_language_in_model_final_message(tmp_path
     assert [event.event for event in events] == ["meta", "token", "done"]
     delta = events[1].data["delta"]
     assert "segura" not in delta  # the model's Spanish safety phrasing must not leak
-    assert "reported incident" in delta  # replaced with the standard redirect
+    assert _redirected(delta)  # replaced with the standard redirect
     assert len(client.calls) == 1  # the model WAS called (input guard didn't fire)
 
 
@@ -1019,7 +1025,7 @@ def test_agent_redirects_spanish_idad_noun_forms(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1053,7 +1059,7 @@ def test_agent_redirects_latin_american_place_nouns_in_rank_arm(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1206,7 +1212,7 @@ def test_agent_redirects_spanish_colloquial_place_adjectives(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1264,7 +1270,7 @@ def test_agent_redirects_spanish_mal_place_compound(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1320,7 +1326,7 @@ def test_agent_redirects_mal_place_compound_with_es_plurals(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1352,7 +1358,7 @@ def test_agent_redirects_avoid_evitar_place_requests(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1413,7 +1419,7 @@ def test_agent_redirects_evitar_finite_inflections(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1444,7 +1450,7 @@ def test_agent_redirects_rank_verb_with_punctuation_before_noun(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1518,7 +1524,7 @@ def test_agent_over_refuses_estar_seguro_with_place_word_known_limitation(tmp_pa
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1546,7 +1552,7 @@ def test_agent_still_redirects_ser_seguro_place_safety(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1577,7 +1583,7 @@ def test_agent_redirects_postposed_barrio_malo(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1609,7 +1615,7 @@ def test_agent_redirects_estar_third_person_place_safety(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -1641,7 +1647,7 @@ def test_agent_redirects_spanish_centro_esquina_place_context(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -2274,7 +2280,7 @@ def test_agent_redirects_trend_flavored_safety_asks(tmp_path):
                 )
             )
             assert [event.event for event in events] == ["meta", "token", "done"], phrasing
-            assert "reported incident" in events[1].data["delta"], phrasing
+            assert _redirected(events[1].data["delta"]), phrasing
             assert client.calls == [], phrasing
     finally:
         session.close()
@@ -2624,5 +2630,78 @@ def test_presence_proximity_arm_needs_a_first_person_subject(tmp_path):
             )
             assert len(client.calls) == 1, text
             assert events[1].data["delta"] == neutral, text
+    finally:
+        session.close()
+
+
+def test_safety_refusal_answers_spanish_asks_in_spanish(tmp_path):
+    from app.assistant.agent import SAFETY_REDIRECT, SAFETY_REDIRECT_ES
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    spanish = ["¿es seguro este barrio?", "¿Qué barrios debo evitar?", "Clasifica estas zonas"]
+    english = ["is this neighborhood safe?", "rank these places", "which area is safest?"]
+    try:
+        for phrasing in spanish:
+            client = FakeClient(['{"type":"final","message":"unused"}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert events[1].data["delta"] == SAFETY_REDIRECT_ES, phrasing
+            assert client.calls == [], phrasing
+        for phrasing in english:
+            client = FakeClient(['{"type":"final","message":"unused"}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=phrasing)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert events[1].data["delta"] == SAFETY_REDIRECT, phrasing
+    finally:
+        session.close()
+
+
+def test_presence_refusal_answers_spanish_asks_in_spanish(tmp_path):
+    from app.assistant.agent import PRESENCE_REDIRECT, PRESENCE_REDIRECT_ES
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    try:
+        client = FakeClient(['{"type":"final","message":"unused"}'])
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(
+                        role="user", content="¿estuve cerca de alguno de estos incidentes?"
+                    ),
+                    AssistantChatMessage(role="user", content="was I present at any incident?"),
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+        assert events[1].data["delta"] == PRESENCE_REDIRECT_ES
+
+        client = FakeClient(['{"type":"final","message":"unused"}'])
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="was I present at any incident?")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+        assert events[1].data["delta"] == PRESENCE_REDIRECT
     finally:
         session.close()
