@@ -1,5 +1,10 @@
 # Public instance runbook — compcat.app on a VPS
 
+> **Zero-cost alternative:** [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) reaches the same public
+> compcat.app from the ThinkPad through a named Cloudflare tunnel — same app, same env posture,
+> same nightly ops, no VPS and no TLS to manage. Read its "what this trades" section before
+> choosing; the two runbooks diverge only at the edge.
+
 This document takes a **fresh Ubuntu 24.04 box to an always-on public CompCat at
 <https://compcat.app>**: TLS-terminated, rate-limited, ingesting SPD data nightly, backing itself
 up nightly, and monitored from outside. It assumes no prior knowledge of the deployment — following

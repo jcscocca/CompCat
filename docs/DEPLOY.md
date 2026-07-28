@@ -1,8 +1,10 @@
 # Deploying CompCat for a small internal trial (~5 testers)
 
-> **Public VPS instance?** This document is the single-host trial (ThinkPad, HTTP, ~5 testers).
-> For the always-on public instance at compcat.app — TLS, hardening, nightly ingest and backups —
-> see [`DEPLOY-VPS.md`](DEPLOY-VPS.md).
+> **Public instance?** This document is the single-host trial (ThinkPad, HTTP, ~5 testers).
+> For the always-on public instance at compcat.app — TLS, nightly ingest and backups — there are
+> two runbooks with the same posture and different edges:
+> [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) (zero cost: this same ThinkPad, published through a named
+> Cloudflare tunnel) and [`DEPLOY-VPS.md`](DEPLOY-VPS.md) (a rented box, hardened, TLS via Caddy).
 
 This runs the whole app — FastAPI API **and** the built React UI — in one container,
 with Postgres alongside, via `docker compose`. Each tester's browser gets its own
