@@ -4,10 +4,10 @@ import csv
 import math
 from io import StringIO
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import PlaceCluster
+from app.models import PlaceCluster, PlaceCrimeSummary
 from app.normalization.geo import is_valid_coordinate, snap_to_grid
 from app.places.schemas import (
     BulkPlaceCreateResponse,
@@ -97,6 +97,16 @@ def delete_manual_place(session: Session, user_id_hash: str, place_id: str) -> b
     place = _get_user_place(session, user_id_hash, place_id)
     if place is None:
         return False
+    # A saved-place analyze writes PlaceCrimeSummary rows whose FK to place_clusters.id
+    # carries no ON DELETE, so they must go first or the delete raises IntegrityError.
+    # Cleared explicitly rather than via a schema migration so existing deploys need no
+    # DDL. StopVisit is the only other FK to place_clusters and cannot reference a manual
+    # place (those come from imports). StatisticalComparisonOption stores the cluster id
+    # as plain text on an immutable comparison record that may span other places, so it is
+    # deliberately left intact.
+    session.execute(
+        delete(PlaceCrimeSummary).where(PlaceCrimeSummary.place_cluster_id == place_id)
+    )
     session.delete(place)
     session.commit()
     return True
