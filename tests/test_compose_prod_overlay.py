@@ -89,6 +89,7 @@ def test_rendered_overlay_publishes_only_the_caddy_edge() -> None:
             "POSTGRES_PASSWORD": _TEST_PASSWORD,
             "MCA_DATABASE_URL": _TEST_DATABASE_URL,
             "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+            "MCA_RATE_LIMIT_ENABLED": "true",
         }
     )
     assert result.returncode == 0, result.stderr
@@ -109,6 +110,7 @@ def test_rendered_caddy_mounts_the_repo_caddyfile_read_only() -> None:
             "POSTGRES_PASSWORD": _TEST_PASSWORD,
             "MCA_DATABASE_URL": _TEST_DATABASE_URL,
             "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+            "MCA_RATE_LIMIT_ENABLED": "true",
         }
     )
     assert result.returncode == 0, result.stderr
@@ -153,6 +155,7 @@ def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:
         "POSTGRES_PASSWORD": _TEST_PASSWORD,
         "MCA_DATABASE_URL": _TEST_DATABASE_URL,
         "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        "MCA_RATE_LIMIT_ENABLED": "true",
     }
     with_origin = _render({**env, "VITE_CANONICAL_ORIGIN": "https://compcat.app"})
     assert with_origin.returncode == 0, with_origin.stderr
@@ -170,6 +173,7 @@ def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
         {
             "MCA_DATABASE_URL": _TEST_DATABASE_URL,
             "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+            "MCA_RATE_LIMIT_ENABLED": "true",
         },
         drop=("POSTGRES_PASSWORD",),
     )
@@ -177,12 +181,33 @@ def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
     assert "POSTGRES_PASSWORD" in result.stderr
 
 
+def test_rendered_overlay_requires_the_rate_limiter_posture() -> None:
+    # The base file defaults the limiter to false. In production that silently ships an
+    # unmetered public surface, so the overlay makes the posture explicit.
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    result = _render(
+        {
+            "POSTGRES_PASSWORD": _TEST_PASSWORD,
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        },
+        drop=("MCA_RATE_LIMIT_ENABLED",),
+    )
+    assert result.returncode != 0
+    assert "MCA_RATE_LIMIT_ENABLED" in result.stderr
+
+
 def test_rendered_overlay_requires_an_explicit_token_budget() -> None:
     # The production spend posture must be stated, not inherited silently (0 disables).
     if not _compose_available():
         pytest.skip("docker compose plugin not available")
     result = _render(
-        {"POSTGRES_PASSWORD": _TEST_PASSWORD, "MCA_DATABASE_URL": _TEST_DATABASE_URL},
+        {
+            "POSTGRES_PASSWORD": _TEST_PASSWORD,
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_RATE_LIMIT_ENABLED": "true",
+        },
         drop=("MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY",),
     )
     assert result.returncode != 0
@@ -195,6 +220,7 @@ _BASE_ENV = {
     "POSTGRES_PASSWORD": _TEST_PASSWORD,
     "MCA_DATABASE_URL": _TEST_DATABASE_URL,
     "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+    "MCA_RATE_LIMIT_ENABLED": "true",
 }
 
 

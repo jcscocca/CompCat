@@ -76,6 +76,7 @@ jobs:
           POSTGRES_PASSWORD: ci-not-a-real-password
           MCA_DATABASE_URL: postgresql+psycopg://mca:ci-not-a-real-password@db:5432/mca
           MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: "0"
+          MCA_RATE_LIMIT_ENABLED: "true"
         run: |
           docker compose --env-file /dev/null \
             -f docker-compose.yml -f docker-compose.prod.yml config > rendered.yml
@@ -96,6 +97,7 @@ jobs:
           POSTGRES_PASSWORD: ci-not-a-real-password
           MCA_DATABASE_URL: postgresql+psycopg://mca:ci-not-a-real-password@db:5432/mca
           MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: "0"
+          MCA_RATE_LIMIT_ENABLED: "true"
           MCA_ADMIN_INGEST_TOKEN: ci-not-a-real-token
         run: |
           docker compose --env-file /dev/null --profile ops \

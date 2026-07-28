@@ -37,6 +37,10 @@ services:
       # be forwarded here or it silently never reaches the container. Required, no default:
       # the production spend posture must be stated explicitly (0 disables the budget).
       MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: ${MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY:?set MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY (0 disables the daily token budget)}
+      # The base file defaults this to false, which in production means an unmetered
+      # public surface — no session, assistant, or per-IP burst caps. Required with no
+      # default so the posture is stated, never inherited.
+      MCA_RATE_LIMIT_ENABLED: ${MCA_RATE_LIMIT_ENABLED:?set MCA_RATE_LIMIT_ENABLED (true in production — the limiter is the public-surface guard)}
       # Optional override (null value = pass through from the host env only when set,
       # so the app default of 7 applies otherwise; no inline fallback default, per the
       # overlay rule).
