@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
+from calendar import monthrange
 from collections.abc import AsyncIterator, Iterable
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -174,7 +177,12 @@ async def run_assistant_turn(
                 session,
                 user_id_hash,
                 tool_name,
-                _tool_arguments(tool_name, dashboard_state, plan.get("arguments")),
+                _tool_arguments(
+                    tool_name,
+                    dashboard_state,
+                    plan.get("arguments"),
+                    recent_user_texts[-1] if recent_user_texts else "",
+                ),
             )
         except AssistantClarification as exc:
             yield AssistantStreamEvent(event="token", data={"delta": guarded(str(exc))})
@@ -310,12 +318,15 @@ def _tool_arguments(
     tool_name: str,
     dashboard_state: AssistantDashboardState,
     model_arguments: Any,
+    user_text: str = "",
 ) -> dict[str, Any]:
     """Backfill selection-tool arguments from the dashboard state.
 
     Small local models routinely emit a ``tool_call`` with empty ``arguments``.
     The agent already holds the authoritative selection (places, radius, dates),
-    so we inject it and let any model-provided values override.
+    so we inject it and let any model-provided values override — except for an
+    explicit relative window ("last 12 months"), which is arithmetic the agent
+    does itself (see _relative_window).
     """
     raw_arguments = model_arguments if isinstance(model_arguments, dict) else {}
     arguments = {
@@ -324,7 +335,7 @@ def _tool_arguments(
         if value not in (None, "", [])
     }
     if tool_name not in SELECTION_TOOLS:
-        return arguments
+        return _with_relative_window(tool_name, dashboard_state, arguments, user_text)
 
     defaults: dict[str, Any] = {
         "place_ids": list(dashboard_state.selected_place_ids),
@@ -352,7 +363,75 @@ def _tool_arguments(
 
     merged = {key: value for key, value in defaults.items() if value not in (None, "", [])}
     merged.update(arguments)
-    return merged
+    return _with_relative_window(tool_name, dashboard_state, merged, user_text)
+
+
+# Tools that take an analysis window. update_filters is not a selection tool but still
+# carries the dates, so the backstop has to cover it too.
+_DATE_WINDOW_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
+_RELATIVE_WINDOW_PATTERN = re.compile(
+    r"\blast\s+(\d{1,3})\s+(day|week|month|year)s?\b", re.IGNORECASE
+)
+
+
+def _with_relative_window(
+    tool_name: str,
+    dashboard_state: AssistantDashboardState,
+    arguments: dict[str, Any],
+    user_text: str,
+) -> dict[str, Any]:
+    """Recompute an explicit relative window deterministically and override the model.
+
+    Models get "last 12 months" wrong in the way that matters least visibly and most
+    often — right length, wrong year. The phrase is unambiguous arithmetic against the
+    active window's end date, so it does not need judgement.
+    """
+    if tool_name not in _DATE_WINDOW_TOOLS:
+        return arguments
+    end = dashboard_state.analysis_end_date or _parse_date(arguments.get("analysis_end_date"))
+    window = _relative_window(user_text, end)
+    if window is None:
+        return arguments
+    start, end = window
+    return {
+        **arguments,
+        "analysis_start_date": start.isoformat(),
+        "analysis_end_date": end.isoformat(),
+    }
+
+
+def _relative_window(user_text: str, end: date | None) -> tuple[date, date] | None:
+    match = _RELATIVE_WINDOW_PATTERN.search(user_text or "")
+    if match is None or end is None:
+        return None
+    amount, unit = int(match.group(1)), match.group(2).lower()
+    if amount < 1:
+        return None
+    if unit == "day":
+        start = end - timedelta(days=amount - 1)
+    elif unit == "week":
+        start = end - timedelta(days=amount * 7 - 1)
+    else:
+        months = amount * 12 if unit == "year" else amount
+        start = _months_before(end, months) + timedelta(days=1)
+    return start, end
+
+
+def _months_before(value: date, months: int) -> date:
+    """``value`` shifted back ``months`` calendar months, clamped to the shorter month."""
+    total = value.year * 12 + value.month - 1 - months
+    year, month = divmod(total, 12)
+    day = min(value.day, monthrange(year, month + 1)[1])
+    return date(year, month + 1, day)
+
+
+def _parse_date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_model_json(raw: str) -> dict[str, Any]:

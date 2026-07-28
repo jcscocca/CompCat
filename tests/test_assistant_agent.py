@@ -2475,3 +2475,97 @@ def test_narration_prompt_bans_machine_detail_and_pins_plain_language_stats():
     assert "only from the grounding" in text
     assert "one short flavor phrase" in text
     assert "never in the same sentence as a number" in text
+
+
+def test_relative_window_ask_overrides_the_models_dates():
+    # Live miss: asked for "the last 12 months" against a window ending 2025-10-31, the
+    # model proposed a window a year off. Relative windows are arithmetic, not judgement.
+    from app.assistant.agent import _tool_arguments
+
+    state = AssistantDashboardState(
+        selected_place_ids=["place-1"],
+        analysis_start_date=date(2025, 1, 1),
+        analysis_end_date=date(2025, 10, 31),
+        radii_m=[250],
+    )
+    arguments = _tool_arguments(
+        "analyze_places",
+        state,
+        {"analysis_start_date": "2023-11-01", "analysis_end_date": "2024-10-31"},
+        "show me the last 12 months",
+    )
+    assert arguments["analysis_start_date"] == "2024-11-01"
+    assert arguments["analysis_end_date"] == "2025-10-31"
+
+
+def test_relative_window_backstop_covers_days_weeks_and_years():
+    from app.assistant.agent import _tool_arguments
+
+    state = AssistantDashboardState(analysis_end_date=date(2025, 10, 31), radii_m=[250])
+
+    def window(text):
+        arguments = _tool_arguments("update_filters", state, {}, text)
+        return arguments["analysis_start_date"], arguments["analysis_end_date"]
+
+    assert window("last 7 days") == ("2025-10-25", "2025-10-31")
+    assert window("the last 2 weeks please") == ("2025-10-18", "2025-10-31")
+    assert window("last 6 months") == ("2025-05-01", "2025-10-31")
+    assert window("last 2 years") == ("2023-11-01", "2025-10-31")
+
+
+def test_relative_window_backstop_is_inert_without_a_relative_ask():
+    from app.assistant.agent import _tool_arguments
+
+    state = AssistantDashboardState(
+        selected_place_ids=["place-1"],
+        analysis_start_date=date(2025, 1, 1),
+        analysis_end_date=date(2025, 10, 31),
+        radii_m=[250],
+    )
+    arguments = _tool_arguments(
+        "analyze_places",
+        state,
+        {"analysis_start_date": "2024-06-01", "analysis_end_date": "2024-12-31"},
+        "analyze the second half of 2024",
+    )
+    assert arguments["analysis_start_date"] == "2024-06-01"
+    assert arguments["analysis_end_date"] == "2024-12-31"
+
+
+def test_relative_window_backstop_reaches_the_tool_on_a_turn(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        [
+            json.dumps(
+                {
+                    "type": "tool_call",
+                    "tool_name": "update_filters",
+                    "arguments": {
+                        "analysis_start_date": "2023-11-01",
+                        "analysis_end_date": "2024-10-31",
+                    },
+                }
+            )
+        ]
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="narrow it to the last 12 months")],
+                AssistantDashboardState(
+                    selected_place_ids=["place-1"],
+                    analysis_start_date=date(2025, 1, 1),
+                    analysis_end_date=date(2025, 10, 31),
+                    radii_m=[250],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    patch = next(e for e in events if e.event == "tool").data["result"]["patch"]
+    assert patch["analysis_start_date"] == "2024-11-01"
+    assert patch["analysis_end_date"] == "2025-10-31"
