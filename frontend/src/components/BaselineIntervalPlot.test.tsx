@@ -41,7 +41,9 @@ describe("BaselineIntervalPlot", () => {
   it("shows relation words verbatim from the payload", () => {
     render(<BaselineIntervalPlot place={place} identity={placeIdentity(0)} noun={noun} domainMax={plotDomainMax([place])} />);
     expect(screen.getAllByText(/place is above/).length).toBe(2);
-    expect(screen.getAllByText(/similar/).length).toBe(2);
+    // "similar" claimed equivalence a failure to reject never establishes.
+    expect(screen.getAllByText(/no clear difference/).length).toBe(2);
+    expect(screen.queryByText(/\bsimilar\b/)).not.toBeInTheDocument();
   });
 
   it("pins the interval label to the identity", () => {

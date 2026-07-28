@@ -5,10 +5,12 @@ import type { BaselineEntry, NeighborhoodPlace } from "../types";
 
 const KIND_ORDER: BaselineEntry["kind"][] = ["mcpp", "beat", "sector", "city"];
 
+// "similar" asserted equivalence the test never established: failing to reject a null is
+// not evidence of no difference. Say what was actually found.
 const RELATION_TEXT: Record<BaselineEntry["relation"], string> = {
   above: "place is above",
   below: "place is below",
-  similar: "similar",
+  similar: "no clear difference",
   insufficient: "insufficient data",
 };
 

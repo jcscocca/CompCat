@@ -18,7 +18,7 @@ export function CompareVerdict({ callout, noun }: { callout: CompareCallout; nou
     return (
       <div className="mc-verdict tone-ok" data-testid="compare-callout" role="status">
         <p className="mc-verdict-headline">
-          <strong>{lowestLabel}</strong> has the lowest {rate} — statistically lower than {loweredCount} of the {otherCount} other addresses. The rest are within normal variation.
+          <strong>{lowestLabel}</strong> has the lowest {rate} — statistically lower than {loweredCount} of the {otherCount} other addresses. For the rest, the difference isn't statistically clear at this sample size.
         </p>
       </div>
     );
@@ -26,7 +26,7 @@ export function CompareVerdict({ callout, noun }: { callout: CompareCallout; nou
   if (kind === "none") {
     return (
       <div className="mc-verdict tone-muted" data-testid="compare-callout" role="status">
-        <p className="mc-verdict-headline">No statistically clear difference in {rate} across these addresses — the gaps fall within normal variation.</p>
+        <p className="mc-verdict-headline">No statistically clear difference in {rate} across these addresses — none of the gaps are statistically clear at this sample size.</p>
       </div>
     );
   }
