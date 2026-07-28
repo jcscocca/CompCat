@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Sequence
 from datetime import date
 from typing import Any
@@ -443,12 +444,13 @@ def _monthly_counts(
     analysis_start_date: date,
     analysis_end_date: date,
 ) -> list[int]:
-    incident_months = [_observed_month(incident) for incident in incidents]
-    counts_by_month = {
-        current_month: incident_months.count(current_month)
+    # Same single-pass tally as neighborhood_service._monthly_counts; the per-month
+    # list.count() it replaces was O(months x incidents).
+    incident_months = Counter(_observed_month(incident) for incident in incidents)
+    return [
+        incident_months[current_month]
         for current_month in _month_range(analysis_start_date, analysis_end_date)
-    }
-    return list(counts_by_month.values())
+    ]
 
 
 def _month_range(start_date: date, end_date: date) -> list[tuple[int, int]]:
