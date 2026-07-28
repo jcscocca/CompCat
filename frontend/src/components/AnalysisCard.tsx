@@ -61,8 +61,8 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
   const resultTitle = card.kind === "compare"
     ? comparisonLabels.length === 2
       ? `${comparisonLabels[0]} vs ${comparisonLabels[1]}`
-      : `${comparisonLabels.length || card.placeIds.length} locations compared`
-    : neighborhood?.places[0]?.place_label ?? "Location analysis";
+      : `${comparisonLabels.length || card.placeIds.length} places compared`
+    : neighborhood?.places[0]?.place_label ?? "Place analysis";
 
   const showCategory = layer !== "calls";
   const subcategoryHeader = layer === "calls" ? "Call type" : layer === "arrests" ? "Charge" : "Subcategory";

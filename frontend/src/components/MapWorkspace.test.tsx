@@ -358,11 +358,11 @@ describe("MapWorkspace", () => {
     await screen.findByRole("button", { name: "Add places manually" });
 
     fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
-    fireEvent.change(screen.getByLabelText("CSV rows"), {
+    fireEvent.click(screen.getByRole("button", { name: "Paste list" }));
+    fireEvent.change(screen.getByLabelText("Place rows (label, lat, lon)"), {
       target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+    fireEvent.click(screen.getByRole("button", { name: /import places/i }));
 
     expect(await screen.findByRole("checkbox", { name: "Select Home" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("checkbox", { name: "Select Work" })).toHaveAttribute("aria-checked", "true");
@@ -1951,11 +1951,11 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByRole("button", { name: "Add places manually" });
     fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
-    fireEvent.change(screen.getByLabelText("CSV rows"), {
+    fireEvent.click(screen.getByRole("button", { name: "Paste list" }));
+    fireEvent.change(screen.getByLabelText("Place rows (label, lat, lon)"), {
       target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+    fireEvent.click(screen.getByRole("button", { name: /import places/i }));
 
     await screen.findByRole("checkbox", { name: "Select Home" }); // import landed on the manage list
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -1982,11 +1982,11 @@ describe("MapWorkspace", () => {
       expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-bar");
 
       fireEvent.click(screen.getByRole("button", { name: /add places manually/i }));
-      fireEvent.click(screen.getByRole("button", { name: "Bulk CSV" }));
-      fireEvent.change(screen.getByLabelText("CSV rows"), {
+      fireEvent.click(screen.getByRole("button", { name: "Paste list" }));
+      fireEvent.change(screen.getByLabelText("Place rows (label, lat, lon)"), {
         target: { value: "display_label,latitude,longitude\nHome,47.61,-122.33\nWork,47.62,-122.34" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /import rows/i }));
+      fireEvent.click(screen.getByRole("button", { name: /import places/i }));
 
       await screen.findByRole("checkbox", { name: "Select Home" });
       fireEvent.click(screen.getByRole("button", { name: "Close" }));

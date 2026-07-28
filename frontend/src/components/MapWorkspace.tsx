@@ -446,7 +446,7 @@ export function MapWorkspace() {
       setSelectedIds((current) => new Set([...current, created.id]));
       await data.refreshWithFallback("Saved, but dashboard places could not refresh.");
     } catch (cause) {
-      data.setError(friendlyMessageOr(cause, "Unable to save this location. Try again."));
+      data.setError(friendlyMessageOr(cause, "Unable to save this place. Try again."));
     } finally {
       setSavingEntryKey(null);
     }

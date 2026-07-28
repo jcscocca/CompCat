@@ -18,7 +18,7 @@ const MINIMUM_DATA_STATUS_COPY: Record<string, string> = {
   // Floors live in app/analysis/rate_tests.py (MIN_PLACE_COUNT 3, MIN_COMBINED_COUNT 10,
   // MIN_ANALYSIS_DAYS 30); keep these numbers in step with them.
   place_count_too_low: "fewer than 3 incidents at this place",
-  option_count_too_low: "fewer than 3 incidents at this location",
+  option_count_too_low: "fewer than 3 incidents at this place",
   combined_count_too_low: "fewer than 10 incidents combined",
   date_range_too_short: "window shorter than 30 days",
   non_positive_exposure: "no area-time to compare against",

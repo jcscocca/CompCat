@@ -32,7 +32,7 @@ const rows: CompareVerdictRow[] = [
 afterEach(cleanup);
 
 describe("CompareRateNumberLine", () => {
-  it("renders a labeled row and rate for every address, lowest included", () => {
+  it("renders a labeled row and rate for every place, lowest included", () => {
     render(<CompareRateNumberLine rows={rows} noun={noun} radiusM={250} />);
     const plot = screen.getByTestId("compare-numberline");
     expect(within(plot).getByText("Pike")).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("CompareRateNumberLine", () => {
     expect(plot.querySelectorAll(".mc-plot-row .dot")).toHaveLength(3);
   });
 
-  it("draws an interval bar per address, but only a dot when the rate CI is absent", () => {
+  it("draws an interval bar per place, but only a dot when the rate CI is absent", () => {
     const withMissing: CompareVerdictRow[] = [
       row("Pike", "lowest", 3.9, 2.7, 5.6, 1),
       row("Gap", "limited", 9.0, null, null, 2),
@@ -56,7 +56,7 @@ describe("CompareRateNumberLine", () => {
     render(<CompareRateNumberLine rows={rows} noun={noun} radiusM={250} />);
     const plot = screen.getByTestId("compare-numberline");
     expect(plot.querySelectorAll(".mc-plot-line")).toHaveLength(2);
-    expect(within(plot).getByText(/marks the lowest address’s rate/i)).toBeInTheDocument();
+    expect(within(plot).getByText(/marks the lowest place’s rate/i)).toBeInTheDocument();
   });
 
   it("defers to the ranked verdict in an honesty footnote", () => {

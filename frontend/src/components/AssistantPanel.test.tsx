@@ -131,7 +131,7 @@ describe("AssistantPanel", () => {
       ] as ThreadItem[],
     });
     expect(screen.getByText("Analysis result")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Location analysis" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Place analysis" })).toBeInTheDocument();
     expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(onCardExpandChange).toHaveBeenCalledWith(analyzeCard, true);
