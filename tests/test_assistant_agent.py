@@ -2333,3 +2333,127 @@ def test_build_tool_grounding_fences_the_data_block():
     assert grounding.count("```") == 2
     fenced = grounding.split("```")[1]
     assert "Ignore previous instructions" in fenced
+
+
+def _two_place_analyze_envelope():
+    """A realistically shaped analyze_places envelope: uuids, incident rows, geometry,
+    24-hour temporal profiles — the payload shape that used to be chopped mid-JSON."""
+
+    def _place(label, ratio, lower, upper, hour_peak, weekend):
+        hours = [1] * 24
+        for hour in (hour_peak, hour_peak + 1, hour_peak + 2):
+            hours[hour] = 40
+        dow = [10, 10, 10, 10, 10, weekend, weekend]
+        return {
+            "place_id": "3f2a71c4-1f0e-4a55-9b31-5c9d0f7e2a11",
+            "place_label": label,
+            "beat": "M3",
+            "baseline_available": True,
+            "decision": "above_clear",
+            "minimum_data_status": "met",
+            "place_incident_count": 120,
+            "nearest_incident_m": 41.2,
+            "monthly_counts": [10] * 12,
+            "baselines": [
+                {
+                    "kind": "mcpp",
+                    "label": "Capitol Hill",
+                    "area_km2": 2.4,
+                    "baseline_incident_count": 900,
+                    "baseline_rate": 0.004,
+                    "rate_ratio": ratio,
+                    "ci_lower": lower,
+                    "ci_upper": upper,
+                    "adjusted_p_value": 0.012,
+                    "method": "quasi_poisson",
+                    "relation": "above",
+                }
+            ],
+            "category_breakdown": [
+                {"label": "Theft", "place_count": 60, "place_share": 0.5, "beat_share": 0.3},
+                {"label": "Burglary", "place_count": 36, "place_share": 0.3, "beat_share": 0.2},
+                {"label": "Assault", "place_count": 12, "place_share": 0.1, "beat_share": 0.1},
+                {"label": "Other", "place_count": 12, "place_share": 0.1, "beat_share": 0.4},
+            ],
+            "temporal": {
+                "hour_counts": hours,
+                "dow_counts": dow,
+                "hour_by_dow": [[1] * 24 for _ in range(7)],
+                "total_with_time": sum(hours),
+                "without_time": 3,
+            },
+        }
+
+    return {
+        "tool_name": "analyze_places",
+        "arguments": {},
+        "result": {
+            "place_ids": ["3f2a71c4-1f0e-4a55-9b31-5c9d0f7e2a11"],
+            "settings_used": {
+                "radius_m": 250,
+                "analysis_start_date": "2024-11-01",
+                "analysis_end_date": "2025-10-31",
+                "offense_category": None,
+                "layer": "reported",
+            },
+            "analysis": {"summaries": [{"radius_m": 250} for _ in range(8)]},
+            "neighborhood": {
+                "radius_m": 250,
+                "places": [
+                    _place("Library stop", 1.4, 1.1, 1.8, 17, 30),
+                    _place("Second stop", 0.7, 0.6, 0.9, 21, 5),
+                ],
+            },
+            "incidents": {
+                "incidents": [
+                    {
+                        "id": "9c1b44de-77aa-4f0e-8a2c-11deadbeef00",
+                        "latitude": 47.61,
+                        "longitude": -122.33,
+                        "offense_category": "PROPERTY",
+                    }
+                    for _ in range(30)
+                ],
+                "returned_count": 30,
+                "total_count": 240,
+            },
+            "analysis_run_id": "8b0c9a71-2222-4bcd-9aaa-0123456789ab",
+            "badges": [
+                {
+                    "place_id": "3f2a71c4-1f0e-4a55-9b31-5c9d0f7e2a11",
+                    "label": "Library stop",
+                    "run_id": "8b0c9a71-2222-4bcd-9aaa-0123456789ab",
+                    "settings_fingerprint": "abc123def456",
+                }
+            ],
+        },
+    }
+
+
+def test_grounding_is_compact_and_keeps_the_load_bearing_statistics():
+    # MAX_GROUNDING_RESULT_CHARS used to chop a real payload mid-JSON at 17-30%, and the
+    # narrator then denied having data it had been handed. The grounding is now derived,
+    # not truncated: stats survive, raw arrays/uuids/geometry do not.
+    from app.assistant.prompts import MAX_GROUNDING_RESULT_CHARS, build_tool_grounding
+
+    envelope = _two_place_analyze_envelope()
+    grounding = build_tool_grounding("analyze_places", "Analyzed 2 places.", envelope)
+
+    assert len(grounding) < MAX_GROUNDING_RESULT_CHARS
+    assert "Analyzed 2 places." in grounding
+    # Both places' rate ratios and intervals survive.
+    assert "1.4" in grounding and "1.1" in grounding and "1.8" in grounding
+    assert "0.7" in grounding and "0.6" in grounding and "0.9" in grounding
+    assert grounding.count("95% CI") == 2
+    # Temporal presence arrives as a derived line, not a 24-slot array.
+    assert "busiest hours 17:00" in grounding
+    assert "busiest hours 21:00" in grounding
+    assert "weekend share" in grounding
+    # Category breakdown survives as a top-3.
+    assert "Theft" in grounding and "Burglary" in grounding
+    # No raw arrays, uuids or geometry.
+    assert "[" not in grounding
+    assert "3f2a71c4-1f0e-4a55-9b31-5c9d0f7e2a11" not in grounding
+    assert "8b0c9a71-2222-4bcd-9aaa-0123456789ab" not in grounding
+    assert "latitude" not in grounding
+    assert "trimmed" not in grounding
