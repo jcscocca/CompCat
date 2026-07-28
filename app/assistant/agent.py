@@ -184,10 +184,6 @@ async def run_assistant_turn(
 
     if plan.get("type") == "tool_call":
         tool_name = str(plan.get("tool_name"))
-        if narrate:
-            yield AssistantStreamEvent(
-                event="status", data={"label": f"running {tool_name}…"}
-            )
         try:
             tool_result = execute_tool(
                 session,
@@ -211,6 +207,13 @@ async def run_assistant_turn(
                 event="error", data={"message": str(exc), "code": "tool_error"}
             )
             return
+        # Emitted only once the tool has actually produced a result: a plan that clarifies
+        # (or names a tool that does not exist) runs nothing, and a "running analyze_places…"
+        # spinner in front of a clarifying question claims work that never happened.
+        if narrate:
+            yield AssistantStreamEvent(
+                event="status", data={"label": f"running {tool_name}…"}
+            )
         yield AssistantStreamEvent(event="tool", data=tool_result)
         # build_tool_summary already applied the output guard, so `summary` is either the
         # neutral one-liner or a redirect. A redirect must not be narrated (same rule as a

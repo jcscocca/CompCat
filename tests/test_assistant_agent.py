@@ -2705,3 +2705,53 @@ def test_presence_refusal_answers_spanish_asks_in_spanish(tmp_path):
         assert events[1].data["delta"] == PRESENCE_REDIRECT
     finally:
         session.close()
+
+
+def test_clarification_path_emits_no_running_tool_status(tmp_path, monkeypatch):
+    # A "running analyze_places…" spinner followed by a clarifying question tells the user
+    # work happened that never did. No tool ran, so no tool status.
+    _narration_on(monkeypatch)
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeStreamClient(
+        ['{"type":"tool_call","tool_name":"analyze_places","arguments":{}}'],
+        ["never streamed"],
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="analyze it")],
+                AssistantDashboardState(),  # nothing selected, no window
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    labels = [e.data["label"] for e in events if e.event == "status"]
+    assert not any(label.startswith("running") for label in labels), labels
+    assert any(e.event == "token" for e in events)  # the clarification still reaches the user
+    assert events[-1].event == "done"
+    assert client.stream_calls == []
+
+
+def test_unknown_tool_name_emits_no_running_tool_status(tmp_path, monkeypatch):
+    _narration_on(monkeypatch)
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeStreamClient(['{"type":"tool_call","arguments":{}}'], [])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="do the thing")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    labels = [e.data["label"] for e in events if e.event == "status"]
+    assert not any(label.startswith("running") for label in labels), labels
