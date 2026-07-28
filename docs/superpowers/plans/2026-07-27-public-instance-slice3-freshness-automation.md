@@ -478,7 +478,7 @@ regress them silently.
 - Modify: `tests/test_internal_surface.py`
 - Modify: `tests/test_ratelimit_api.py`
 
-- [ ] **Step 1: Write the tests and watch them pass for the right reason**
+- [x] **Step 1: Write the tests and watch them pass for the right reason**
 
 Append to `tests/test_internal_surface.py`:
 
@@ -494,10 +494,10 @@ def test_data_freshness_probe_absent_from_schema(tmp_path):
 def test_data_freshness_probe_still_served(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
-    # Hidden from the schema, but reachable with no session (an empty DB reads as stale).
+    # Hidden from the schema, but reachable with no session.
     response = client.get("/health/data")
     assert response.status_code == 503
-    assert response.json()["status"] == "unknown" or response.json()["stale"]
+    assert response.json()["stale"]  # empty DB: unknown recency counts as stale
 ```
 
 Append to `tests/test_ratelimit_api.py`:
@@ -514,7 +514,7 @@ def test_burst_limit_exempts_the_data_freshness_probe(tmp_path, monkeypatch) -> 
         assert client.get("/health/data").status_code != 429
 ```
 
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `.venv/bin/python -m pytest tests/test_internal_surface.py tests/test_ratelimit_api.py -v`
 Expected: PASS (3 new tests). If `test_burst_limit_exempts_the_data_freshness_probe` returns 429, the
@@ -523,7 +523,7 @@ exempt tuple no longer covers the probe — add `"/health/data"` to `_BURST_EXEM
 `include_in_schema=False` from the probe: `test_data_freshness_probe_absent_from_schema` must fail.
 Restore it before committing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_internal_surface.py tests/test_ratelimit_api.py

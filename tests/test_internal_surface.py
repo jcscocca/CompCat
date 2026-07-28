@@ -75,3 +75,20 @@ def test_internal_endpoint_reopenable_with_explicit_flag(tmp_path, monkeypatch):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
     assert client.post("/internal/crime/ingest/sample").status_code == 200
+
+
+def test_data_freshness_probe_absent_from_schema(tmp_path):
+    # /health/data is a monitoring probe, not part of the public contract. /health stays
+    # documented — it is the container's readiness check.
+    paths = _schema_paths(tmp_path)
+    assert "/health" in paths
+    assert "/health/data" not in paths
+
+
+def test_data_freshness_probe_still_served(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    # Hidden from the schema, but reachable with no session.
+    response = client.get("/health/data")
+    assert response.status_code == 503
+    assert response.json()["stale"]  # empty DB: unknown recency counts as stale
