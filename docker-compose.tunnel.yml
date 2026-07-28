@@ -1,0 +1,56 @@
+# Named-tunnel overlay — the zero-cost public posture. Layered on top of BOTH the base file
+# and the production overlay, never alone:
+#
+#   docker compose -p compcat-public \
+#     -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.tunnel.yml \
+#     --profile ops --env-file .env.tunnel up -d --build
+#
+# Runbook: docs/DEPLOY-TUNNEL.md. scripts/public/start-public.ps1 wraps this invocation.
+#
+# What it changes versus the VPS posture (docker-compose.prod.yml):
+#   - there is no TLS edge in the stack and no published host port at all. Cloudflare
+#     terminates TLS at its own edge and reaches the app through an OUTBOUND connection the
+#     cloudflared container opens — the host needs no inbound firewall hole, no public IP and
+#     no port forward, which is the whole point of running this from a laptop behind NAT;
+#   - caddy is parked on a profile nothing activates (see below), so the entire ACME /
+#     certificate story disappears with it;
+#   - everything else — required secrets, unpublished Postgres, restart policies, the nightly
+#     `ops` sidecar (03:10 ingest / 03:40 backup / 03:50 retention) and the 10 MB x 5 log cap —
+#     is inherited from the production overlay unchanged.
+#
+# ALWAYS run this with `-p compcat-public`. It is a THIRD compose project on the ThinkPad,
+# isolated from the personal instance (`compcat`, real places + personal uploads ENABLED, must
+# never be exposed) and from the demo (`compcat-demo`). The project prefix gives it its own
+# named volumes — compcat-public_mca-postgres, compcat-public_backups — so no database, no
+# backup archive and no network is ever shared with the other two.
+services:
+  caddy:
+    # Compose has no "delete a service an earlier file defined", so park it on a profile that
+    # nothing ever activates. Under the default profile set (and under `--profile ops`, the
+    # only profile this stack uses) caddy is absent from the rendered config, so it is never
+    # created and 80/443 are never bound. tests/test_compose_tunnel_overlay.py asserts that.
+    # Its caddy-data / caddy-config volume declarations stay in the prod overlay's top-level
+    # `volumes:` block and are simply unused here.
+    profiles: ["disabled"]
+
+  # The public ingress, inverted: instead of the internet dialling us, cloudflared dials
+  # Cloudflare and the tunnel token names which tunnel this is. The hostname routing
+  # (compcat.app -> http://api:8000) lives in the Cloudflare dashboard, not in this file —
+  # that is the one piece of the edge config that is not in the repo.
+  cloudflared:
+    # Pinned, like every other image in this stack; --no-autoupdate below keeps the running
+    # binary matching the tag rather than silently replacing itself in place.
+    image: cloudflare/cloudflared:2026.7.3
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN from the Cloudflare dashboard (Zero Trust > Networks > Tunnels)}
+    # Short form on purpose, mirroring caddy in the prod overlay: the tunnel should register
+    # with Cloudflare immediately rather than wait out the api's migrate-and-boot window. A
+    # request that arrives early gets Cloudflare's own 502 page; a tunnel that has not
+    # registered makes the hostname look permanently offline.
+    depends_on:
+      - api
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
