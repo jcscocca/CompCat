@@ -75,17 +75,18 @@ docker compose exec api python scripts/seed_crime.py    # or, for local dev: mak
 This is demo data, not real SPD data; it's idempotent (re-running skips existing rows).
 For real data, run the Socrata ingest below.
 
-Beat-area reference data ships inside the image; crime incidents are ingested at
-runtime from Seattle's open data. Pull ~2018-onward incidents (newest first) — adjust
-the page count for how much you want (each page ≈ 5,000 incidents):
+Beat-area reference data ships inside the image; incident data is ingested at runtime
+from Seattle's open data. One call per layer does the whole job — `mode=backfill`
+resolves the start date from the stored watermark and pages through Socrata internally
+with retry/backoff (the same invocation the public instance's nightly sidecar uses,
+`deploy/ingest-daily.sh`). All three are safe to re-run: the watermark advances or no-ops.
 
 ```bash
 TOKEN=$(grep '^MCA_ADMIN_INGEST_TOKEN=' .env.deploy | cut -d= -f2)
-for offset in 0 5000 10000 15000 20000 25000; do
-  curl -fsS -X POST -H "X-Admin-Token: $TOKEN" \
-    "http://localhost:8000/admin/crime/ingest/socrata?start_date=2018-01-01&limit=5000&offset=$offset" \
-    && echo " ingested offset $offset"
-  sleep 1
+for src in seattle_spd_crime seattle_spd_arrests seattle_spd_911; do
+  curl -fsS --max-time 3600 -X POST -H "X-Admin-Token: $TOKEN" \
+    "http://localhost:8000/admin/crime/ingest/socrata?source=$src&mode=backfill&limit=5000" \
+    && echo " $src done"
 done
 ```
 
@@ -93,10 +94,13 @@ done
 > add `RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates`
 > to the `python:3.11-slim` stage of the `Dockerfile` and rebuild.
 
-**SPD Arrest Data (optional).** Arrests load separately via `make ingest-arrests` (or
-`POST /admin/crime/ingest/socrata?source=seattle_spd_arrests&mode=backfill` with the
-`X-Admin-Token` header). They are stored but not yet surfaced in the UI, and the dashboard
-"Data through" freshness pill remains scoped to SPD reported incidents only.
+**The three layers.** `seattle_spd_crime` (reported incidents, 2018 floor) is the primary
+layer. `seattle_spd_arrests` (2018 floor) is the enforcement-activity layer — rows carry a
+best-effort NIBRS crosswalk from ingest, so the category filter works there too.
+`seattle_spd_911` (rolling 24-month window) is by far the largest volume; its first
+backfill is the long one, so run it last and let it finish. Each layer surfaces in the UI
+behind the top-bar layer toggle, and the "Data through" freshness pill follows whichever
+layer is active.
 
 ## 4. Share with testers
 
