@@ -23,7 +23,7 @@ fi
 status=0
 for source in seattle_spd_crime seattle_spd_arrests seattle_spd_911; do
     log "${source}: starting"
-    if curl -sS --fail --max-time 3600 -X POST \
+    if curl -sS --fail-with-body --max-time 3600 -X POST \
         -H "X-Admin-Token: ${MCA_ADMIN_INGEST_TOKEN}" \
         "${API_BASE}/admin/crime/ingest/socrata?source=${source}&mode=backfill&limit=${PAGE_LIMIT}"
     then

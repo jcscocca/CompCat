@@ -44,8 +44,9 @@ def health_data() -> JSONResponse:
     upstream Socrata outage must page someone, not restart-loop the app.
 
     Hidden from the schema and session-free: it exposes only per-layer data_through/lag, which
-    /dashboard/freshness already serves. Reads the freshness values the dashboard has cached
-    in-process, so polling it adds no table scans. Unknown counts as stale.
+    /dashboard/freshness already serves. Shares the dashboard's in-process freshness cache
+    (same keys, same TTLs), so a poll recomputes the aggregate only when that cache has
+    expired anyway. Unknown counts as stale.
     """
     threshold = get_settings().data_staleness_days
     today = datetime.now(UTC).date()
@@ -62,7 +63,10 @@ def health_data() -> JSONResponse:
     for layer, values in freshness.items():
         data_through = values.get("data_through")
         lag_days = _lag_days(data_through, today)
-        if lag_days is None or lag_days > threshold:
+        # Negative lag means a future-dated upstream row; without this guard that layer
+        # could never report stale again — a permanent blind spot for exactly the failure
+        # this probe exists to catch.
+        if lag_days is None or lag_days < 0 or lag_days > threshold:
             stale.append(
                 {
                     "layer": layer,

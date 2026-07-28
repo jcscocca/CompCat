@@ -54,6 +54,18 @@ def test_all_layers_fresh_returns_200(tmp_path) -> None:
     assert response.json() == {"status": "ok", "stale": []}
 
 
+def test_future_dated_layer_is_stale_not_permanently_fresh(tmp_path) -> None:
+    # A mis-dated upstream row pins data_through ahead of today; negative lag must read as
+    # stale or that layer could never alarm again.
+    client = _client(tmp_path)
+    _seed({"reported": -3, "arrests": 0, "calls": 0})
+    response = client.get("/health/data")
+    assert response.status_code == 503
+    body = response.json()
+    assert [entry["layer"] for entry in body["stale"]] == ["reported"]
+    assert body["stale"][0]["lag_days"] == -3
+
+
 def test_one_stale_layer_returns_503_and_names_it(tmp_path) -> None:
     client = _client(tmp_path)
     _seed({"reported": 1, "arrests": 1, "calls": 30})
