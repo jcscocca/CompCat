@@ -637,3 +637,17 @@ def test_analyze_places_clarifies_without_place(tmp_path, monkeypatch):
             )
     finally:
         session.close()
+
+
+def test_planning_prompt_defines_the_three_layers_as_a_table():
+    """Live miss: the model inverted reported/arrests/calls in free-form answers. Dense
+    prose does not survive; three parallel one-line definitions do."""
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    lines = [line.strip() for line in PLANNING_SYSTEM_PROMPT.splitlines()]
+    assert 'reported = SPD crime reports' in " ".join(lines)
+    assert 'arrests  = SPD arrest records' in " ".join(lines)
+    assert 'calls    = 911 calls for service' in " ".join(lines)
+    # One line each, so the three definitions stay parallel and scannable.
+    for marker in ("reported =", "arrests  =", "calls    ="):
+        assert sum(1 for line in lines if line.startswith(marker)) == 1, marker

@@ -2457,3 +2457,21 @@ def test_grounding_is_compact_and_keeps_the_load_bearing_statistics():
     assert "8b0c9a71-2222-4bcd-9aaa-0123456789ab" not in grounding
     assert "latitude" not in grounding
     assert "trimmed" not in grounding
+
+
+def test_narration_prompt_bans_machine_detail_and_pins_plain_language_stats():
+    # Live audit: Tabby read out field names and enum values ("decision: not_clear",
+    # "minimum_data_status"), restated intervals as raw numbers, and buried caveats in
+    # the same breath as a flavour line.
+    from app.assistant.prompts import NARRATION_SYSTEM_PROMPT
+
+    text = NARRATION_SYSTEM_PROMPT.lower()
+    assert "never mention" in text
+    assert "field names" in text
+    assert "tool" in text
+    assert "plausible range" in text
+    assert "statistically clear" in text
+    assert "not statistically clear at this sample size" in text
+    assert "only from the grounding" in text
+    assert "one short flavor phrase" in text
+    assert "never in the same sentence as a number" in text
