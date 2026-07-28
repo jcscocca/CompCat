@@ -69,8 +69,24 @@ class ManualPlaceResponse(BaseModel):
     sensitivity_class: SensitivityClass
 
 
+# The body-size cap alone still admits thousands of tiny rows, each of which becomes a
+# PlaceCluster insert. Bound the batch itself — far more places than anyone tracks.
+MAX_BULK_PLACE_ROWS = 200
+
+
 class BulkPlaceCreate(BaseModel):
     csv_text: str = Field(min_length=1, max_length=200_000)
+
+    @field_validator("csv_text")
+    @classmethod
+    def csv_text_row_count_within_cap(cls, value: str) -> str:
+        # Counted on raw lines rather than by parsing: this runs before the CSV is read,
+        # and an over-cap body should be rejected without doing the work. Quoted newlines
+        # only ever over-count, which fails safe.
+        rows = sum(1 for line in value.splitlines() if line.strip())
+        if rows - 1 > MAX_BULK_PLACE_ROWS:
+            raise ValueError(f"csv_text must not exceed {MAX_BULK_PLACE_ROWS} rows")
+        return value
 
 
 class BulkPlaceCreateResponse(BaseModel):

@@ -15,6 +15,7 @@ from app.places.schemas import (
     ManualPlaceResponse,
     ManualPlaceUpdate,
 )
+from app.schemas import new_id
 
 MANUAL_CLUSTER_VERSION = "manual-1"
 MANUAL_CLUSTER_METHOD = "manual_public_dashboard"
@@ -27,8 +28,17 @@ def create_manual_place(
     user_id_hash: str,
     payload: ManualPlaceCreate,
 ) -> ManualPlaceResponse:
+    place = _place_model(user_id_hash, payload)
+    session.add(place)
+    session.commit()
+    session.refresh(place)
+    return _place_response(place)
+
+
+def _place_model(user_id_hash: str, payload: ManualPlaceCreate) -> PlaceCluster:
     display_latitude, display_longitude = snap_to_grid(payload.latitude, payload.longitude)
-    place = PlaceCluster(
+    return PlaceCluster(
+        id=new_id(),
         user_id_hash=user_id_hash,
         cluster_version=MANUAL_CLUSTER_VERSION,
         cluster_method=MANUAL_CLUSTER_METHOD,
@@ -47,10 +57,6 @@ def create_manual_place(
         display_label=payload.display_label.strip(),
         label_source="manual",
     )
-    session.add(place)
-    session.commit()
-    session.refresh(place)
-    return _place_response(place)
 
 
 def update_manual_place(
@@ -119,7 +125,7 @@ def create_bulk_manual_places(
 ) -> BulkPlaceCreateResponse:
     _ensure_bulk_csv_field_size_limit()
     reader = csv.DictReader(StringIO(csv_text))
-    created: list[ManualPlaceResponse] = []
+    created: list[PlaceCluster] = []
     skipped_count = 0
 
     if not reader.fieldnames or not REQUIRED_BULK_PLACE_COLUMNS.issubset(reader.fieldnames):
@@ -154,12 +160,19 @@ def create_bulk_manual_places(
             skipped_count += 1
             continue
 
-        created.append(create_manual_place(session, user_id_hash, payload))
+        created.append(_place_model(user_id_hash, payload))
+
+    # One transaction for the whole batch: the previous per-row commit turned a paste of
+    # N places into N transactions. Ids are assigned up front and the responses are read
+    # off the in-memory models before the commit expires them, so this adds no SELECTs.
+    session.add_all(created)
+    responses = [_place_response(place) for place in created]
+    session.commit()
 
     return BulkPlaceCreateResponse(
         created_count=len(created),
         skipped_count=skipped_count,
-        places=created,
+        places=responses,
     )
 
 
