@@ -24,7 +24,7 @@ export function CompareRateNumberLine({ rows, noun, radiusM }: { rows: CompareVe
 
   return (
     <div className="mc-plot mc-numberline" data-testid="compare-numberline">
-      <p className="mc-label">{noun.pluralCap} per year within {radiusM} m — 95% interval</p>
+      <p className="mc-label">{noun.pluralCap} per year within {radiusM} m — approximate 95% interval</p>
       <div className="mc-plot-chart">
         <div className="mc-plot-guides" aria-hidden>
           <span className="name" />

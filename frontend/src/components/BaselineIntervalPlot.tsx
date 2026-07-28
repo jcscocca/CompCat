@@ -61,7 +61,7 @@ export function BaselineIntervalPlot({
 
   return (
     <div className={`mc-bplot id-${identity.slot}`} data-testid="baseline-plot">
-      <p className="mc-label">{noun.pluralCap} per year within {radius} m — 95% interval</p>
+      <p className="mc-label">{noun.pluralCap} per year within {radius} m — approximate 95% interval</p>
       <div className="mc-bplot-chart">
         <div className="mc-bplot-overlay" aria-hidden="true">
           <span className="name" />

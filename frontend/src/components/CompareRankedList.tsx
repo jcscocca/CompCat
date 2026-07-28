@@ -7,7 +7,7 @@ import type { CompareRelationship, CompareVerdictRow } from "../lib/compareVerdi
 
 const CHIP: Record<CompareRelationship, { label: string; clear: boolean }> = {
   lowest: { label: "lowest rate", clear: true },
-  similar: { label: "similar to lowest", clear: false },
+  similar: { label: "no clear difference", clear: false },
   higher: { label: "clearly higher", clear: false },
   limited: { label: "limited data", clear: false },
 };

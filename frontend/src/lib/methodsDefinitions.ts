@@ -15,7 +15,7 @@ export const METHODS_DEFINITIONS: MethodDefinition[] = [
     plain: "Four references your place is compared against: its neighborhood (MCPP) and its police beat, both of which EXCLUDE the area inside your radius so the place is not compared to itself; plus its sector and the city as a whole, which do not exclude it — at that scale one radius is a negligible share. The same filters apply to every baseline.",
     howToRead: "Four different answers to 'normal compared to what?' — expect them to disagree." },
   { id: "rateRatio", term: "Rate ratio", shownAs: "4.0×",
-    plain: "How many times the place's density sits above or below the rest of its beat.",
+    plain: "How many times the place's density sits above or below a baseline area's.",
     howToRead: "Above 1× = busier than the surrounding area; below 1× = quieter." },
   { id: "confidenceInterval", term: "Approximate 95% interval", shownAs: "2.1–7.6×",
     plain: "The plausible range for the ratio given the sample size, for this single place-vs-baseline comparison. Approximate: it comes from a large-sample normal approximation, so its real coverage is near, not exactly, 95%.",
