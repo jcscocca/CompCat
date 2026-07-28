@@ -857,7 +857,7 @@ git commit -m "feat(deploy): nightly SPD ingest sidecar under the compose ops pr
 
 ## Task 4: Full gate
 
-- [ ] **Step 1: Run `make test-all` from the worktree root**
+- [x] **Step 1: Run `make test-all` from the worktree root**
 
 Run: `make test-all`
 Expected: green — pytest (backend, including the ~22 new tests), `ruff check .` clean, frontend
@@ -867,29 +867,29 @@ failure is pre-existing; re-run on a clean checkout before investigating.
 If `make test` reports a stale-shebang error, run the suite as `.venv/bin/python -m pytest tests -q`
 and treat that as the pytest leg.
 
-- [ ] **Step 2: Confirm the slice completion criteria**
+- [x] **Step 2: Confirm the slice completion criteria**
 
 From the spec, restated as a checklist — verify each before declaring the slice done:
 
-- [ ] **1. With the `ops` profile, the cron container fires all three layers sequentially, visible in
+- [x] **1. With the `ops` profile, the cron container fires all three layers sequentially, visible in
   `docker logs`.** Covered structurally by
   `tests/test_compose_prod_overlay.py::test_sidecar_renders_under_the_ops_profile` and
   `::test_job_script_posts_every_layer_in_order_using_the_env_token`, and behaviorally by the Task 3
   Step 6 smoke (short schedule, unreachable API, three ordered failures in the log). Firing against
   live Socrata is a slice-4 bring-up step.
-- [ ] **2. `/health/data` is 200 on fresh data, 503 when the threshold forces staleness, and absent
+- [x] **2. `/health/data` is 200 on fresh data, 503 when the threshold forces staleness, and absent
   from OpenAPI.** Covered by `tests/test_health_data_probe.py::test_all_layers_fresh_returns_200`,
   `::test_one_day_past_the_threshold_is_stale`, `::test_a_layer_with_no_data_counts_as_stale` and
   `tests/test_internal_surface.py::test_data_freshness_probe_absent_from_schema`. Note the exact
   boundary semantics: with `MCA_DATA_STALENESS_DAYS=0` only data through *today* stays fresh, so a dev
   DB seeded any earlier flips to 503.
-- [ ] **3. Dev and demo compose behavior unchanged; the sidecar exists only under the prod overlay's
+- [x] **3. Dev and demo compose behavior unchanged; the sidecar exists only under the prod overlay's
   ops profile.** `docker-compose.yml` and `docker-compose.demo.yml` are untouched (`git diff --stat`
   must show neither), and
   `tests/test_compose_prod_overlay.py::test_sidecar_is_absent_without_the_ops_profile` pins the
   rendering.
-- [ ] **4. `make test-all` green** (Step 1 above).
-- [ ] **Invariant:** no user-facing copy. The probe payload carries only `status`, `layer`,
+- [x] **4. `make test-all` green** (Step 1 above).
+- [x] **Invariant:** no user-facing copy. The probe payload carries only `status`, `layer`,
   `data_through`, `lag_days` — pinned by
   `tests/test_health_data_probe.py::test_probe_payload_uses_only_recency_vocabulary`. The container
   healthcheck still points at `/health` (`docker-compose.yml` unchanged), pinned by
