@@ -4,6 +4,8 @@
 #
 # What it changes versus the dev/demo default:
 #   - Postgres is NOT published on the host (the api reaches db over the compose network);
+#   - the api container publishes NO host port either — Caddy terminates TLS on 80/443 and is the
+#     only ingress; the app is reachable solely over the compose network at api:8000;
 #   - POSTGRES_PASSWORD and MCA_DATABASE_URL are required from the environment with no default,
 #     so compose refuses to render — let alone start — if either is missing;
 #   - api and db restart automatically (unless-stopped) so a host reboot brings the stack back.
@@ -19,6 +21,16 @@ services:
     restart: unless-stopped
 
   api:
+    build:
+      # List form: a passthrough from the operator's environment / --env-file, with no
+      # inline fallback default (this overlay allows none, and asserts as much on its own
+      # text). Unset simply drops the arg and the frontend keeps relative metadata.
+      args:
+        - VITE_CANONICAL_ORIGIN
+    # Same !reset mechanic as db above: drop the base file's "8000:8000" publish. In production
+    # the only listener on the host is caddy; nothing should be able to reach uvicorn directly
+    # and bypass TLS, the edge, and the real client IP that the limiter keys on.
+    ports: !reset []
     environment:
       MCA_DATABASE_URL: ${MCA_DATABASE_URL:?set MCA_DATABASE_URL (no default in production)}
       # The base compose file enumerates the api env explicitly, so every prod-only var must
@@ -31,7 +43,8 @@ services:
       MCA_DATA_STALENESS_DAYS:
     restart: unless-stopped
 
-  # Nightly ingest automation. Only starts with an explicit profile:
+  # Nightly ops automation: SPD ingest at 03:10 and a pg_dump backup at 03:40. Only starts
+  # with an explicit profile:
   #
   #   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile ops up -d --build
   #
@@ -47,11 +60,45 @@ services:
     command: ["crond", "-f", "-d", "8"]
     environment:
       - MCA_ADMIN_INGEST_TOKEN
+      # The backup job dumps over the compose network and needs the same password the db
+      # service was initialized with. List form (no interpolation) so a non-ops render never
+      # requires it.
+      - POSTGRES_PASSWORD
       - TZ=America/Los_Angeles
     volumes:
       - ./deploy/ingest-cron.crontab:/etc/crontabs/root:ro
       - ./deploy/ingest-daily.sh:/etc/ingest/run.sh:ro
+      - ./deploy/backup-daily.sh:/etc/ingest/backup.sh:ro
+      - backups:/backups
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  # TLS edge. Caddy obtains and renews the Let's Encrypt certificate for the site name in
+  # deploy/Caddyfile on its own; 80 must stay open for the ACME HTTP challenge and the
+  # HTTP->HTTPS redirect, and 443/udp gives HTTP/3. The named volumes make certificates and
+  # OCSP staples survive a container replacement — without them a redeploy re-issues and can
+  # hit Let's Encrypt rate limits. depends_on is the short form on purpose: a service_healthy
+  # condition would hold the edge down (and the ACME challenge unanswered) while api migrates.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
+  # Database dumps written nightly by deploy/backup-daily.sh. A named volume, not a bind
+  # mount: `docker compose down` keeps it and `down -v` deliberately destroys it along with
+  # the database it came from.
+  backups:

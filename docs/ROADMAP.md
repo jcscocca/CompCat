@@ -357,23 +357,27 @@ parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md
 registered domain — still session-based, still not an operated multi-user service. Umbrella
 spec: `docs/superpowers/specs/2026-07-27-public-instance-design.md`; four slices, each with
 its own spec (same date prefix), worked one at a time, code-first (1→4). Decisions: VPS
-(provider open), Groq wired for setup with Anthropic as the prod Analyst posture, new domain
-to register, "Built by Jacob Scocca" + GitHub link as the in-app operator identity.*
+(provider open), Groq wired for setup with Anthropic as the prod Analyst posture, compcat.app
+as the registered domain, "Built by Jacob Scocca" + GitHub link as the in-app operator identity.*
 
-- [ ] **Slice 1 — Safety rails:** LLM boot guard (prod-like + hosted key + limiter off →
-  refuse boot), daily token budget (`MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY`), prod posture
-  warnings, `docker-compose.prod.yml` (no published 5432, required DB password).
-- [ ] **Slice 2 — Trust surface:** in-app About/Privacy panel (ⓘ in topbar; invariant,
+- [x] **Slice 1 — Safety rails (#168):** LLM boot guard (prod-like + hosted key + limiter off →
+  refuse boot), daily token budget (`MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY`) charged by every LLM
+  client and enforced before each upstream call, boot-time posture warnings, and
+  `docker-compose.prod.yml` (no published 5432, required DB password) with a CI render assertion.
+- [x] **Slice 2 — Trust surface (#167):** in-app About/Privacy panel (ⓘ in topbar; invariant,
   scope, storage, honest limits), favicon + meta/OG tags, session-ephemerality hints,
   error-copy hygiene, "Export CSV" label unification, pinch-zoom restore, SPD/NIBRS glosses.
-- [ ] **Slice 3 — Freshness automation:** compose `ops` cron sidecar driving the existing
-  admin ingest daily per layer; `GET /health/data` staleness probe (200/503, schema-hidden)
-  for external monitoring; container liveness stays on `/health`.
-- [ ] **Slice 4 — VPS bring-up:** provider-agnostic `docs/DEPLOY-VPS.md` + `scripts/prod/`
-  (hardening, Docker, tiles, start/stop with ingest-if-stale), Caddy TLS edge,
-  `.env.prod.example` (Anthropic primary + Groq fallback), nightly `pg_dump` rotation +
-  restore rehearsal, external uptime monitoring on `/health/data`, soak-harness pass
-  (closes the pending H2 run), then the README live link.
+- [x] **Slice 3 — Freshness automation (#169):** compose `ops` cron sidecar driving the existing
+  admin ingest daily per layer; `GET /health/data` staleness probe (200/503, schema-hidden) for
+  external monitoring; container liveness stays on `/health`.
+- [x] **Slice 4 — VPS bring-up — repo-side shipped; bring-up pending on the operator steps in
+  `docs/DEPLOY-VPS.md`:** Caddy TLS edge as the only ingress (api no longer publishes 8000),
+  `X-Forwarded-For` client identity, `.env.prod.example` (Anthropic primary + Groq fallback),
+  `scripts/prod/` start/stop with ingest-if-stale, nightly `pg_dump` with 7-daily/4-weekly
+  rotation, absolute link-preview metadata via `VITE_CANONICAL_ORIGIN`, and the full runbook.
+  **Still manual, on the box:** create the server, point `compcat.app` DNS, fill `.env.prod` with
+  real keys, run the start script, rehearse the restore, create the uptime monitor, run the soak
+  (closes the pending H2 run), then add the live link to the README.
 
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).

@@ -58,6 +58,42 @@ def test_trusted_proxy_header_separates_clients(tmp_path, monkeypatch) -> None:
     assert client.post("/sessions", headers={"CF-Connecting-IP": "8.8.8.1"}).status_code == 429
 
 
+def test_trusted_forwarded_for_separates_clients_through_the_middleware(
+    tmp_path, monkeypatch
+) -> None:
+    # The burst tier reads the scope headers directly (BurstLimitMiddleware), not client_ip_from,
+    # so the X-Forwarded-For step has to exist in both places or the two tiers key differently.
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "2")
+    monkeypatch.setenv("MCA_TRUST_PROXY_HEADERS", "true")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl8.sqlite3")
+    client = TestClient(app)
+    first = [
+        client.get("/input-modes", headers={"X-Forwarded-For": "8.8.8.1, 172.18.0.1"}).status_code
+        for _ in range(3)
+    ]
+    assert first[:2] == [200, 200]
+    assert first[2] == 429
+    # A different leftmost hop is a different client and gets its own bucket.
+    assert (
+        client.get("/input-modes", headers={"X-Forwarded-For": "8.8.8.2, 172.18.0.1"}).status_code
+        == 200
+    )
+
+
+def test_spoofed_forwarded_for_ignored_without_trust(limited_client: TestClient) -> None:
+    # Same socket peer for all four; the spoofed header must not mint fresh buckets.
+    for i in range(3):
+        assert (
+            limited_client.post("/sessions", headers={"X-Forwarded-For": f"8.8.8.{i}"}).status_code
+            == 200
+        )
+        limited_client.cookies.clear()
+    assert (
+        limited_client.post("/sessions", headers={"X-Forwarded-For": "8.8.9.9"}).status_code == 429
+    )
+
+
 def test_limiter_off_by_default(tmp_path) -> None:
     app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl3.sqlite3")
     client = TestClient(app)

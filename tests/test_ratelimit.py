@@ -52,6 +52,42 @@ def test_client_ip_uses_header_with_trust() -> None:
     assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
 
 
+def test_client_ip_uses_forwarded_for_with_trust() -> None:
+    # Caddy sets X-Forwarded-For; without trusting it every visitor shares one bucket.
+    req = FakeRequest(host="172.18.0.5", headers={"x-forwarded-for": "8.8.8.8"})
+    assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
+
+
+def test_client_ip_ignores_forwarded_for_without_trust() -> None:
+    # Untrusted, the header is just attacker-supplied text: fall back to the socket peer.
+    req = FakeRequest(host="9.9.9.9", headers={"x-forwarded-for": "8.8.8.8"})
+    assert client_ip_from(req, trust_proxy_headers=False) == "9.9.9.9"
+
+
+def test_cf_connecting_ip_wins_over_forwarded_for() -> None:
+    # Cloudflare's header is single-valued and set by the edge itself, so it is the stronger
+    # signal when both are present (the demo path keeps working unchanged).
+    req = FakeRequest(
+        host="127.0.0.1",
+        headers={"cf-connecting-ip": "8.8.8.8", "x-forwarded-for": "1.1.1.1"},
+    )
+    assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
+
+
+def test_forwarded_for_takes_the_leftmost_hop() -> None:
+    # "client, proxy1, proxy2" — our Caddy appends the peer it saw, so the original client
+    # is first. Taking the last entry would key every request on the proxy.
+    req = FakeRequest(
+        host="172.18.0.5", headers={"x-forwarded-for": "8.8.8.8, 203.0.113.7, 172.18.0.1"}
+    )
+    assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
+
+
+def test_blank_proxy_headers_fall_back_to_the_socket_peer() -> None:
+    req = FakeRequest(host="9.9.9.9", headers={"cf-connecting-ip": "  ", "x-forwarded-for": " , "})
+    assert client_ip_from(req, trust_proxy_headers=True) == "9.9.9.9"
+
+
 def test_token_budget_accumulates_and_rolls_over_at_utc_midnight() -> None:
     state = RateLimiterState()
     assert state.budget_exceeded(limit=100, day_key="2026-07-27") is False

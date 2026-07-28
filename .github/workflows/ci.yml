@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker build .
-      - name: Production overlay renders without publishing Postgres
+      - name: Production overlay publishes only the Caddy edge
         env:
           POSTGRES_PASSWORD: ci-not-a-real-password
           MCA_DATABASE_URL: postgresql+psycopg://mca:ci-not-a-real-password@db:5432/mca
@@ -80,13 +80,17 @@ jobs:
           docker compose --env-file /dev/null \
             -f docker-compose.yml -f docker-compose.prod.yml config > rendered.yml
           # "! cmd" is exempt from set -e; an if/exit keeps the assertion load-bearing.
-          if grep -q 'published: "5432"' rendered.yml; then
-            echo "prod overlay must not publish 5432" >&2
-            exit 1
-          fi
-          grep -q 'published: "8000"' rendered.yml
+          for port in 5432 8000; do
+            if grep -q "published: \"$port\"" rendered.yml; then
+              echo "prod overlay must not publish $port — caddy is the only ingress" >&2
+              exit 1
+            fi
+          done
+          grep -q 'published: "80"' rendered.yml
+          grep -q 'published: "443"' rendered.yml
+          grep -q 'caddy:2-alpine' rendered.yml
           grep -q 'MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY' rendered.yml
-          test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "2"
+          test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "3"
       - name: Ingest sidecar renders only under the ops profile
         env:
           POSTGRES_PASSWORD: ci-not-a-real-password
@@ -98,6 +102,8 @@ jobs:
             -f docker-compose.yml -f docker-compose.prod.yml config > rendered-ops.yml
           grep -q 'ingest-cron' rendered-ops.yml
           grep -q 'target: /etc/crontabs/root' rendered-ops.yml
+          grep -q 'target: /etc/ingest/backup.sh' rendered-ops.yml
+          grep -q 'target: /backups' rendered-ops.yml
           # rendered.yml is the previous step's no-profile render: the sidecar must be absent.
           if grep -q 'ingest-cron' rendered.yml; then
             echo "sidecar must not render without --profile ops" >&2

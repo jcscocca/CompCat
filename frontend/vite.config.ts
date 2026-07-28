@@ -25,8 +25,38 @@ function maplibreWorkerAssets(): Plugin {
   };
 }
 
+// Link unfurlers (Slack, iMessage, Twitter/X, Discord) resolve og:image against the page URL
+// unreliably or not at all, so a shared link renders without its card unless these are
+// absolute. Absolutize at build time from VITE_CANONICAL_ORIGIN rather than hardcoding the
+// domain: unset (the repo default, and every dev/CI build) keeps index.html's relative form,
+// which is what the same-origin app actually wants.
+export function absolutizeSocialMeta(html: string, origin: string | undefined): string {
+  const base = (origin ?? "").trim().replace(/\/+$/, "");
+  if (!base) return html;
+  const absolute = html.replace(
+    /(<meta[^>]*(?:property|name)=["'](?:og:image|twitter:image)["'][^>]*content=["'])(\/[^"']*)/gi,
+    (_match, head: string, path: string) => `${head}${base}${path}`,
+  );
+  // og:url has no relative form worth shipping, so it exists only in an absolutized build.
+  return absolute.replace(
+    /(<meta[^>]*property=["']og:type["'][^>]*>)/i,
+    `$1\n    <meta property="og:url" content="${base}/" />`,
+  );
+}
+
+export function canonicalOriginMeta(): Plugin {
+  return {
+    name: "canonical-origin-meta",
+    apply: "build",
+    // Read the env at call time, not module scope, so the build that sets it is the build
+    // that gets it (and the test can exercise both branches).
+    transformIndexHtml: (html: string) =>
+      absolutizeSocialMeta(html, process.env.VITE_CANONICAL_ORIGIN),
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), maplibreWorkerAssets()],
+  plugins: [react(), maplibreWorkerAssets(), canonicalOriginMeta()],
   optimizeDeps: {
     exclude: ["maplibre-gl"],
   },

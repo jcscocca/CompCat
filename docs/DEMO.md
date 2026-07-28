@@ -41,7 +41,9 @@ Start refreshes SPD data automatically when it's more than 14 days stale.
 Sessions 10/hour/IP · Analyst 20/hour/session and 100/day global · API burst 120/min/IP.
 Tune via `MCA_RATE_LIMIT_*` in `.env.demo`.
 
-## The "for-real" launch (deferred)
+## The "for-real" launch (built)
 
-Same env vars and limiter on a small VPS, a named tunnel or plain TLS, a real domain, and
-a durable README link. Nothing here needs rework for that move.
+The always-on public instance at **compcat.app** is now documented end to end in
+[`DEPLOY-VPS.md`](DEPLOY-VPS.md): the same env vars and limiter on a small VPS, TLS via Caddy,
+nightly ingest and backups. Nothing in this demo path changed — the ThinkPad quick tunnel remains
+the two-minute option for showing CompCat to someone in person.
