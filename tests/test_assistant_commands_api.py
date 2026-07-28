@@ -183,3 +183,21 @@ def test_commands_rate_limited_per_session(tmp_path, monkeypatch):
     assert "Retry-After" in second.headers
     detail = second.json()["detail"].lower()
     assert "request" in detail or "limit" in detail
+
+
+def test_validation_failure_returns_fixed_copy_without_internals(session_client):
+    # A pydantic ValidationError is a ValueError, so it used to be echoed verbatim —
+    # leaking the internal args-model name, field paths and a pydantic docs URL.
+    response = session_client.post(
+        "/assistant/commands",
+        json={"command": "analyze_places", "arguments": {"radii_m": ["banana"]}},
+    )
+    assert response.status_code == 200
+    errors = [event for event in parse_sse(response.text) if event.get("event") == "error"]
+    assert len(errors) == 1
+    assert errors[0]["data"]["message"] == (
+        "That command didn't validate — check the values and try again."
+    )
+    body = response.text.lower()
+    for leaked in ("pydantic", "validation error for", "errors.pydantic.dev", "input_value"):
+        assert leaked not in body

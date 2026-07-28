@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import required_public_user_hash
@@ -188,6 +189,18 @@ async def assistant_chat(
 
 
 _COMMAND_FAILED_MESSAGE = "That didn't go through. Try again in a moment."
+# AssistantToolError carries deliberate user-facing copy. Any other ValueError reaching
+# here is a raw pydantic ValidationError from building the tool's args model, whose str()
+# leaks the internal model name, field paths and a pydantic docs URL.
+_COMMAND_INVALID_MESSAGE = "That command didn't validate — check the values and try again."
+
+
+def _is_validation_failure(exc: BaseException) -> bool:
+    """execute_tool re-raises a pydantic ValidationError as AssistantToolError(str(exc)),
+    keeping the original as __cause__ — so the wrapper's message is the raw pydantic text.
+    Deliberately authored AssistantToolError copy has no ValidationError cause and is
+    passed through unchanged."""
+    return isinstance(exc, ValidationError) or isinstance(exc.__cause__, ValidationError)
 
 
 @router.post("/assistant/commands")
@@ -230,9 +243,13 @@ async def assistant_command(
                 yield _sse_event(AssistantStreamEvent(event="done", data={}))
                 return
             except (AssistantToolError, ValueError) as exc:
+                message = str(exc)
+                if _is_validation_failure(exc):
+                    logger.debug("assistant command failed validation", exc_info=exc)
+                    message = _COMMAND_INVALID_MESSAGE
                 yield _sse_event(
                     AssistantStreamEvent(
-                        event="error", data={"message": str(exc), "code": "tool_error"}
+                        event="error", data={"message": message, "code": "tool_error"}
                     )
                 )
                 return
