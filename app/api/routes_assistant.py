@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import required_public_user_hash
 from app.assistant.agent import _UNREACHABLE_MESSAGE, run_assistant_turn
@@ -251,8 +252,13 @@ async def assistant_command(
         )
         try:
             try:
-                tool_result = execute_tool(
-                    session, user_id_hash, request.command, dict(request.arguments)
+                # execute_tool is fully synchronous — sync DB work, sync httpx, and a
+                # geocoder that time.sleep()s to hold its 1 req/s cadence. Awaiting it on
+                # the event loop froze the whole process for the duration: one
+                # select_places with several address lookups took health checks, static
+                # files and every other user's request down with it.
+                tool_result = await run_in_threadpool(
+                    execute_tool, session, user_id_hash, request.command, dict(request.arguments)
                 )
             except AssistantClarification as exc:
                 yield _sse_event(AssistantStreamEvent(event="token", data={"delta": str(exc)}))
