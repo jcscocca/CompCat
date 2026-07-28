@@ -80,13 +80,21 @@ def mount_dashboard(app: FastAPI) -> None:
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
-    log_posture_warnings(get_settings())
+    settings = get_settings()
+    log_posture_warnings(settings)
     configure_database(database_url)
     init_db()
+    # The interactive docs are a local/dev affordance. On a public deployment they hand
+    # out a complete machine-readable map of the surface, and Swagger UI is a live request
+    # console against it — so the schema and both UIs are off in a prod-like environment.
+    docs_enabled = not settings.is_production_like
     app = FastAPI(
         title="CompCat",
         version="0.1.0",
         description="Privacy-first recurring-place and Seattle crime context API.",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
     app.include_router(health_router)
     app.include_router(sessions_router)
