@@ -46,6 +46,13 @@ describe("BaselineIntervalPlot", () => {
     expect(screen.queryByText(/\bsimilar\b/)).not.toBeInTheDocument();
   });
 
+  // The header's "within 250 m" applies to the baseline ticks too, which is easy to miss:
+  // those rows are densities rescaled to this circle, not counts observed area-wide.
+  it("says the baseline rows are scaled to your radius and window", () => {
+    render(<BaselineIntervalPlot place={place} identity={placeIdentity(0)} noun={noun} domainMax={plotDomainMax([place])} />);
+    expect(screen.getByText("Baseline rows are scaled to your radius and window for comparison.")).toBeInTheDocument();
+  });
+
   it("pins the interval label to the identity", () => {
     render(<BaselineIntervalPlot place={place} identity={placeIdentity(1)} noun={noun} domainMax={plotDomainMax([place])} />);
     expect(screen.getByText("B's 95% interval")).toBeInTheDocument();

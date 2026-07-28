@@ -106,6 +106,10 @@ export function BaselineIntervalPlot({
           <span className="val" />
         </div>
       </div>
+      {/* The baseline rows are area-time densities rescaled to this circle and window, not
+          counts observed in the neighborhood — the header's "within {radius} m" applies to
+          every row, which is easy to miss on the baseline ticks. */}
+      <p className="mc-bplot-note">Baseline rows are scaled to your radius and window for comparison.</p>
     </div>
   );
 }

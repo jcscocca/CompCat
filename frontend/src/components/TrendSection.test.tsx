@@ -140,7 +140,18 @@ describe("TrendSection", () => {
     renderSection({ neighborhood: neighborhood("Test Hill") });
     await screen.findByTestId("trend-chart");
     expect(screen.queryByTestId("trend-city")).not.toBeInTheDocument();
-    expect(screen.getByText(/Too few incidents in the anchor period/)).toBeInTheDocument();
+    // The factor is undefined, not merely imprecise — say what is actually missing.
+    expect(
+      screen.getByText(/No incidents in the first 12 months of this window, so there's nothing to anchor the citywide line to\./),
+    ).toBeInTheDocument();
+  });
+
+  // The series covers the whole MCPP; without this the reader takes it for their radius.
+  it("labels the trend as neighborhood-level and wider than the radius", async () => {
+    getTrends.mockResolvedValue(trends({ months: months(60) }));
+    renderSection({ neighborhood: neighborhood("Test Hill") });
+    await screen.findByTestId("trend-chart");
+    expect(screen.getByText(/Neighborhood-level trend \(Test Hill\) — wider than your radius\./)).toBeInTheDocument();
   });
 
   it("shows raw counts only for a short window", async () => {
