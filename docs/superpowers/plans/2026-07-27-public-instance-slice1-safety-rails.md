@@ -1003,7 +1003,7 @@ git commit -m "feat(assistant): charge every LLM call against the daily token bu
 - Modify: `app/assistant/agent.py`
 - Create: `tests/test_assistant_token_budget.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_assistant_token_budget.py`:
 
@@ -1195,13 +1195,13 @@ def test_budget_message_stays_out_of_place_and_safety_vocabulary() -> None:
         assert banned not in lowered
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_assistant_token_budget.py -v`
 Expected: FAIL — the first two tests fail (no `error` event; the turn runs the planning call
 anyway). The last three already pass.
 
-- [ ] **Step 3: Implement enforcement**
+- [x] **Step 3: Implement enforcement**
 
 In `app/assistant/agent.py`, add the rate-limiter import after `from app.config import get_settings`
 (line 30):
@@ -1274,13 +1274,13 @@ with:
     yield AssistantStreamEvent(event="status", data={"label": _STATUS_WRITING})
 ```
 
-- [ ] **Step 4: Run to verify it passes, with the full assistant suite**
+- [x] **Step 4: Run to verify it passes, with the full assistant suite**
 
 Run: `.venv/bin/python -m pytest tests/test_assistant_token_budget.py tests/test_assistant_agent.py tests/test_assistant_api.py tests/test_assistant_commands_api.py tests/test_ratelimit_api.py -v`
 Expected: PASS (5 new tests; the whole existing assistant suite green — with no budget configured
 `_budget_exhausted` is always `False`, so every existing path is unchanged).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/assistant/agent.py tests/test_assistant_token_budget.py
