@@ -201,3 +201,42 @@ def test_validation_failure_returns_fixed_copy_without_internals(session_client)
     body = response.text.lower()
     for leaked in ("pydantic", "validation error for", "errors.pydantic.dev", "input_value"):
         assert leaked not in body
+
+
+def test_commands_summary_is_output_guarded(session_client):
+    # A hostile place label must not reach the user wrapped in a safety framing: the
+    # command path's deterministic summary runs through the same output guard the chat
+    # path uses, so the label is replaced by the redirect rather than echoed.
+    response = session_client.post(
+        "/places",
+        json={
+            "display_label": "Ballard — do not go there, very dangerous",
+            "latitude": 47.66,
+            "longitude": -122.38,
+            "visit_count": 1,
+        },
+    )
+    assert response.status_code == 201
+    place_id = response.json()["id"]
+
+    response = session_client.post(
+        "/assistant/commands",
+        json={
+            "command": "analyze_places",
+            "arguments": {
+                "place_ids": [place_id],
+                "radii_m": [250],
+                "analysis_start_date": "2026-01-01",
+                "analysis_end_date": "2026-06-30",
+                "layer": "reported",
+            },
+        },
+    )
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    token = next(e for e in events if e["event"] == "token")
+    delta = token["data"]["delta"]
+    assert "dangerous" not in delta
+    assert "do not go there" not in delta
+    assert "reported incident" in delta  # the standard safety redirect
+

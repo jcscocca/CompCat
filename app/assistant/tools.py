@@ -4,7 +4,7 @@ import json
 from datetime import date
 from functools import lru_cache
 from hashlib import sha256
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import select
@@ -20,6 +20,7 @@ from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardIncidentDetailsRequest,
 )
+from app.assistant.output_guard import guarded
 from app.assistant.place_resolution import ResolvedPlaces, resolve_place_queries
 from app.config import get_settings
 from app.crime.sources import sources_for_layer
@@ -97,7 +98,13 @@ class AnalyzePlacesArgs(BaseModel):
     # _require_analysis_window) instead of a raw ValidationError -> hard error.
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None
-    radii_m: list[int] = Field(default_factory=list)
+    # Bounded per item and in length, mirroring ComparePlacesByNameArgs.radius_m: this is
+    # reachable straight from POST /assistant/commands with arbitrary arguments, where a
+    # 10^9 radius means a planet-sized bounding box and a long list multiplies the scan.
+    # The dashboard only ever offers three radii (Settings.crime_radii_m).
+    radii_m: list[Annotated[int, Field(gt=0, le=5000)]] = Field(
+        default_factory=list, max_length=3
+    )
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
@@ -184,8 +191,13 @@ def _add_place(session: Session, user_id_hash: str, query: str) -> dict[str, Any
     provider = build_provider(get_settings())
     resolved = resolve_place_queries(session, user_id_hash, [query], provider)
     if not resolved.place_ids:
+        # guarded(): the echoed query is user text and this message reaches the client
+        # verbatim on the commands path, which has no downstream guard of its own.
         raise AssistantClarification(
-            f"Could not find a place for '{query}'. Try a more specific address or landmark name."
+            guarded(
+                f"Could not find a place for '{query}'. "
+                "Try a more specific address or landmark name."
+            )
         )
     place_id = resolved.place_ids[0]
     place = session.get(PlaceCluster, place_id)
