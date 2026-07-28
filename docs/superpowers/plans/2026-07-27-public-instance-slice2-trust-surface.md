@@ -927,7 +927,7 @@ git commit -m "feat(copy): say that sessions expire and share links recompute"
 - Modify: `frontend/src/components/PersonalUpload.tsx`
 - Modify: `frontend/src/components/PersonalUpload.test.tsx`
 
-- [ ] **Step 1: Replace the two raw-body client tests with mapping tests**
+- [x] **Step 1: Replace the two raw-body client tests with mapping tests**
 
 In `frontend/src/api/client.test.ts`:
 
@@ -1016,12 +1016,12 @@ import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, g
 
 (The `expect.not.stringContaining` cast is needed because `rejects.toThrow`'s signature expects a string/RegExp/Error; the asymmetric matcher works at runtime.)
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx vitest run src/api/client.test.ts`
 Expected: FAIL — the new constants do not exist (import error) / thrown messages are raw bodies.
 
-- [ ] **Step 3: Implement the mapping in `client.ts`**
+- [x] **Step 3: Implement the mapping in `client.ts`**
 
 In `frontend/src/api/client.ts`, insert these exports directly above `async function request<T>` (line 57):
 
@@ -1107,12 +1107,12 @@ export async function uploadPersonalData(file: File): Promise<{ place_cluster_co
 }
 ```
 
-- [ ] **Step 4: Run the client tests**
+- [x] **Step 4: Run the client tests**
 
 Run: `cd frontend && npx vitest run src/api/client.test.ts`
 Expected: PASS (8 new + the untouched originals).
 
-- [ ] **Step 5: Add the failing `PersonalUpload` test**
+- [x] **Step 5: Add the failing `PersonalUpload` test**
 
 In `frontend/src/components/PersonalUpload.test.tsx`, add a module mock above the component import and a new test. Replace the file's import block and describe body with:
 
@@ -1177,12 +1177,12 @@ describe("PersonalUpload", () => {
 });
 ```
 
-- [ ] **Step 6: Run to verify the two new tests fail**
+- [x] **Step 6: Run to verify the two new tests fail**
 
 Run: `cd frontend && npx vitest run src/components/PersonalUpload.test.tsx --environment jsdom`
 Expected: FAIL — the status shows the thrown message, not the static fallback.
 
-- [ ] **Step 7: Use static fallbacks in `PersonalUpload.tsx`**
+- [x] **Step 7: Use static fallbacks in `PersonalUpload.tsx`**
 
 In `frontend/src/components/PersonalUpload.tsx`, replace the two catch blocks (lines 22-24 and 34-36):
 
@@ -1200,17 +1200,17 @@ In `frontend/src/components/PersonalUpload.tsx`, replace the two catch blocks (l
     } finally {
 ```
 
-- [ ] **Step 8: Run the suite**
+- [x] **Step 8: Run the suite**
 
 Run: `cd frontend && npx vitest run src/api/client.test.ts src/components/PersonalUpload.test.tsx --environment jsdom`
 Expected: PASS.
 
-- [ ] **Step 9: Full frontend sweep (the client change touches every caller)**
+- [x] **Step 9: Full frontend sweep (the client change touches every caller)**
 
 Run: `cd frontend && npm test && npm run lint`
 Expected: PASS. If a test asserted a raw-body error string anywhere else, update it to the mapped constant — do **not** reintroduce body pass-through.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add frontend/src/api/client.ts frontend/src/api/client.test.ts frontend/src/components/PersonalUpload.tsx frontend/src/components/PersonalUpload.test.tsx

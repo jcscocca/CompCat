@@ -54,19 +54,51 @@ export type IncidentPointsPayload = {
   layer?: string;
 };
 
+/**
+ * Status→copy mapping for every failing HTTP call. A raw response body (FastAPI's
+ * `{"detail": …}`, a reverse proxy's HTML error page, a stack trace) must never become a
+ * thrown Error.message: components render those messages, so the body would reach the
+ * screen. Bodies go to console.debug instead, which keeps them debuggable in devtools.
+ */
+export const SESSION_EXPIRED_MESSAGE = "Session expired — reload to start a new one.";
+/** Matches the wording the rate limiter itself uses (app/ratelimit.py). */
+export const RATE_LIMITED_MESSAGE = "Request limit reached — please retry shortly.";
+export const SERVER_ERROR_MESSAGE = "Something went wrong on our side. Try again shortly.";
+export const GENERIC_ERROR_MESSAGE = "That request didn't go through. Try again.";
+
+export function friendlyRequestError(status: number): string {
+  if (status === 401) return SESSION_EXPIRED_MESSAGE;
+  if (status === 429) return RATE_LIMITED_MESSAGE;
+  if (status >= 500) return SERVER_ERROR_MESSAGE;
+  return GENERIC_ERROR_MESSAGE;
+}
+
+function isAbort(cause: unknown): boolean {
+  return (cause as { name?: string } | null)?.name === "AbortError";
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers as Record<string, string> | undefined),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    });
+  } catch (cause) {
+    // A cancelled request is control flow, not a failure: callers check signal.aborted.
+    if (isAbort(cause)) throw cause;
+    console.debug("request network failure", path, cause);
+    throw new Error(SERVER_ERROR_MESSAGE);
+  }
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+    const body = await response.text().catch(() => "");
+    console.debug("request failed", path, response.status, body);
+    throw new Error(friendlyRequestError(response.status));
   }
 
   if (response.status === 204) {
@@ -118,9 +150,17 @@ export function updatePlace(placeId: string, payload: { display_label?: string; 
 export async function uploadPersonalData(file: File): Promise<{ place_cluster_count: number }> {
   const body = new FormData();
   body.append("file", file);
-  const response = await fetch("/uploads", { method: "POST", credentials: "include", body });
+  let response: Response;
+  try {
+    response = await fetch("/uploads", { method: "POST", credentials: "include", body });
+  } catch (cause) {
+    if (isAbort(cause)) throw cause;
+    console.debug("upload network failure", cause);
+    throw new Error(SERVER_ERROR_MESSAGE);
+  }
   if (!response.ok) {
-    throw new Error((await response.text()) || `Upload failed (${response.status})`);
+    console.debug("upload failed", response.status, await response.text().catch(() => ""));
+    throw new Error(friendlyRequestError(response.status));
   }
   return response.json();
 }
