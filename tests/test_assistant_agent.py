@@ -2569,3 +2569,60 @@ def test_relative_window_backstop_reaches_the_tool_on_a_turn(tmp_path):
     patch = next(e for e in events if e.event == "tool").data["result"]["patch"]
     assert patch["analysis_start_date"] == "2024-11-01"
     assert patch["analysis_end_date"] == "2025-10-31"
+
+
+def test_presence_guard_covers_proximity_phrasings(tmp_path):
+    # "Was I near it?" is the same ask as "was I present at it?" — CompCat knows saved
+    # places, never where the user has been.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    questions = [
+        "was I near any of these incidents?",
+        "Were we nearby when the robbery happened",
+        "Was I close to the assault on the 10th",
+        "was I around during any of these crimes",
+        "Have I been near the shooting",
+    ]
+    try:
+        for question in questions:
+            client = FakeClient(['{"type":"final","message":"unused"}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=question)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert "personal presence" in events[1].data["delta"], question
+            assert client.calls == [], question
+    finally:
+        session.close()
+
+
+def test_presence_proximity_arm_needs_a_first_person_subject(tmp_path):
+    # Third-person proximity is the product's core question and must reach the model.
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    neutral = "There are 4 reported incidents in the selected context."
+    inputs = [
+        "incidents near Pike Place",
+        "show the crimes near this pin",
+        "how many incidents happened around Capitol Hill during January?",
+        "which incidents are closest to the library?",
+    ]
+    try:
+        for text in inputs:
+            client = FakeClient([f'{{"type":"final","message":{json.dumps(neutral)}}}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=text)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
+            )
+            assert len(client.calls) == 1, text
+            assert events[1].data["delta"] == neutral, text
+    finally:
+        session.close()

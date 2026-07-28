@@ -102,7 +102,18 @@ PRESENCE_CLAIM_PATTERN = re.compile(
     r"[^.?!]{0,40}?"
     r"\b(?:incident|crime|offen[sc]e|robbery|assault|burglary|shooting|homicide"
     r"|attack|mugging|event)s?\b"
-    r"|\bhappened\s+to\s+(?:you|me|us)\b",
+    r"|\bhappened\s+to\s+(?:you|me|us)\b"
+    # Proximity arm: "was I near/around/close to any of these incidents?" asks for the same
+    # placement the presence arm does. Anchored to an explicit first/second-person
+    # subject-verb pair so third-person proximity — "incidents near Pike Place", the
+    # product's core question — passes untouched.
+    r"|\b(?:(?:was|were|am|are|have|had|did)\s+(?:i|you|we)"
+    r"|(?:i|you|we)\s+(?:was|were|am|have|had|been))\b"
+    r"[^.?!]{0,40}?"
+    r"\b(?:near|nearby|close\s+to|around|(?:there|present)\s+(?:when|during))\b"
+    r"[^.?!]{0,40}?"
+    r"\b(?:incident|crime|offen[sc]e|robbery|assault|burglary|shooting|homicide"
+    r"|attack|mugging|event)s?\b",
     re.IGNORECASE,
 )
 
