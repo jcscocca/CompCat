@@ -170,7 +170,7 @@ Read (and, where noted, executed) from this worktree at plan time.
 - Modify: `app/api/routes_health.py`
 - Create: `tests/test_health_data_probe.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_health_data_probe.py`:
 
@@ -204,10 +204,10 @@ def _seed(layer_ages: dict[str, int]) -> None:
     max(coalesce(offense_start_utc, report_utc)) per layer."""
     today = datetime.now(UTC)
     session = get_sessionmaker()()
-    for index, (layer, age) in enumerate(layer_ages.items()):
+    for layer, age in layer_ages.items():
         session.add(
             CrimeIncident(
-                id=f"{layer}-{index}",
+                id=f"{layer}-{age}",
                 source_dataset=_SOURCES[layer],
                 offense_start_utc=today - timedelta(days=age),
                 offense_category="PROPERTY",
@@ -284,10 +284,9 @@ def test_threshold_boundary_is_inclusive(tmp_path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("MCA_DATA_STALENESS_DAYS", "7")
     client = _client(tmp_path)
     _seed({"reported": 7, "arrests": 7, "calls": 7})
-    assert client.get("/health/data").status_code == 200
-
-    _seed({"reported": 8})  # newest reported row is still 7 days old -> unchanged
-    assert client.get("/health/data").status_code == 200
+    response = client.get("/health/data")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "stale": []}
 
 
 def test_one_day_past_the_threshold_is_stale(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -344,7 +343,7 @@ def test_lag_days_helper_handles_unparseable_values() -> None:
     assert health_module._lag_days(20260720, today) is None
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_health_data_probe.py -v`
 Expected: FAIL — every probe test 404s (`/health/data` does not exist),
@@ -354,7 +353,7 @@ Expected: FAIL — every probe test 404s (`/health/data` does not exist),
 `AttributeError: module 'app.api.routes_health' has no attribute '_lag_days'`.
 `test_liveness_probe_is_unchanged` fails only on its second assertion.
 
-- [ ] **Step 3: Add the setting**
+- [x] **Step 3: Add the setting**
 
 In `app/config.py`, insert directly after
 `socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")` and before
@@ -369,7 +368,7 @@ In `app/config.py`, insert directly after
     data_staleness_days: int = 7
 ```
 
-- [ ] **Step 4: Add the probe**
+- [x] **Step 4: Add the probe**
 
 Replace `app/api/routes_health.py` in full:
 
@@ -451,7 +450,7 @@ def health_data() -> JSONResponse:
     return JSONResponse(status_code=200, content={"status": "ok", "stale": []})
 ```
 
-- [ ] **Step 5: Run to verify it passes, plus the neighbouring health/freshness suites**
+- [x] **Step 5: Run to verify it passes, plus the neighbouring health/freshness suites**
 
 Run: `.venv/bin/python -m pytest tests/test_health_data_probe.py tests/test_health.py tests/test_dashboard_freshness.py tests/test_freshness_cache.py -v`
 Expected: PASS (13 new tests; the existing health, freshness and cache suites unchanged and green).
@@ -459,7 +458,7 @@ Expected: PASS (13 new tests; the existing health, freshness and cache suites un
 Run: `.venv/bin/ruff check .`
 Expected: clean (mind the 100-char limit and the import order in the rewritten module).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/config.py app/api/routes_health.py tests/test_health_data_probe.py

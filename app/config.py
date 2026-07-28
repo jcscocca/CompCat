@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     socrata_arrests_dataset_id: str = "9bjs-7a7w"
     socrata_calls_dataset_id: str = "33kz-ixgy"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
+    # Data-recency threshold for the monitoring probe GET /health/data: a layer whose newest
+    # incident date lags more than this many days is reported stale (503) so an external monitor
+    # catches a dead ingest cron, a broken admin token, or an upstream Socrata outage. A lag of
+    # exactly this many days is still fresh. Liveness stays on /health — staleness alerts, it
+    # never restarts the container.
+    data_staleness_days: int = 7
     raw_upload_retention: bool = False
     # Hard ceiling on personal-upload / import request bodies, read into memory before
     # parsing. Bounds a memory-exhaustion DoS; generous enough for real location-history
