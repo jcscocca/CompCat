@@ -107,7 +107,9 @@ class PlaceCluster(Base):
     sensitivity_class: Mapped[str] = mapped_column(Text, default="normal")
     display_label: Mapped[str | None] = mapped_column(Text, nullable=True)
     label_source: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
@@ -172,7 +174,9 @@ class PlaceCrimeSummary(Base):
     # Which analysis layer produced this summary ("reported" or "calls"); null = legacy
     # rows, treated as "reported" on read.
     layer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class AnalysisRun(Base):
@@ -213,7 +217,9 @@ class StatisticalComparison(Base):
     overview_summary_text: Mapped[str] = mapped_column(Text)
     overview_caveat_text: Mapped[str] = mapped_column(Text)
     full_caveat_text: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class StatisticalComparisonOption(Base):
