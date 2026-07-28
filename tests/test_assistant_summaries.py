@@ -291,3 +291,24 @@ def test_reports_lead_in_absent_on_empty_results_and_other_tools():
         build_tool_summary(_envelope("get_dashboard_summary", {"totals": {"place_count": 2}}))
         == "You have 2 saved places."
     )
+
+
+def test_summary_runs_through_the_output_guard():
+    from app.assistant.output_guard import SAFETY_REDIRECT
+
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Ballard — do not go there, very dangerous",
+                    "baseline_available": False,
+                    "decision": "baseline_unavailable",
+                    "place_incident_count": 4,
+                }
+            ]
+        },
+        "created": [],
+        "unresolved": [],
+    }
+    assert build_tool_summary(_envelope("analyze_places", result)) == SAFETY_REDIRECT

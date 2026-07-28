@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.assistant.output_guard import guarded
+
 _DECISION_PHRASES = {
     "above_clear": "above its surrounding-area baseline, statistically clear",
     "below_clear": "below its surrounding-area baseline, statistically clear",
@@ -27,7 +29,12 @@ def _layer_terms(result: dict[str, Any]) -> tuple[str, str]:
 
 def build_tool_summary(tool_result: dict[str, Any]) -> str:
     """A neutral, invariant-safe one-liner for a tool result, built from fields
-    the result already carries (no safety scoring/ranking, no LLM)."""
+    the result already carries (no safety scoring/ranking, no LLM).
+
+    The text is user-bound on every path that calls this — the chat turn's kill-switch
+    and fallback emissions, and the /assistant/commands route, which streams it with no
+    model in the loop — and it interpolates user-controlled place labels. So the finished
+    line runs through the output guard here, once, rather than at each emission site."""
     result = tool_result.get("result") or {}
     handler = {
         "add_place": _add_place_summary,
@@ -40,7 +47,7 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
     }.get(tool_result.get("tool_name"))
     if handler is None:
         return "Done."
-    return handler(result) or "Done."
+    return guarded(handler(result) or "Done.")
 
 
 def _add_place_summary(result: dict[str, Any]) -> str:
