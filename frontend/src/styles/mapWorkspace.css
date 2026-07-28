@@ -1,7 +1,7 @@
 .mc-scope{
   --surface:#FFFFFF; --surface-raised:#F6F9FA; --surface-sunken:#EEF2F5;
   --border:#D5DEE4; --border-strong:#C3CFD8;
-  --text-strong:#16232B; --text:#3D4C57; --text-dim:#64747F;
+  --text-strong:#16232B; --text:#3D4C57; --text-dim:#5C6B75;
   --accent:#0F6E56; --accent-deep:#0A5443;
   --accent-soft:rgba(15,110,86,.10); --accent-halo:rgba(15,110,86,.30);
   --on-accent:#fff;
@@ -9,6 +9,9 @@
   --ok:#3FA46B;
   --scrim:rgba(255,255,255,0.25);
   --slate:#74858E; --slate-soft:rgba(116,133,142,0.20);
+  /* Trend marks: neutral greys meeting 3:1 against the card surface in both themes.
+     Never hue-coded — a trend line must not imply good/bad. */
+  --trend-raw:#74858E; --trend-rolling:#3A3F46;
   --graphite:#3A3F46;
   --panel-width:clamp(360px,34vw,420px);
   --panel-rail:48px;
@@ -243,7 +246,7 @@
 .mc-card .meta .sub{font-family:var(--f-mono);font-size:11px;color:var(--text-dim);margin-top:2px;}
 .mc-card .right{display:flex;align-items:center;gap:8px;}
 .mc-card .cnt{font-family:var(--f-mono);font-size:12px;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:99px;}
-.mc-card .cnt.low{color:var(--slate);background:var(--slate-soft);}
+.mc-card .cnt.low{color:var(--text);background:var(--slate-soft);}
 .mc-card .ico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--text);background:var(--surface-sunken);border:1px solid var(--border);}
 .mc-card .ico svg{width:15px;height:15px;}
 .mc-exp-toggle{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:var(--text-dim);cursor:pointer;}
@@ -322,7 +325,7 @@
 /* Compact layer switch in the workspace top bar (shared across tabs). */
 .mc-layertoggle{gap:4px;flex-wrap:nowrap;}
 .mc-layertoggle .mc-chip{height:28px;padding:0 10px;font-size:11.5px;white-space:nowrap;}
-.mc-layer-unavailable{margin-left:4px;font-family:var(--f-mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;opacity:.75;}
+.mc-layer-unavailable{margin-left:4px;font-family:var(--f-mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;}
 .mc-field{margin-bottom:14px;}
 .mc-field label{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text);margin-bottom:7px;}
 .mc-inputs{display:flex;gap:10px;}
@@ -342,7 +345,6 @@
 @keyframes pindrop{0%{opacity:0;transform:translateY(-16px) scale(.86);}100%{opacity:1;transform:translateY(0) scale(1);}}
 @keyframes halo{0%{transform:translate(-50%,-50%) scale(.6);opacity:.55;}70%{opacity:0;}100%{transform:translate(-50%,-50%) scale(2.4);opacity:0;}}
 @keyframes panelin{0%{transform:translateX(34px);opacity:0;}100%{transform:translateX(0);opacity:1;}}
-@keyframes fadein{0%{opacity:0;transform:translateY(4px);}100%{opacity:1;transform:translateY(0);}}
 @keyframes armpulse{0%,100%{box-shadow:0 0 0 4px var(--accent-soft);}50%{box-shadow:0 0 0 8px transparent;}}
 @media (max-width:760px){.mc-legend{display:none;}}
 
@@ -350,7 +352,7 @@
 .mc-frame{position:relative;width:100%;height:100vh;height:100dvh;overflow:hidden;background:var(--surface-sunken);border-radius:0;box-shadow:none;}
 
 .mc-modal-scrim{position:fixed;inset:0;z-index:1300;background:rgba(20,24,28,.45);display:grid;place-items:center;padding:20px;}
-.mc-modal{width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;}
+.mc-modal{width:min(560px,100%);max-height:90dvh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;}
 .mc-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .mc-modal-head h3{margin:0;font-size:16px;}
 .mc-modal-tabs{display:flex;gap:8px;margin-bottom:14px;}
@@ -365,7 +367,7 @@
 .mc-empty p{margin:0;font-size:13px;color:var(--text);line-height:1.5;}
 
 @media (prefers-reduced-motion: reduce){
-  .pin .body,.halo,.mc-workspace-panel,.mc-searchpill-pin.is-armed,.mc-skeleton,.mc-tabby-pulse{animation:none !important;}
+  .mc-pin-halo,.mc-pin-icon svg,.mc-workspace-panel,.mc-searchpill-pin.is-armed,.mc-skeleton,.mc-tabby-pulse{animation:none !important;}
 }
 
 .mc-map.is-adding{cursor:crosshair;}
@@ -456,10 +458,15 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 
 @media (max-width:760px){
   /* Mobile bottom sheet. Breakpoint matches MOBILE_MAX_WIDTH (760) in src/lib/drawer.ts. */
-  .mc-topbar{right:0;height:auto;min-height:56px;padding:calc(env(safe-area-inset-top) + 8px) 20px 8px;gap:12px;}
+  .mc-topbar{right:0;height:auto;min-height:56px;
+    padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 20px) 8px calc(env(safe-area-inset-left) + 20px);gap:12px;}
   .mc-wordmark{font-size:20px;white-space:nowrap;}
   .mc-searchpill{top:calc(env(safe-area-inset-top) + 64px);left:calc(env(safe-area-inset-left) + 16px);width:auto;max-width:calc(100vw - 32px);}
   .mc-helper{top:calc(env(safe-area-inset-top) + 116px);left:calc(env(safe-area-inset-left) + 16px);}
+  /* Both sit at desktop offsets that land on top of the search pill on mobile. Stack
+     them below it, mirroring the pill's own safe-area formula (pill top + 44px + gap). */
+  .mc-error{top:calc(env(safe-area-inset-top) + 116px);max-width:calc(100vw - 32px);}
+  .mc-banner{top:calc(env(safe-area-inset-top) + 164px);max-width:calc(100vw - 32px);}
   .mc-empty{top:34%;width:min(260px,calc(100% - 96px));padding:16px 18px;}
 
   /* No side panel on mobile: drop the desktop --panel-width offset from map chrome and
@@ -486,6 +493,8 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
      Mobile keys peek on is-bar; the desktop is-collapsed/is-open classes never apply here. */
   .mc-workspace-panel.is-full{height:min(92dvh,100%);}
   .mc-workspace-panel.is-bar{height:auto;transition:none;}
+  /* Set by BottomSheet during a grabber drag so the live height tracks the finger. */
+  .mc-workspace-panel.is-dragging{transition:none;}
 
   .mc-grabber{display:flex;align-items:center;justify-content:center;height:26px;flex:none;cursor:grab;touch-action:none;}
   .mc-grabber b{display:block;width:38px;height:5px;border-radius:3px;background:var(--border-strong);}
@@ -640,8 +649,8 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-trend svg{width:100%;height:auto;display:block;}
 /* Neutral data marks — identical in both themes (product invariant, see below). */
 .mc-trend-raw,.mc-trend-rolling,.mc-trend-city{stroke-linejoin:round;stroke-linecap:round;}
-.mc-trend-raw{stroke:var(--slate-soft);stroke-width:1.5;}
-.mc-trend-rolling{stroke:var(--graphite);stroke-width:2.5;}
+.mc-trend-raw{stroke:var(--trend-raw);stroke-width:1.5;}
+.mc-trend-rolling{stroke:var(--trend-rolling);stroke-width:2.5;}
 .mc-trend-city{stroke:var(--text-dim);stroke-width:2;stroke-dasharray:6 4;}
 .mc-trend-grid{stroke:var(--border);stroke-width:1;}
 .mc-trend-cursor{stroke:var(--text-dim);stroke-width:1;}
@@ -649,8 +658,8 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-trend-legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:11px;color:var(--text-dim);}
 .mc-trend-legend span{display:inline-flex;align-items:center;gap:5px;}
 .mc-trend-sw{display:inline-block;width:18px;height:0;}
-.mc-trend-sw.raw{border-top:1.5px solid var(--slate);}
-.mc-trend-sw.rolling{border-top:2.5px solid var(--graphite);}
+.mc-trend-sw.raw{border-top:1.5px solid var(--trend-raw);}
+.mc-trend-sw.rolling{border-top:2.5px solid var(--trend-rolling);}
 .mc-trend-sw.city{border-top:2px dashed var(--text-dim);}
 .mc-trend-readout{margin:0;font-size:11px;color:var(--text-dim);font-family:var(--f-mono,ui-monospace);min-height:15px;}
 .mc-trend-note{margin:0;font-size:10.5px;color:var(--text-dim);}
@@ -664,13 +673,14 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 [data-theme="dark"] .mc-scope{
   --surface:#1A222B; --surface-raised:#12181F; --surface-sunken:#232C35;
   --border:#2A3540; --border-strong:#3A4754;
-  --text-strong:#E8EDF2; --text:#B9C6D0; --text-dim:#7C8B99;
+  --text-strong:#E8EDF2; --text:#B9C6D0; --text-dim:#93A2AF;
   --accent:#3FBF8F; --accent-deep:#7FE0BC;
   --accent-soft:rgba(63,191,143,.14); --accent-halo:rgba(63,191,143,.35);
   --on-accent:#0E1519;
   --danger:#F0937B; --danger-soft:rgba(240,147,123,.16);
   --ok:#5BBF87;
   --scrim:rgba(0,0,0,0.25);
+  --trend-raw:#8DA0AD; --trend-rolling:#C6D2DC;
   color-scheme:dark;
 }
 /* MapLibre popup surface + tip follow the theme (white by default). */
