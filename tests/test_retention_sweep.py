@@ -1,8 +1,8 @@
 """Server-side retention sweep.
 
-Sessions are 24h anonymous tokens, but the rows an analysis leaves behind (clusters,
-runs, summaries, comparisons) outlive them and are addressable by nobody once the token
-expires. The sweep is the only thing that ever removes them.
+Session expiry slides, so identities persist as long as they keep visiting. The sweep
+removes rows only for identities with no activity across the whole retention window;
+it is the only thing that ever removes them.
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from app.models import (
     StatisticalPairwiseResult,
 )
 from app.normalization.clusters import CLUSTER_METHOD
+from app.services.direct_places_service import DIRECT_CLUSTER_METHOD
 from app.services.manual_place_service import MANUAL_CLUSTER_METHOD
 from app.services.retention_service import sweep_retention
 
@@ -37,9 +38,9 @@ def _session(tmp_path, name: str = "retention"):
     return get_sessionmaker()()
 
 
-def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD) -> PlaceCluster:
+def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD, owner: str = "user-dormant") -> PlaceCluster:
     return PlaceCluster(
-        user_id_hash="user-hash",
+        user_id_hash=owner,
         cluster_version="manual-1",
         cluster_method=method,
         centroid_latitude=47.61,
@@ -53,9 +54,9 @@ def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD) -> Place
     )
 
 
-def _summary(cluster_id: str, created_at: datetime) -> PlaceCrimeSummary:
+def _summary(cluster_id: str, created_at: datetime, owner: str = "user-dormant") -> PlaceCrimeSummary:
     return PlaceCrimeSummary(
-        user_id_hash="user-hash",
+        user_id_hash=owner,
         place_cluster_id=cluster_id,
         radius_m=500,
         analysis_start_date=date(2026, 1, 1),
@@ -65,9 +66,9 @@ def _summary(cluster_id: str, created_at: datetime) -> PlaceCrimeSummary:
     )
 
 
-def _run(created_at: datetime) -> AnalysisRun:
+def _run(created_at: datetime, owner: str = "user-dormant") -> AnalysisRun:
     return AnalysisRun(
-        user_id_hash="user-hash",
+        user_id_hash=owner,
         analysis_start_date=date(2026, 1, 1),
         analysis_end_date=date(2026, 6, 30),
         radii_m_json="[500]",
@@ -75,9 +76,9 @@ def _run(created_at: datetime) -> AnalysisRun:
     )
 
 
-def _comparison(created_at: datetime) -> StatisticalComparison:
+def _comparison(created_at: datetime, owner: str = "user-dormant") -> StatisticalComparison:
     return StatisticalComparison(
-        user_id_hash="user-hash",
+        user_id_hash=owner,
         comparison_type="site",
         geometry_type="place_buffer",
         radius_m=500,
@@ -91,10 +92,10 @@ def _comparison(created_at: datetime) -> StatisticalComparison:
     )
 
 
-def _option(comparison_id: str, created_at: datetime) -> StatisticalComparisonOption:
+def _option(comparison_id: str, created_at: datetime, owner: str = "user-dormant") -> StatisticalComparisonOption:
     return StatisticalComparisonOption(
         comparison_id=comparison_id,
-        user_id_hash="user-hash",
+        user_id_hash=owner,
         option_id="option-a",
         option_label="Option A",
         geometry_type="place_buffer",
@@ -107,10 +108,10 @@ def _option(comparison_id: str, created_at: datetime) -> StatisticalComparisonOp
     )
 
 
-def _pairwise(comparison_id: str, created_at: datetime) -> StatisticalPairwiseResult:
+def _pairwise(comparison_id: str, created_at: datetime, owner: str = "user-dormant") -> StatisticalPairwiseResult:
     return StatisticalPairwiseResult(
         comparison_id=comparison_id,
-        user_id_hash="user-hash",
+        user_id_hash=owner,
         option_a_id="option-a",
         option_a_label="Option A",
         option_b_id="option-b",
@@ -139,24 +140,59 @@ def _count(session, model) -> int:
     return session.scalar(select(func.count()).select_from(model))
 
 
+def test_sweep_never_touches_a_live_identitys_old_places(tmp_path):
+    # The review repro: sliding sessions (PR #174) mean a daily visitor keeps one
+    # identity forever. "Home", saved 31 days ago by an owner who ran an analysis
+    # yesterday, is live user content — age alone must not delete it.
+    session = _session(tmp_path)
+    home = _cluster(OLD, owner="user-daily")
+    session.add(home)
+    session.add(_run(FRESH, owner="user-daily"))  # yesterday's activity
+    session.commit()
+    home_id = home.id
+
+    counts = sweep_retention(session, get_settings(), now=NOW)
+
+    assert counts["place_clusters"] == 0
+    assert session.get(PlaceCluster, home_id) is not None
+
+
+def test_sweep_removes_a_fully_dormant_identitys_data(tmp_path):
+    session = _session(tmp_path)
+    abandoned = _cluster(OLD, owner="user-gone")
+    session.add(abandoned)
+    session.add(_run(OLD, owner="user-gone"))
+    session.commit()
+    abandoned_id = abandoned.id
+
+    counts = sweep_retention(session, get_settings(), now=NOW)
+
+    assert counts["place_clusters"] == 1
+    assert counts["analysis_runs"] == 1
+    assert session.get(PlaceCluster, abandoned_id) is None
+
+
 def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
     session = _session(tmp_path)
-    old_cluster, fresh_cluster = _cluster(OLD), _cluster(FRESH)
+    # Distinct owners: the dormant identity's rows are all old; the active identity's
+    # rows are fresh. Identity scoping means only the dormant owner's rows sweep.
+    old_cluster, fresh_cluster = _cluster(OLD), _cluster(FRESH, owner="user-active")
     session.add_all([old_cluster, fresh_cluster])
     session.flush()
-    old_comparison, fresh_comparison = _comparison(OLD), _comparison(FRESH)
+    old_comparison = _comparison(OLD)
+    fresh_comparison = _comparison(FRESH, owner="user-active")
     session.add_all([old_comparison, fresh_comparison])
     session.flush()
     session.add_all(
         [
             _summary(old_cluster.id, OLD),
-            _summary(fresh_cluster.id, FRESH),
+            _summary(fresh_cluster.id, FRESH, owner="user-active"),
             _run(OLD),
-            _run(FRESH),
+            _run(FRESH, owner="user-active"),
             _option(old_comparison.id, OLD),
-            _option(fresh_comparison.id, FRESH),
+            _option(fresh_comparison.id, FRESH, owner="user-active"),
             _pairwise(old_comparison.id, OLD),
-            _pairwise(fresh_comparison.id, FRESH),
+            _pairwise(fresh_comparison.id, FRESH, owner="user-active"),
         ]
     )
     session.commit()
@@ -188,15 +224,17 @@ def test_sweep_never_touches_upload_derived_clusters(tmp_path):
     # must not reach into personal-upload data even when it is older than the window.
     session = _session(tmp_path, "uploads")
     upload_cluster = _cluster(OLD, method=CLUSTER_METHOD)
+    direct_cluster = _cluster(OLD, method=DIRECT_CLUSTER_METHOD)
     manual_cluster = _cluster(OLD)
-    session.add_all([upload_cluster, manual_cluster])
+    session.add_all([upload_cluster, direct_cluster, manual_cluster])
     session.commit()
-    upload_id, manual_id = upload_cluster.id, manual_cluster.id
+    upload_id, direct_id, manual_id = upload_cluster.id, direct_cluster.id, manual_cluster.id
 
     counts = sweep_retention(session, get_settings(), now=NOW)
 
     assert counts["place_clusters"] == 1
     assert session.get(PlaceCluster, upload_id) is not None
+    assert session.get(PlaceCluster, direct_id) is not None
     assert session.get(PlaceCluster, manual_id) is None
     session.close()
 

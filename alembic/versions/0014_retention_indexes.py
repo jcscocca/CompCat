@@ -21,6 +21,9 @@ INDEXES = (
     ("ix_place_clusters_created_at", "place_clusters"),
     ("ix_place_crime_summaries_created_at", "place_crime_summaries"),
     ("ix_statistical_comparisons_created_at", "statistical_comparisons"),
+    # The sweep also filters geocode_cache on age; without this it is the one
+    # swept table that seq-scans every batch.
+    ("ix_geocode_cache_created_at", "geocode_cache"),
 )
 
 

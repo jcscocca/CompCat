@@ -506,14 +506,20 @@ compose logs db
 
 **Data retention:** a CompCat session is a 24-hour anonymous token, but the rows an analysis
 writes — entered-place clusters, analysis runs, crime summaries, statistical comparisons and
-their options/pairwise children — outlive it, and once the token expires nobody (visitor or
-operator) can address them again. The 03:50 sidecar job posts
-`/admin/maintenance/retention-sweep`, which deletes those rows past
-`MCA_SESSION_DATA_RETENTION_DAYS` (default 30, `0` disables the sweep) in foreign-key order and
+their options/pairwise children — outlive it. Session expiry slides on every visit, so a
+returning visitor keeps one identity indefinitely; only identities silent for the whole
+retention window are truly abandoned. The 03:50 sidecar job posts
+`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no
+activity in `MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep) —
+an active visitor's data, however old, is never swept — in foreign-key order and
 in bounded batches, and evicts `geocode_cache` entries past their own
 `MCA_GEOCODER_CACHE_TTL_DAYS`. It never touches personal-upload clusters — those have their own
 delete path — nor SPD incident data. It runs after the backup, so each night's dump still
-contains what that night removed. To run it by hand and read the per-table row counts:
+contains what that night removed.
+
+> Migration note: `0014_retention_indexes` creates plain (non-CONCURRENT) indexes. Fine
+> on a fresh or small database; if you ever apply it after months of accumulated data,
+> expect the indexed tables to be write-locked for the build's duration. To run it by hand and read the per-table row counts:
 
 ```bash
 compose exec ingest-cron /bin/sh /etc/ingest/retention.sh
