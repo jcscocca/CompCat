@@ -2138,4 +2138,32 @@ describe("MapWorkspace", () => {
 
     expect(screen.getByRole("link", { name: /download tableau csv/i })).toHaveAttribute("href", "/exports/current.csv");
   });
+
+  it("opens the About panel from the topbar and closes it on Escape", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+
+    expect(screen.queryByRole("dialog", { name: "About CompCat" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "About CompCat" }));
+    expect(screen.getByRole("dialog", { name: "About CompCat" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "About CompCat" })).not.toBeInTheDocument();
+  });
+
+  it("narrow viewport: the About button stays in the topbar beside the theme toggle", async () => {
+    window.innerWidth = 375;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+
+    const { container } = render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+
+    const right = container.querySelector(".mc-topbar-right")!;
+    expect(within(right as HTMLElement).getByRole("button", { name: "About CompCat" })).toBeInTheDocument();
+    expect(within(right as HTMLElement).getByRole("button", { name: /Switch to .* theme/ })).toBeInTheDocument();
+  });
 });

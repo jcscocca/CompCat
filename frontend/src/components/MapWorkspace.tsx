@@ -28,6 +28,7 @@ import { usePinDraft } from "../lib/usePinDraft";
 import { useTheme } from "../lib/useTheme";
 import { useAssistantTurn } from "../lib/useAssistantTurn";
 import { useThread } from "../lib/useThread";
+import { AboutModal } from "./AboutModal";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
 import { ContextStrip } from "./ContextStrip";
@@ -61,6 +62,7 @@ export function MapWorkspace() {
   const [offer, setOffer] = useState<{ text: string; chips: FollowupChip[] } | null>(null);
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
   const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [savingEntryKey, setSavingEntryKey] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
     if (initialView) {
@@ -799,6 +801,15 @@ export function MapWorkspace() {
           <div className="mc-topbar-right">
             {!isMobile ? layerControls : null}
             {!isMobile ? <div className="mc-status"><span className="dot" />Public session - Seattle</div> : null}
+            <button
+              type="button"
+              className="mc-aboutbtn"
+              aria-label="About CompCat"
+              title="About CompCat"
+              onClick={() => setAboutOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.6h.01" /></svg>
+            </button>
             <ThemeToggle theme={theme} onChange={setTheme} />
           </div>
         </header>
@@ -938,6 +949,8 @@ export function MapWorkspace() {
             }}
           />
         ) : null}
+
+        {aboutOpen ? <AboutModal onClose={() => setAboutOpen(false)} /> : null}
       </div>
     </div>
   );

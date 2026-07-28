@@ -95,7 +95,7 @@ Read from the branch at plan time; line numbers are branch HEAD (`8bc57c5`).
 - Modify: `frontend/src/components/MapWorkspace.test.tsx`
 - Modify: `frontend/src/styles/mapWorkspace.css`
 
-- [ ] **Step 1: Write the failing component test**
+- [x] **Step 1: Write the failing component test**
 
 Create `frontend/src/components/AboutModal.test.tsx`:
 
@@ -216,12 +216,12 @@ describe("AboutModal", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/AboutModal.test.tsx --environment jsdom`
 Expected: FAIL — `Failed to resolve import "./AboutModal"`.
 
-- [ ] **Step 3: Create `frontend/src/components/AboutModal.tsx`**
+- [x] **Step 3: Create `frontend/src/components/AboutModal.tsx`**
 
 Note the three exported constants: they are the *only* strings in this file carrying invariant vocabulary, and Task 9 strips exactly them before sweeping. `REVISED_CAVEAT` is imported rather than restated so the "Honest limits" wording stays identical to the one printed on every expanded card.
 
@@ -399,7 +399,7 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
 }
 ```
 
-- [ ] **Step 4: Add the About panel styles**
+- [x] **Step 4: Add the About panel styles**
 
 In `frontend/src/styles/mapWorkspace.css`, immediately after the `.mc-modal-foot{…}` rule (currently line 247), append:
 
@@ -412,12 +412,12 @@ In `frontend/src/styles/mapWorkspace.css`, immediately after the `.mc-modal-foot
 .mc-about-byline{color:var(--text-strong);font-weight:500;}
 ```
 
-- [ ] **Step 5: Run the component test**
+- [x] **Step 5: Run the component test**
 
 Run: `cd frontend && npx vitest run src/components/AboutModal.test.tsx --environment jsdom`
 Expected: PASS (8 tests).
 
-- [ ] **Step 6: Add the failing topbar test**
+- [x] **Step 6: Add the failing topbar test**
 
 In `frontend/src/components/MapWorkspace.test.tsx`, add inside the existing `describe("MapWorkspace", …)` block:
 
@@ -453,12 +453,12 @@ In `frontend/src/components/MapWorkspace.test.tsx`, add inside the existing `des
 
 (`render`, `screen`, `fireEvent`, `within`, `vi` are already imported at the top of that file; `makeSummary` is already defined there. The suite's `afterEach` already resets `window.innerWidth = 1024`.)
 
-- [ ] **Step 7: Run to verify they fail**
+- [x] **Step 7: Run to verify they fail**
 
 Run: `cd frontend && npx vitest run src/components/MapWorkspace.test.tsx --environment jsdom -t "About"`
 Expected: FAIL — no button named "About CompCat".
 
-- [ ] **Step 8: Wire the button and modal into `MapWorkspace.tsx`**
+- [x] **Step 8: Wire the button and modal into `MapWorkspace.tsx`**
 
 1. Add the import next to the other component imports (alphabetical block starting `import { AssistantPanel } from "./AssistantPanel";` at line 31):
 
@@ -499,7 +499,7 @@ import { AboutModal } from "./AboutModal";
         {aboutOpen ? <AboutModal onClose={() => setAboutOpen(false)} /> : null}
 ```
 
-- [ ] **Step 9: Share the icon-button styling**
+- [x] **Step 9: Share the icon-button styling**
 
 In `frontend/src/styles/mapWorkspace.css`, change the two `.mc-themetoggle` selectors (lines 58 and 60) to also cover the new button:
 
@@ -509,17 +509,17 @@ In `frontend/src/styles/mapWorkspace.css`, change the two `.mc-themetoggle` sele
 .mc-themetoggle:hover,.mc-aboutbtn:hover{border-color:var(--border-strong);}
 ```
 
-- [ ] **Step 10: Run both suites**
+- [x] **Step 10: Run both suites**
 
 Run: `cd frontend && npx vitest run src/components/AboutModal.test.tsx src/components/MapWorkspace.test.tsx --environment jsdom`
 Expected: PASS — 8 new AboutModal tests, 2 new MapWorkspace tests, every pre-existing MapWorkspace test unchanged and green.
 
-- [ ] **Step 11: Lint**
+- [x] **Step 11: Lint**
 
 Run: `cd frontend && npm run lint`
 Expected: clean.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add frontend/src/components/AboutModal.tsx frontend/src/components/AboutModal.test.tsx frontend/src/components/MapWorkspace.tsx frontend/src/components/MapWorkspace.test.tsx frontend/src/styles/mapWorkspace.css
