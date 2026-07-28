@@ -26,7 +26,7 @@
 
 /* z-index ladder (all within the .mc-scope stacking root):
      6  panel query bar (sticky)      30  map fallback notice
-    34  disclosure chip   35  attribution   40  legend
+    34  disclosure chip   35  attribution   40  legend + its mobile toggle
     60  panel resize handle
   1100  topbar · banner · error · empty-state · pin-drop helper · zoom control
   1101  search-pill results           1200  workspace panel
@@ -346,7 +346,27 @@
 @keyframes halo{0%{transform:translate(-50%,-50%) scale(.6);opacity:.55;}70%{opacity:0;}100%{transform:translate(-50%,-50%) scale(2.4);opacity:0;}}
 @keyframes panelin{0%{transform:translateX(34px);opacity:0;}100%{transform:translateX(0);opacity:1;}}
 @keyframes armpulse{0%,100%{box-shadow:0 0 0 4px var(--accent-soft);}50%{box-shadow:0 0 0 8px transparent;}}
-@media (max-width:760px){.mc-legend{display:none;}}
+/* Mobile map key. The legend used to be display:none here, leaving phone users with no way
+   to read the markers; it is now a compact overlay behind a round toggle. MapWorkspace
+   renders .mc-mapkey only under MOBILE_MAX_WIDTH, sets its `bottom` from the live sheet
+   snap, and marks the legend [hidden] while closed — this block is layout only. The
+   column-reverse stack keeps the button (first in DOM, so first in tab order) at the
+   bottom with the legend growing upward from it. */
+@media (max-width:760px){
+  .mc-mapkey{position:absolute;z-index:40;left:calc(env(safe-area-inset-left) + 12px);
+    bottom:var(--mapkey-bottom);display:flex;flex-direction:column-reverse;align-items:flex-start;gap:8px;}
+  .mc-mapkey-toggle{display:grid;place-items:center;padding:0;width:38px;height:38px;
+    border-radius:50%;cursor:pointer;background:var(--surface);border:1px solid var(--border);
+    color:var(--text-strong);box-shadow:0 8px 20px -10px rgba(16,24,32,.35);}
+  .mc-mapkey-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .mc-mapkey-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
+  /* Grows upward from the toggle, scrolling rather than reaching the search pill: the 166px
+     allowance is the toggle (38) + its gap (8) + topbar and pill clearance (120). */
+  .mc-mapkey .mc-legend{position:static;width:min(212px,calc(100vw - 24px));overflow:auto;padding:11px 12px;
+    max-height:clamp(80px,calc(100dvh - var(--mapkey-bottom) - 166px),300px);}
+  .mc-mapkey .mc-legend h3{margin-bottom:8px;}
+  .mc-mapkey .mc-leg-row{padding:3px 0;}
+}
 
 .mc-scope{display:block;width:100%;height:100%;}
 .mc-frame{position:relative;width:100%;height:100vh;height:100dvh;overflow:hidden;background:var(--surface-sunken);border-radius:0;box-shadow:none;}

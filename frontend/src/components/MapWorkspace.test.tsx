@@ -2322,4 +2322,54 @@ describe("MapWorkspace", () => {
     expect(within(right as HTMLElement).getByRole("button", { name: "About CompCat" })).toBeInTheDocument();
     expect(within(right as HTMLElement).getByRole("button", { name: /Switch to .* theme/ })).toBeInTheDocument();
   });
+
+  // The legend was display:none under the mobile breakpoint, so phone users had no way to
+  // read what the pins, rings and dots meant.
+  async function renderForMapKey(innerWidth: number) {
+    window.innerWidth = innerWidth;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+  }
+
+  it("narrow viewport: the map key sits behind a toggle that opens and closes it", async () => {
+    await renderForMapKey(375);
+
+    const toggle = screen.getByRole("button", { name: "Map key" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-controls", "mc-map-legend");
+    expect(screen.getByText("Saved place")).not.toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // Same legend, unchanged: every marker row is there once opened.
+    expect(screen.getByText("Saved place")).toBeVisible();
+    expect(screen.getByText("Selected")).toBeVisible();
+    expect(screen.getByText("Low data")).toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Saved place")).not.toBeVisible();
+  });
+
+  it("narrow viewport: Escape closes the open map key and returns focus to its toggle", async () => {
+    await renderForMapKey(375);
+
+    const toggle = screen.getByRole("button", { name: "Map key" });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveFocus();
+  });
+
+  it("wide viewport: the map key stays on screen with no toggle", async () => {
+    await renderForMapKey(1024);
+
+    expect(screen.queryByRole("button", { name: "Map key" })).toBeNull();
+    expect(screen.getByText("Saved place")).toBeVisible();
+  });
 });

@@ -178,6 +178,10 @@ export function MapWorkspace() {
   );
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
   const [dismissedIncidentError, setDismissedIncidentError] = useState("");
+  // Mobile has no room for the standing legend, so it hides behind a toggle (desktop keeps
+  // the legend on screen and never renders the button).
+  const [mapKeyOpen, setMapKeyOpen] = useState(false);
+  const mapKeyToggleRef = useRef<HTMLButtonElement>(null);
 
   const compare = useCompare({
     entries: list.entries,
@@ -667,6 +671,29 @@ export function MapWorkspace() {
   // Focus mode is a desktop side-panel concept — force it off on mobile (the bottom sheet).
   const isFocus = !isMobile && !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
 
+  // The rest of the bottom-left map chrome is pinned clear of the sheet's peek snap only, so
+  // it disappears under a raised sheet. The map key instead rides above whichever snap is
+  // live. The 240 floor clears the incident chip, which is pinned at +164 px and runs to
+  // ~217 px when its citywide-redaction clause wraps. Capped at the half snap: at full there
+  // is no map left to key. Read back by the CSS as --mapkey-bottom to size the overlay.
+  const mapKeyBottomPx = Math.max(
+    snapHeightPx(drawer.snap === "full" ? "half" : drawer.snap, window.innerHeight) + 12,
+    240,
+  );
+
+  // The open map key is a dismissible overlay, so Escape closes it and hands focus back to
+  // the toggle that opened it.
+  useEffect(() => {
+    if (!mapKeyOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMapKeyOpen(false);
+      mapKeyToggleRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mapKeyOpen]);
+
   // Follow-up chips key off the newest card's OWN frozen scope, so they re-run against what
   // the card shows even after the live dashboard has moved on.
   const latestCard: AnalysisCardData | null = useMemo(() => {
@@ -841,7 +868,25 @@ export function MapWorkspace() {
           <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
         ) : null}
 
-        <MapLegend layer={analysis.layer} />
+        {isMobile ? (
+          <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
+            <button
+              type="button"
+              ref={mapKeyToggleRef}
+              className="mc-mapkey-toggle"
+              aria-label="Map key"
+              title="Map key"
+              aria-expanded={mapKeyOpen}
+              aria-controls="mc-map-legend"
+              onClick={() => setMapKeyOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 7h.01M5 12h.01M5 17h.01M10 7h9M10 12h9M10 17h9" /></svg>
+            </button>
+            <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
+          </div>
+        ) : (
+          <MapLegend layer={analysis.layer} id="mc-map-legend" />
+        )}
         <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}
