@@ -4,8 +4,26 @@ import logging
 
 import pytest
 
+import app.main
 from app.config import Settings
 from app.main import create_app, log_posture_warnings
+
+
+@pytest.fixture(autouse=True)
+def _enable_posture_logger():
+    """Keep these assertions independent of test-suite ordering: alembic's env.py runs
+    fileConfig(disable_existing_loggers=True), which silences app.main's logger for every
+    later test. Same reset as tests/test_failover_llm_client.py."""
+    logger = app.main.logger
+    previous_disabled = logger.disabled
+    previous_global_disable = logging.root.manager.disable
+    logger.disabled = False
+    logging.disable(logging.NOTSET)
+    try:
+        yield
+    finally:
+        logger.disabled = previous_disabled
+        logging.disable(previous_global_disable)
 
 
 def _prod_settings(**env) -> Settings:

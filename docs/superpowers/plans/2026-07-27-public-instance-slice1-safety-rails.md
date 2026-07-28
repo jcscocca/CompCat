@@ -1619,7 +1619,7 @@ git commit -m "feat(deploy): production compose overlay with no published db por
 
 ## Task 7: Full gate
 
-- [ ] **Step 1: Run `make test-all` from the worktree root**
+- [x] **Step 1: Run `make test-all` from the worktree root**
 
 Run: `make test-all`
 Expected: green — pytest (backend, including the ~27 new tests), `ruff check .` clean, frontend
@@ -1629,25 +1629,25 @@ failure is pre-existing; re-run on a clean checkout before investigating.
 If `make test` reports a stale-shebang error, run the suite as
 `.venv/bin/python -m pytest tests -q` and treat that as the pytest leg.
 
-- [ ] **Step 2: Confirm the slice completion criteria**
+- [x] **Step 2: Confirm the slice completion criteria**
 
 From the spec, restated as a checklist — verify each before declaring the slice done:
 
-- [ ] **1. Prod-like boot with a hosted key and the limiter off refuses to start; the same boot with
+- [x] **1. Prod-like boot with a hosted key and the limiter off refuses to start; the same boot with
   the limiter on starts clean.** Covered by
   `tests/test_config_llm_guard.py::test_hosted_key_without_rate_limiting_refuses_to_boot` (all four
   key variables) and `::test_hosted_key_boots_when_rate_limiting_is_on`.
-- [ ] **2. With a small test budget, the assistant turn is refused with the fixed message and makes
+- [x] **2. With a small test budget, the assistant turn is refused with the fixed message and makes
   no upstream call.** Covered by
   `tests/test_assistant_token_budget.py::test_turn_refuses_before_the_planning_call_when_the_budget_is_spent`
   (`complete_calls == 0`) and `::test_turn_refuses_before_narration_when_planning_spends_the_budget`
   (`stream_calls == 0`).
-- [ ] **3. `docker compose -f docker-compose.yml -f docker-compose.prod.yml config` shows no
+- [x] **3. `docker compose -f docker-compose.yml -f docker-compose.prod.yml config` shows no
   published db port and no default password.** Covered by
   `tests/test_compose_prod_overlay.py::test_rendered_overlay_publishes_no_postgres_port` and
   `::test_rendered_overlay_refuses_to_render_without_a_db_password`, plus the CI docker-lane step.
-- [ ] **4. `make test-all` green** (Step 1 above).
-- [ ] **Invariant:** the budget-exhausted message is the only new user-facing string, and it names
+- [x] **4. `make test-all` green** (Step 1 above).
+- [x] **Invariant:** the budget-exhausted message is the only new user-facing string, and it names
   no place, address, neighborhood, or safety concept — pinned by
   `tests/test_assistant_token_budget.py::test_budget_message_stays_out_of_place_and_safety_vocabulary`.
   No guard or analysis behavior changed.
