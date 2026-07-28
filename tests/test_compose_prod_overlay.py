@@ -142,10 +142,21 @@ def test_caddyfile_terminates_tls_for_the_registered_domain_and_proxies_the_api(
     assert directives == [
         "compcat.app {",
         "encode gzip",
+        "request_body {",
+        "max_size 1MB",
         "reverse_proxy api:8000 {",
         "header_up -CF-Connecting-IP",
         "header_up X-Forwarded-For {client_ip}",
     ]
+
+
+def test_caddyfile_caps_the_request_body_at_the_edge() -> None:
+    # The largest legitimate body is the 200 KB bulk-places CSV; personal uploads are off
+    # on the public instance. The app's own 413 only fires after FastAPI has spooled the
+    # multipart body to disk, so this edge cap is what actually bounds an upload.
+    text = _CADDYFILE.read_text(encoding="utf-8")
+    assert "request_body" in text
+    assert "max_size 1MB" in text
 
 
 def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:

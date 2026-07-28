@@ -154,3 +154,18 @@ def test_analyze_accepts_a_near_future_end_date(tmp_path):
         ),
     )
     assert response.status_code == 200
+
+
+def test_analyze_rejects_an_oversized_offense_filter(tmp_path):
+    # These strings are persisted verbatim onto AnalysisRun, so an unbounded category is a
+    # 1 MB write per request.
+    client = _client(tmp_path)
+    for field in ("offense_category", "offense_subcategory", "nibrs_group"):
+        response = client.post("/dashboard/analyze", json=_analyze_body(**{field: "x" * 81}))
+        assert response.status_code == 422, field
+
+
+def test_analyze_accepts_a_normal_offense_filter(tmp_path):
+    client = _client(tmp_path)
+    response = client.post("/dashboard/analyze", json=_analyze_body(offense_category="PROPERTY"))
+    assert response.status_code == 200
