@@ -108,6 +108,31 @@ describe("PlaceContextCard", () => {
     expect(screen.queryByText(/had usable coordinates/)).not.toBeInTheDocument();
   });
 
+  it("spells out the adequacy status and method instead of the raw enum", () => {
+    renderCard({
+      ...homePlace,
+      minimum_data_status: "place_count_too_low",
+      baselines: [{ ...homePlace.baselines[0], method: "wald_log_rate_ratio" }],
+    });
+    expect(screen.getByText("fewer than 3 incidents at this place")).toBeInTheDocument();
+    expect(screen.queryByText("place_count_too_low")).not.toBeInTheDocument();
+    expect(screen.queryByText("wald_log_rate_ratio")).not.toBeInTheDocument();
+  });
+
+  it("blanks the analytical columns for a baseline that was not tested", () => {
+    renderCard({
+      ...homePlace,
+      baselines: [{ ...homePlace.baselines[0], relation: "insufficient" }],
+    });
+    const table = document.querySelector(".mc-baseline-table") as HTMLElement;
+    const row = within(table).getByText("Capitol Hill").closest("tr") as HTMLElement;
+    expect(within(row).getByText("not tested — below the data floor")).toBeInTheDocument();
+    expect(within(row).getAllByText("—")).toHaveLength(3);
+    // The under-powered ratio/interval/p must not read as a finding.
+    expect(row.textContent).not.toContain("3.4×");
+    expect(row.textContent).not.toContain("0.002");
+  });
+
   it("never emits safety-ranking vocabulary", () => {
     const { container } = renderCard();
     const noBaseline = renderCard({ ...homePlace, baseline_available: false, baselines: [] });

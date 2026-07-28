@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { CategoryShare, NeighborhoodPlace, TemporalProfile } from "../types";
+import { isNotTested, methodLabel, minimumDataStatusLabel, NO_VALUE, NOT_TESTED_LABEL } from "../lib/analysisTerms";
 import { countNoun, type IncidentNoun } from "../lib/layerCopy";
 import { aggregateHeadline } from "../lib/verdictCopy";
 import { placeIdentity } from "../lib/placeIdentity";
@@ -250,23 +251,28 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
                     <tr><th scope="col">Baseline</th><th scope="col">Rate/yr</th><th scope="col">Ratio</th><th scope="col">95% CI</th><th scope="col">adj p</th><th scope="col">Method</th></tr>
                   </thead>
                   <tbody>
-                    {place.baselines.map((b) => (
-                      <tr key={b.kind}>
-                        <td>{b.label}</td>
-                        <td>{formatPerYear(annualIncidentsWithin(b.baseline_rate, place.radius_m))}</td>
-                        <td>{b.rate_ratio.toFixed(1)}×</td>
-                        <td>{b.ci_lower.toFixed(1)}–{b.ci_upper.toFixed(1)}×</td>
-                        <td>{b.adjusted_p_value.toFixed(3)}</td>
-                        <td>{b.method}</td>
-                      </tr>
-                    ))}
+                    {place.baselines.map((b) => {
+                      // An untested baseline still carries numbers; they are placeholders or
+                      // under-powered noise, not a finding, so they render as "—".
+                      const notTested = isNotTested(b);
+                      return (
+                        <tr key={b.kind}>
+                          <td>{b.label}</td>
+                          <td>{formatPerYear(annualIncidentsWithin(b.baseline_rate, place.radius_m))}</td>
+                          <td>{notTested ? NO_VALUE : `${b.rate_ratio.toFixed(1)}×`}</td>
+                          <td>{notTested ? NO_VALUE : `${b.ci_lower.toFixed(1)}–${b.ci_upper.toFixed(1)}×`}</td>
+                          <td>{notTested ? NO_VALUE : b.adjusted_p_value.toFixed(3)}</td>
+                          <td>{notTested ? NOT_TESTED_LABEL : methodLabel(b.method)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : null}
             <dl>
               <div><dt>Baseline beats</dt><dd>{place.baseline_beats?.length ? place.baseline_beats.join(" + ") : (place.beat ?? "—")}</dd></div>
-              <div><dt>Adequacy</dt><dd>{place.minimum_data_status}</dd></div>
+              <div><dt>Adequacy</dt><dd>{minimumDataStatusLabel(place.minimum_data_status)}</dd></div>
               <div><dt>Nearest</dt><dd>{place.nearest_incident_m != null ? `${Math.round(place.nearest_incident_m)} m` : "—"}</dd></div>
             </dl>
             <CategoryBreakdown rows={place.category_breakdown} />
