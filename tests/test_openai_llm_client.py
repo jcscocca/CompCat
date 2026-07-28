@@ -12,8 +12,10 @@ from app.ratelimit import get_rate_limiter
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8080/v1/chat/completions")
 
 
-def _make_client() -> OpenAiLlmClient:
-    return OpenAiLlmClient(base_url="http://localhost:8080/v1", model="test-model")
+def _make_client(**overrides: object) -> OpenAiLlmClient:
+    kwargs: dict[str, object] = {"base_url": "http://localhost:8080/v1", "model": "test-model"}
+    kwargs.update(overrides)
+    return OpenAiLlmClient(**kwargs)  # type: ignore[arg-type]
 
 
 def _json_response(data: object, status_code: int = 200) -> httpx.Response:
@@ -345,12 +347,45 @@ def test_stream_asks_for_usage_and_records_the_final_frame(
         yield response
 
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
-    assert asyncio.run(_collect_stream(_make_client())) == ["Hel", "lo"]
+    assert asyncio.run(_collect_stream(_make_client(include_stream_usage=True))) == ["Hel", "lo"]
 
     assert captured["stream_options"] == {"include_usage": True}
     limiter = get_rate_limiter()
     assert limiter.budget_exceeded(limit=100) is True
     assert limiter.budget_exceeded(limit=101) is False
+
+
+def test_stream_omits_usage_option_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The LAN llama-swap request must stay byte-identical when no token budget is configured —
+    # a host that 400s on unknown fields would otherwise lose narration entirely.
+    captured: dict[str, object] = {}
+    response = _FakeStreamResponse([_sse_line("ok"), "data: [DONE]"])
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fake_stream(self_client, method, url, **kwargs):  # noqa: ANN001
+        captured.update(kwargs.get("json") or {})
+        yield response
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    assert asyncio.run(_collect_stream(_make_client())) == ["ok"]
+    assert "stream_options" not in captured
+
+
+def test_unreachable_stream_charges_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A request that never reached the provider must not bill its prompt — under failover a
+    # dead primary would otherwise charge the budget on every single turn.
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fake_stream(self_client, method, url, **kwargs):  # noqa: ANN001
+        raise httpx.ConnectError("refused")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    with pytest.raises(LlmUnavailable):
+        asyncio.run(_collect_stream(_make_client()))
+    assert get_rate_limiter().budget_exceeded(limit=1) is False
 
 
 def test_abandoned_stream_still_spends_its_budget(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -21,4 +21,8 @@ services:
   api:
     environment:
       MCA_DATABASE_URL: ${MCA_DATABASE_URL:?set MCA_DATABASE_URL (no default in production)}
+      # The base compose file enumerates the api env explicitly, so every prod-only var must
+      # be forwarded here or it silently never reaches the container. Required, no default:
+      # the production spend posture must be stated explicitly (0 disables the budget).
+      MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: ${MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY:?set MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY (0 disables the daily token budget)}
     restart: unless-stopped

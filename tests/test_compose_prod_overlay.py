@@ -67,7 +67,11 @@ def test_rendered_overlay_publishes_no_postgres_port() -> None:
     if not _compose_available():
         pytest.skip("docker compose plugin not available")
     result = _render(
-        {"POSTGRES_PASSWORD": _TEST_PASSWORD, "MCA_DATABASE_URL": _TEST_DATABASE_URL}
+        {
+            "POSTGRES_PASSWORD": _TEST_PASSWORD,
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        }
     )
     assert result.returncode == 0, result.stderr
     rendered = result.stdout
@@ -79,6 +83,24 @@ def test_rendered_overlay_publishes_no_postgres_port() -> None:
 def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
     if not _compose_available():
         pytest.skip("docker compose plugin not available")
-    result = _render({"MCA_DATABASE_URL": _TEST_DATABASE_URL}, drop=("POSTGRES_PASSWORD",))
+    result = _render(
+        {
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        },
+        drop=("POSTGRES_PASSWORD",),
+    )
     assert result.returncode != 0
     assert "POSTGRES_PASSWORD" in result.stderr
+
+
+def test_rendered_overlay_requires_an_explicit_token_budget() -> None:
+    # The production spend posture must be stated, not inherited silently (0 disables).
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    result = _render(
+        {"POSTGRES_PASSWORD": _TEST_PASSWORD, "MCA_DATABASE_URL": _TEST_DATABASE_URL},
+        drop=("MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY",),
+    )
+    assert result.returncode != 0
+    assert "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY" in result.stderr
