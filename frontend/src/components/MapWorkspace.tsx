@@ -806,6 +806,9 @@ export function MapWorkspace() {
         />
 
         <header className="mc-topbar">
+          {/* The wordmark is a styled span, so the page had no h1 for screen readers or
+              document outline. */}
+          <h1 className="mc-sr">CompCat — reported Seattle incident context around addresses</h1>
           <div className="mc-brand">
             <span className="mc-logo">
               <svg width="16" height="16" viewBox="0 0 24 24"><path d="M4 9 L4 4 L9 7 Q12 6 15 7 L20 4 L20 9 Q21.5 11.5 21.5 14 Q21.5 20 12 20 Q2.5 20 2.5 14 Q2.5 11.5 4 9 Z" fill="var(--on-accent)" /><circle cx="8.5" cy="13" r="1.3" fill="var(--accent)" /><circle cx="15.5" cy="13" r="1.3" fill="var(--accent)" /></svg>

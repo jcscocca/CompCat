@@ -51,7 +51,7 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
             <button
               type="button"
               className="mc-chip on mc-scope-location-focus"
-              aria-label={`Show ${entry.label} on map`}
+              aria-label={`Show ${entry.label} on map — Unsaved`}
               onClick={() => onFocus(entry)}
               onMouseEnter={() => onHoverPlace(id)}
               onMouseLeave={() => onHoverPlace(null)}
@@ -67,6 +67,9 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
                 type="button"
                 className="mc-scope-location-action"
                 disabled={savingKey === id}
+                // While saving, the visible "Saving…" is the whole name; idle needs the
+                // location so several Save buttons are distinguishable.
+                aria-label={savingKey === id ? undefined : `Save ${entry.label}`}
                 onClick={() => onSave(entry)}
               >
                 {savingKey === id ? "Saving…" : "Save"}

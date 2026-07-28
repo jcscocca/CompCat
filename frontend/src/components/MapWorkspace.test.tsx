@@ -330,7 +330,7 @@ describe("MapWorkspace", () => {
     // A manual save is an edit, so it waits for Run — no premature auto-run fires. The saved
     // pin is auto-selected, so the rail's Run analysis sends its id via the command path.
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
 
     await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
@@ -372,7 +372,7 @@ describe("MapWorkspace", () => {
     // places are auto-selected; the rail's Run analysis compares them (2+ saved → compare).
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
 
     await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
@@ -579,11 +579,21 @@ describe("MapWorkspace", () => {
     render(<StrictMode><MapWorkspace /></StrictMode>);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "500 m" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  // The wordmark is a styled span, so the page had no h1 at all.
+  it("exposes a screen-reader heading naming the app and what it reports", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    render(<MapWorkspace />);
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("CompCat — reported Seattle incident context around addresses");
+    expect(heading).toHaveClass("mc-sr");
   });
 
   it("shows an error when the session cannot start", async () => {
@@ -1161,7 +1171,7 @@ describe("MapWorkspace", () => {
       expect(synthetic).toBeDefined();
       expect(last.selectedIds.has(synthetic!.id)).toBe(true);
     });
-    expect(screen.getByRole("button", { name: "Show 500 Pine St on map" })).toHaveTextContent("Unsaved");
+    expect(screen.getByRole("button", { name: "Show 500 Pine St on map — Unsaved" })).toHaveTextContent("Unsaved");
     expect(screen.getByRole("button", { name: "Remove 500 Pine St from analysis" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save pin/i })).toBeInTheDocument();
   });
@@ -1181,7 +1191,7 @@ describe("MapWorkspace", () => {
     // Dismiss the draft-pin popover so the chip's own Save (handleSaveEntry) is the control
     // under test — the popover's saveDraft path is a different call site.
     fireEvent.keyDown(window, { key: "Escape" });
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save 500 Pine St" }));
 
     await waitFor(() => expect(createPlace).toHaveBeenCalled());
     // createPlace is mocked suite-wide, so a payload the API would 422 on still "passes"
@@ -1199,7 +1209,7 @@ describe("MapWorkspace", () => {
     await waitFor(() => {
       expect(screen.getByRole("checkbox", { name: "500 Pine St" })).toHaveAttribute("aria-checked", "true");
     });
-    expect(screen.queryByRole("button", { name: "Show 500 Pine St on map" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show 500 Pine St on map — Unsaved" })).not.toBeInTheDocument();
   });
 
   it("marks the current card as previous analysis when filters change", async () => {
@@ -1213,7 +1223,7 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
     expect(screen.getByText("Analysis result")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     expect(screen.getByText("Previous analysis")).toBeInTheDocument();
@@ -1511,7 +1521,7 @@ describe("MapWorkspace", () => {
 
     // The update_filters effect updates the single filter control without adding a
     // duplicate transcript line or leaving the rail.
-    await waitFor(() => expect(screen.getByRole("button", { name: /analysis context filters/i })).toHaveAccessibleName(/500 m/));
+    await waitFor(() => expect(screen.getByRole("button", { name: /edit filters/i })).toHaveAccessibleName(/500 m/));
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
@@ -1543,7 +1553,7 @@ describe("MapWorkspace", () => {
     expect(screen.getByText(/chips and filters still work/i)).toBeInTheDocument();
 
     // Filters are not gated by offline, and the change stays in the single filter control.
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(screen.getByRole("button", { name: "500 m" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
@@ -1757,7 +1767,7 @@ describe("MapWorkspace", () => {
 
     // A radius change through the rail's context strip invalidates the analysis context,
     // detaching the presence badges.
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     await waitFor(() => expect(screen.queryByTestId("badge-a")).not.toBeInTheDocument());
@@ -2188,7 +2198,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     const runButton = screen.getByRole("button", { name: "Run analysis" });
     expect(runButton).toBeEnabled();
     fireEvent.click(runButton);
@@ -2217,7 +2227,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
 
     await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
@@ -2239,7 +2249,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText(/point me at a place/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
   });
 
@@ -2252,7 +2262,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalled());
