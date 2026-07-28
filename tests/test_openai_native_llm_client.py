@@ -12,12 +12,19 @@ from app.assistant.llm_client import (
     LlmUnavailable,
     OpenAiNativeLlmClient,
 )
+from app.ratelimit import get_rate_limiter
 
 _DUMMY_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
 
 
 def _resp(content: str | None):
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+
+
+def _resp_with_usage(content: str, usage: object):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))], usage=usage
+    )
 
 
 def _chunk(content: str | None):
@@ -205,3 +212,42 @@ def test_temperature_suppressed_for_reasoning_models() -> None:
     )
     asyncio.run(client.complete([{"role": "user", "content": "hi"}], temperature=0.2))
     assert "temperature" not in comp.captured
+
+
+# ---------- daily token budget accounting ----------
+
+
+def test_complete_records_reported_usage() -> None:
+    comp = _FakeCompletions(
+        response=_resp_with_usage(
+            "hello", SimpleNamespace(prompt_tokens=25, completion_tokens=5)
+        )
+    )
+    asyncio.run(_client(comp).complete([{"role": "user", "content": "hi"}]))
+
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=30) is True
+    assert limiter.budget_exceeded(limit=31) is False
+
+
+def test_stream_asks_for_usage_and_records_the_final_chunk() -> None:
+    usage_chunk = SimpleNamespace(
+        choices=[], usage=SimpleNamespace(prompt_tokens=60, completion_tokens=4)
+    )
+    comp = _FakeCompletions(stream=_FakeStream([_chunk("ok"), usage_chunk]))
+    _collect(_client(comp), [{"role": "user", "content": "hi"}])
+
+    assert comp.captured["stream_options"] == {"include_usage": True}
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=64) is True
+    assert limiter.budget_exceeded(limit=65) is False
+
+
+def test_stream_without_usage_falls_back_to_the_char_estimate() -> None:
+    comp = _FakeCompletions(stream=_FakeStream([_chunk("abcdefgh")]))
+    _collect(_client(comp), [{"role": "user", "content": "hi"}])
+
+    # prompt "hi" -> 1, completion "abcdefgh" -> 2
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=3) is True
+    assert limiter.budget_exceeded(limit=4) is False

@@ -439,7 +439,7 @@ Every completed call charges the counter: provider-reported `usage` when present
 - Modify: `tests/test_anthropic_llm_client.py`
 - Modify: `tests/test_openai_native_llm_client.py`
 
-- [ ] **Step 1: Write the failing tests — OpenAI-compatible client**
+- [x] **Step 1: Write the failing tests — OpenAI-compatible client**
 
 In `tests/test_openai_llm_client.py`, add `from app.ratelimit import get_rate_limiter` to the imports
 (after the `from app.assistant.llm_client import ...` line), then append at the end of the file:
@@ -525,13 +525,13 @@ def test_abandoned_stream_still_spends_its_budget(monkeypatch: pytest.MonkeyPatc
     assert limiter.budget_exceeded(limit=3) is False
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_openai_llm_client.py -v`
 Expected: FAIL — the four new tests fail (`budget_exceeded(limit=42)` is `False`: nothing is being
 recorded; the `stream_options` assertion raises `KeyError`). All pre-existing tests in the file pass.
 
-- [ ] **Step 3: Add the accounting helpers**
+- [x] **Step 3: Add the accounting helpers**
 
 In `app/assistant/llm_client.py`, extend the import block (top of file) — add `import math` to the
 stdlib group and the first-party import after the third-party group:
@@ -596,7 +596,7 @@ def record_llm_tokens(
     get_rate_limiter().add_tokens(tokens)
 ```
 
-- [ ] **Step 4: Wire the OpenAI-compatible client**
+- [x] **Step 4: Wire the OpenAI-compatible client**
 
 In `OpenAiLlmClient.complete`, replace the content-extraction block (lines 115-126):
 
@@ -707,13 +707,13 @@ Then replace the whole of `OpenAiLlmClient.stream` (lines 128-196) with:
             )
 ```
 
-- [ ] **Step 5: Run the OpenAI-compatible suite**
+- [x] **Step 5: Run the OpenAI-compatible suite**
 
 Run: `.venv/bin/python -m pytest tests/test_openai_llm_client.py tests/test_llm_client_auth.py tests/test_failover_llm_client.py -v`
 Expected: PASS (4 new tests plus every existing one — the malformed-frame, `[DONE]`, mid-stream-death
 and extra_body tests all still hold).
 
-- [ ] **Step 6: Write the failing Anthropic tests**
+- [x] **Step 6: Write the failing Anthropic tests**
 
 In `tests/test_anthropic_llm_client.py`, add `from app.ratelimit import get_rate_limiter` to the
 imports, then teach the two fakes about usage.
@@ -793,13 +793,13 @@ def test_stream_without_usage_falls_back_to_the_char_estimate() -> None:
     assert limiter.budget_exceeded(limit=4) is False
 ```
 
-- [ ] **Step 7: Run to verify the Anthropic tests fail**
+- [x] **Step 7: Run to verify the Anthropic tests fail**
 
 Run: `.venv/bin/python -m pytest tests/test_anthropic_llm_client.py -v`
 Expected: FAIL — the three new tests fail (`budget_exceeded(limit=75)` is `False`); the pre-existing
 Anthropic tests still pass (the fakes gained optional fields only).
 
-- [ ] **Step 8: Wire the Anthropic client**
+- [x] **Step 8: Wire the Anthropic client**
 
 In `app/assistant/llm_client.py`, add this helper directly after `_anthropic_text` (lines 222-228):
 
@@ -861,12 +861,12 @@ Replace the body of `AnthropicLlmClient.stream` (lines 312-330) with:
             )
 ```
 
-- [ ] **Step 9: Run the Anthropic suite**
+- [x] **Step 9: Run the Anthropic suite**
 
 Run: `.venv/bin/python -m pytest tests/test_anthropic_llm_client.py -v`
 Expected: PASS (3 new tests + all existing).
 
-- [ ] **Step 10: Write the failing OpenAI-native tests**
+- [x] **Step 10: Write the failing OpenAI-native tests**
 
 In `tests/test_openai_native_llm_client.py`, add `from app.ratelimit import get_rate_limiter` to the
 imports, add this helper next to `_resp` (line 19-20):
@@ -920,13 +920,13 @@ def test_stream_without_usage_falls_back_to_the_char_estimate() -> None:
     assert limiter.budget_exceeded(limit=4) is False
 ```
 
-- [ ] **Step 11: Run to verify they fail**
+- [x] **Step 11: Run to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_openai_native_llm_client.py -v`
 Expected: FAIL — the three new tests fail (nothing recorded; `stream_options` missing from
 `comp.captured`). All existing tests pass.
 
-- [ ] **Step 12: Wire the OpenAI-native client**
+- [x] **Step 12: Wire the OpenAI-native client**
 
 In `OpenAiNativeLlmClient._request_kwargs`, replace the `if stream:` branch (lines 404-405) with:
 
@@ -980,7 +980,7 @@ Replace the body of `OpenAiNativeLlmClient.stream` (lines 435-455) with:
             raise LlmUnavailable("LLM returned an empty stream.")
 ```
 
-- [ ] **Step 13: Run every LLM client suite + ruff**
+- [x] **Step 13: Run every LLM client suite + ruff**
 
 Run: `.venv/bin/python -m pytest tests/test_openai_llm_client.py tests/test_openai_native_llm_client.py tests/test_anthropic_llm_client.py tests/test_failover_llm_client.py tests/test_llm_client_auth.py tests/test_assistant_api.py -v`
 Expected: PASS (10 new tests; every existing client and assistant-API test green).
@@ -988,7 +988,7 @@ Expected: PASS (10 new tests; every existing client and assistant-API test green
 Run: `.venv/bin/ruff check .`
 Expected: clean (watch the 100-char line limit in the new helpers).
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add app/assistant/llm_client.py tests/test_openai_llm_client.py tests/test_anthropic_llm_client.py tests/test_openai_native_llm_client.py

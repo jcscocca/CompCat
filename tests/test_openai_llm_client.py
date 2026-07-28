@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.assistant.llm_client import LlmUnavailable, OpenAiLlmClient
+from app.ratelimit import get_rate_limiter
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8080/v1/chat/completions")
 
@@ -288,3 +289,83 @@ def test_stream_sets_stream_true_and_merges_extra_body(monkeypatch: pytest.Monke
     )
     assert captured["stream"] is True
     assert captured["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+# ---------- daily token budget accounting ----------
+
+
+def test_complete_records_provider_reported_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    response_data = {
+        "choices": [{"message": {"content": "hi"}}],
+        "usage": {"prompt_tokens": 30, "completion_tokens": 12},
+    }
+
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        return _json_response(response_data)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    asyncio.run(_make_client().complete([{"role": "user", "content": "hello"}], role=None))
+
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=42) is True
+    assert limiter.budget_exceeded(limit=43) is False
+
+
+def test_complete_falls_back_to_the_char_estimate(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A host that omits usage must not silently bypass the budget.
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        return _json_response({"choices": [{"message": {"content": "hi"}}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    asyncio.run(_make_client().complete([{"role": "user", "content": "hello"}], role=None))
+
+    # ceil(5/4) for the prompt "hello" + ceil(2/4) for the completion "hi" = 3
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=3) is True
+    assert limiter.budget_exceeded(limit=4) is False
+
+
+def test_stream_asks_for_usage_and_records_the_final_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    response = _FakeStreamResponse(
+        [
+            _sse_line("Hel"),
+            _sse_line("lo"),
+            'data: {"choices":[],"usage":{"prompt_tokens":80,"completion_tokens":20}}',
+            "data: [DONE]",
+        ]
+    )
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fake_stream(self_client, method, url, **kwargs):  # noqa: ANN001
+        captured.update(kwargs.get("json") or {})
+        yield response
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    assert asyncio.run(_collect_stream(_make_client())) == ["Hel", "lo"]
+
+    assert captured["stream_options"] == {"include_usage": True}
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=100) is True
+    assert limiter.budget_exceeded(limit=101) is False
+
+
+def test_abandoned_stream_still_spends_its_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The output guard tripping (or a client disconnect) closes the generator mid-stream. Tokens
+    # already generated upstream must still be charged, or the budget is trivially bypassable.
+    _patch_stream(monkeypatch, _FakeStreamResponse([_sse_line("abcd"), _sse_line("efgh")]))
+
+    async def run() -> None:
+        gen = _make_client().stream([{"role": "user", "content": "hi"}], role=None)
+        assert await gen.__anext__() == "abcd"
+        await gen.aclose()
+
+    asyncio.run(run())
+
+    # prompt "hi" -> ceil(2/4) = 1, completion seen so far "abcd" -> ceil(4/4) = 1
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=2) is True
+    assert limiter.budget_exceeded(limit=3) is False

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from collections.abc import AsyncIterator
 from typing import Protocol
 
@@ -11,10 +12,52 @@ import anthropic
 import httpx
 import openai
 
+from app.ratelimit import get_rate_limiter
+
 logger = logging.getLogger(__name__)
 
 _ANTHROPIC_DEFAULT_MAX_TOKENS = 1024
 _OPENAI_NATIVE_DEFAULT_MAX_TOKENS = 1024
+
+
+def _estimate_tokens(text: str) -> int:
+    """~4 characters per token. Used only when a backend reports no usage — an OpenAI-compatible
+    endpoint that omits usage must not silently bypass the daily budget. Over-counts slightly on
+    prose; the budget is a spend backstop, not billing."""
+    return math.ceil(len(text) / 4)
+
+
+def _usage_field(usage: object, *names: str) -> int:
+    for name in names:
+        value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
+        if isinstance(value, int):
+            return value
+    return 0
+
+
+def _usage_tokens(usage: object) -> int | None:
+    """prompt+completion tokens from a provider usage payload — OpenAI
+    (prompt_tokens/completion_tokens) or Anthropic (input_tokens/output_tokens), as a dict or an
+    SDK object. None when the backend reported nothing usable."""
+    if usage is None:
+        return None
+    total = _usage_field(usage, "prompt_tokens", "input_tokens") + _usage_field(
+        usage, "completion_tokens", "output_tokens"
+    )
+    return total or None
+
+
+def record_llm_tokens(
+    messages: list[dict[str, str]], completion: str, usage: object = None
+) -> None:
+    """Charge one LLM call against the shared daily token budget (app/ratelimit.py). Pure
+    accounting — it runs whether or not rate limiting is on; enforcement lives in the assistant
+    turn."""
+    tokens = _usage_tokens(usage)
+    if tokens is None:
+        prompt = "".join(str(message.get("content") or "") for message in messages)
+        tokens = _estimate_tokens(prompt) + _estimate_tokens(completion)
+    get_rate_limiter().add_tokens(tokens)
 
 
 class AssistantLlmClient(Protocol):
@@ -118,6 +161,7 @@ class OpenAiLlmClient:
             raise LlmUnavailable(
                 "LLM endpoint returned an unexpected response shape."
             ) from exc
+        record_llm_tokens(messages, content or "", data.get("usage"))
         if not content or not content.strip():
             raise LlmUnavailable(
                 "LLM returned empty content (a reasoning model may have spent the token "
@@ -142,9 +186,14 @@ class OpenAiLlmClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": True,
+            # Ask for the trailing usage frame so the daily token budget counts real tokens;
+            # hosts that ignore the option fall back to the chars/4 estimate below.
+            "stream_options": {"include_usage": True},
         }
         timeout = httpx.Timeout(self.timeout_s, connect=self.connect_timeout_s)
         yielded = False
+        usage: dict[str, object] | None = None
+        parts: list[str] = []
         try:
             # asyncio.timeout bounds the total stream duration (see max_stream_seconds); on
             # expiry it raises TimeoutError, handled by the generic except below (degrades to
@@ -168,6 +217,13 @@ class OpenAiLlmClient:
                                 chunk = json.loads(data)
                             except ValueError:
                                 continue
+                            if not isinstance(chunk, dict):
+                                continue
+                            # The include_usage frame carries empty choices, so read usage
+                            # before the choices lookup below discards the frame.
+                            usage_frame = chunk.get("usage")
+                            if isinstance(usage_frame, dict):
+                                usage = usage_frame
                             try:
                                 delta = chunk["choices"][0].get("delta") or {}
                             except (KeyError, IndexError, TypeError):
@@ -175,6 +231,7 @@ class OpenAiLlmClient:
                             content = delta.get("content")
                             if content:
                                 yielded = True
+                                parts.append(content)
                                 yield content
         except httpx.HTTPError as exc:
             if yielded:
@@ -188,6 +245,10 @@ class OpenAiLlmClient:
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
             raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        finally:
+            # Also runs on aclose() (output-guard trip, client disconnect), so an abandoned
+            # narration still spends what it generated.
+            record_llm_tokens(messages, "".join(parts), usage)
         if not yielded:
             raise LlmUnavailable(
                 "LLM returned an empty stream (a reasoning model may have spent the "
@@ -226,6 +287,18 @@ def _anthropic_text(response: object) -> str:
         for block in blocks
         if getattr(block, "type", None) == "text"
     )
+
+
+async def _anthropic_final_usage(stream: object) -> object | None:
+    """The accumulated usage for a completed Anthropic stream. Defensive: a stream object with no
+    get_final_message (or one that refuses after a partial iteration) degrades to the estimate."""
+    getter = getattr(stream, "get_final_message", None)
+    if getter is None:
+        return None
+    try:
+        return getattr(await getter(), "usage", None)
+    except Exception:  # a partial/abandoned stream has no final message — estimate instead
+        return None
 
 
 class AnthropicLlmClient:
@@ -294,6 +367,7 @@ class AnthropicLlmClient:
         except anthropic.APIError as exc:
             raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
         content = _anthropic_text(response)
+        record_llm_tokens(messages, content, getattr(response, "usage", None))
         if not content or not content.strip():
             raise LlmUnavailable(
                 "LLM returned empty content (the model may have refused or spent its token "
@@ -310,6 +384,8 @@ class AnthropicLlmClient:
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         yielded = False
+        usage: object | None = None
+        parts: list[str] = []
         try:
             async with self._ensure_client().messages.stream(
                 **self._request_kwargs(messages, max_tokens)
@@ -317,13 +393,19 @@ class AnthropicLlmClient:
                 async for text in stream.text_stream:
                     if text:
                         yielded = True
+                        parts.append(text)
                         yield text
+                usage = await _anthropic_final_usage(stream)
         except Exception as exc:  # API, transport, or decode failure — degrade uniformly
             if yielded:
                 raise LlmStreamInterrupted(
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
             raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        finally:
+            # Also runs on aclose() (output-guard trip, client disconnect), where usage is still
+            # None and the chars/4 estimate charges what was generated.
+            record_llm_tokens(messages, "".join(parts), usage)
         if not yielded:
             raise LlmUnavailable(
                 "LLM returned an empty stream (the model may have refused or produced no text)."
@@ -403,6 +485,8 @@ class OpenAiNativeLlmClient:
             kwargs["temperature"] = temperature
         if stream:
             kwargs["stream"] = True
+            # Trailing usage chunk for the daily token budget; harmless when a proxy drops it.
+            kwargs["stream_options"] = {"include_usage": True}
         return kwargs
 
     async def complete(
@@ -420,6 +504,7 @@ class OpenAiNativeLlmClient:
         except openai.APIError as exc:
             raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
         content = _openai_message_text(response)
+        record_llm_tokens(messages, content, getattr(response, "usage", None))
         if not content or not content.strip():
             raise LlmUnavailable("LLM returned empty content.")
         return content
@@ -433,6 +518,8 @@ class OpenAiNativeLlmClient:
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         yielded = False
+        usage: object | None = None
+        parts: list[str] = []
         try:
             chunks = await self._ensure_client().chat.completions.create(
                 **self._request_kwargs(messages, temperature, max_tokens, stream=True)
@@ -441,9 +528,11 @@ class OpenAiNativeLlmClient:
             # stream instead of leaking the connection and server-side generation.
             async with chunks:
                 async for chunk in chunks:
+                    usage = getattr(chunk, "usage", None) or usage
                     text = _openai_delta_text(chunk)
                     if text:
                         yielded = True
+                        parts.append(text)
                         yield text
         except Exception as exc:  # API, transport, or decode failure — degrade uniformly
             if yielded:
@@ -451,6 +540,9 @@ class OpenAiNativeLlmClient:
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
             raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+        finally:
+            # Also runs on aclose() (output-guard trip, client disconnect).
+            record_llm_tokens(messages, "".join(parts), usage)
         if not yielded:
             raise LlmUnavailable("LLM returned an empty stream.")
 
