@@ -782,7 +782,7 @@ git commit -m "feat(meta): description, Open Graph, twitter card, theme-color, a
 - Modify: `frontend/index.html`
 - Modify: `frontend/tests/indexHtml.test.ts`
 
-- [ ] **Step 1: Add the failing test**
+- [x] **Step 1: Add the failing test**
 
 In `frontend/tests/indexHtml.test.ts`, inside the existing `describe("index.html privacy guard", …)` block (next to the `viewport-fit=cover` test), add:
 
@@ -795,12 +795,12 @@ In `frontend/tests/indexHtml.test.ts`, inside the existing `describe("index.html
   });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx vitest run tests/indexHtml.test.ts -t "pinch"`
 Expected: FAIL — the viewport still contains `maximum-scale=1.0, user-scalable=no`.
 
-- [ ] **Step 3: Drop the scale locks**
+- [x] **Step 3: Drop the scale locks**
 
 In `frontend/index.html`, replace the viewport meta with:
 
@@ -808,12 +808,12 @@ In `frontend/index.html`, replace the viewport meta with:
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 ```
 
-- [ ] **Step 4: Run the index tests**
+- [x] **Step 4: Run the index tests**
 
 Run: `cd frontend && npx vitest run tests/indexHtml.test.ts`
 Expected: PASS (all 10).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/index.html frontend/tests/indexHtml.test.ts

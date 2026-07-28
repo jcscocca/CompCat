@@ -19,6 +19,13 @@ describe("index.html privacy guard", () => {
     const viewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.exec(html)?.[0] ?? "";
     expect(viewport).toMatch(/viewport-fit=cover/);
   });
+
+  it("does not block pinch zoom (WCAG 1.4.4)", () => {
+    const viewport = /<meta[^>]*name=["']viewport["'][^>]*>/i.exec(html)?.[0] ?? "";
+    expect(viewport).not.toMatch(/maximum-scale/);
+    expect(viewport).not.toMatch(/user-scalable/);
+    expect(viewport).toMatch(/viewport-fit=cover/);
+  });
 });
 
 const DESCRIPTION =
