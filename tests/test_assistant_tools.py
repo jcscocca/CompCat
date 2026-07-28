@@ -651,3 +651,17 @@ def test_planning_prompt_defines_the_three_layers_as_a_table():
     # One line each, so the three definitions stay parallel and scannable.
     for marker in ("reported =", "arrests  =", "calls    ="):
         assert sum(1 for line in lines if line.startswith(marker)) == 1, marker
+
+
+def test_analyze_places_bounds_the_radii_list():
+    """radii_m was an unbounded list[int] reachable straight from POST /assistant/commands:
+    a 10^9 radius yields a planet-sized bounding box, and an unbounded list multiplies the
+    scan. Rejected at validation, before any query runs."""
+    base = {
+        "place_ids": ["p1"],
+        "analysis_start_date": "2026-01-01",
+        "analysis_end_date": "2026-06-30",
+    }
+    for radii in ([10**9], [5001], [0], [-250], [50, 100, 150, 200, 250, 300, 350, 400]):
+        with pytest.raises(AssistantToolError):
+            execute_tool(None, "user-hash", "analyze_places", {**base, "radii_m": radii})
