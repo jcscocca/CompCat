@@ -107,8 +107,10 @@ class Settings(BaseSettings):
     # Demo/public rate limiting (see docs/superpowers/specs/2026-07-10-demo-on-demand-design.md).
     # All enforcement is OFF unless rate_limit_enabled — dev and tests are unaffected.
     rate_limit_enabled: bool = False
-    # Trust CF-Connecting-IP for client identity (set true only behind cloudflared;
-    # otherwise the header is attacker-controlled).
+    # Trust proxy headers for client identity: CF-Connecting-IP first, then the leftmost
+    # X-Forwarded-For hop. Set true only when a proxy we control is the sole ingress
+    # (cloudflared for the demo, the Caddy edge in docker-compose.prod.yml) — otherwise both
+    # headers are attacker-controlled and every caller can mint a fresh rate bucket.
     trust_proxy_headers: bool = False
     rate_limit_sessions_per_hour: int = 10
     rate_limit_assistant_per_hour: int = 20

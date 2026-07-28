@@ -105,11 +105,34 @@ def reset_rate_limiter() -> None:
     _state = RateLimiterState()
 
 
+def _proxy_header_ip(headers) -> str | None:
+    """Client IP from proxy headers, in trust order — only ever consulted when
+    MCA_TRUST_PROXY_HEADERS is on, because both headers are attacker-supplied otherwise.
+
+    1. CF-Connecting-IP: single-valued and written by Cloudflare's own edge (the demo path).
+    2. X-Forwarded-For, FIRST entry: our Caddy *appends* the peer it saw, so the leftmost hop
+       is the original client. Taking the last entry would key every request on the proxy and
+       collapse the whole internet into one bucket.
+
+    `headers` is any mapping with lowercase keys (Starlette's case-insensitive Headers, or the
+    lowercased dict BurstLimitMiddleware builds from the raw ASGI scope).
+    """
+    cf_header = (headers.get("cf-connecting-ip") or "").strip()
+    if cf_header:
+        return cf_header
+    forwarded = (headers.get("x-forwarded-for") or "").strip()
+    if forwarded:
+        first_hop = forwarded.split(",")[0].strip()
+        if first_hop:
+            return first_hop
+    return None
+
+
 def client_ip_from(request, *, trust_proxy_headers: bool) -> str:
     if trust_proxy_headers:
-        header = request.headers.get("cf-connecting-ip")
-        if header:
-            return header
+        header_ip = _proxy_header_ip(request.headers)
+        if header_ip:
+            return header_ip
     client = getattr(request, "client", None)
     return getattr(client, "host", None) or "unknown"
 
@@ -177,9 +200,9 @@ class BurstLimitMiddleware:
             for k, v in scope.get("headers", [])
         }
         ip = "unknown"
-        if settings.trust_proxy_headers and headers.get("cf-connecting-ip"):
-            ip = headers["cf-connecting-ip"]
-        elif scope.get("client"):
+        if settings.trust_proxy_headers:
+            ip = _proxy_header_ip(headers) or ip
+        if ip == "unknown" and scope.get("client"):
             ip = scope["client"][0]
         wait = get_rate_limiter().try_take(
             "burst",
