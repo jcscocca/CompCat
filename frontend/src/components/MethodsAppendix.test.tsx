@@ -28,3 +28,70 @@ describe("MethodsAppendix", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+// Each of these was checked against the engine; they are the claims the appendix is allowed
+// to make, so pin them rather than letting the prose drift back.
+describe("methods definitions match the engine", () => {
+  const byId = new Map(METHODS_DEFINITIONS.map((d) => [d.id, d]));
+
+  it("states the rate as a per-year extrapolation, not an observed count", () => {
+    const rate = byId.get("reportedIncidentRate")!;
+    expect(rate.shownAs).toBe("12 /yr");
+    expect(rate.plain).toMatch(/extrapolation, not an observed count/);
+    expect(rate.formula).toBe("per-year = incidents ÷ days × 365.25");
+  });
+
+  it("describes all four baselines and which of them exclude your radius", () => {
+    const baseline = byId.get("beatBaselineRate")!;
+    for (const term of ["neighborhood", "beat", "sector", "city"]) {
+      expect(baseline.plain.toLowerCase()).toContain(term);
+    }
+    expect(baseline.plain).toMatch(/EXCLUDE the area inside your radius/);
+    expect(baseline.plain).toMatch(/negligible/);
+    // The window is user-selected; the baseline is not fixed to 2018-present.
+    expect(baseline.plain).not.toMatch(/2018/);
+  });
+
+  it("says dispersion always widens and uses a Student-t multiplier", () => {
+    const dispersion = byId.get("overdispersion")!;
+    expect(dispersion.plain).toMatch(/never narrowing below plain Poisson/);
+    expect(dispersion.plain).toMatch(/above φ 1\.2 the method is labeled quasi-Poisson/);
+    expect(dispersion.plain).toMatch(/Student-t multiplier/);
+  });
+
+  it("lists the 3-incident place floor alongside the other withhold reasons", () => {
+    const floors = byId.get("minimumDataStatus")!;
+    expect(floors.plain).toMatch(/at least 30 days/);
+    expect(floors.plain).toMatch(/at least 3 incidents/);
+    expect(floors.plain).toMatch(/at least 10/);
+    expect(floors.plain).toMatch(/baseline area is too small/);
+    expect(floors.plain).toMatch(/non-positive exposure/);
+    expect(floors.plain).toMatch(/too few months to fit/);
+  });
+
+  it("calls the interval approximate", () => {
+    const interval = byId.get("confidenceInterval")!;
+    expect(interval.term).toBe("Approximate 95% interval");
+    expect(interval.plain).toMatch(/normal approximation/);
+  });
+
+  it("scopes the BH adjustment to one place's baselines, with a separate pass per address set", () => {
+    const bh = byId.get("adjustedPValue")!;
+    expect(bh.plain).toMatch(/four baselines/);
+    expect(bh.plain).toMatch(/second, separate adjustment/);
+    expect(bh.plain).toMatch(/not pooled/);
+  });
+
+  // The exact conditional Poisson p-value is computed server-side but never serialized into
+  // any response, so documenting it described a number no reader could ever see.
+  it("does not document the exact p-value, which never ships in a payload", () => {
+    expect(byId.has("exactPValue")).toBe(false);
+    expect(METHODS_DEFINITIONS.some((d) => /exact/i.test(d.term))).toBe(false);
+  });
+
+  it("warns that results are radius-dependent and that many looks inflate surprises", () => {
+    expect(byId.get("radiusMatters")!.howToRead).toMatch(/250 m can legitimately differ at 1000 m/);
+    expect(byId.get("manyLooks")!.plain).toMatch(/by chance/);
+    expect(byId.get("manyLooks")!.howToRead).toMatch(/caution/);
+  });
+});
