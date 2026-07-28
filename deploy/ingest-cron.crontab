@@ -1,0 +1,4 @@
+# Nightly SPD ingest, 03:10 America/Los_Angeles (TZ is set on the container). SPD datasets
+# update daily; this hour is quiet and local to the data. The job's own output goes to PID 1's
+# stdout (crond), which is the container log — `docker logs <stack>-ingest-cron-1`.
+10 3 * * * /bin/sh /etc/ingest/run.sh >> /proc/1/fd/1 2>&1

@@ -25,4 +25,33 @@ services:
       # be forwarded here or it silently never reaches the container. Required, no default:
       # the production spend posture must be stated explicitly (0 disables the budget).
       MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: ${MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY:?set MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY (0 disables the daily token budget)}
+      # Optional override (null value = pass through from the host env only when set,
+      # so the app default of 7 applies otherwise; no inline fallback default, per the
+      # overlay rule).
+      MCA_DATA_STALENESS_DAYS:
+    restart: unless-stopped
+
+  # Nightly ingest automation. Only starts with an explicit profile:
+  #
+  #   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile ops up -d --build
+  #
+  # Dev/demo stacks and a plain prod bring-up never render it. MCA_ADMIN_INGEST_TOKEN is passed
+  # through from the operator's environment (list form, not interpolation — a "${VAR:?}" here
+  # would break every render that does not use the profile, since Compose interpolates the whole
+  # file before it filters by profile) and never appears in the crontab.
+  ingest-cron:
+    profiles: ["ops"]
+    build:
+      context: .
+      dockerfile: deploy/ingest-cron.Dockerfile
+    command: ["crond", "-f", "-d", "8"]
+    environment:
+      - MCA_ADMIN_INGEST_TOKEN
+      - TZ=America/Los_Angeles
+    volumes:
+      - ./deploy/ingest-cron.crontab:/etc/crontabs/root:ro
+      - ./deploy/ingest-daily.sh:/etc/ingest/run.sh:ro
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped

@@ -116,3 +116,14 @@ def test_burst_limit_exempts_health(tmp_path, monkeypatch) -> None:
     client = TestClient(app)
     for _ in range(5):
         assert client.get("/health").status_code == 200
+
+
+def test_burst_limit_exempts_the_data_freshness_probe(tmp_path, monkeypatch) -> None:
+    # An external monitor polls /health/data every minute; the /health prefix in
+    # _BURST_EXEMPT_PREFIXES must keep covering it.
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "1")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl7.sqlite3")
+    client = TestClient(app)
+    for _ in range(5):
+        assert client.get("/health/data").status_code != 429
