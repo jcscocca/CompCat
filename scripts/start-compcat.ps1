@@ -6,12 +6,19 @@
 # It ALWAYS pulls the latest from origin first (this checkout is pull-only - do dev on
 # the Mac), and rebuilds only if HEAD actually moved. If the tree is dirty or origin is
 # unreachable it warns and starts the current checkout rather than failing to come up.
+# Once the api is healthy it also refreshes any stale data layer (reported / arrests /
+# 911 calls) via the watermarked backfill — same as the demo and VPS start scripts —
+# so there is no separate ingest step. Skip that with -SkipIngest.
 #
 #   pwsh -File scripts\start-compcat.ps1     # pull latest, rebuild if it changed, then start
 #
 # To stop everything when you're done: `docker compose stop`,
 # and close llama-swap from Task Manager (or just reboot — nothing comes back).
-param([switch]$Update)  # accepted for backwards compatibility; pulling is now always on
+param(
+    [switch]$Update,  # accepted for backwards compatibility; pulling is now always on
+    [switch]$SkipIngest,
+    [int]$FreshnessMaxAgeDays = 14
+)
 $ErrorActionPreference = 'Stop'
 $repo    = Split-Path -Parent $PSScriptRoot
 $envFile = Join-Path $repo '.env.deploy'
@@ -100,6 +107,45 @@ if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCont
         -RedirectStandardOutput (Join-Path $logDir 'llama-swap.out.log') `
         -RedirectStandardError  (Join-Path $logDir 'llama-swap.err.log') -WindowStyle Hidden
     Write-Host 'Analyst: launched on :8080 (loads the model on first request)'
+}
+
+# 3.5 Data freshness: refresh any stale layer on start (mirrors start-demo.ps1 and the
+#     VPS start script). mode=backfill resolves each layer's start date from its stored
+#     watermark and pages through Socrata internally, so re-runs advance or no-op. The
+#     first 911-calls backfill is the long one (rolling 24-month window). Non-fatal by
+#     design: an offline Socrata must not block the app from coming up.
+if ($SkipIngest) {
+    Write-Host 'Data refresh: skipped (-SkipIngest)'
+} else {
+    try {
+        Write-Host 'Waiting for /health before the data-freshness check...'
+        $deadline = (Get-Date).AddMinutes(3)
+        while ($true) {
+            try { $null = Invoke-RestMethod -Uri 'http://localhost:8000/health' -TimeoutSec 5; break }
+            catch { if ((Get-Date) -gt $deadline) { throw 'API did not become healthy in 3 minutes.' }; Start-Sleep -Seconds 5 }
+        }
+        # Freshness needs a session cookie; the response is keyed by layer.
+        $ws = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $null = Invoke-RestMethod -Uri 'http://localhost:8000/sessions' -Method Post -WebSession $ws
+        $freshness = Invoke-RestMethod -Uri 'http://localhost:8000/dashboard/freshness' -WebSession $ws
+        $token = ((Get-Content $envFile | Where-Object { $_ -match '^MCA_ADMIN_INGEST_TOKEN=' }) -split '=', 2)[1]
+        $layers = [ordered]@{ reported = 'seattle_spd_crime'; arrests = 'seattle_spd_arrests'; calls = 'seattle_spd_911' }
+        foreach ($layer in $layers.Keys) {
+            # Missing data_through (fresh DB) would make [datetime]$null throw; treat it
+            # as maximally stale so the first run ingests.
+            $dataThrough = $freshness.$layer.data_through
+            if (-not $dataThrough -or ([datetime]$dataThrough -lt (Get-Date).AddDays(-$FreshnessMaxAgeDays))) {
+                Write-Host ("{0}: data through [{1}] — backfilling {2} (the first calls run takes a while)..." -f $layer, $dataThrough, $layers[$layer])
+                $null = Invoke-RestMethod -Method Post -Headers @{ 'X-Admin-Token' = $token } -TimeoutSec 3600 `
+                    -Uri ("http://localhost:8000/admin/crime/ingest/socrata?source={0}&mode=backfill&limit=5000" -f $layers[$layer])
+                Write-Host ("{0}: done" -f $layer)
+            } else {
+                Write-Host ("{0}: data through {1} — fresh enough." -f $layer, $dataThrough)
+            }
+        }
+    } catch {
+        Write-Host "WARNING: data-freshness refresh failed ($_); the app is up with whatever data it already has."
+    }
 }
 
 # 4. Print the LAN URL for the Mac's browser.

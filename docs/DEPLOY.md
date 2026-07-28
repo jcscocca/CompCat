@@ -76,10 +76,15 @@ This is demo data, not real SPD data; it's idempotent (re-running skips existing
 For real data, run the Socrata ingest below.
 
 Beat-area reference data ships inside the image; incident data is ingested at runtime
-from Seattle's open data. One call per layer does the whole job — `mode=backfill`
-resolves the start date from the stored watermark and pages through Socrata internally
-with retry/backoff (the same invocation the public instance's nightly sidecar uses,
-`deploy/ingest-daily.sh`). All three are safe to re-run: the watermark advances or no-ops.
+from Seattle's open data. **`scripts/start-compcat.ps1` refreshes any stale layer
+automatically once the api is healthy** (skip with `-SkipIngest`; staleness window
+`-FreshnessMaxAgeDays`, default 14) — so normally there is nothing to run by hand.
+
+For an ad-hoc pull outside the start script, one call per layer does the whole job —
+`mode=backfill` resolves the start date from the stored watermark and pages through
+Socrata internally with retry/backoff (the same invocation the public instance's nightly
+sidecar uses, `deploy/ingest-daily.sh`). All three are safe to re-run: the watermark
+advances or no-ops.
 
 ```bash
 TOKEN=$(grep '^MCA_ADMIN_INGEST_TOKEN=' .env.deploy | cut -d= -f2)
