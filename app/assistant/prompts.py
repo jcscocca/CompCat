@@ -4,6 +4,12 @@ import json
 from typing import Any
 
 from app.assistant.schemas import AssistantChatMessage, SemanticContextPacket
+from app.assistant.summaries import (
+    DECISION_PHRASES,
+    layer_noun,
+    pair_is_untested,
+    rate_ratio_is_reportable,
+)
 
 PLANNING_SYSTEM_PROMPT = """You are CompCat's incident-context analyst.
 Use only the semantic context and approved tool results.
@@ -120,19 +126,6 @@ sentences stay plain."""
 # of truncating it, so this should rarely bind.
 MAX_GROUNDING_RESULT_CHARS = 4000
 
-_LAYER_NOUNS = {
-    "reported": "reported incidents",
-    "arrests": "arrests",
-    "calls": "911 calls",
-}
-_DECISION_PHRASES = {
-    "above_clear": "above its surrounding-area baseline, statistically clear",
-    "below_clear": "below its surrounding-area baseline, statistically clear",
-    "not_clear": "not statistically clear vs its surrounding area",
-    "insufficient_data": "not enough data for a surrounding-area comparison",
-    "model_warning": "too few months to model reliably",
-    "baseline_unavailable": "no surrounding-area baseline available",
-}
 _VERDICT_PHRASES = {
     "statistically_higher": "statistically clear",
     "statistically_lower": "statistically clear",
@@ -179,7 +172,7 @@ def _settings_lines(result: dict[str, Any]) -> list[str]:
     start, end = settings.get("analysis_start_date"), settings.get("analysis_end_date")
     if start and end:
         bits.append(f"window {start} to {end}")
-    bits.append(f"counting {_LAYER_NOUNS.get(settings.get('layer'), 'reported incidents')}")
+    bits.append(f"counting {layer_noun(settings.get('layer'))}")
     category = settings.get("offense_category")
     bits.append(f"category filter {category.lower()}" if category else "all categories")
     return [f"Settings: {'; '.join(bits)}."]
@@ -187,7 +180,7 @@ def _settings_lines(result: dict[str, Any]) -> list[str]:
 
 def _analyze_lines(result: dict[str, Any]) -> list[str]:
     places = (result.get("neighborhood") or {}).get("places") or []
-    noun = _LAYER_NOUNS.get((result.get("settings_used") or {}).get("layer"), "reported incidents")
+    noun = layer_noun((result.get("settings_used") or {}).get("layer"))
     lines: list[str] = []
     for place in places[:_MAX_PLACES]:
         label = place.get("place_label") or "The place"
@@ -202,18 +195,12 @@ def _analyze_lines(result: dict[str, Any]) -> list[str]:
 
 
 def _baseline_lines(place: dict[str, Any]) -> list[str]:
-    # Mirrors summaries._rate_ratio_is_reportable: a place below the data floor has no
-    # comparison to report, however confident an individual baseline entry's ratio looks.
-    status = place.get("minimum_data_status")
-    untested = (
-        place.get("baseline_available") is False
-        or place.get("decision") in {"insufficient_data", "model_warning", "baseline_unavailable"}
-        or (status is not None and status != "met")
-    )
-    if untested:
-        phrase = _DECISION_PHRASES.get(place.get("decision"), "no surrounding-area comparison")
+    # One data-floor rule, shared with the deterministic summary: a place below the floor has
+    # no comparison to report, however confident an individual baseline entry's ratio looks.
+    if not rate_ratio_is_reportable(place):
+        phrase = DECISION_PHRASES.get(place.get("decision"), "no surrounding-area comparison")
         return [f"  comparison: {phrase}."]
-    lines = [f"  verdict: {_DECISION_PHRASES.get(place.get('decision'), 'no verdict')}."]
+    lines = [f"  verdict: {DECISION_PHRASES.get(place.get('decision'), 'no verdict')}."]
     for entry in place.get("baselines") or []:
         ratio, lower, upper = entry.get("rate_ratio"), entry.get("ci_lower"), entry.get("ci_upper")
         if ratio is None or lower is None or upper is None:
@@ -259,7 +246,7 @@ def _compare_lines(result: dict[str, Any]) -> list[str]:
     comparison = result.get("comparison") or {}
     overview = comparison.get("overview") or {}
     options = overview.get("options") or []
-    noun = _LAYER_NOUNS.get((result.get("settings_used") or {}).get("layer"), "reported incidents")
+    noun = layer_noun((result.get("settings_used") or {}).get("layer"))
     lines: list[str] = []
     counts = "; ".join(
         f"{option.get('label')} {option.get('incident_count')}"
@@ -282,9 +269,7 @@ def _compare_lines(result: dict[str, Any]) -> list[str]:
 
 def _pairwise_line(entry: dict[str, Any]) -> str:
     pair = f"{entry.get('option_a_label')} vs {entry.get('option_b_label')}"
-    if entry.get("method") == "not_tested_minimum_data" or (
-        entry.get("minimum_data_status") or "met"
-    ) != "met":
+    if pair_is_untested(entry):
         return f"{pair}: not tested (below the data floor)."
     ratio, lower, upper = entry.get("rate_ratio"), entry.get("ci_lower"), entry.get("ci_upper")
     verdict = _VERDICT_PHRASES.get(entry.get("decision_class"), "no verdict")

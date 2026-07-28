@@ -197,8 +197,9 @@ async def run_assistant_turn(
                 ),
             )
         except AssistantClarification as exc:
+            clarification = str(exc)
             yield AssistantStreamEvent(
-                event="token", data={"delta": guard(str(exc)) or str(exc)}
+                event="token", data={"delta": guard(clarification) or clarification}
             )
             yield AssistantStreamEvent(event="done", data={})
             return

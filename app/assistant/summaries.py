@@ -4,7 +4,7 @@ from typing import Any
 
 from app.assistant.output_guard import guarded
 
-_DECISION_PHRASES = {
+DECISION_PHRASES = {
     "above_clear": "above its surrounding-area baseline, statistically clear",
     "below_clear": "below its surrounding-area baseline, statistically clear",
     "not_clear": "not statistically clear vs its surrounding area",
@@ -20,6 +20,10 @@ _LAYER_TERMS = {
     "arrests": ("From the arrest records: ", "arrests"),
     "calls": ("From the call logs: ", "911 calls"),
 }
+
+
+def layer_noun(layer: str | None) -> str:
+    return _LAYER_TERMS.get(layer or "reported", _LAYER_TERMS["reported"])[1]
 
 
 def _layer_terms(result: dict[str, Any]) -> tuple[str, str]:
@@ -91,7 +95,7 @@ def _primary_baseline(place: dict[str, Any]) -> dict[str, Any] | None:
 _UNTESTED_DECISIONS = frozenset({"insufficient_data", "model_warning", "baseline_unavailable"})
 
 
-def _rate_ratio_is_reportable(place: dict[str, Any]) -> bool:
+def rate_ratio_is_reportable(place: dict[str, Any]) -> bool:
     if place.get("baseline_available") is False:
         return False
     if place.get("decision") in _UNTESTED_DECISIONS:
@@ -108,7 +112,7 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
     for place in places:
         label = place.get("place_label") or "The place"
         count = place.get("place_incident_count") or 0
-        entry = _primary_baseline(place) if _rate_ratio_is_reportable(place) else None
+        entry = _primary_baseline(place) if rate_ratio_is_reportable(place) else None
         relation = (entry or {}).get("relation")
         if entry and relation in _RELATION_PHRASES and entry.get("rate_ratio") is not None:
             ci = ""
@@ -120,7 +124,7 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
                 f"{entry.get('label')}'s rate{ci}; {count} {noun} within {radius} m."
             )
         else:
-            phrase = _DECISION_PHRASES.get(place.get("decision"), "no area comparison")
+            phrase = DECISION_PHRASES.get(place.get("decision"), "no area comparison")
             sentences.append(f"{label}: {count} {noun} within {radius} m ({phrase}).")
     summary = (lead_in + " ".join(sentences)) if sentences else "No places to analyze."
     return _with_provenance(summary, result)
@@ -153,6 +157,12 @@ _NOT_TESTED_METHOD = "not_tested_minimum_data"
 _MAX_UNTESTED_PAIRS_LISTED = 3
 
 
+def pair_is_untested(entry: dict[str, Any]) -> bool:
+    return entry.get("method") == _NOT_TESTED_METHOD or (
+        entry.get("minimum_data_status") or "met"
+    ) != "met"
+
+
 def _untested_pair_sentences(result: dict[str, Any]) -> list[str]:
     pairwise = ((result.get("comparison") or {}).get("analytical") or {}).get(
         "pairwise_results"
@@ -160,8 +170,7 @@ def _untested_pair_sentences(result: dict[str, Any]) -> list[str]:
     pairs = [
         f"{entry.get('option_a_label')} vs {entry.get('option_b_label')}"
         for entry in pairwise
-        if entry.get("method") == _NOT_TESTED_METHOD
-        or (entry.get("minimum_data_status") or "met") != "met"
+        if pair_is_untested(entry)
     ]
     if not pairs:
         return []
