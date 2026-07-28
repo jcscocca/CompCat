@@ -352,15 +352,39 @@ parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md
 - [ ] **Follow-up:** run the first on-device iPhone acceptance and the multi-hour Postgres soak;
   reassess the older optional Compare backlog against the card-first interaction before building it.
 
+## Phase 8 — Durable public instance (2026-07-27)
+*The "for-real launch" that `docs/DEMO.md` deferred: CompCat always-on from a small VPS at a
+registered domain — still session-based, still not an operated multi-user service. Umbrella
+spec: `docs/superpowers/specs/2026-07-27-public-instance-design.md`; four slices, each with
+its own spec (same date prefix), worked one at a time, code-first (1→4). Decisions: VPS
+(provider open), Groq wired for setup with Anthropic as the prod Analyst posture, new domain
+to register, "Built by Jacob Scocca" + GitHub link as the in-app operator identity.*
+
+- [ ] **Slice 1 — Safety rails:** LLM boot guard (prod-like + hosted key + limiter off →
+  refuse boot), daily token budget (`MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY`), prod posture
+  warnings, `docker-compose.prod.yml` (no published 5432, required DB password).
+- [ ] **Slice 2 — Trust surface:** in-app About/Privacy panel (ⓘ in topbar; invariant,
+  scope, storage, honest limits), favicon + meta/OG tags, session-ephemerality hints,
+  error-copy hygiene, "Export CSV" label unification, pinch-zoom restore, SPD/NIBRS glosses.
+- [ ] **Slice 3 — Freshness automation:** compose `ops` cron sidecar driving the existing
+  admin ingest daily per layer; `GET /health/data` staleness probe (200/503, schema-hidden)
+  for external monitoring; container liveness stays on `/health`.
+- [ ] **Slice 4 — VPS bring-up:** provider-agnostic `docs/DEPLOY-VPS.md` + `scripts/prod/`
+  (hardening, Docker, tiles, start/stop with ingest-if-stale), Caddy TLS edge,
+  `.env.prod.example` (Anthropic primary + Groq fallback), nightly `pg_dump` rotation +
+  restore rehearsal, external uptime monitoring on `/health/data`, soak-harness pass
+  (closes the pending H2 run), then the README live link.
+
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.
 
 ---
 
-> **Eventual public release — superseded by Phase 7 (2026-07-09).** The open question this
-> note held ("does CompCat ever go public, and as what?") is now answered: CompCat goes
-> public as a **showcase** (Phase 7 — public repo, hosted demo, write-up), not as an
-> operated multi-user service. The service pile this note enumerated (real authentication,
-> encryption at rest, per-user tenant isolation, user accounts, onboarding) remains
-> deliberately unplanned with no date.
+> **Eventual public release — Phase 7 (2026-07-09) chose the showcase; Phase 8 (2026-07-27)
+> makes it durable.** The open question this note held ("does CompCat ever go public, and as
+> what?") resolved in two steps: Phase 7 made CompCat public as a **showcase** (public repo,
+> demo-on-demand, write-ups); Phase 8 upgrades the demo to an **always-on public instance**
+> (VPS, domain, automated freshness) — still anonymous-session-based. The service pile this
+> note enumerated (real authentication, encryption at rest, per-user tenant isolation, user
+> accounts, onboarding) remains deliberately unplanned with no date.
