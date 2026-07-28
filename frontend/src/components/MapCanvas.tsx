@@ -423,7 +423,7 @@ export function MapCanvas({
         </div>
       ) : tilesMissing ? (
         <div className="mc-map-fallback" role="status">
-          Basemap tiles unavailable — run <code>make fetch-tiles</code>. Pins and analysis still work.
+          Basemap tiles are unavailable right now — pins and analysis still work.
         </div>
       ) : null}
     </div>

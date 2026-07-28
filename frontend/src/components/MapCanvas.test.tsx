@@ -323,7 +323,10 @@ describe("MapCanvas", () => {
   it("shows the fallback notice when the tile artifact is missing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
     renderCanvas();
-    expect(await screen.findByText(/basemap tiles unavailable/i)).toBeInTheDocument();
+    const notice = await screen.findByText(/basemap tiles are unavailable right now/i);
+    expect(notice).toBeInTheDocument();
+    // The notice is user-facing copy, not developer instructions — no make targets in the UI.
+    expect(notice.textContent).not.toMatch(/make /);
   });
 
   it("skips places without coordinates", async () => {

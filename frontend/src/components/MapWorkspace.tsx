@@ -825,7 +825,7 @@ export function MapWorkspace() {
           <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
         ) : null}
 
-        <MapLegend />
+        <MapLegend layer={analysis.layer} />
         <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}
