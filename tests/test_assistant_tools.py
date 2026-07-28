@@ -616,6 +616,27 @@ def test_add_place_clarifies_when_not_found(tmp_path, monkeypatch):
         session.close()
 
 
+def test_add_place_clarification_guards_a_hostile_query_echo(tmp_path, monkeypatch):
+    # The commands path streams this message verbatim with no downstream guard, so the
+    # echoed query must pass through the output guard (review finding, reproduced live).
+    from app.assistant.output_guard import REDIRECTS
+    from app.assistant.tools import AssistantClarification
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: _FakeProvider([]))
+    try:
+        with pytest.raises(AssistantClarification) as excinfo:
+            execute_tool(
+                session,
+                user_hash,
+                "add_place",
+                {"query": "the most dangerous block in this neighborhood"},
+            )
+        assert str(excinfo.value) in REDIRECTS
+    finally:
+        session.close()
+
+
 def test_analyze_places_clarifies_without_place(tmp_path, monkeypatch):
     from app.assistant.tools import AssistantClarification
 
@@ -637,3 +658,31 @@ def test_analyze_places_clarifies_without_place(tmp_path, monkeypatch):
             )
     finally:
         session.close()
+
+
+def test_planning_prompt_defines_the_three_layers_as_a_table():
+    """Live miss: the model inverted reported/arrests/calls in free-form answers. Dense
+    prose does not survive; three parallel one-line definitions do."""
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    lines = [line.strip() for line in PLANNING_SYSTEM_PROMPT.splitlines()]
+    assert 'reported = SPD crime reports' in " ".join(lines)
+    assert 'arrests  = SPD arrest records' in " ".join(lines)
+    assert 'calls    = 911 calls for service' in " ".join(lines)
+    # One line each, so the three definitions stay parallel and scannable.
+    for marker in ("reported =", "arrests  =", "calls    ="):
+        assert sum(1 for line in lines if line.startswith(marker)) == 1, marker
+
+
+def test_analyze_places_bounds_the_radii_list():
+    """radii_m was an unbounded list[int] reachable straight from POST /assistant/commands:
+    a 10^9 radius yields a planet-sized bounding box, and an unbounded list multiplies the
+    scan. Rejected at validation, before any query runs."""
+    base = {
+        "place_ids": ["p1"],
+        "analysis_start_date": "2026-01-01",
+        "analysis_end_date": "2026-06-30",
+    }
+    for radii in ([10**9], [5001], [0], [-250], [50, 100, 150, 200, 250, 300, 350, 400]):
+        with pytest.raises(AssistantToolError):
+            execute_tool(None, "user-hash", "analyze_places", {**base, "radii_m": radii})
