@@ -1,5 +1,9 @@
 # Deploying CompCat for a small internal trial (~5 testers)
 
+> **Public VPS instance?** This document is the single-host trial (ThinkPad, HTTP, ~5 testers).
+> For the always-on public instance at compcat.app — TLS, hardening, nightly ingest and backups —
+> see [`DEPLOY-VPS.md`](DEPLOY-VPS.md).
+
 This runs the whole app — FastAPI API **and** the built React UI — in one container,
 with Postgres alongside, via `docker compose`. Each tester's browser gets its own
 isolated session (signed cookie → per-user data); the UI only calls session-scoped
@@ -237,3 +241,6 @@ docker compose exec -T db pg_restore -U mca -d mca --clean --if-exists < compcat
 
 Keep dumps off-host. A daily `pg_dump` via cron/systemd-timer on the ThinkPad is enough
 for the trial; restore is the two commands above against a fresh volume.
+
+On the public VPS this is automated (nightly `pg_dump` with 7-daily/4-weekly rotation) — see
+[`DEPLOY-VPS.md`](DEPLOY-VPS.md) §6, which also carries the restore rehearsal.
