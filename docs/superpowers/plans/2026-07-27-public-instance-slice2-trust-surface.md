@@ -1548,29 +1548,29 @@ git commit -m "test(invariant): sweep the About copy, allowing only the fixed ca
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Run the full gate from the worktree root**
+- [x] **Step 1: Run the full gate from the worktree root**
 
 Run: `make test-all`
 Expected: pytest green (backend untouched — no `app/` file changed in this slice), `ruff check .` clean, `npm test` green (every suite, including the new `AboutModal`, `IncidentDetailsSection`, and extended `indexHtml` files), `npm run build` succeeds and writes `app/static/dashboard/` with the five new files under `assets/`.
 
 If pytest or ruff report anything, stop: this slice must not have touched Python. Confirm with `git diff --stat origin/main -- app/ tests/ alembic/` → empty.
 
-- [ ] **Step 2: Confirm the slice completion criteria**
+- [x] **Step 2: Confirm the slice completion criteria**
 
 Check each against what the gate and the code now show:
 
-- [ ] **1a.** ⓘ opens About on desktop — `MapWorkspace.test.tsx` "opens the About panel from the topbar and closes it on Escape".
-- [ ] **1b.** ⓘ opens About on mobile — `MapWorkspace.test.tsx` "narrow viewport: the About button stays in the topbar beside the theme toggle".
-- [ ] **1c.** Every section present — `AboutModal.test.tsx` "renders a labelled modal dialog with every section" (What this is / Scope / Data sources / What's stored / Honest limits / License).
-- [ ] **1d.** Keyboard accessible — `AboutModal.test.tsx` focus-in/restore, Escape/close/scrim, and Tab-trap tests.
-- [ ] **2a.** Link unfurls with title, description, image — `indexHtml.test.ts` "carries an Open Graph card…" and "carries a large-image twitter card" (+ manual unfurler check below).
-- [ ] **2b.** Tab shows a favicon — `indexHtml.test.ts` "links the favicon set and the web manifest"; `ls app/static/dashboard/assets/favicon.svg` after `npm run build`.
-- [ ] **3a.** No code path renders a raw response body — `client.test.ts` "never surfaces a JSON detail body from any failing status" + the four mapping tests + `PersonalUpload.test.tsx` static-fallback tests.
-- [ ] **3b.** Export label is "Export CSV" on every surface — `ManagePlacesModal.test.tsx` "labels the export link 'Export CSV'…"; `grep -rn "Download Tableau\|Tableau CSV" frontend/src/` returns nothing; `AnalysisCard.tsx:80` was already "Export CSV".
-- [ ] **3c.** Pinch-zoom works — `indexHtml.test.ts` "does not block pinch zoom (WCAG 1.4.4)" (+ manual device check below).
-- [ ] **4.** `make test-all` green, including the extended invariant sweep (`AboutModal.test.tsx` "confines safety/risk vocabulary to the three fixed caveat constants").
+- [x] **1a.** ⓘ opens About on desktop — `MapWorkspace.test.tsx` "opens the About panel from the topbar and closes it on Escape".
+- [x] **1b.** ⓘ opens About on mobile — `MapWorkspace.test.tsx` "narrow viewport: the About button stays in the topbar beside the theme toggle".
+- [x] **1c.** Every section present — `AboutModal.test.tsx` "renders a labelled modal dialog with every section" (What this is / Scope / Data sources / What's stored / Honest limits / License).
+- [x] **1d.** Keyboard accessible — `AboutModal.test.tsx` focus-in/restore, Escape/close/scrim, and Tab-trap tests.
+- [x] **2a.** Link unfurls with title, description, image — `indexHtml.test.ts` "carries an Open Graph card…" and "carries a large-image twitter card" (+ manual unfurler check below).
+- [x] **2b.** Tab shows a favicon — `indexHtml.test.ts` "links the favicon set and the web manifest"; `ls app/static/dashboard/assets/favicon.svg` after `npm run build`.
+- [x] **3a.** No code path renders a raw response body — `client.test.ts` "never surfaces a JSON detail body from any failing status" + the four mapping tests + `PersonalUpload.test.tsx` static-fallback tests.
+- [x] **3b.** Export label is "Export CSV" on every surface — `ManagePlacesModal.test.tsx` "labels the export link 'Export CSV'…"; `grep -rn "Download Tableau\|Tableau CSV" frontend/src/` returns nothing; `AnalysisCard.tsx:80` was already "Export CSV".
+- [x] **3c.** Pinch-zoom works — `indexHtml.test.ts` "does not block pinch zoom (WCAG 1.4.4)" (+ manual device check below).
+- [x] **4.** `make test-all` green, including the extended invariant sweep (`AboutModal.test.tsx` "confines safety/risk vocabulary to the three fixed caveat constants").
 
-- [ ] **Step 3: Report status to the orchestrator**
+- [x] **Step 3: Report status to the orchestrator**
 
 Summarize: gate result, the ten commits, and any Manual verification item that still needs a human.
 
