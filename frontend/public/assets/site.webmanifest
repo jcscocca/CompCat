@@ -1,0 +1,15 @@
+{
+  "name": "CompCat",
+  "short_name": "CompCat",
+  "description": "Explore reported Seattle SPD incident context around addresses — not a safety score.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1A222B",
+  "theme_color": "#1A222B",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/assets/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

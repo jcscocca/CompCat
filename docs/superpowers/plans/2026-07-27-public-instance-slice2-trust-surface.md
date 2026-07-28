@@ -539,7 +539,7 @@ Every file lands in `frontend/public/assets/` because `/assets` is the only publ
 - Create (generated): `frontend/public/assets/favicon-32.png`, `frontend/public/assets/apple-touch-icon.png`
 - Create (copied): `frontend/public/assets/og-card.png`
 
-- [ ] **Step 1: Author the SVG favicon from the brand mark**
+- [x] **Step 1: Author the SVG favicon from the brand mark**
 
 Create `frontend/public/assets/favicon.svg`. The 24-unit brand art (`MapWorkspace.tsx:795`) is placed on a 32-unit rounded square — `rx="9"` and the accent ground mirror `.mc-logo` (`mapWorkspace.css:52`), with the art inset 4 units per side so it stays legible at 16 px:
 
@@ -554,7 +554,7 @@ Create `frontend/public/assets/favicon.svg`. The 24-unit brand art (`MapWorkspac
 </svg>
 ```
 
-- [ ] **Step 2: Write the raster script**
+- [x] **Step 2: Write the raster script**
 
 Create `scripts/render_favicons.mjs` — same `createRequire` trick as `scripts/render_ios_icon.mjs` because `@resvg/resvg-js` lives under `frontend/node_modules`:
 
@@ -600,7 +600,7 @@ render(mark(true), 32, join(out, "favicon-32.png"));
 render(mark(false), 180, join(out, "apple-touch-icon.png"));
 ```
 
-- [ ] **Step 3: Generate the PNGs and copy the OG card**
+- [x] **Step 3: Generate the PNGs and copy the OG card**
 
 Run from the worktree root:
 
@@ -614,7 +614,7 @@ Expected: two `wrote …` lines (a few hundred bytes for the 32 px, a few KB for
 
 Verify: `file frontend/public/assets/*.png` → `PNG image data, 32 x 32`, `PNG image data, 180 x 180`, `PNG image data, 1440 x 900`.
 
-- [ ] **Step 4: Write the web manifest**
+- [x] **Step 4: Write the web manifest**
 
 Create `frontend/public/assets/site.webmanifest`:
 
@@ -636,7 +636,7 @@ Create `frontend/public/assets/site.webmanifest`:
 }
 ```
 
-- [ ] **Step 5: Confirm the build actually places them under the mounted path**
+- [x] **Step 5: Confirm the build actually places them under the mounted path**
 
 Run from the worktree root:
 
@@ -647,7 +647,7 @@ ls -1 app/static/dashboard/assets/ | grep -E 'favicon|apple-touch|og-card|webman
 
 Expected: all five filenames listed (`favicon.svg`, `favicon-32.png`, `apple-touch-icon.png`, `og-card.png`, `site.webmanifest`) alongside Vite's hashed bundles. If Vite warns about a public-file name colliding with an emitted chunk, rename the offending file — do **not** move the directory, because `/assets` is the only mount.
 
-- [ ] **Step 6: Commit the assets**
+- [x] **Step 6: Commit the assets**
 
 ```bash
 git add frontend/public/assets scripts/render_favicons.mjs
