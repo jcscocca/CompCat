@@ -179,6 +179,9 @@
 .mc-result-minibar-fill{display:block;height:100%;background:var(--text-dim);}
 .mc-result-minibar-count{text-align:right;}
 .mc-result-minibar-note{margin:0;font-family:var(--f-mono);font-size:10px;color:var(--text-dim);}
+/* Collapsed-card caveat: small, but the invariant must stay legible — semantic token, not a dim one. */
+.mc-result-caveat{margin:2px 0 0;font-size:11.5px;line-height:1.45;color:var(--text);}
+.mc-result-summary .mc-methods{margin:6px 0 0;}
 .mc-result-detail{width:100%;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding-top:2px;}
 .mc-result-comparison,.mc-result-places{min-width:0;display:grid;gap:12px;}
 .mc-result-detail>.mc-trend,.mc-result-detail>.mc-incidents{margin-top:0;}
