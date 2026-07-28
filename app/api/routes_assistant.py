@@ -83,6 +83,7 @@ def _build_primary(settings: Settings) -> AssistantLlmClient:
         model=settings.llm_model,
         extra_body=_no_think_body(settings.llm_disable_thinking),
         api_key=settings.llm_api_key,
+        include_stream_usage=settings.assistant_token_budget_per_day > 0,
     )
 
 
@@ -116,6 +117,7 @@ def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
         model=model,
         extra_body=_no_think_body(settings.llm_fallback_disable_thinking),
         api_key=settings.effective_llm_fallback_api_key,
+        include_stream_usage=settings.assistant_token_budget_per_day > 0,
     )
 
 

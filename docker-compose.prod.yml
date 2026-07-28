@@ -1,0 +1,28 @@
+# Production overlay — layered on top of the base compose file, never used alone:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it changes versus the dev/demo default:
+#   - Postgres is NOT published on the host (the api reaches db over the compose network);
+#   - POSTGRES_PASSWORD and MCA_DATABASE_URL are required from the environment with no default,
+#     so compose refuses to render — let alone start — if either is missing;
+#   - api and db restart automatically (unless-stopped) so a host reboot brings the stack back.
+# Supply the values from an env file, e.g. `--env-file .env.prod`; the full production posture
+# (.env.prod.example) ships with the VPS bring-up slice.
+services:
+  db:
+    # !reset drops the base file's "5432:5432" publish outright. A plain empty list would be
+    # merged with the base list, not replace it.
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD (no default in production)}
+    restart: unless-stopped
+
+  api:
+    environment:
+      MCA_DATABASE_URL: ${MCA_DATABASE_URL:?set MCA_DATABASE_URL (no default in production)}
+      # The base compose file enumerates the api env explicitly, so every prod-only var must
+      # be forwarded here or it silently never reaches the container. Required, no default:
+      # the production spend posture must be stated explicitly (0 disables the budget).
+      MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: ${MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY:?set MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY (0 disables the daily token budget)}
+    restart: unless-stopped

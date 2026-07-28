@@ -34,6 +34,7 @@ def _settings(**overrides):
         "openai_model": "gpt-4o",
         "openai_base_url": "",
         "openai_send_temperature": True,
+        "assistant_token_budget_per_day": 0,
     }
     base.update(overrides)
     ns = SimpleNamespace(**base)

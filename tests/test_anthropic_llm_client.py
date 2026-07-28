@@ -12,6 +12,7 @@ from app.assistant.llm_client import (
     LlmStreamInterrupted,
     LlmUnavailable,
 )
+from app.ratelimit import get_rate_limiter
 
 _DUMMY_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
@@ -23,8 +24,9 @@ class _Block:
 
 
 class _Response:
-    def __init__(self, blocks: list[_Block]) -> None:
+    def __init__(self, blocks: list[_Block], usage: object | None = None) -> None:
         self.content = blocks
+        self.usage = usage
 
 
 class _StreamCtx:
@@ -37,11 +39,13 @@ class _StreamCtx:
         enter_exc: Exception | None = None,
         iter_exc: Exception | None = None,
         error_after: int | None = None,
+        usage: object | None = None,
     ) -> None:
         self._texts = texts
         self._enter_exc = enter_exc
         self._iter_exc = iter_exc
         self._error_after = error_after
+        self._usage = usage
 
     async def __aenter__(self) -> _StreamCtx:
         if self._enter_exc is not None:
@@ -60,6 +64,9 @@ class _StreamCtx:
             if self._error_after is not None and index == self._error_after:
                 raise self._iter_exc or httpx.ReadError("dropped")
             yield text
+
+    async def get_final_message(self):
+        return SimpleNamespace(usage=self._usage)
 
 
 class _FakeMessages:
@@ -228,3 +235,40 @@ def test_thinking_can_be_re_enabled() -> None:
     )
     asyncio.run(client.complete([{"role": "user", "content": "hi"}]))
     assert "thinking" not in msgs.captured
+
+
+# ---------- daily token budget accounting ----------
+
+
+def test_complete_records_reported_usage() -> None:
+    msgs = _FakeMessages(
+        response=_Response(
+            [_Block("text", "ok")], usage=SimpleNamespace(input_tokens=70, output_tokens=5)
+        )
+    )
+    asyncio.run(_client(msgs).complete([{"role": "user", "content": "hi"}]))
+
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=75) is True
+    assert limiter.budget_exceeded(limit=76) is False
+
+
+def test_stream_records_final_message_usage() -> None:
+    msgs = _FakeMessages(
+        stream_ctx=_StreamCtx(["ok"], usage=SimpleNamespace(input_tokens=40, output_tokens=8))
+    )
+    _collect(_client(msgs), [{"role": "user", "content": "hi"}])
+
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=48) is True
+    assert limiter.budget_exceeded(limit=49) is False
+
+
+def test_stream_without_usage_falls_back_to_the_char_estimate() -> None:
+    msgs = _FakeMessages(stream_ctx=_StreamCtx(["abcdefgh"]))
+    _collect(_client(msgs), [{"role": "user", "content": "hi"}])
+
+    # prompt "hi" -> ceil(2/4) = 1, completion "abcdefgh" -> ceil(8/4) = 2
+    limiter = get_rate_limiter()
+    assert limiter.budget_exceeded(limit=3) is True
+    assert limiter.budget_exceeded(limit=4) is False

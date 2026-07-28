@@ -50,3 +50,36 @@ def test_client_ip_ignores_header_without_trust() -> None:
 def test_client_ip_uses_header_with_trust() -> None:
     req = FakeRequest(host="127.0.0.1", headers={"cf-connecting-ip": "8.8.8.8"})
     assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
+
+
+def test_token_budget_accumulates_and_rolls_over_at_utc_midnight() -> None:
+    state = RateLimiterState()
+    assert state.budget_exceeded(limit=100, day_key="2026-07-27") is False
+    state.add_tokens(60, day_key="2026-07-27")
+    assert state.budget_exceeded(limit=100, day_key="2026-07-27") is False
+    state.add_tokens(40, day_key="2026-07-27")
+    assert state.budget_exceeded(limit=100, day_key="2026-07-27") is True
+    # New UTC day: the counter resets lazily on first touch, exactly like the call counter.
+    assert state.budget_exceeded(limit=100, day_key="2026-07-28") is False
+
+
+def test_token_budget_is_disabled_for_a_non_positive_limit() -> None:
+    state = RateLimiterState()
+    state.add_tokens(10_000, day_key="2026-07-27")
+    assert state.budget_exceeded(limit=0, day_key="2026-07-27") is False
+    assert state.budget_exceeded(limit=-1, day_key="2026-07-27") is False
+
+
+def test_add_tokens_returns_the_day_total_and_ignores_non_positive() -> None:
+    state = RateLimiterState()
+    assert state.add_tokens(25, day_key="2026-07-27") == 25
+    assert state.add_tokens(0, day_key="2026-07-27") == 25
+    assert state.add_tokens(-5, day_key="2026-07-27") == 25
+
+
+def test_token_counter_is_independent_of_the_daily_call_counter() -> None:
+    state = RateLimiterState()
+    state.add_tokens(500, day_key="2026-07-27")
+    assert state.try_count_global(limit=1, day_key="2026-07-27") is True
+    assert state.budget_exceeded(limit=400, day_key="2026-07-27") is True
+    assert state.try_count_global(limit=1, day_key="2026-07-27") is False

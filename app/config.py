@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     rate_limit_assistant_global_per_day: int = 100
     rate_limit_assistant_commands_per_hour: int = 120
     rate_limit_burst_per_minute: int = 120
+    # Shared daily LLM token budget (prompt + completion, all assistant calls, UTC day).
+    # 0 = disabled. Enforced only when rate_limit_enabled — and the boot guard above makes the
+    # limiter mandatory whenever a hosted LLM key is configured in a prod-like environment.
+    assistant_token_budget_per_day: int = 0
 
     geocoder_provider: str = "nominatim"
     geocoder_base_url: str = "https://nominatim.openstreetmap.org/search"
@@ -176,6 +180,34 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Production deployments must set MCA_GEOCODER_CONTACT_EMAIL "
                 "(Nominatim requires an identifiable contact)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def require_production_llm_rate_limit(self) -> Settings:
+        """A configured hosted-LLM key is the spend signal — the provider name alone cannot tell a
+        paid endpoint from a free one (Groq and OpenAI both ride the "openai" provider). Prod-like
+        + any hosted key + the limiter off would leave metered spend exposed to an open URL, so
+        refuse to boot. The keyless LAN llama-swap path is untouched."""
+        if not self.is_production_like or self.rate_limit_enabled:
+            return self
+
+        key_names = [
+            name
+            for name, value in (
+                ("MCA_LLM_API_KEY", self.llm_api_key),
+                ("MCA_LLM_FALLBACK_API_KEY", self.llm_fallback_api_key),
+                ("MCA_OPENAI_API_KEY", self.openai_api_key),
+                ("MCA_ANTHROPIC_API_KEY", self.anthropic_api_key),
+            )
+            if value.strip()
+        ]
+        if key_names:
+            joined_names = ", ".join(key_names)
+            raise ValueError(
+                f"Production deployments with a hosted LLM key ({joined_names}) must set "
+                "MCA_RATE_LIMIT_ENABLED=true — an unmetered key behind a public URL can run up "
+                "real spend. Set it to true, or unset the key to use a keyless endpoint."
             )
         return self
 

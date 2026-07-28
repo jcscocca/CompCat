@@ -28,6 +28,7 @@ from app.assistant.stream_guard import StreamGuardTripped, guarded_stream
 from app.assistant.summaries import build_tool_summary
 from app.assistant.tools import AssistantClarification, AssistantToolError, execute_tool
 from app.config import get_settings
+from app.ratelimit import get_rate_limiter
 
 # Reject requests that ask the assistant to score/rank places by safety, danger, or risk —
 # the product invariant forbids it. The guard is split into three cooperating patterns:
@@ -176,6 +177,28 @@ _NARRATION_MAX_TOKENS = 256
 _STATUS_INTERPRETING = "interpreting your request…"
 _STATUS_WRITING = "writing up…"
 
+# Shared daily LLM token budget exhausted. Fixed copy, invariant-safe: it speaks only about the
+# request budget — never about places, addresses, or safety.
+_BUDGET_EXHAUSTED_MESSAGE = (
+    "Tabby's used up today's analysis budget. Free-text chat returns tomorrow — "
+    "chips, filters, and analysis still work."
+)
+
+
+def _budget_exhausted(settings) -> bool:
+    """True when today's shared token budget is spent. Enforcement rides the rate limiter
+    (MCA_RATE_LIMIT_ENABLED); an unset/zero budget disables it entirely."""
+    if not settings.rate_limit_enabled:
+        return False
+    return get_rate_limiter().budget_exceeded(limit=settings.assistant_token_budget_per_day)
+
+
+def _budget_error_event() -> AssistantStreamEvent:
+    return AssistantStreamEvent(
+        event="error",
+        data={"message": _BUDGET_EXHAUSTED_MESSAGE, "code": "budget_exhausted"},
+    )
+
 
 async def run_assistant_turn(
     session: Session,
@@ -199,6 +222,12 @@ async def run_assistant_turn(
     if _requests_presence_claim(recent_user_texts):
         yield AssistantStreamEvent(event="token", data={"delta": _PRESENCE_REDIRECT})
         yield AssistantStreamEvent(event="done", data={})
+        return
+
+    # Budget checkpoint 1 of 2: refuse before the planning call, so an exhausted day makes no
+    # upstream request at all. Placed before the status event so the UI gets no dangling spinner.
+    if _budget_exhausted(settings):
+        yield _budget_error_event()
         return
 
     narrate = settings.assistant_narration_enabled
@@ -257,6 +286,9 @@ async def run_assistant_turn(
             yield AssistantStreamEvent(event="token", data={"delta": summary})
             yield AssistantStreamEvent(event="done", data={})
             return
+        if _budget_exhausted(settings):
+            yield _budget_error_event()
+            return
         yield AssistantStreamEvent(event="status", data={"label": _STATUS_WRITING})
         grounding = build_tool_grounding(tool_name, summary, tool_result)
         # End the read txn before the long narration await — narration needs no DB.
@@ -290,6 +322,9 @@ async def run_assistant_turn(
         # never hand a violating draft to the narrator.
         yield AssistantStreamEvent(event="token", data={"delta": redirect or message})
         yield AssistantStreamEvent(event="done", data={})
+        return
+    if _budget_exhausted(settings):
+        yield _budget_error_event()
         return
     yield AssistantStreamEvent(event="status", data={"label": _STATUS_WRITING})
     # End the read txn before the long narration await — narration needs no DB.

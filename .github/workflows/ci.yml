@@ -71,3 +71,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker build .
+      - name: Production overlay renders without publishing Postgres
+        env:
+          POSTGRES_PASSWORD: ci-not-a-real-password
+          MCA_DATABASE_URL: postgresql+psycopg://mca:ci-not-a-real-password@db:5432/mca
+          MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: "0"
+        run: |
+          docker compose --env-file /dev/null \
+            -f docker-compose.yml -f docker-compose.prod.yml config > rendered.yml
+          # "! cmd" is exempt from set -e; an if/exit keeps the assertion load-bearing.
+          if grep -q 'published: "5432"' rendered.yml; then
+            echo "prod overlay must not publish 5432" >&2
+            exit 1
+          fi
+          grep -q 'published: "8000"' rendered.yml
+          grep -q 'MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY' rendered.yml
+          test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "2"
