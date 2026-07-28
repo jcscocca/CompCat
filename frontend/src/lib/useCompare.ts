@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import { analyzePlaces, comparePlaces, getIncidentDetails, getNeighborhoodAnalysis } from "../api/client";
+import { analyzePlaces, comparePlaces, friendlyMessageOr, getIncidentDetails, getNeighborhoodAnalysis } from "../api/client";
 import type { AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
 import type { AddressEntry } from "./useAddressList";
 
@@ -98,10 +98,9 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
       setIncidents(incidentsResult.status === "fulfilled" ? incidentsResult.value : null);
       setComparison(compareResult.status === "fulfilled" ? compareResult.value : null);
       setRunPoints(snapshot);
-      const primaryFailed = wantCompare
-        ? compareResult.status === "rejected"
-        : neighborhoodResult.status === "rejected";
-      if (primaryFailed) setError(RUN_ERROR);
+      const primary = wantCompare ? compareResult : neighborhoodResult;
+      // An expired session / rate limit says something the generic run error can't.
+      if (primary.status === "rejected") setError(friendlyMessageOr(primary.reason, RUN_ERROR));
       if (summariesResult.status === "fulfilled" && summariesResult.value !== null) onSummariesRefreshed?.();
       setRunning(false);
     }

@@ -28,7 +28,7 @@ describe("aggregateHeadline", () => {
       incidentNoun("reported"),
     );
     expect(headline).toBe(
-      "Cafe's reported incident rate is above its sector (C) and the citywide rate; similar to Capitol Hill and its beat (C2).",
+      "Cafe's reported incident rate is above its sector (C) and the citywide rate; shows no statistically clear difference from Capitol Hill and its beat (C2).",
     );
   });
 

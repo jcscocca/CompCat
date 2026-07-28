@@ -60,7 +60,7 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
             type="button"
             className="mc-ctx-summary-action"
             aria-expanded={open}
-            aria-label={`Analysis context filters: ${contextLabel}`}
+            aria-label={`${open ? "Close" : "Edit"} filters — ${contextLabel}`}
             onClick={() => setOpen((o) => !o)}
           >
             {open ? "Close" : "Edit"}

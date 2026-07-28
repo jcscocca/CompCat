@@ -1,4 +1,17 @@
-export function MapLegend() {
+import { incidentNoun } from "../lib/layerCopy";
+import type { LayerKey } from "../types";
+
+type Props = {
+  /** The active data layer, so the dot/cluster rows name what is actually plotted. */
+  layer: LayerKey;
+};
+
+function sentenceCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function MapLegend({ layer }: Props) {
+  const noun = incidentNoun(layer);
   return (
     <div className="mc-legend" aria-label="Map key">
       <h3>Map key</h3>
@@ -18,7 +31,7 @@ export function MapLegend() {
         <span className="g">
           <span style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--accent-soft)", border: "1.5px solid var(--accent)", display: "block" }} />
         </span>
-        <span>Analyzed radius<small>incident count</small></span>
+        <span>Analyzed radius<small>{noun.singular} count</small></span>
       </div>
       <div className="mc-leg-row">
         <span className="g">
@@ -30,13 +43,13 @@ export function MapLegend() {
         <span className="g">
           <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#3A3F46", border: "1px solid #fff", display: "block" }} />
         </span>
-        <span>Reported incident</span>
+        <span>{sentenceCase(noun.singular)}</span>
       </div>
       <div className="mc-leg-row">
         <span className="g">
           <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#3A3F46", border: "1.5px solid #fff", display: "grid", placeItems: "center", color: "#fff", fontSize: 10, fontWeight: 700 }}>5</span>
         </span>
-        <span>Incident cluster<small>count</small></span>
+        <span>{sentenceCase(noun.singular)} cluster<small>count</small></span>
       </div>
     </div>
   );

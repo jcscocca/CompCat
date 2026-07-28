@@ -23,9 +23,23 @@ describe("CompareVerdict", () => {
     expect(screen.getByText(/lower than 1 of the 3 other addresses/i)).toBeInTheDocument();
   });
 
+  // "within normal variation" told the reader the remaining gaps were established as
+  // ordinary; the test only failed to resolve them at this sample size.
+  it("partial: attributes the unresolved rest to sample size, not to normality", () => {
+    const { container } = render(<CompareVerdict callout={{ ...base, kind: "partial", loweredCount: 1, otherCount: 3 }} noun={incidentNoun("reported")} />);
+    expect(container.textContent).toContain("For the rest, the difference isn't statistically clear at this sample size.");
+    expect(container.textContent).not.toMatch(/normal variation/i);
+  });
+
   it("none: no statistically clear difference", () => {
     render(<CompareVerdict callout={{ ...base, kind: "none" }} noun={incidentNoun("reported")} />);
     expect(screen.getByText(/no statistically clear difference/i)).toBeInTheDocument();
+  });
+
+  it("none: attributes the gaps to sample size, not to normality", () => {
+    const { container } = render(<CompareVerdict callout={{ ...base, kind: "none" }} noun={incidentNoun("reported")} />);
+    expect(container.textContent).toContain("none of the gaps are statistically clear at this sample size.");
+    expect(container.textContent).not.toMatch(/normal variation/i);
   });
 
   it("inconclusive: leads with the caveat text", () => {

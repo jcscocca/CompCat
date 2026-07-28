@@ -14,13 +14,19 @@ const fitToCaptures = vi.hoisted(() => [] as unknown[]);
 // synthetic ad-hoc pins MapWorkspace appends (mirrors the flyToCaptures pattern above).
 const canvasCaptures = vi.hoisted(() => [] as { places: unknown[]; selectedIds: Set<string> }[]);
 vi.mock("./MapCanvas", () => ({
-  MapCanvas: ({ places, selectedIds, draft, flyTo, fitTo, badgedPlaceIds, onMapClick, onMarkerClick, onBadgeClick }: any) => {
+  MapCanvas: ({ places, selectedIds, draft, flyTo, fitTo, badgedPlaceIds, onViewportChange, onMapClick, onMarkerClick, onBadgeClick }: any) => {
     if (flyToCaptures[flyToCaptures.length - 1] !== flyTo) flyToCaptures.push(flyTo);
     if (fitToCaptures[fitToCaptures.length - 1] !== fitTo) fitToCaptures.push(fitTo);
     canvasCaptures.push({ places, selectedIds });
     return (
       <div data-testid="mapcanvas">
         <button data-testid="fire-map-click" onClick={() => onMapClick({ lat: 47.6, lng: -122.3 })} />
+        {/* The real canvas reports a viewport on load/moveend; the incident-dot layer holds
+            off fetching until it does. */}
+        <button
+          data-testid="fire-viewport"
+          onClick={() => onViewportChange?.({ west: -122.4, south: 47.55, east: -122.25, north: 47.65 })}
+        />
         {draft ? <div data-testid="draft-pin" /> : null}
         {places.map((place: any) => (
           <span key={place.id}>
@@ -35,7 +41,11 @@ vi.mock("./MapCanvas", () => ({
   },
 }));
 
-vi.mock("../api/client", () => ({
+// The status->copy helpers (friendlyMessageOr, SESSION_EXPIRED_MESSAGE) are pure and are
+// exactly what the error surfaces are asserted on, so keep the real ones and fake only the
+// network calls.
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
   analyzePlaces: vi.fn(),
   comparePlaces: vi.fn(),
   createBulkPlaces: vi.fn(),
@@ -65,6 +75,8 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 
 import { MapWorkspace } from "./MapWorkspace";
 import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getBeatPolygons, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
+import { getIncidentPoints, SESSION_EXPIRED_MESSAGE } from "../api/client";
+import { assertValidPlaceCreate } from "../api/placeCreateContract";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { snapHeightPx } from "../lib/drawer";
 import { encodeView } from "../lib/savedView";
@@ -281,7 +293,7 @@ describe("MapWorkspace", () => {
 
     await waitFor(() => {
       expect(createPlace).toHaveBeenCalledWith({
-        display_label: "Test location",
+        display_label: "Pin at 47.600, -122.300",
         latitude: 47.6,
         longitude: -122.3,
         visit_count: 1,
@@ -318,7 +330,7 @@ describe("MapWorkspace", () => {
     // A manual save is an edit, so it waits for Run — no premature auto-run fires. The saved
     // pin is auto-selected, so the rail's Run analysis sends its id via the command path.
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
 
     await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
@@ -360,7 +372,7 @@ describe("MapWorkspace", () => {
     // places are auto-selected; the rail's Run analysis compares them (2+ saved → compare).
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
 
     await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
@@ -567,11 +579,21 @@ describe("MapWorkspace", () => {
     render(<StrictMode><MapWorkspace /></StrictMode>);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "500 m" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  // The wordmark is a styled span, so the page had no h1 at all.
+  it("exposes a screen-reader heading naming the app and what it reports", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    render(<MapWorkspace />);
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("CompCat — reported Seattle incident context around addresses");
+    expect(heading).toHaveClass("mc-sr");
   });
 
   it("shows an error when the session cannot start", async () => {
@@ -580,6 +602,65 @@ describe("MapWorkspace", () => {
     // Rendered by both error surfaces in an empty app: the map banner and the rail alert.
     const alerts = await screen.findAllByText(/unable to start a dashboard session/i);
     expect(alerts.length).toBeGreaterThan(1);
+  });
+
+  // A failed first session left the app inert with no way forward but a manual reload.
+  it("offers a retry when the first session fails, and recovers on success", async () => {
+    vi.mocked(createSession)
+      .mockRejectedValueOnce(new Error("no session"))
+      .mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+
+    render(<MapWorkspace />);
+    await screen.findAllByText(/unable to start a dashboard session/i);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Home")).toBeInTheDocument();
+    expect(screen.queryByText(/unable to start a dashboard session/i)).not.toBeInTheDocument();
+  });
+
+  it("offers a reload, not a retry, when the session bootstrap 401s", async () => {
+    vi.mocked(createSession).mockRejectedValue(new Error(SESSION_EXPIRED_MESSAGE));
+    render(<MapWorkspace />);
+    await screen.findAllByText(new RegExp(SESSION_EXPIRED_MESSAGE.slice(0, 20), "i"));
+    // Retrying the same dead session cannot help; only a reload mints a new one.
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  // The dot layer failed silently: an empty map reads as "nothing happened here".
+  it("surfaces an incident-layer failure as a dismissible banner", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(getIncidentPoints).mockRejectedValue(new Error(SESSION_EXPIRED_MESSAGE));
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+    fireEvent.click(screen.getByTestId("fire-viewport"));
+
+    const message = await screen.findByText(new RegExp(SESSION_EXPIRED_MESSAGE.slice(0, 20), "i"));
+    const banner = message.closest(".mc-banner-warn") as HTMLElement;
+    expect(banner).toHaveAttribute("role", "alert");
+
+    fireEvent.click(within(banner).getByRole("button", { name: "Dismiss" }));
+    await waitFor(() => expect(screen.queryByText(SESSION_EXPIRED_MESSAGE)).not.toBeInTheDocument());
+  });
+
+  it("shows the session message when saving a searched address 401s", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(createPlace).mockRejectedValue(new Error(SESSION_EXPIRED_MESSAGE));
+    geocodeSearch.mockResolvedValue([{ label: "500 Pine St", latitude: 47.63, longitude: -122.35, source: "test" }]);
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+    fireEvent.change(screen.getByRole("combobox", { name: /search address or place/i }), { target: { value: "500 Pine" } });
+    fireEvent.click(await screen.findByRole("option", { name: "500 Pine St" }));
+    fireEvent.click(await screen.findByRole("button", { name: /save pin/i }));
+
+    // Not the generic "Unable to save pin. Try again." — retrying cannot fix a dead session.
+    expect(await screen.findByText(SESSION_EXPIRED_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByText(/unable to save pin/i)).not.toBeInTheDocument();
   });
 
   it("stays on the rail when the assistant returns compare_places (no view switch)", async () => {
@@ -1090,9 +1171,45 @@ describe("MapWorkspace", () => {
       expect(synthetic).toBeDefined();
       expect(last.selectedIds.has(synthetic!.id)).toBe(true);
     });
-    expect(screen.getByRole("button", { name: "Show 500 Pine St on map" })).toHaveTextContent("Unsaved");
+    expect(screen.getByRole("button", { name: "Show 500 Pine St on map — Unsaved" })).toHaveTextContent("Unsaved");
     expect(screen.getByRole("button", { name: "Remove 500 Pine St from analysis" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save pin/i })).toBeInTheDocument();
+  });
+
+  it("saves a searched address from its chip with a payload the backend accepts", async () => {
+    const saved: Place = { ...home, id: "s2", display_label: "500 Pine St", latitude: 47.63, longitude: -122.35 };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValueOnce(makeSummary()).mockResolvedValue(makeSummary([saved]));
+    vi.mocked(createPlace).mockResolvedValue(saved);
+    geocodeSearch.mockResolvedValue([{ label: "500 Pine St", latitude: 47.63, longitude: -122.35, source: "test" }]);
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+    fireEvent.change(screen.getByRole("combobox", { name: /search address or place/i }), { target: { value: "500 Pine" } });
+    fireEvent.click(await screen.findByRole("option", { name: "500 Pine St" }));
+
+    // Dismiss the draft-pin popover so the chip's own Save (handleSaveEntry) is the control
+    // under test — the popover's saveDraft path is a different call site.
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(await screen.findByRole("button", { name: "Save 500 Pine St" }));
+
+    await waitFor(() => expect(createPlace).toHaveBeenCalled());
+    // createPlace is mocked suite-wide, so a payload the API would 422 on still "passes"
+    // unless it is checked against the documented contract.
+    const payload = vi.mocked(createPlace).mock.calls[0]![0];
+    assertValidPlaceCreate(payload);
+    expect(payload).toMatchObject({
+      display_label: "500 Pine St",
+      latitude: 47.63,
+      longitude: -122.35,
+      sensitivity_class: "normal",
+    });
+
+    // The ad-hoc chip is replaced in place by a saved, checked place chip.
+    await waitFor(() => {
+      expect(screen.getByRole("checkbox", { name: "500 Pine St" })).toHaveAttribute("aria-checked", "true");
+    });
+    expect(screen.queryByRole("button", { name: "Show 500 Pine St on map — Unsaved" })).not.toBeInTheDocument();
   });
 
   it("marks the current card as previous analysis when filters change", async () => {
@@ -1106,7 +1223,7 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
     expect(screen.getByText("Analysis result")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     expect(screen.getByText("Previous analysis")).toBeInTheDocument();
@@ -1404,7 +1521,7 @@ describe("MapWorkspace", () => {
 
     // The update_filters effect updates the single filter control without adding a
     // duplicate transcript line or leaving the rail.
-    await waitFor(() => expect(screen.getByRole("button", { name: /analysis context filters/i })).toHaveAccessibleName(/500 m/));
+    await waitFor(() => expect(screen.getByRole("button", { name: /edit filters/i })).toHaveAccessibleName(/500 m/));
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
@@ -1436,7 +1553,7 @@ describe("MapWorkspace", () => {
     expect(screen.getByText(/chips and filters still work/i)).toBeInTheDocument();
 
     // Filters are not gated by offline, and the change stays in the single filter control.
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(screen.getByRole("button", { name: "500 m" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
@@ -1650,7 +1767,7 @@ describe("MapWorkspace", () => {
 
     // A radius change through the rail's context strip invalidates the analysis context,
     // detaching the presence badges.
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     await waitFor(() => expect(screen.queryByTestId("badge-a")).not.toBeInTheDocument());
@@ -1910,6 +2027,46 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
+  // The blob has done its job once the view is in state. Leaving it in the address bar means
+  // a reload silently re-applies someone else's scope over whatever the user built since.
+  it("strips ?view= from the URL once the shared view has loaded, keeping the in-app state", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+
+    const view = encodeView({
+      points: [{ latitude: 47.61, longitude: -122.34, label: "Pike Place" }],
+      radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31",
+      layer: "reported", offenseCategory: "",
+    });
+    window.history.replaceState({}, "", `/?view=${view}&keep=1`);
+    render(<MapWorkspace />);
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("view")).toBeNull());
+    // Only ?view= goes; any other query the user arrived with survives.
+    expect(new URLSearchParams(window.location.search).get("keep")).toBe("1");
+
+    // The shared scope itself is untouched: the banner, its Exit affordance and the loaded
+    // points all still work off component state rather than the URL.
+    expect(await screen.findByText(/shared view/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit" })).toBeInTheDocument();
+    await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Exit" }));
+    await waitFor(() => expect(screen.queryByText(/shared view/i)).not.toBeInTheDocument());
+  });
+
+  it("keeps the bad-link warning when ?view= fails to decode, and still strips the param", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    window.history.replaceState({}, "", "/?view=not-a-real-view");
+    render(<MapWorkspace />);
+
+    expect(await screen.findByText(/shared link couldn't be opened/i)).toBeInTheDocument();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("view")).toBeNull());
+  });
+
   it("an address lookup auto-runs once and fires no place-added offer (no place saved)", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
@@ -2041,7 +2198,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     const runButton = screen.getByRole("button", { name: "Run analysis" });
     expect(runButton).toBeEnabled();
     fireEvent.click(runButton);
@@ -2070,7 +2227,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
 
     await waitFor(() => expect(streamAssistantCommand).toHaveBeenCalled());
@@ -2092,7 +2249,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText(/point me at a place/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
   });
 
@@ -2105,7 +2262,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalled());

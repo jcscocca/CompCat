@@ -6,7 +6,7 @@
 // the selection orchestrator, assistant-effect application) are noted in the repo review.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, updatePlace, type AssistantCommandName } from "../api/client";
+import { createBulkPlaces, createPlace, deletePlace, friendlyMessageOr, getBeatPolygons, SESSION_EXPIRED_MESSAGE, updatePlace, type AssistantCommandName } from "../api/client";
 import { availableDataAnalysisWindow, currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
 import { interpretToolResult } from "../lib/assistantBridge";
@@ -177,6 +177,7 @@ export function MapWorkspace() {
     [savedIdSet, adhocPlaces],
   );
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
+  const [dismissedIncidentError, setDismissedIncidentError] = useState("");
 
   const compare = useCompare({
     entries: list.entries,
@@ -215,6 +216,18 @@ export function MapWorkspace() {
     setPendingAutoRun(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The shared view is now in component state, so the ?view= blob has done its job. Strip it
+  // (replaceState, so no history entry and no reload) — otherwise a reload or a bookmark
+  // silently re-applies the shared scope over whatever the user has since built, and the
+  // address bar keeps advertising someone else's link. The Exit affordance reads
+  // `sharedBanner`, not the URL, so it keeps working.
+  useEffect(() => {
+    if (!hadViewParam) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("view");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [hadViewParam]);
 
   // "Analysis greets you": one shot after the persisted selection seeds the list. Share
   // links own their first run above; landing lookups arm pendingAutoRun themselves.
@@ -425,14 +438,15 @@ export function MapWorkspace() {
         display_label: entry.label,
         latitude: entry.latitude,
         longitude: entry.longitude,
-        visit_count: 0,
+        // ManualPlaceCreate requires ge=1; 0 made every save of a searched address a 422.
+        visit_count: 1,
         sensitivity_class: "normal",
       });
       list.markSaved(entryKey, created.id);
       setSelectedIds((current) => new Set([...current, created.id]));
       await data.refreshWithFallback("Saved, but dashboard places could not refresh.");
-    } catch {
-      data.setError("Unable to save this location. Try again.");
+    } catch (cause) {
+      data.setError(friendlyMessageOr(cause, "Unable to save this location. Try again."));
     } finally {
       setSavingEntryKey(null);
     }
@@ -457,8 +471,8 @@ export function MapWorkspace() {
       if (entryIndex >= 0) list.removeAt(entryIndex);
       setSelectedIds((current) => { const next = new Set(current); next.delete(id); return next; });
       await data.refreshWithFallback("Removed place, but dashboard totals could not refresh.");
-    } catch {
-      data.setError("Unable to remove place. Try again.");
+    } catch (cause) {
+      data.setError(friendlyMessageOr(cause, "Unable to remove place. Try again."));
     }
   }
 
@@ -792,6 +806,9 @@ export function MapWorkspace() {
         />
 
         <header className="mc-topbar">
+          {/* The wordmark is a styled span, so the page had no h1 for screen readers or
+              document outline. */}
+          <h1 className="mc-sr">CompCat — reported Seattle incident context around addresses</h1>
           <div className="mc-brand">
             <span className="mc-logo">
               <svg width="16" height="16" viewBox="0 0 24 24"><path d="M4 9 L4 4 L9 7 Q12 6 15 7 L20 4 L20 9 Q21.5 11.5 21.5 14 Q21.5 20 12 20 Q2.5 20 2.5 14 Q2.5 11.5 4 9 Z" fill="var(--on-accent)" /><circle cx="8.5" cy="13" r="1.3" fill="var(--accent)" /><circle cx="15.5" cy="13" r="1.3" fill="var(--accent)" /></svg>
@@ -824,7 +841,7 @@ export function MapWorkspace() {
           <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
         ) : null}
 
-        <MapLegend />
+        <MapLegend layer={analysis.layer} />
         <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}
@@ -834,7 +851,26 @@ export function MapWorkspace() {
         />
 
         {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (
-          <p className="mc-error" role="alert">{data.error}</p>
+          <p className="mc-error" role="alert">
+            {data.error}{" "}
+            {/* A dead session cannot be retried in place — only a reload mints a new one. */}
+            {data.sessionFailed ? (
+              data.error === SESSION_EXPIRED_MESSAGE ? (
+                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+              ) : (
+                <button type="button" onClick={data.retryBootstrap}>Retry</button>
+              )
+            ) : null}
+          </p>
+        ) : null}
+
+        {/* The dot layer failed silently before: the map just showed no incidents, which
+            reads as "nothing happened here" rather than "this did not load". */}
+        {incidentLayer.error && dismissedIncidentError !== incidentLayer.error ? (
+          <div className="mc-banner mc-banner-warn" role="alert">
+            {incidentLayer.error}{" "}
+            <button type="button" onClick={() => setDismissedIncidentError(incidentLayer.error ?? "")}>Dismiss</button>
+          </div>
         ) : null}
 
         {sharedBanner ? (
@@ -950,7 +986,12 @@ export function MapWorkspace() {
           />
         ) : null}
 
-        {aboutOpen ? <AboutModal onClose={() => setAboutOpen(false)} /> : null}
+        {aboutOpen ? (
+          <AboutModal
+            onClose={() => setAboutOpen(false)}
+            personalUploadsEnabled={data.personalUploadsEnabled}
+          />
+        ) : null}
       </div>
     </div>
   );

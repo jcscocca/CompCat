@@ -73,6 +73,32 @@ export function friendlyRequestError(status: number): string {
   return GENERIC_ERROR_MESSAGE;
 }
 
+const FRIENDLY_MESSAGES: ReadonlySet<string> = new Set([
+  SESSION_EXPIRED_MESSAGE,
+  RATE_LIMITED_MESSAGE,
+  SERVER_ERROR_MESSAGE,
+  GENERIC_ERROR_MESSAGE,
+]);
+
+/**
+ * True when a rejection carries one of the messages above — i.e. it came from `request`
+ * and is safe to render. Anything else (a TypeError, a parse failure) must not reach the
+ * screen, which is why callers pass their own fallback rather than printing `error.message`.
+ */
+export function isFriendlyRequestError(error: unknown): error is Error {
+  return error instanceof Error && FRIENDLY_MESSAGES.has(error.message);
+}
+
+/** The status-mapped message when there is one, else the caller's generic copy. */
+export function friendlyMessageOr(error: unknown, fallback: string): string {
+  return isFriendlyRequestError(error) ? error.message : fallback;
+}
+
+/** A 401: the session is gone, so retrying the same call cannot help — only a reload can. */
+export function isSessionExpired(error: unknown): boolean {
+  return error instanceof Error && error.message === SESSION_EXPIRED_MESSAGE;
+}
+
 function isAbort(cause: unknown): boolean {
   return (cause as { name?: string } | null)?.name === "AbortError";
 }

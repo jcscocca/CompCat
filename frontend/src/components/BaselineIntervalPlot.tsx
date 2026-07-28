@@ -5,10 +5,12 @@ import type { BaselineEntry, NeighborhoodPlace } from "../types";
 
 const KIND_ORDER: BaselineEntry["kind"][] = ["mcpp", "beat", "sector", "city"];
 
+// "similar" asserted equivalence the test never established: failing to reject a null is
+// not evidence of no difference. Say what was actually found.
 const RELATION_TEXT: Record<BaselineEntry["relation"], string> = {
   above: "place is above",
   below: "place is below",
-  similar: "similar",
+  similar: "no clear difference",
   insufficient: "insufficient data",
 };
 
@@ -59,7 +61,7 @@ export function BaselineIntervalPlot({
 
   return (
     <div className={`mc-bplot id-${identity.slot}`} data-testid="baseline-plot">
-      <p className="mc-label">{noun.pluralCap} per year within {radius} m — 95% interval</p>
+      <p className="mc-label">{noun.pluralCap} per year within {radius} m — approximate 95% interval</p>
       <div className="mc-bplot-chart">
         <div className="mc-bplot-overlay" aria-hidden="true">
           <span className="name" />
@@ -104,6 +106,10 @@ export function BaselineIntervalPlot({
           <span className="val" />
         </div>
       </div>
+      {/* The baseline rows are area-time densities rescaled to this circle and window, not
+          counts observed in the neighborhood — the header's "within {radius} m" applies to
+          every row, which is easy to miss on the baseline ticks. */}
+      <p className="mc-bplot-note">Baseline rows are scaled to your radius and window for comparison.</p>
     </div>
   );
 }

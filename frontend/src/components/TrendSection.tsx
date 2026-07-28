@@ -23,8 +23,11 @@ const COUNT_NOTES: Record<LayerKey, string> = {
 };
 const INDEX_NOTE =
   "Citywide series is indexed to this area's scale — it shows direction, not magnitude.";
+// anchorFactor indexes the citywide series on the first 12 months; with no incidents there
+// the scaling factor is undefined. The old wording ("too few incidents") implied a
+// threshold judgement rather than a division that cannot be performed.
 const ANCHOR_SUPPRESSED_NOTE =
-  "Too few incidents in the anchor period to index the citywide series.";
+  "No incidents in the first 12 months of this window, so there's nothing to anchor the citywide line to.";
 const SHORT_WINDOW_NOTE = "Not enough complete months for a trend view yet.";
 const SHORT_WINDOW_MONTHS = 13;
 
@@ -67,6 +70,8 @@ export function TrendSection({ neighborhood, layer, category }: TrendSectionProp
     const city = k == null ? null : indexCitywide(data.citywide_counts, k);
     const notes = [
       shortWindow ? SHORT_WINDOW_NOTE : k == null ? ANCHOR_SUPPRESSED_NOTE : INDEX_NOTE,
+      // The series is neighborhood-wide; readers otherwise take it for their own radius.
+      `Neighborhood-level trend (${data.mcpp_label}) — wider than your radius.`,
       COUNT_NOTES[layer],
     ];
     body = (

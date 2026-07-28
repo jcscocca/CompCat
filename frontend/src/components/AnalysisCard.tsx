@@ -111,6 +111,11 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
               {capped ? <p className="mc-result-minibar-note">of the {card.incidents!.returned_count} nearest</p> : null}
             </div>
           ) : null}
+
+          {/* The caveat and the methods sheet were reachable only after expanding, so the
+              summary most people stop at carried a bare number and no framing. */}
+          <p className="mc-result-caveat">{REVISED_CAVEAT}</p>
+          <MethodsAppendix />
         </div>
       ) : (
         <div className="mc-result-detail">

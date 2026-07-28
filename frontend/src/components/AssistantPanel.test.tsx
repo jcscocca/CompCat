@@ -315,4 +315,64 @@ describe("AssistantPanel", () => {
     rerender({ errorLine: undefined });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  describe("thread auto-scroll", () => {
+    // jsdom has no layout: scrollHeight/clientHeight are permanently 0 and scrollTop never
+    // moves on its own. Stub the geometry so the log looks like an overflowing, scrollable
+    // container and record what the component assigns to scrollTop.
+    function stubScrollableLog(overflowPx = 1000) {
+      const log = document.querySelector(".mc-dock-log") as HTMLDivElement;
+      const clientHeight = 400;
+      Object.defineProperty(log, "clientHeight", { value: clientHeight, configurable: true });
+      Object.defineProperty(log, "scrollHeight", { value: clientHeight + overflowPx, configurable: true });
+      let scrollTop = 0;
+      Object.defineProperty(log, "scrollTop", {
+        get: () => scrollTop,
+        set: (next: number) => { scrollTop = next; },
+        configurable: true,
+      });
+      return log;
+    }
+
+    it("scrolls to the bottom when a new entry lands", () => {
+      const { rerender } = setup({ items: [{ kind: "user_text", text: "hello" }] });
+      const log = stubScrollableLog();
+      expect(log.scrollTop).toBe(0);
+
+      rerender({ items: [{ kind: "user_text", text: "hello" }, { kind: "tabby_text", text: "Hi." }] });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+    });
+
+    it("keeps following the bottom while an answer streams", () => {
+      const items: ThreadItem[] = [{ kind: "user_text", text: "hello" }];
+      const { rerender } = setup({ items, draft: "Check" });
+      const log = stubScrollableLog();
+
+      rerender({ items, draft: "Checking the" });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+
+      log.scrollTop = 0; // a growing draft must re-pin it, not leave it where it was
+      rerender({ items, draft: "Checking the files…" });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+    });
+
+    it("leaves the view alone once the reader has scrolled up", () => {
+      const items: ThreadItem[] = [{ kind: "user_text", text: "hello" }];
+      const { rerender } = setup({ items, draft: "Check" });
+      const log = stubScrollableLog();
+
+      // Scroll well clear of the bottom, as a reader going back over an earlier answer would.
+      log.scrollTop = 120;
+      fireEvent.scroll(log);
+
+      rerender({ items, draft: "Checking the files…" });
+      expect(log.scrollTop).toBe(120);
+
+      // Returning to the bottom re-arms the follow behaviour.
+      log.scrollTop = log.scrollHeight - log.clientHeight;
+      fireEvent.scroll(log);
+      rerender({ items, draft: "Checking the files… done." });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+    });
+  });
 });

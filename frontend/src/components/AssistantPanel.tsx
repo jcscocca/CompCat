@@ -67,6 +67,9 @@ const OFFLINE_COMPOSER_HINT = "Tabby can't reach the case files — chips and fi
 
 const GREETED_KEY = "compcat.tabby.greeted";
 
+/** How far off the bottom still counts as "reading the newest entry". */
+const STICK_TO_BOTTOM_SLACK_PX = 48;
+
 export function AssistantPanel({
   items,
   busy,
@@ -94,6 +97,10 @@ export function AssistantPanel({
   const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
   // Card wrapper elements keyed by their index in displayItems, for scroll-to-card.
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
+  const logRef = useRef<HTMLDivElement>(null);
+  // Stick to the bottom only while the reader is already there — scrolling up to re-read an
+  // earlier answer must not be yanked back by the next streamed token.
+  const stickToBottomRef = useRef(true);
 
   function markGreeted() {
     if (!greeted) {
@@ -116,6 +123,14 @@ export function AssistantPanel({
   // bubble that shows streaming text is the same DOM node the final commit updates in
   // place (rather than an unmount+remount when the turn settles).
   const displayItems: ThreadItem[] = draft ? [...items, { kind: "tabby_text", text: draft }] : items;
+
+  // Follow the newest entry and the streaming draft. Runs on every commit rather than on a
+  // length change alone: a streamed answer grows the same node in place.
+  useEffect(() => {
+    const log = logRef.current;
+    if (!log || !stickToBottomRef.current) return;
+    log.scrollTop = log.scrollHeight;
+  }, [displayItems.length, draft, statusLine, toolActivity.length]);
 
   useEffect(() => {
     if (!focusCard) return;
@@ -144,7 +159,16 @@ export function AssistantPanel({
         {paneActions}
       </div>
 
-      <div className="mc-dock-log" aria-live="polite">
+      <div
+        className="mc-dock-log"
+        aria-live="polite"
+        ref={logRef}
+        onScroll={(event) => {
+          const log = event.currentTarget;
+          stickToBottomRef.current =
+            log.scrollHeight - log.scrollTop - log.clientHeight <= STICK_TO_BOTTOM_SLACK_PX;
+        }}
+      >
         {displayItems.map((item, index) => {
           if (item.kind === "user_text") {
             return <div key={index} className="mc-dock-msg is-user">{item.text}</div>;

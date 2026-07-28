@@ -149,10 +149,9 @@ describe("AnalysisCard", () => {
     expect(screen.queryByText(/2021-07-01/)).not.toBeInTheDocument();
     expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
     expect(screen.queryByText(/reported incident rate is/)).not.toBeInTheDocument();
-    // compact: no trend/incident/methods sections
+    // compact: no trend/incident sections (methods + caveat stay — see below)
     expect(screen.queryByTestId("trend-section")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/near selected places/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Methods/ })).not.toBeInTheDocument();
   });
 
   it("compact compare card renders the CompareVerdict callout", () => {
@@ -200,13 +199,26 @@ describe("AnalysisCard", () => {
     expect(onExpandChange).toHaveBeenCalledWith(false);
   });
 
-  it("shows the product caveat above the methods appendix only when expanded", () => {
-    render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
-    expect(screen.queryByText(/not a personal risk prediction/)).not.toBeInTheDocument();
+  // Most readers never expand a card, so the caveat and the methods sheet have to be
+  // reachable from the summary — they used to live only in the expanded branch.
+  it("shows the product caveat and a methods link in both states", () => {
+    const { container } = render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
+    expect(screen.getByText(/not a personal risk prediction/)).toBeInTheDocument();
+    expect(container.querySelector(".mc-result-summary .mc-result-caveat")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Methods/ })).toBeInTheDocument();
     cleanup();
 
     render(<AnalysisCard card={analyzeCard()} expanded onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
     expect(screen.getByText(/not a personal risk prediction/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Methods/ })).toBeInTheDocument();
+  });
+
+  it("opens the methods sheet from a collapsed card without expanding it", () => {
+    const onExpandChange = vi.fn();
+    render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={onExpandChange} exportHrefBase={EXPORT_BASE} />);
+    fireEvent.click(screen.getByRole("button", { name: /Methods/ }));
+    expect(screen.getByRole("dialog", { name: /Methods and definitions/i })).toBeInTheDocument();
+    expect(onExpandChange).not.toHaveBeenCalled();
   });
 
   it("skips the category mini-bars on the calls layer (911 calls carry no category)", () => {
