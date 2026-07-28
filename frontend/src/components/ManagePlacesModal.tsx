@@ -245,7 +245,8 @@ export function ManagePlacesModal({
           <PersonalUpload onUploaded={onUploaded ?? (() => {})} />
         )}
         <div className="mc-modal-foot">
-          <a className="mc-link-copy" href={exportHref}>Download Tableau CSV</a>
+          <a className="mc-link-copy" href={exportHref}>Export CSV</a>
+          <p className="mc-export-note">Tableau-ready place summary for the current session.</p>
         </div>
       </div>
     </div>

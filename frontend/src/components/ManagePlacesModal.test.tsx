@@ -160,8 +160,16 @@ describe("ManagePlacesModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the Download Tableau CSV link with the given href", () => {
+  it("renders the export link with the given href", () => {
     render(<ManagePlacesModal {...baseProps} exportHref="/exports/session.csv" initialView="manage" />);
-    expect(screen.getByRole("link", { name: /download tableau csv/i })).toHaveAttribute("href", "/exports/session.csv");
+    expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute("href", "/exports/session.csv");
+  });
+
+  it("labels the export link 'Export CSV' and keeps Tableau as a descriptor", () => {
+    render(<ManagePlacesModal {...baseProps} initialView="manage" />);
+    const link = screen.getByRole("link", { name: "Export CSV" });
+    expect(link).toHaveAttribute("href", "/exports/current.csv");
+    expect(screen.queryByRole("link", { name: /Download Tableau CSV/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Tableau-ready place summary for the current session.")).toBeInTheDocument();
   });
 });

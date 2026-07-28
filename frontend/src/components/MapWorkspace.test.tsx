@@ -2136,7 +2136,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
     await screen.findByRole("dialog", { name: "Manage places" });
 
-    expect(screen.getByRole("link", { name: /download tableau csv/i })).toHaveAttribute("href", "/exports/current.csv");
+    expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute("href", "/exports/current.csv");
   });
 
   it("opens the About panel from the topbar and closes it on Escape", async () => {

@@ -245,6 +245,7 @@
 .mc-exp-toggle{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:var(--text-dim);cursor:pointer;}
 .mc-exp-toggle input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;}
 .mc-modal-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);}
+.mc-export-note{margin:6px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
 .mc-about-section{margin-bottom:14px;}
 .mc-about-section h4{margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--text-dim);}
 .mc-about-section p{margin:0 0 8px;font-size:13px;line-height:1.55;color:var(--text);}

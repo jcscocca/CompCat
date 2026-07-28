@@ -1228,7 +1228,7 @@ git commit -m "fix(errors): map request failures to friendly copy; never surface
 - Modify: `frontend/src/components/ManagePlacesModal.test.tsx`
 - Modify: `frontend/src/styles/mapWorkspace.css`
 
-- [ ] **Step 1: Add the failing test**
+- [x] **Step 1: Add the failing test**
 
 In `frontend/src/components/ManagePlacesModal.test.tsx`, add inside the existing describe block:
 
@@ -1242,12 +1242,12 @@ In `frontend/src/components/ManagePlacesModal.test.tsx`, add inside the existing
   });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/ManagePlacesModal.test.tsx --environment jsdom -t "Export CSV"`
 Expected: FAIL — the link is named "Download Tableau CSV".
 
-- [ ] **Step 3: Relabel**
+- [x] **Step 3: Relabel**
 
 In `frontend/src/components/ManagePlacesModal.tsx`, replace the footer (lines 246-248) with:
 
@@ -1258,7 +1258,7 @@ In `frontend/src/components/ManagePlacesModal.tsx`, replace the footer (lines 24
         </div>
 ```
 
-- [ ] **Step 4: Style the descriptor**
+- [x] **Step 4: Style the descriptor**
 
 In `frontend/src/styles/mapWorkspace.css`, immediately after the `.mc-modal-foot{…}` rule (line 247), append:
 
@@ -1266,14 +1266,14 @@ In `frontend/src/styles/mapWorkspace.css`, immediately after the `.mc-modal-foot
 .mc-export-note{margin:6px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
 ```
 
-- [ ] **Step 5: Run and grep for stragglers**
+- [x] **Step 5: Run and grep for stragglers**
 
 Run: `cd frontend && npx vitest run src/components/ManagePlacesModal.test.tsx src/components/AnalysisCard.test.tsx --environment jsdom`
 Expected: PASS.
 
 Run: `cd frontend && grep -rn "Download Tableau\|Tableau CSV" src/` — expected: no matches.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/components/ManagePlacesModal.tsx frontend/src/components/ManagePlacesModal.test.tsx frontend/src/styles/mapWorkspace.css
