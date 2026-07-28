@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.assistant.llm_client import (
     AssistantLlmClient,
@@ -121,7 +122,12 @@ async def run_assistant_turn(
     llm_client: AssistantLlmClient,
 ) -> AsyncIterator[AssistantStreamEvent]:
     settings = get_settings()
-    context = build_semantic_context(session, user_id_hash, dashboard_state, settings)
+    # run_assistant_turn iterates on the event loop; the semantic context does sync DB
+    # work and execute_tool below can geocode (sync httpx + rate-gate sleep) — both must
+    # run in the threadpool or one slow turn stalls every request in the process.
+    context = await run_in_threadpool(
+        build_semantic_context, session, user_id_hash, dashboard_state, settings
+    )
     yield AssistantStreamEvent(
         event="meta",
         data={"role": settings.assistant_role, "missing_context": context.missing_context},
@@ -185,7 +191,8 @@ async def run_assistant_turn(
     if plan.get("type") == "tool_call":
         tool_name = str(plan.get("tool_name"))
         try:
-            tool_result = execute_tool(
+            tool_result = await run_in_threadpool(
+                execute_tool,
                 session,
                 user_id_hash,
                 tool_name,
@@ -387,7 +394,7 @@ def _tool_arguments(
 # carries the dates, so the backstop has to cover it too.
 _DATE_WINDOW_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
 _RELATIVE_WINDOW_PATTERN = re.compile(
-    r"\blast\s+(\d{1,3})\s+(day|week|month|year)s?\b", re.IGNORECASE
+    r"\b(?:last|past)\s+(?:(\d{1,3})\s+)?(day|week|month|year)s?\b", re.IGNORECASE
 )
 
 
@@ -421,9 +428,13 @@ def _relative_window(user_text: str, end: date | None) -> tuple[date, date] | No
     match = _RELATIVE_WINDOW_PATTERN.search(user_text or "")
     if match is None or end is None:
         return None
-    amount, unit = int(match.group(1)), match.group(2).lower()
+    # Bare "last month"/"past year" means one unit; clamp large N so "last 999 years"
+    # can't produce a pre-dataset window (the data floor is 2018; 2008 is a safe floor).
+    amount = int(match.group(1)) if match.group(1) else 1
+    unit = match.group(2).lower()
     if amount < 1:
         return None
+    amount = min(amount, 100)
     if unit == "day":
         start = end - timedelta(days=amount - 1)
     elif unit == "week":
@@ -431,7 +442,7 @@ def _relative_window(user_text: str, end: date | None) -> tuple[date, date] | No
     else:
         months = amount * 12 if unit == "year" else amount
         start = _months_before(end, months) + timedelta(days=1)
-    return start, end
+    return max(start, date(2008, 1, 1)), end
 
 
 def _months_before(value: date, months: int) -> date:

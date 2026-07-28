@@ -362,6 +362,36 @@ def test_agent_tolerates_non_dict_tool_arguments(tmp_path):
     assert events[1].data["arguments"]["radii_m"] == [250]
 
 
+def test_turn_offloads_blocking_work_to_the_threadpool(tmp_path, monkeypatch):
+    # The turn iterates on the event loop; the semantic context (sync DB) and
+    # execute_tool (sync geocode + rate-gate sleep) must both go through
+    # run_in_threadpool or one slow turn stalls every request in the process.
+    from starlette.concurrency import run_in_threadpool as real_run_in_threadpool
+
+    import app.assistant.agent as agent_module
+
+    offloaded: list[str] = []
+
+    async def recording_threadpool(func, *args, **kwargs):
+        offloaded.append(func.__name__)
+        return await real_run_in_threadpool(func, *args, **kwargs)
+
+    monkeypatch.setattr(agent_module, "run_in_threadpool", recording_threadpool)
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient([
+        '{"type":"tool_call","tool_name":"get_dashboard_summary","arguments":{}}'
+    ])
+    try:
+        events = asyncio.run(_collect(session, user_hash,
+            [AssistantChatMessage(role="user", content="What do you see?")],
+            AssistantDashboardState(selected_place_ids=["place-1"]), client))
+    finally:
+        session.close()
+    assert events[-1].event == "done"
+    assert "build_semantic_context" in offloaded
+    assert "execute_tool" in offloaded
+
+
 def test_agent_accepts_fenced_json_plan(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
     client = FakeClient(['```json\n{"type":"final","message":"One saved place."}\n```'])
@@ -2517,6 +2547,11 @@ def test_relative_window_backstop_covers_days_weeks_and_years():
     assert window("the last 2 weeks please") == ("2025-10-18", "2025-10-31")
     assert window("last 6 months") == ("2025-05-01", "2025-10-31")
     assert window("last 2 years") == ("2023-11-01", "2025-10-31")
+    # Bare forms mean one unit; "past" is a synonym for "last".
+    assert window("last month") == ("2025-10-01", "2025-10-31")
+    assert window("over the past year") == ("2024-11-01", "2025-10-31")
+    # Absurd spans clamp instead of producing a pre-dataset window.
+    assert window("the last 999 years")[0] == "2008-01-01"
 
 
 def test_relative_window_backstop_is_inert_without_a_relative_ask():

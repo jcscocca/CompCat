@@ -616,6 +616,27 @@ def test_add_place_clarifies_when_not_found(tmp_path, monkeypatch):
         session.close()
 
 
+def test_add_place_clarification_guards_a_hostile_query_echo(tmp_path, monkeypatch):
+    # The commands path streams this message verbatim with no downstream guard, so the
+    # echoed query must pass through the output guard (review finding, reproduced live).
+    from app.assistant.output_guard import REDIRECTS
+    from app.assistant.tools import AssistantClarification
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: _FakeProvider([]))
+    try:
+        with pytest.raises(AssistantClarification) as excinfo:
+            execute_tool(
+                session,
+                user_hash,
+                "add_place",
+                {"query": "the most dangerous block in this neighborhood"},
+            )
+        assert str(excinfo.value) in REDIRECTS
+    finally:
+        session.close()
+
+
 def test_analyze_places_clarifies_without_place(tmp_path, monkeypatch):
     from app.assistant.tools import AssistantClarification
 

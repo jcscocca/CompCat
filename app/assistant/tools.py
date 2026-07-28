@@ -20,6 +20,7 @@ from app.api.dashboard_schemas import (
     DashboardAnalyzeRequest,
     DashboardIncidentDetailsRequest,
 )
+from app.assistant.output_guard import guarded
 from app.assistant.place_resolution import ResolvedPlaces, resolve_place_queries
 from app.config import get_settings
 from app.crime.sources import sources_for_layer
@@ -190,8 +191,13 @@ def _add_place(session: Session, user_id_hash: str, query: str) -> dict[str, Any
     provider = build_provider(get_settings())
     resolved = resolve_place_queries(session, user_id_hash, [query], provider)
     if not resolved.place_ids:
+        # guarded(): the echoed query is user text and this message reaches the client
+        # verbatim on the commands path, which has no downstream guard of its own.
         raise AssistantClarification(
-            f"Could not find a place for '{query}'. Try a more specific address or landmark name."
+            guarded(
+                f"Could not find a place for '{query}'. "
+                "Try a more specific address or landmark name."
+            )
         )
     place_id = resolved.place_ids[0]
     place = session.get(PlaceCluster, place_id)
