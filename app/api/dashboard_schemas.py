@@ -9,6 +9,13 @@ from app.crime.sources import LAYER_REPORTED, LAYERS
 
 DashboardRadiusMeters = Annotated[int, Field(gt=0, le=5000)]
 
+# Every analysis endpoint fans out over radii x date-window, so both are capped: the
+# product offers three radii (config.crime_radii_m) and the UI only ever sends one, and
+# ~8 years of window is far past the SPD dataset's useful span. Without these an
+# unauthenticated-cheap POST can request an arbitrarily expensive scan.
+MAX_ANALYSIS_RADII = 3
+MAX_ANALYSIS_SPAN_DAYS = 3000
+
 # Seattle-metro bounds (lon W/E, lat S/N) — mirrors config.geocoder_viewbox and
 # frontend SEATTLE_BBOX. A shared-view point must resolve inside Seattle.
 _SEATTLE_WEST, _SEATTLE_EAST = -122.55, -122.10
@@ -39,6 +46,25 @@ class AnalysisPoint(BaseModel):
         return self
 
 
+class AnalysisWindow(BaseModel):
+    """The date window shared by every analysis request, ordered and length-capped."""
+
+    analysis_start_date: date
+    analysis_end_date: date
+
+    @model_validator(mode="after")
+    def window_must_be_ordered_and_bounded(self) -> AnalysisWindow:
+        if self.analysis_end_date < self.analysis_start_date:
+            raise ValueError("analysis_end_date must be on or after analysis_start_date")
+        span_days = (self.analysis_end_date - self.analysis_start_date).days
+        if span_days > MAX_ANALYSIS_SPAN_DAYS:
+            raise ValueError(
+                f"date range is too long — choose a window of at most "
+                f"{MAX_ANALYSIS_SPAN_DAYS} days"
+            )
+        return self
+
+
 class MapBounds(BaseModel):
     """A map viewport; must intersect the Seattle area the data covers."""
 
@@ -61,10 +87,8 @@ class MapBounds(BaseModel):
         return self
 
 
-class DashboardIncidentPointsRequest(BaseModel):
+class DashboardIncidentPointsRequest(AnalysisWindow):
     bounds: MapBounds
-    analysis_start_date: date
-    analysis_end_date: date
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
@@ -76,12 +100,10 @@ class DashboardIncidentPointsRequest(BaseModel):
         return _validate_layer(value)
 
 
-class DashboardAnalyzeRequest(BaseModel):
+class DashboardAnalyzeRequest(AnalysisWindow):
     place_ids: list[str] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=1, max_length=_MAX_POINTS)
-    analysis_start_date: date
-    analysis_end_date: date
-    radii_m: list[DashboardRadiusMeters] = Field(min_length=1)
+    radii_m: list[DashboardRadiusMeters] = Field(min_length=1, max_length=MAX_ANALYSIS_RADII)
     offense_category: str | None = None
     offense_subcategory: str | None = None
     nibrs_group: str | None = None
@@ -109,11 +131,9 @@ class DashboardAnalyzeRequest(BaseModel):
         return _validate_layer(value)
 
 
-class DashboardCompareRequest(BaseModel):
+class DashboardCompareRequest(AnalysisWindow):
     place_ids: list[str] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
     points: list[AnalysisPoint] | None = Field(default=None, min_length=2, max_length=_MAX_POINTS)
-    analysis_start_date: date
-    analysis_end_date: date
     radius_m: DashboardRadiusMeters
     offense_category: str | None = None
     offense_subcategory: str | None = None
