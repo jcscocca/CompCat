@@ -33,11 +33,17 @@ class RateGate:
     def wait(self, min_interval_s: float, *, now=time.monotonic, sleep=time.sleep) -> None:
         if min_interval_s <= 0:
             return
+        # Claim a slot under the lock, then serve the delay outside it. Sleeping while
+        # holding the mutex made every concurrent caller block on the lock rather than on
+        # its own delay, so N geocodes pinned N threadpool workers for N x interval. The
+        # cadence guarantee is unchanged: each claimed slot is still at least one interval
+        # after the previous one.
         with self._lock:
-            remaining = min_interval_s - (now() - self._last)
-            if remaining > 0:
-                sleep(remaining)
-            self._last = now()
+            slot = max(now(), self._last + min_interval_s)
+            self._last = slot
+        remaining = slot - now()
+        if remaining > 0:
+            sleep(remaining)
 
 
 _rate_gate = RateGate()
