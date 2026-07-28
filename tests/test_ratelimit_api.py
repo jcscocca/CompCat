@@ -163,3 +163,63 @@ def test_burst_limit_exempts_the_data_freshness_probe(tmp_path, monkeypatch) -> 
     client = TestClient(app)
     for _ in range(5):
         assert client.get("/health/data").status_code != 429
+
+
+def test_assistant_per_ip_cap(tmp_path, monkeypatch) -> None:
+    # The per-session bucket is trivially reset by asking for a new session cookie, so a
+    # single host could mint sessions and keep spending. The per-IP bucket is the tier
+    # that actually bounds one caller's assistant usage.
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_ASSISTANT_PER_IP_PER_HOUR", "0")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl8.sqlite3")
+    client = TestClient(app)
+    client.post("/sessions")
+    response = client.post(
+        "/assistant/chat",
+        json={"messages": [{"role": "user", "content": "hi"}], "dashboard_state": {}},
+    )
+    assert response.status_code == 429
+    assert "limit" in response.json()["detail"].lower()
+    assert response.headers.get("Retry-After")
+
+
+def test_assistant_per_ip_cap_survives_a_new_session(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_ASSISTANT_PER_IP_PER_HOUR", "1")
+    monkeypatch.setenv("MCA_RATE_LIMIT_SESSIONS_PER_HOUR", "100")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl9.sqlite3")
+    body = {"messages": [{"role": "user", "content": "hi"}], "dashboard_state": {}}
+
+    first = TestClient(app)
+    first.post("/sessions")
+    assert first.post("/assistant/chat", json=body).status_code == 200
+
+    # A brand-new session from the same IP still hits the per-IP bucket.
+    second = TestClient(app)
+    second.post("/sessions")
+    assert second.post("/assistant/chat", json=body).status_code == 429
+
+
+def test_assistant_per_ip_rejection_does_not_burn_global_budget(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_ASSISTANT_PER_IP_PER_HOUR", "0")
+    monkeypatch.setenv("MCA_RATE_LIMIT_ASSISTANT_GLOBAL_PER_DAY", "1")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl10.sqlite3")
+    client = TestClient(app)
+    client.post("/sessions")
+    assert (
+        client.post(
+            "/assistant/chat",
+            json={"messages": [{"role": "user", "content": "hi"}], "dashboard_state": {}},
+        ).status_code
+        == 429
+    )
+    from app.ratelimit import get_rate_limiter
+
+    assert get_rate_limiter().try_count_global(limit=1) is True
+
+
+def test_assistant_per_ip_default_is_thirty() -> None:
+    from app.config import Settings
+
+    assert Settings(_env_file=None).rate_limit_assistant_per_ip_per_hour == 30

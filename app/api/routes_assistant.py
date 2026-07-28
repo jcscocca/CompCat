@@ -6,7 +6,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -33,7 +33,7 @@ from app.assistant.tools import (
 )
 from app.config import Settings, get_settings
 from app.db import get_session
-from app.ratelimit import get_rate_limiter
+from app.ratelimit import client_ip_from, get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,7 @@ def build_assistant_llm_client(settings: Settings) -> AssistantLlmClient:
 @router.post("/assistant/chat")
 async def assistant_chat(
     request: AssistantChatRequest,
+    http_request: Request,
     user_id_hash: Annotated[str, Depends(required_public_user_hash)],
     session: Annotated[Session, Depends(get_session)],
 ) -> StreamingResponse:
@@ -155,6 +156,21 @@ async def assistant_chat(
                 status_code=429,
                 detail="Analyst request limit reached for this session — please retry later.",
                 headers={"Retry-After": str(max(1, int(wait)))},
+            )
+        # Per-IP bucket beside it: the per-session tier is reset by simply asking for a new
+        # session cookie, so on its own it bounds a conversation rather than a caller. Also
+        # checked before the global counter, for the same reason the session bucket is.
+        ip_wait = limiter.try_take(
+            "assistant_ip",
+            client_ip_from(http_request, trust_proxy_headers=settings.trust_proxy_headers),
+            capacity=settings.rate_limit_assistant_per_ip_per_hour,
+            per_seconds=3600.0,
+        )
+        if ip_wait > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="Analyst request limit reached — please retry later.",
+                headers={"Retry-After": str(max(1, int(ip_wait)))},
             )
         if not limiter.try_count_global(limit=settings.rate_limit_assistant_global_per_day):
             raise HTTPException(

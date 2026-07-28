@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
     rate_limit_sessions_per_hour: int = 10
     rate_limit_assistant_per_hour: int = 20
+    # Per-IP companion to the per-session bucket above. A caller can reset the per-session
+    # tier at will by asking for a new session cookie, so that bucket bounds a conversation,
+    # not a person — this one bounds the caller. Keyed on the same client IP the burst tier
+    # resolves, so it inherits the same proxy-header trust rules.
+    rate_limit_assistant_per_ip_per_hour: int = 30
     rate_limit_assistant_global_per_day: int = 100
     rate_limit_assistant_commands_per_hour: int = 120
     rate_limit_burst_per_minute: int = 120
