@@ -196,7 +196,9 @@ def _suggest_followups_summary(result: dict[str, Any]) -> str:
     suggestions = result.get("suggestions") or []
     if not suggestions:
         return "Here are some things you can try next."
-    return "You could: " + " ".join(f"• {item}" for item in suggestions)
+    # Newline-separated dashes: the chat pane renders markdown, so these arrive as a list
+    # instead of one run-on sentence with bullet glyphs in it.
+    return "You could:\n" + "\n".join(f"- {item}" for item in suggestions)
 
 
 def _resolved_labels(result: dict[str, Any]) -> list[str]:

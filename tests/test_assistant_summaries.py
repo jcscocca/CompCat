@@ -418,3 +418,14 @@ def test_compare_summary_reports_untested_pairs_instead_of_placeholder_stats():
     assert "Not tested (below the data floor): Pike Place vs Capitol Hill." in text
     assert "1.0×" not in text
     assert "1.0–1.0" not in text
+
+
+def test_followups_render_as_a_markdown_list():
+    result = {"suggestions": ["Compare the selected places.", "Try a different radius."]}
+    text = build_tool_summary(_envelope("suggest_followups", result))
+    assert text == (
+        "You could:\n"
+        "- Compare the selected places.\n"
+        "- Try a different radius."
+    )
+    assert "•" not in text
