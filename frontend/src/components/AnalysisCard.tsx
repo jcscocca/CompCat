@@ -136,8 +136,6 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
                   windowLabel={windowLabel}
                   noun={noun}
                   domainMax={plotDomainMax(neighborhood.places)}
-                  locator={null}
-                  coords={null}
                 />
               ))}
             </div>
