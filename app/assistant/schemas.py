@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 MAX_MESSAGE_CHARS = 4000
 MAX_MESSAGES_PER_REQUEST = 200
 
+# The same ceilings applied to dashboard_state. It is interpolated verbatim into the planning
+# prompt (semantic_layer.active_filters), so leaving it unbounded let a caller send megabytes
+# upstream while every *message* stayed under MAX_MESSAGE_CHARS — the payload cap without the
+# payload. The place-id list is also the .in_() argument in semantic_layer._selected_places,
+# where an unbounded list overflows SQL bind parameters.
+MAX_SELECTED_PLACES = 25  # the UI tops out at 10 saved places plus ad-hoc pins
+MAX_PLACE_ID_CHARS = 64  # ids are uuids (36)
+MAX_RADII = 3  # Settings.crime_radii_m only ever offers three
+MAX_FILTER_CHARS = 80
+
 
 class AssistantChatMessage(BaseModel):
     role: Literal["user", "assistant"]
@@ -23,13 +33,17 @@ class AssistantChatMessage(BaseModel):
 
 
 class AssistantDashboardState(BaseModel):
-    selected_place_ids: list[str] = Field(default_factory=list)
+    selected_place_ids: list[Annotated[str, Field(max_length=MAX_PLACE_ID_CHARS)]] = Field(
+        default_factory=list, max_length=MAX_SELECTED_PLACES
+    )
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None
-    radii_m: list[int] = Field(default_factory=list)
-    offense_category: str | None = None
-    offense_subcategory: str | None = None
-    nibrs_group: str | None = None
+    radii_m: list[Annotated[int, Field(gt=0, le=5000)]] = Field(
+        default_factory=list, max_length=MAX_RADII
+    )
+    offense_category: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
+    offense_subcategory: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
+    nibrs_group: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
     # Active analysis layer ("reported" = SPD crime reports, "arrests" = SPD arrest
     # records (enforcement activity), "calls" = 911 calls for service).
     layer: Literal["reported", "arrests", "calls"] = "reported"

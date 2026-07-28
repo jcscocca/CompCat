@@ -78,6 +78,33 @@ def test_assistant_chat_rejects_oversized_payload(tmp_path):
     assert too_many_messages.status_code == 422
 
 
+def test_assistant_chat_rejects_oversized_dashboard_state(tmp_path, monkeypatch):
+    # dashboard_state is interpolated verbatim into the planning prompt, so leaving it
+    # unbounded was the payload cap without the payload: every message under
+    # MAX_MESSAGE_CHARS while megabytes went upstream, before any budget accounting.
+    from app.api import routes_assistant
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("an over-cap request must never reach the LLM client")
+
+    monkeypatch.setattr(routes_assistant, "build_assistant_llm_client", _boom)
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+
+    for state in (
+        {"selected_place_ids": [f"place-{index}" for index in range(30_000)]},
+        {"selected_place_ids": ["x" * 5_000]},
+        {"radii_m": [10**9]},
+        {"offense_category": "x" * 5_000},
+    ):
+        response = client.post(
+            "/assistant/chat",
+            json={"messages": [{"role": "user", "content": "hi"}], "dashboard_state": state},
+        )
+        assert response.status_code == 422, state
+
+
 def test_assistant_chat_streams_agent_events(monkeypatch, tmp_path):
     from app.api import routes_assistant
 
