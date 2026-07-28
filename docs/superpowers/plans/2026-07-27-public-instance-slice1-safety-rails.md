@@ -1439,7 +1439,7 @@ it skips only when the Docker CLI/compose plugin is absent, and CI runners alway
 - Create: `tests/test_compose_prod_overlay.py`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_compose_prod_overlay.py`:
 
@@ -1530,13 +1530,13 @@ def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
     assert "POSTGRES_PASSWORD" in result.stderr
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_compose_prod_overlay.py -v`
 Expected: FAIL — `FileNotFoundError` / render errors, because `docker-compose.prod.yml` does not
 exist yet.
 
-- [ ] **Step 3: Create the overlay**
+- [x] **Step 3: Create the overlay**
 
 Create `docker-compose.prod.yml`:
 
@@ -1567,13 +1567,13 @@ services:
     restart: unless-stopped
 ```
 
-- [ ] **Step 4: Run to verify the test passes**
+- [x] **Step 4: Run to verify the test passes**
 
 Run: `.venv/bin/python -m pytest tests/test_compose_prod_overlay.py -v`
 Expected: PASS (3 tests). If the two render tests skip, the Docker CLI is missing locally — CI still
 enforces them via Step 5.
 
-- [ ] **Step 5: Add the CI docker-lane assertion**
+- [x] **Step 5: Add the CI docker-lane assertion**
 
 In `.github/workflows/ci.yml`, replace the `docker` job (lines 70-73) with:
 
@@ -1595,7 +1595,7 @@ In `.github/workflows/ci.yml`, replace the `docker` job (lines 70-73) with:
           test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "2"
 ```
 
-- [ ] **Step 6: Run the CI assertion locally (same commands)**
+- [x] **Step 6: Run the CI assertion locally (same commands)**
 
 Run from the worktree root:
 
@@ -1608,7 +1608,7 @@ docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.prod
 
 Expected: `published: "8000"` and two `restart: unless-stopped` lines; **no** `published: "5432"`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add docker-compose.prod.yml tests/test_compose_prod_overlay.py .github/workflows/ci.yml

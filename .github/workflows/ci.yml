@@ -71,3 +71,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker build .
+      - name: Production overlay renders without publishing Postgres
+        env:
+          POSTGRES_PASSWORD: ci-not-a-real-password
+          MCA_DATABASE_URL: postgresql+psycopg://mca:ci-not-a-real-password@db:5432/mca
+        run: |
+          docker compose --env-file /dev/null \
+            -f docker-compose.yml -f docker-compose.prod.yml config > rendered.yml
+          ! grep -q 'published: "5432"' rendered.yml
+          grep -q 'published: "8000"' rendered.yml
+          test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "2"
