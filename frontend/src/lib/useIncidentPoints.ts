@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getIncidentPoints } from "../api/client";
+import { friendlyMessageOr, getIncidentPoints } from "../api/client";
 import type { AnalysisSettings, IncidentPoint, IncidentPointsResponse, MapBounds } from "../types";
 
 const DEBOUNCE_MS = 300;
@@ -105,7 +105,7 @@ export function useIncidentPoints({
         })
         .catch((cause: unknown) => {
           if (controller.signal.aborted) return;
-          setError(cause instanceof Error ? cause.message : "incident points failed");
+          setError(friendlyMessageOr(cause, "Incident pins could not load for this view."));
         });
     }, DEBOUNCE_MS);
     return () => {
