@@ -26,7 +26,16 @@ export const ABOUT_DATA_CAVEAT = REVISED_CAVEAT;
  * new abstraction: two dialogs do not justify a shared primitive, and the pattern is
  * load-bearing for keyboard users.
  */
-export function AboutModal({ onClose }: { onClose: () => void }) {
+export function AboutModal({
+  onClose,
+  personalUploadsEnabled = false,
+}: {
+  onClose: () => void;
+  /** Runtime state of `public_enable_personal_uploads`, read from the dashboard's
+   * input-modes probe. The panel used to claim uploads were disabled unconditionally,
+   * which is a lie on any instance that has them switched on. */
+  personalUploadsEnabled?: boolean;
+}) {
   const modalRef = useRef<HTMLDivElement>(null);
   // onClose is a fresh arrow each parent render; read it through a ref so the focus/trap
   // effect runs once on open (not on every render, which would steal focus back).
@@ -145,7 +154,11 @@ export function AboutModal({ onClose }: { onClose: () => void }) {
             <li>Places you save belong to that session and expire with it. Nothing about you survives it.</li>
             <li>Share links carry only coordinates rounded to about 110 m plus the analysis filters — no session id, no saved-place ids.</li>
             <li>No third-party requests: map tiles, fonts, and address search are all served from this instance.</li>
-            <li>Personal location-history uploads are disabled on this instance.</li>
+            <li>
+              {personalUploadsEnabled
+                ? "Personal location-history uploads are opt-in: nothing is uploaded unless you choose to, and you can delete what you uploaded at any time."
+                : "Personal location-history uploads are disabled on this instance."}
+            </li>
           </ul>
         </section>
 

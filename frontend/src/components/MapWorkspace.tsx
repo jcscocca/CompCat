@@ -951,7 +951,12 @@ export function MapWorkspace() {
           />
         ) : null}
 
-        {aboutOpen ? <AboutModal onClose={() => setAboutOpen(false)} /> : null}
+        {aboutOpen ? (
+          <AboutModal
+            onClose={() => setAboutOpen(false)}
+            personalUploadsEnabled={data.personalUploadsEnabled}
+          />
+        ) : null}
       </div>
     </div>
   );

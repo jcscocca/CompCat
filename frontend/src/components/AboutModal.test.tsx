@@ -137,9 +137,28 @@ describe("AboutModal", () => {
 const BANNED = ["safe", "unsafe", "safety", "danger", "dangerous", "risk", "risky"];
 const FIXED_CAVEATS = [ABOUT_INVARIANT, ABOUT_RELIANCE_LIMIT, ABOUT_DATA_CAVEAT];
 
+describe("AboutModal personal uploads line", () => {
+  it("says uploads are disabled when the instance has them off", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
+  });
+
+  // The line was hard-coded, so an instance with uploads switched on told users the
+  // opposite of the truth.
+  it("describes uploads as opt-in and deletable when the instance has them on", () => {
+    render(<AboutModal onClose={vi.fn()} personalUploadsEnabled />);
+    expect(screen.queryByText(/uploads are disabled on this instance/i)).not.toBeInTheDocument();
+    const line = screen.getByText(/Personal location-history uploads are opt-in/i);
+    expect(line).toHaveTextContent(/nothing is uploaded unless you choose to/i);
+    expect(line).toHaveTextContent(/delete what you uploaded at any time/i);
+  });
+});
+
 describe("AboutModal invariant sweep", () => {
-  it("confines safety/risk vocabulary to the three fixed caveat constants", () => {
-    const { container } = render(<AboutModal onClose={vi.fn()} />);
+  // Both branches of the runtime uploads line are swept: new copy on either side of that
+  // conditional is still copy the invariant applies to.
+  it.each([[false], [true]])("confines safety/risk vocabulary to the three fixed caveat constants (uploads enabled: %s)", (uploadsEnabled) => {
+    const { container } = render(<AboutModal onClose={vi.fn()} personalUploadsEnabled={uploadsEnabled} />);
     const rendered = (container.textContent ?? "").toLowerCase();
 
     let remaining = rendered;
