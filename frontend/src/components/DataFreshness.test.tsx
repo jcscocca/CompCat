@@ -52,6 +52,16 @@ describe("DataFreshness", () => {
     expect(screen.getByText("No reported SPD incidents data loaded")).toBeInTheDocument();
   });
 
+  it("spells out SPD on first use in the freshness tooltip", () => {
+    const { container } = render(<DataFreshness freshness={loaded} layer="reported" />);
+    expect(container.querySelector(".mc-freshness")).toHaveAttribute(
+      "title",
+      expect.stringContaining("reported Seattle Police Department (SPD) incidents"),
+    );
+    // The visible pill stays short.
+    expect(screen.getByText("Data through Jun 22, 2026")).toBeInTheDocument();
+  });
+
   it("distinguishes an availability request failure from an empty layer", () => {
     render(<DataFreshness freshness={null} layer="reported" loaded />);
     expect(screen.getByText("Data availability unavailable")).toBeInTheDocument();

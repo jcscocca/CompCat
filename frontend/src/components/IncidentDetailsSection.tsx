@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { IncidentDetail, IncidentDetailsResponse } from "../types";
 import { formatIncidentAddress, titleCase } from "../lib/addressLabel";
 import { countNoun, type IncidentNoun } from "../lib/layerCopy";
@@ -6,9 +8,17 @@ function incidentCategoryLabel(incident: IncidentDetail) {
   return incident.offense_category ? titleCase(incident.offense_category) : "Uncategorized";
 }
 
-function incidentSubtypeLabel(incident: IncidentDetail) {
+const NIBRS_GLOSS =
+  "National Incident-Based Reporting System — the FBI offense classification SPD files each report under.";
+
+function incidentSubtypeLabel(incident: IncidentDetail): ReactNode {
   if (incident.offense_subcategory) return titleCase(incident.offense_subcategory);
-  return incident.nibrs_group ? `NIBRS ${incident.nibrs_group}` : "All reported";
+  if (!incident.nibrs_group) return "All reported";
+  return (
+    <>
+      <abbr title={NIBRS_GLOSS}>NIBRS</abbr> {incident.nibrs_group}
+    </>
+  );
 }
 
 function incidentIdentifier(incident: IncidentDetail) {

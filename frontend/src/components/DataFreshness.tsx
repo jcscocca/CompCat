@@ -34,6 +34,14 @@ export function DataFreshness({
   const entry = freshness?.[layer];
   const noun =
     layer === "calls" ? "911 calls" : layer === "arrests" ? "SPD arrests" : "reported SPD incidents";
+  // The tooltip is the acronym's first use in the persistent chrome, so spell it out there;
+  // the visible pill and the empty-state line stay short.
+  const longNoun =
+    layer === "calls"
+      ? "911 calls"
+      : layer === "arrests"
+        ? "Seattle Police Department (SPD) arrests"
+        : "reported Seattle Police Department (SPD) incidents";
   if (!loaded && !entry) {
     return null;
   }
@@ -44,7 +52,7 @@ export function DataFreshness({
     return <div className="mc-status mc-freshness is-unavailable">No {noun} data loaded</div>;
   }
   const detail = [
-    `${entry.incident_count.toLocaleString()} ${noun}`,
+    `${entry.incident_count.toLocaleString()} ${longNoun}`,
     entry.earliest ? `from ${formatDate(entry.earliest)}` : null,
     `through ${formatDate(entry.data_through)}`,
     entry.last_ingested_at ? `· ingested ${formatDate(entry.last_ingested_at)}` : null,

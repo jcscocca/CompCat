@@ -29,6 +29,7 @@
   1101  search-pill results           1200  workspace panel
   1300  modal scrim (a sibling of the drawer, so it must clear all of the above) */
 .mc-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+.mc-scope abbr[title]{text-decoration:underline dotted;text-underline-offset:2px;cursor:help;}
 
 .mc-map{position:absolute;inset:0;}
 .mc-map-canvas{position:absolute;inset:0;}

@@ -38,4 +38,7 @@ export const METHODS_DEFINITIONS: MethodDefinition[] = [
   { id: "exactPValue", term: "Exact p-value", shownAs: "0.012",
     plain: "A small-sample exact conditional Poisson p-value, shown for transparency. The verdict is decided on the interval-consistent (Wald) p-value instead.",
     howToRead: "Supplementary — the badge does not depend on it." },
+  { id: "nibrsGroup", term: "NIBRS group", shownAs: "NIBRS A",
+    plain: "The FBI's National Incident-Based Reporting System classification SPD files each offense under. Group A covers the offenses reported in full detail; Group B covers a shorter list reported only when an arrest is made.",
+    howToRead: "A filing category, not a severity ranking." },
 ];

@@ -1293,7 +1293,7 @@ git commit -m "fix(copy): one export label — Export CSV, Tableau as descriptor
 - Create: `frontend/src/components/IncidentDetailsSection.test.tsx`
 - Modify: `frontend/src/styles/mapWorkspace.css`
 
-- [ ] **Step 1: Add the failing tests**
+- [x] **Step 1: Add the failing tests**
 
 In `frontend/src/components/DataFreshness.test.tsx`, add inside the existing describe block:
 
@@ -1383,12 +1383,12 @@ describe("IncidentDetailsSection NIBRS gloss", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx vitest run src/components/DataFreshness.test.tsx src/components/MethodsAppendix.test.tsx src/components/IncidentDetailsSection.test.tsx --environment jsdom`
 Expected: FAIL on all three new assertions.
 
-- [ ] **Step 3: Spell out SPD in the freshness tooltip**
+- [x] **Step 3: Spell out SPD in the freshness tooltip**
 
 In `frontend/src/components/DataFreshness.tsx`, after the existing `noun` (line 35-36), add the long form and use it in the tooltip detail only:
 
@@ -1411,7 +1411,7 @@ and change the first entry of the `detail` array (line 47) from `` `${entry.inci
     `${entry.incident_count.toLocaleString()} ${longNoun}`,
 ```
 
-- [ ] **Step 4: Add the NIBRS methods entry**
+- [x] **Step 4: Add the NIBRS methods entry**
 
 In `frontend/src/lib/methodsDefinitions.ts`, append as the last element of `METHODS_DEFINITIONS` (after `exactPValue`):
 
@@ -1421,7 +1421,7 @@ In `frontend/src/lib/methodsDefinitions.ts`, append as the last element of `METH
     howToRead: "A filing category, not a severity ranking." },
 ```
 
-- [ ] **Step 5: Gloss NIBRS inline**
+- [x] **Step 5: Gloss NIBRS inline**
 
 In `frontend/src/components/IncidentDetailsSection.tsx`:
 
@@ -1450,7 +1450,7 @@ function incidentSubtypeLabel(incident: IncidentDetail): ReactNode {
 
 (Both call sites — the `<td>` at line 80 and the `<span>` at line 123 — already render the result as a child, so no other change is needed.)
 
-- [ ] **Step 6: Style `abbr`**
+- [x] **Step 6: Style `abbr`**
 
 In `frontend/src/styles/mapWorkspace.css`, append after the `.mc-sr{…}` rule (line 31):
 
@@ -1458,17 +1458,17 @@ In `frontend/src/styles/mapWorkspace.css`, append after the `.mc-sr{…}` rule (
 .mc-scope abbr[title]{text-decoration:underline dotted;text-underline-offset:2px;cursor:help;}
 ```
 
-- [ ] **Step 7: Run the suites**
+- [x] **Step 7: Run the suites**
 
 Run: `cd frontend && npx vitest run src/components/DataFreshness.test.tsx src/components/MethodsAppendix.test.tsx src/components/IncidentDetailsSection.test.tsx src/components/AnalysisCard.test.tsx --environment jsdom`
 Expected: PASS.
 
-- [ ] **Step 8: Lint**
+- [x] **Step 8: Lint**
 
 Run: `cd frontend && npm run lint`
 Expected: clean (the `ReactNode` return type change is the one thing `tsc` could flag).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/components/DataFreshness.tsx frontend/src/components/DataFreshness.test.tsx frontend/src/lib/methodsDefinitions.ts frontend/src/components/MethodsAppendix.test.tsx frontend/src/components/IncidentDetailsSection.tsx frontend/src/components/IncidentDetailsSection.test.tsx frontend/src/styles/mapWorkspace.css
