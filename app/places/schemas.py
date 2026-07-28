@@ -2,7 +2,28 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.api.dashboard_schemas import (
+    SEATTLE_EAST,
+    SEATTLE_NORTH,
+    SEATTLE_SOUTH,
+    SEATTLE_WEST,
+)
+
+OUTSIDE_SEATTLE_MESSAGE = (
+    "CompCat covers Seattle — coordinates must fall inside the city area."
+)
+
+
+def _require_seattle(latitude: float | None, longitude: float | None) -> None:
+    """Same bbox the shared-view AnalysisPoint enforces. A place outside it can never
+    produce incident context, so accepting it is a silent dead end for the user."""
+    if latitude is not None and not SEATTLE_SOUTH <= latitude <= SEATTLE_NORTH:
+        raise ValueError(OUTSIDE_SEATTLE_MESSAGE)
+    if longitude is not None and not SEATTLE_WEST <= longitude <= SEATTLE_EAST:
+        raise ValueError(OUTSIDE_SEATTLE_MESSAGE)
+
 
 SensitivityClass = Literal[
     "normal",
@@ -30,6 +51,11 @@ class ManualPlaceCreate(BaseModel):
     def display_label_must_not_be_blank(cls, value: str) -> str:
         return _strip_non_empty_label(value)
 
+    @model_validator(mode="after")
+    def within_seattle(self) -> ManualPlaceCreate:
+        _require_seattle(self.latitude, self.longitude)
+        return self
+
 
 class ManualPlaceUpdate(BaseModel):
     display_label: str | None = Field(default=None, min_length=1, max_length=120)
@@ -53,6 +79,11 @@ class ManualPlaceUpdate(BaseModel):
         if value is None:
             return None
         return _strip_non_empty_label(value)
+
+    @model_validator(mode="after")
+    def within_seattle(self) -> ManualPlaceUpdate:
+        _require_seattle(self.latitude, self.longitude)
+        return self
 
 
 class ManualPlaceResponse(BaseModel):
