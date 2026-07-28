@@ -120,6 +120,10 @@ SSH, so there is no fail2ban/auditd baseline here.
    chown deploy:deploy /home/deploy/.ssh/authorized_keys
    chmod 600 /home/deploy/.ssh/authorized_keys
    usermod -aG sudo deploy
+   # deploy has no password (--disabled-password), so sudo must be passwordless or every
+   # later `sudo` in this runbook fails at the prompt.
+   echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy
+   chmod 440 /etc/sudoers.d/deploy
    ```
 
    Pass condition: `ssh deploy@<BOX_IP>` works from your machine in a **second terminal**. Do not
@@ -225,19 +229,20 @@ posture.
 
 **Fetch the basemap tiles** (~100 MB, one time):
 
+The fetch script is stdlib-only, so the system Python is all it needs — no venv on the box
+(`make install` pins `python3.11`, which Ubuntu 24.04 does not ship; the app itself runs inside
+Docker and never uses host Python):
+
 ```bash
-sudo apt install -y python3-venv make
-make install          # creates .venv
-make fetch-tiles
+python3 scripts/fetch_tiles.py
 ```
 
 Pass condition: `app/data/tiles/seattle.pmtiles` exists and is ~100 MB. The app boots without it —
 the map just renders flat with a notice — so this is not blocking, but do it now.
 
-> If the fetch fails with `CERTIFICATE_VERIFY_FAILED`, the invoking Python has no usable CA bundle.
-> Run it through the venv with
-> `SSL_CERT_FILE="$(.venv/bin/python -c 'import certifi; print(certifi.where())')" make fetch-tiles`.
-> Same note as [`DEPLOY.md`](DEPLOY.md).
+> If the fetch fails with `CERTIFICATE_VERIFY_FAILED`, the system Python has no usable CA bundle:
+> `sudo apt install -y ca-certificates` and retry. Same note as [`DEPLOY.md`](DEPLOY.md), which
+> documents this exact invocation (its `make fetch-tiles` form is the Mac/dev path).
 
 ---
 
@@ -413,7 +418,9 @@ Every item has an observable pass condition. Work through it before advertising 
    ```bash
    sed -i 's/^MCA_RATE_LIMIT_ENABLED=true/MCA_RATE_LIMIT_ENABLED=false/' .env.prod
    compose up -d api
-   compose logs api | tail -20        # ValidationError naming MCA_RATE_LIMIT_ENABLED; container exits
+   compose logs api | tail -20        # ValidationError naming MCA_RATE_LIMIT_ENABLED; with
+                                      # restart: unless-stopped the container crash-loops
+                                      # (Restarting in `compose ps`) rather than staying exited
    sed -i 's/^MCA_RATE_LIMIT_ENABLED=false/MCA_RATE_LIMIT_ENABLED=true/' .env.prod
    compose up -d api
    ```
@@ -430,10 +437,12 @@ Every item has an observable pass condition. Work through it before advertising 
    - a 21st Analyst call within one hour is declined with the request-limit message (the caps in
      `.env.prod` are 20/hour/session, 100/day global).
 
-5. **Rate limiting keys on real client IPs.** With the Caddy edge in front, the limiter reads the
-   leftmost `X-Forwarded-For` hop, so two different visitors get two buckets. Sanity check from two
-   networks (e.g. laptop and phone on cellular): both can create a session even after one of them
-   has burned its hourly allowance.
+5. **Rate limiting keys on real client IPs.** Caddy replaces any client-sent `X-Forwarded-For`
+   and the Caddyfile strips `CF-Connecting-IP`, so the limiter's leftmost-XFF read is the true
+   peer and can't be spoofed. Sanity check from two networks (e.g. laptop and phone on
+   cellular): both can create a session even after one of them has burned its hourly
+   allowance. Deeper check: a request with a forged `CF-Connecting-IP: 1.2.3.4` must still
+   land in the sender's own bucket (repeating it past the session cap yields 429s).
 
 6. **Soak.** Run the harness on the box per [`soak-testing.md`](soak-testing.md), substituting
    `--env-file .env.prod` wherever it says `.env.deploy` (the observer shells

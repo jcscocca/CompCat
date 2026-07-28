@@ -125,13 +125,25 @@ def test_caddyfile_terminates_tls_for_the_registered_domain_and_proxies_the_api(
     assert "compcat.app {" in text
     assert "reverse_proxy api:8000" in text
     assert "encode gzip" in text
+    # Header hygiene is load-bearing: the limiter consults CF-Connecting-IP first, so the
+    # edge must strip it (spoofed values would mint a fresh rate bucket per request), and
+    # XFF is pinned so a future trusted_proxies addition can't hand the leftmost hop to
+    # clients.
+    assert "header_up -CF-Connecting-IP" in text
+    assert "header_up X-Forwarded-For {client_ip}" in text
     # Nothing else: no extra directives to review, no TLS overrides that would disable ACME.
     directives = [
         line.strip()
         for line in text.splitlines()
         if line.strip() and not line.strip().startswith("#") and line.strip() != "}"
     ]
-    assert directives == ["compcat.app {", "encode gzip", "reverse_proxy api:8000"]
+    assert directives == [
+        "compcat.app {",
+        "encode gzip",
+        "reverse_proxy api:8000 {",
+        "header_up -CF-Connecting-IP",
+        "header_up X-Forwarded-For {client_ip}",
+    ]
 
 
 def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:

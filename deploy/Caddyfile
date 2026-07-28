@@ -5,5 +5,15 @@
 # Deliberately three directives. Anything more is another thing to review before a deploy.
 compcat.app {
 	encode gzip
-	reverse_proxy api:8000
+	reverse_proxy api:8000 {
+		# The limiter consults CF-Connecting-IP before X-Forwarded-For when
+		# MCA_TRUST_PROXY_HEADERS is on. Caddy manages only X-Forwarded-* — a
+		# client-sent CF-Connecting-IP would pass through verbatim and mint a fresh
+		# rate bucket per request. Strip it; only Cloudflare's own edge may set it.
+		header_up -CF-Connecting-IP
+		# Caddy already replaces XFF from untrusted peers, but pin it explicitly so a
+		# future trusted_proxies addition can't silently hand the leftmost hop to
+		# clients.
+		header_up X-Forwarded-For {client_ip}
+	}
 }

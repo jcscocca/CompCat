@@ -110,9 +110,13 @@ def _proxy_header_ip(headers) -> str | None:
     MCA_TRUST_PROXY_HEADERS is on, because both headers are attacker-supplied otherwise.
 
     1. CF-Connecting-IP: single-valued and written by Cloudflare's own edge (the demo path).
-    2. X-Forwarded-For, FIRST entry: our Caddy *appends* the peer it saw, so the leftmost hop
-       is the original client. Taking the last entry would key every request on the proxy and
-       collapse the whole internet into one bucket.
+       The prod Caddyfile strips this header from client requests (header_up
+       -CF-Connecting-IP) — without that strip, a client could mint a fresh bucket per
+       request by rotating it.
+    2. X-Forwarded-For, FIRST entry: Caddy REPLACES the incoming XFF from untrusted peers
+       (and the prod Caddyfile additionally pins it to {client_ip}), so exactly one hop
+       arrives and the leftmost entry is the true client. If a trusted_proxies chain is ever
+       added in front, this choice must be revisited — leftmost becomes client-controlled.
 
     `headers` is any mapping with lowercase keys (Starlette's case-insensitive Headers, or the
     lowercased dict BurstLimitMiddleware builds from the raw ASGI scope).
