@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, getTrends, streamAssistantChat, streamAssistantCommand } from "./client";
+import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, getTrends, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
 import type { AssistantDashboardState } from "../types";
 
 afterEach(() => {
@@ -60,16 +60,77 @@ describe("api client", () => {
     await expect(deletePlace("place-1")).resolves.toBeUndefined();
   });
 
-  it("throws response text when a request fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("No session", { status: 401 }));
+  it("maps 401 to the session-expired line and never leaks the body", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Missing or invalid session cookie" }), { status: 401 }),
+    );
 
-    await expect(getDashboardSummary()).rejects.toThrow("No session");
+    await expect(getDashboardSummary()).rejects.toThrow(SESSION_EXPIRED_MESSAGE);
+    // The body is still available for debugging, just never in the thrown message.
+    expect(debug).toHaveBeenCalled();
   });
 
-  it("throws a status fallback when a failed request has no response text", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 500 }));
+  it("maps 429 to the retry line", async () => {
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Request limit reached — please retry shortly." }), { status: 429 }),
+    );
 
-    await expect(getDashboardSummary()).rejects.toThrow("Request failed with status 500");
+    await expect(getDashboardSummary()).rejects.toThrow(RATE_LIMITED_MESSAGE);
+  });
+
+  it("maps 5xx to the our-side line", async () => {
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("<html><body>502 Bad Gateway</body></html>", { status: 502 }),
+    );
+
+    await expect(getDashboardSummary()).rejects.toThrow(SERVER_ERROR_MESSAGE);
+  });
+
+  it("maps a network failure to the our-side line", async () => {
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(getDashboardSummary()).rejects.toThrow(SERVER_ERROR_MESSAGE);
+  });
+
+  it("maps any other failing status to the generic retry line", async () => {
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "csv_text must not be empty" }), { status: 422 }),
+    );
+
+    await expect(getDashboardSummary()).rejects.toThrow(GENERIC_ERROR_MESSAGE);
+  });
+
+  it("never surfaces a JSON detail body from any failing status", async () => {
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    for (const status of [400, 401, 403, 404, 409, 422, 429, 500, 503]) {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ detail: "leaky-internal-detail" }), { status }),
+      );
+      await expect(getDashboardSummary()).rejects.toThrow(
+        expect.not.stringContaining("leaky-internal-detail") as unknown as string,
+      );
+    }
+  });
+
+  it("re-throws abort errors untouched so cancelled requests stay control flow", async () => {
+    const abort = new DOMException("The user aborted a request.", "AbortError");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(abort);
+
+    await expect(getDashboardSummary()).rejects.toBe(abort);
+  });
+
+  it("maps upload failures too (uploadPersonalData bypasses request())", async () => {
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Unsupported location-history format" }), { status: 422 }),
+    );
+
+    await expect(uploadPersonalData(new File(["{}"], "t.json"))).rejects.toThrow(GENERIC_ERROR_MESSAGE);
   });
 
   it("fetches dashboard freshness from the public endpoint", async () => {
@@ -172,6 +233,25 @@ describe("api client", () => {
     // A malformed *token* frame is dropped, but a terminal error must never be swallowed
     // or the user sees neither an answer nor an error.
     expect(events).toContain("error");
+  });
+
+  it("maps a failing assistant stream response to friendly copy, never the body", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ detail: "leaky-internal-detail" }), { status: 429 }),
+    );
+
+    const failure = await streamAssistantChat(
+      { messages: [{ role: "user", content: "hi" }], dashboard_state: emptyDashboardState },
+      { onEvent: () => {} },
+    ).then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
+
+    expect(failure?.message).toBe(RATE_LIMITED_MESSAGE);
+    expect(failure?.message).not.toContain("leaky-internal-detail");
+    expect(debug).toHaveBeenCalled();
   });
 
   it("passes the abort signal through to fetch", async () => {

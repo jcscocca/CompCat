@@ -234,6 +234,7 @@ export function ManagePlacesModal({
                 })}
               </ul>
             )}
+            <p className="mc-places-expiry">Saved places last for this session (about a day). Keep a result with a share link.</p>
             <div className="mc-places-note"><Notice /></div>
           </div>
         ) : view === "manual" ? (
@@ -244,7 +245,8 @@ export function ManagePlacesModal({
           <PersonalUpload onUploaded={onUploaded ?? (() => {})} />
         )}
         <div className="mc-modal-foot">
-          <a className="mc-link-copy" href={exportHref}>Download Tableau CSV</a>
+          <a className="mc-link-copy" href={exportHref}>Export CSV</a>
+          <p className="mc-export-note">Tableau-ready place summary for the current session.</p>
         </div>
       </div>
     </div>

@@ -20,7 +20,8 @@ export function PersonalUpload({ onUploaded }: Props) {
       );
       onUploaded();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Upload failed.");
+      console.debug("personal upload failed", error);
+      setStatus("Upload failed. Check the file and try again.");
     } finally {
       setBusy(false);
     }
@@ -33,7 +34,8 @@ export function PersonalUpload({ onUploaded }: Props) {
       setStatus("Your uploaded data was deleted.");
       onUploaded();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Delete failed.");
+      console.debug("personal upload delete failed", error);
+      setStatus("Couldn't delete your uploaded data. Try again.");
     } finally {
       setBusy(false);
     }
