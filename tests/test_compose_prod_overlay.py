@@ -18,17 +18,19 @@ _DEPLOY = _ROOT / "deploy"
 _CRONTAB = _DEPLOY / "ingest-cron.crontab"
 _JOB = _DEPLOY / "ingest-daily.sh"
 _DOCKERFILE = _DEPLOY / "ingest-cron.Dockerfile"
+_CADDYFILE = _DEPLOY / "Caddyfile"
 
 
 def test_overlay_documents_its_own_usage_and_sources_secrets_from_env() -> None:
     text = _PROD.read_text(encoding="utf-8")
     assert "docker compose -f docker-compose.yml -f docker-compose.prod.yml" in text
     # !reset, not an empty list: Compose merges sequences, so only the tag drops the base publish.
-    assert "ports: !reset []" in text
+    # Twice now — db (never published) and api (Caddy is the only ingress in production).
+    assert text.count("ports: !reset []") == 2
     assert "${POSTGRES_PASSWORD:?" in text
     assert "${MCA_DATABASE_URL:?" in text
-    # db, api, and the ops-profile ingest sidecar.
-    assert text.count("restart: unless-stopped") == 3
+    # db, api, the ops-profile ingest sidecar, and caddy.
+    assert text.count("restart: unless-stopped") == 4
     assert ":-" not in text  # no dev fallback defaults anywhere in the production overlay
 
 
@@ -75,7 +77,9 @@ def _render(
     )
 
 
-def test_rendered_overlay_publishes_no_postgres_port() -> None:
+def test_rendered_overlay_publishes_only_the_caddy_edge() -> None:
+    # Production ingress is Caddy on 80/443 (+443/udp for HTTP/3) and nothing else: neither
+    # Postgres nor the app's own 8000 may be reachable from the host network.
     if not _compose_available():
         pytest.skip("docker compose plugin not available")
     result = _render(
@@ -88,8 +92,44 @@ def test_rendered_overlay_publishes_no_postgres_port() -> None:
     assert result.returncode == 0, result.stderr
     rendered = result.stdout
     assert 'published: "5432"' not in rendered
-    assert 'published: "8000"' in rendered  # the app is still reachable
-    assert rendered.count("restart: unless-stopped") == 2
+    assert 'published: "8000"' not in rendered
+    assert 'published: "80"' in rendered
+    assert 'published: "443"' in rendered
+    assert rendered.count("protocol: udp") == 1  # HTTP/3 on 443
+    assert rendered.count("restart: unless-stopped") == 3  # db, api, caddy
+
+
+def test_rendered_caddy_mounts_the_repo_caddyfile_read_only() -> None:
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    result = _render(
+        {
+            "POSTGRES_PASSWORD": _TEST_PASSWORD,
+            "MCA_DATABASE_URL": _TEST_DATABASE_URL,
+            "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY": "0",
+        }
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = result.stdout
+    assert "caddy:2-alpine" in rendered
+    assert "target: /etc/caddy/Caddyfile" in rendered
+    # Certificates and OCSP staples survive a container replacement.
+    assert "target: /data" in rendered
+    assert "target: /config" in rendered
+
+
+def test_caddyfile_terminates_tls_for_the_registered_domain_and_proxies_the_api() -> None:
+    text = _CADDYFILE.read_text(encoding="utf-8")
+    assert "compcat.app {" in text
+    assert "reverse_proxy api:8000" in text
+    assert "encode gzip" in text
+    # Nothing else: no extra directives to review, no TLS overrides that would disable ACME.
+    directives = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#") and line.strip() != "}"
+    ]
+    assert directives == ["compcat.app {", "encode gzip", "reverse_proxy api:8000"]
 
 
 def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:
@@ -134,8 +174,8 @@ def test_sidecar_is_absent_without_the_ops_profile() -> None:
     result = _render(_BASE_ENV, drop=("MCA_ADMIN_INGEST_TOKEN",))
     assert result.returncode == 0, result.stderr
     assert "ingest-cron" not in result.stdout
-    # Only db and api restart in the default rendering.
-    assert result.stdout.count("restart: unless-stopped") == 2
+    # Only db, api and caddy restart in the default rendering.
+    assert result.stdout.count("restart: unless-stopped") == 3
 
 
 def test_sidecar_renders_under_the_ops_profile() -> None:

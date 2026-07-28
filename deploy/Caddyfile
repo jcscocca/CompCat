@@ -1,0 +1,9 @@
+# CompCat production edge. Mounted read-only into the caddy service by
+# docker-compose.prod.yml; Caddy obtains and renews the Let's Encrypt certificate for this
+# name automatically, provided the A record points here and 80/443 are open.
+#
+# Deliberately three directives. Anything more is another thing to review before a deploy.
+compcat.app {
+	encode gzip
+	reverse_proxy api:8000
+}

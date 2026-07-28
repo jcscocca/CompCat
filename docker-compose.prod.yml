@@ -4,6 +4,8 @@
 #
 # What it changes versus the dev/demo default:
 #   - Postgres is NOT published on the host (the api reaches db over the compose network);
+#   - the api container publishes NO host port either — Caddy terminates TLS on 80/443 and is the
+#     only ingress; the app is reachable solely over the compose network at api:8000;
 #   - POSTGRES_PASSWORD and MCA_DATABASE_URL are required from the environment with no default,
 #     so compose refuses to render — let alone start — if either is missing;
 #   - api and db restart automatically (unless-stopped) so a host reboot brings the stack back.
@@ -19,6 +21,10 @@ services:
     restart: unless-stopped
 
   api:
+    # Same !reset mechanic as db above: drop the base file's "8000:8000" publish. In production
+    # the only listener on the host is caddy; nothing should be able to reach uvicorn directly
+    # and bypass TLS, the edge, and the real client IP that the limiter keys on.
+    ports: !reset []
     environment:
       MCA_DATABASE_URL: ${MCA_DATABASE_URL:?set MCA_DATABASE_URL (no default in production)}
       # The base compose file enumerates the api env explicitly, so every prod-only var must
@@ -55,3 +61,27 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  # TLS edge. Caddy obtains and renews the Let's Encrypt certificate for the site name in
+  # deploy/Caddyfile on its own; 80 must stay open for the ACME HTTP challenge and the
+  # HTTP->HTTPS redirect, and 443/udp gives HTTP/3. The named volumes make certificates and
+  # OCSP staples survive a container replacement — without them a redeploy re-issues and can
+  # hit Let's Encrypt rate limits. depends_on is the short form on purpose: a service_healthy
+  # condition would hold the edge down (and the ACME challenge unanswered) while api migrates.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
