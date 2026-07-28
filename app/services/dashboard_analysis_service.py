@@ -129,6 +129,10 @@ def compare_selected_places(
         offense_subcategory=offense_subcategory,
         nibrs_group=nibrs_group,
         sources=sources,
+        # Same rule as analyze_selected_places: points are synthetic, non-persisted
+        # clusters, so a comparison written for them is an audit row nothing can look up
+        # again. Saved place_ids still persist — the run-scoped export reads them back.
+        persist=points is None,
     )
 
 

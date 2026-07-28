@@ -25,6 +25,7 @@ from app.models import (
     StatisticalComparison,
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
+    utc_now,
 )
 from app.schemas import CrimeIncidentData
 from app.services.incident_query_service import bounding_box_for_points, incidents_in_bbox
@@ -41,6 +42,7 @@ def compare_site_options(
     offense_subcategory: str | None,
     nibrs_group: str | None,
     sources: Sequence[str] | None = None,
+    persist: bool = True,
 ) -> dict[str, Any]:
     effective_sources = tuple(sources) if sources is not None else (SOURCE_SPD_CRIME,)
     site_options = [
@@ -123,6 +125,8 @@ def compare_site_options(
         period_counts_by_option_id=period_counts_by_option_id,
         source_dataset=",".join(effective_sources),
     )
+    if not persist:
+        return _result_payload(comparison, geometry_metadata_by_option_id)
     return _persist_and_payload(
         session,
         comparison,
@@ -228,6 +232,89 @@ def _persist_and_payload(
     session.commit()
     session.refresh(comparison_model)
     return _comparison_model_payload(session, comparison_model)
+
+
+def _result_payload(
+    comparison: StatisticalComparisonResult,
+    geometry_metadata_by_option_id: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """The same payload _comparison_model_payload builds, straight off the computed result
+    instead of a round-trip through the tables — for callers that do not persist."""
+    option_payloads = [
+        {
+            "id": option.option_id,
+            "label": option.option_label,
+            "geometry_type": option.geometry_type.value,
+            "radius_m": option.radius_m,
+            "incident_count": option.incident_count,
+            "exposure": option.exposure,
+            "exposure_unit": option.exposure_unit,
+            "incident_rate": option.incident_rate,
+            "rate_ci_lower": option.rate_ci_lower,
+            "rate_ci_upper": option.rate_ci_upper,
+            "rate_ci_method": option.rate_ci_method,
+            "geometry_metadata": (geometry_metadata_by_option_id or {}).get(option.option_id),
+        }
+        for option in comparison.options
+    ]
+    return {
+        "id": comparison.id,
+        "comparison_type": comparison.comparison_type,
+        "geometry_type": comparison.geometry_type.value,
+        "radius_m": comparison.radius_m,
+        "analysis_start_date": comparison.analysis_start_date,
+        "analysis_end_date": comparison.analysis_end_date,
+        "offense_category": comparison.offense_category,
+        "offense_subcategory": comparison.offense_subcategory,
+        "nibrs_group": comparison.nibrs_group,
+        "created_at": comparison.created_at or utc_now(),
+        "overview": {
+            "label": "Overview",
+            "decision_class": comparison.decision_class.value,
+            "recommendation_option_id": comparison.recommendation_option_id,
+            "recommendation_label": comparison.recommendation_label,
+            "summary_text": comparison.overview_summary_text,
+            "caveat_text": comparison.overview_caveat_text,
+            "options": option_payloads,
+        },
+        "analytical": {
+            "label": "Analytical",
+            "source_dataset": comparison.source_dataset,
+            "exposure_unit": comparison.exposure_unit,
+            "full_caveat_text": comparison.full_caveat_text,
+            "options": option_payloads,
+            "pairwise_results": [
+                {
+                    "id": pairwise.id,
+                    "option_a_id": pairwise.option_a_id,
+                    "option_a_label": pairwise.option_a_label,
+                    "option_b_id": pairwise.option_b_id,
+                    "option_b_label": pairwise.option_b_label,
+                    "winner_option_id": pairwise.winner_option_id,
+                    "winner_label": pairwise.winner_label,
+                    "decision_class": pairwise.decision_class.value,
+                    "method": pairwise.method,
+                    "incident_count_a": pairwise.incident_count_a,
+                    "incident_count_b": pairwise.incident_count_b,
+                    "exposure_a": pairwise.exposure_a,
+                    "exposure_b": pairwise.exposure_b,
+                    "exposure_unit": pairwise.exposure_unit,
+                    "rate_a": pairwise.rate_a,
+                    "rate_b": pairwise.rate_b,
+                    "rate_ratio": pairwise.rate_ratio,
+                    "ci_lower": pairwise.ci_lower,
+                    "ci_upper": pairwise.ci_upper,
+                    "p_value": pairwise.p_value,
+                    "adjusted_p_value": pairwise.adjusted_p_value,
+                    "overdispersion_phi": pairwise.overdispersion_phi,
+                    "overdispersion_status": pairwise.overdispersion_status,
+                    "minimum_data_status": pairwise.minimum_data_status,
+                    "caveat_text": pairwise.caveat_text,
+                }
+                for pairwise in comparison.pairwise_results
+            ],
+        },
+    }
 
 
 def _comparison_model_payload(
