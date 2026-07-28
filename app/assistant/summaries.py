@@ -8,7 +8,7 @@ _DECISION_PHRASES = {
     "above_clear": "above its surrounding-area baseline, statistically clear",
     "below_clear": "below its surrounding-area baseline, statistically clear",
     "not_clear": "not statistically clear vs its surrounding area",
-    "insufficient_data": "insufficient data for a surrounding-area comparison",
+    "insufficient_data": "not enough data for a surrounding-area comparison",
     "model_warning": "too few months to model reliably",
     "baseline_unavailable": "no neighborhood baseline available",
 }
@@ -84,6 +84,22 @@ def _primary_baseline(place: dict[str, Any]) -> dict[str, Any] | None:
     return by_kind.get("mcpp") or by_kind.get("beat") or by_kind.get("city")
 
 
+# Decisions that mean "no comparison was actually made". A baseline entry can still carry a
+# ratio in these cases (each entry is tested independently, and a wide-area citywide entry
+# will happily return 88.9× off two incidents), but the place-level verdict is authoritative:
+# stating the ratio anyway is the difference between context and a fabricated finding.
+_UNTESTED_DECISIONS = frozenset({"insufficient_data", "model_warning", "baseline_unavailable"})
+
+
+def _rate_ratio_is_reportable(place: dict[str, Any]) -> bool:
+    if place.get("baseline_available") is False:
+        return False
+    if place.get("decision") in _UNTESTED_DECISIONS:
+        return False
+    status = place.get("minimum_data_status")
+    return status is None or status == "met"
+
+
 def _analyze_places_summary(result: dict[str, Any]) -> str:
     radius = (result.get("settings_used") or {}).get("radius_m")
     lead_in, noun = _layer_terms(result)
@@ -92,7 +108,7 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
     for place in places:
         label = place.get("place_label") or "The place"
         count = place.get("place_incident_count") or 0
-        entry = _primary_baseline(place)
+        entry = _primary_baseline(place) if _rate_ratio_is_reportable(place) else None
         relation = (entry or {}).get("relation")
         if entry and relation in _RELATION_PHRASES and entry.get("rate_ratio") is not None:
             ci = ""
@@ -125,8 +141,34 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
         parts.append(f"{noun.capitalize()} within {radius} m — {counts}.")
     if overview.get("summary_text"):
         parts.append(overview["summary_text"])
+    parts.extend(_untested_pair_sentences(result))
     summary = (lead_in + " ".join(parts)) if parts else "Compared the selected places."
     return _with_provenance(summary, result)
+
+
+# app/analysis/comparison.py fills an untested pair's rate_ratio/CI/p with 1.0 placeholders so
+# the row is storable. Those are not findings — surfacing them as "1.0× (95% CI 1.0–1.0, p 1.0)"
+# reads as a confident "no difference" verdict that was never computed.
+_NOT_TESTED_METHOD = "not_tested_minimum_data"
+_MAX_UNTESTED_PAIRS_LISTED = 3
+
+
+def _untested_pair_sentences(result: dict[str, Any]) -> list[str]:
+    pairwise = ((result.get("comparison") or {}).get("analytical") or {}).get(
+        "pairwise_results"
+    ) or []
+    pairs = [
+        f"{entry.get('option_a_label')} vs {entry.get('option_b_label')}"
+        for entry in pairwise
+        if entry.get("method") == _NOT_TESTED_METHOD
+        or (entry.get("minimum_data_status") or "met") != "met"
+    ]
+    if not pairs:
+        return []
+    listed = pairs[:_MAX_UNTESTED_PAIRS_LISTED]
+    remainder = len(pairs) - len(listed)
+    tail = f", and {remainder} more" if remainder else ""
+    return [f"Not tested (below the data floor): {_join(listed)}{tail}."]
 
 
 def _dashboard_summary(result: dict[str, Any]) -> str:
