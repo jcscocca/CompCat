@@ -425,7 +425,8 @@ export function MapWorkspace() {
         display_label: entry.label,
         latitude: entry.latitude,
         longitude: entry.longitude,
-        visit_count: 0,
+        // ManualPlaceCreate requires ge=1; 0 made every save of a searched address a 422.
+        visit_count: 1,
         sensitivity_class: "normal",
       });
       list.markSaved(entryKey, created.id);

@@ -65,6 +65,7 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 
 import { MapWorkspace } from "./MapWorkspace";
 import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getBeatPolygons, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
+import { assertValidPlaceCreate } from "../api/placeCreateContract";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { snapHeightPx } from "../lib/drawer";
 import { encodeView } from "../lib/savedView";
@@ -1093,6 +1094,42 @@ describe("MapWorkspace", () => {
     expect(screen.getByRole("button", { name: "Show 500 Pine St on map" })).toHaveTextContent("Unsaved");
     expect(screen.getByRole("button", { name: "Remove 500 Pine St from analysis" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save pin/i })).toBeInTheDocument();
+  });
+
+  it("saves a searched address from its chip with a payload the backend accepts", async () => {
+    const saved: Place = { ...home, id: "s2", display_label: "500 Pine St", latitude: 47.63, longitude: -122.35 };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValueOnce(makeSummary()).mockResolvedValue(makeSummary([saved]));
+    vi.mocked(createPlace).mockResolvedValue(saved);
+    geocodeSearch.mockResolvedValue([{ label: "500 Pine St", latitude: 47.63, longitude: -122.35, source: "test" }]);
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+    fireEvent.change(screen.getByRole("combobox", { name: /search address or place/i }), { target: { value: "500 Pine" } });
+    fireEvent.click(await screen.findByRole("option", { name: "500 Pine St" }));
+
+    // Dismiss the draft-pin popover so the chip's own Save (handleSaveEntry) is the control
+    // under test — the popover's saveDraft path is a different call site.
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(createPlace).toHaveBeenCalled());
+    // createPlace is mocked suite-wide, so a payload the API would 422 on still "passes"
+    // unless it is checked against the documented contract.
+    const payload = vi.mocked(createPlace).mock.calls[0]![0];
+    assertValidPlaceCreate(payload);
+    expect(payload).toMatchObject({
+      display_label: "500 Pine St",
+      latitude: 47.63,
+      longitude: -122.35,
+      sensitivity_class: "normal",
+    });
+
+    // The ad-hoc chip is replaced in place by a saved, checked place chip.
+    await waitFor(() => {
+      expect(screen.getByRole("checkbox", { name: "500 Pine St" })).toHaveAttribute("aria-checked", "true");
+    });
+    expect(screen.queryByRole("button", { name: "Show 500 Pine St on map" })).not.toBeInTheDocument();
   });
 
   it("marks the current card as previous analysis when filters change", async () => {
