@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # never restarts the container.
     data_staleness_days: int = 7
     raw_upload_retention: bool = False
+    # How long server-side, session-scoped analysis data (place clusters, analysis runs,
+    # crime summaries, statistical comparisons) is kept before the retention sweep
+    # (POST /admin/maintenance/retention-sweep) deletes it. Sessions themselves are 24h
+    # anonymous tokens, so these rows are unreachable by anyone long before this. 0 disables.
+    session_data_retention_days: int = 30
     # Hard ceiling on personal-upload / import request bodies, read into memory before
     # parsing. Bounds a memory-exhaustion DoS; generous enough for real location-history
     # exports. 100 MiB default.
