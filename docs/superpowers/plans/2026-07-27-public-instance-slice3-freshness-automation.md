@@ -550,7 +550,7 @@ rather than baked, so the schedule can be changed without rebuilding the image.
 - Modify: `tests/test_compose_prod_overlay.py`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/test_compose_prod_overlay.py`, extend the module constants (after `_PROD`):
 
@@ -679,14 +679,14 @@ def test_sidecar_image_is_pinned_and_installs_tzdata() -> None:
     assert "curl" in text
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_compose_prod_overlay.py -v`
 Expected: FAIL — the three file-text tests raise `FileNotFoundError` (nothing under `deploy/` yet),
 `test_sidecar_renders_under_the_ops_profile` fails on `"ingest-cron" in rendered`, and the updated
 `restart: unless-stopped` count assertion fails at 2 != 3. The two slice-1 render tests still pass.
 
-- [ ] **Step 3: Create the sidecar image definition**
+- [x] **Step 3: Create the sidecar image definition**
 
 Create `deploy/ingest-cron.Dockerfile`:
 
@@ -753,7 +753,7 @@ exit "${status}"
 Then: `chmod +x deploy/ingest-daily.sh` (cron invokes it through `/bin/sh` either way, but the exec
 bit keeps it runnable by hand during the slice-4 bring-up check).
 
-- [ ] **Step 4: Add the service to the production overlay**
+- [x] **Step 4: Add the service to the production overlay**
 
 Append to `docker-compose.prod.yml` (after the `api` service; keep the file free of `:-` defaults —
 `tests/test_compose_prod_overlay.py` asserts there are none):
@@ -785,13 +785,13 @@ Append to `docker-compose.prod.yml` (after the `api` service; keep the file free
     restart: unless-stopped
 ```
 
-- [ ] **Step 5: Run to verify the tests pass**
+- [x] **Step 5: Run to verify the tests pass**
 
 Run: `.venv/bin/python -m pytest tests/test_compose_prod_overlay.py -v`
 Expected: PASS (9 tests: 3 from slice 1 + 6 new). If the render tests skip, the Docker CLI is missing
 locally — CI still enforces them via Step 7.
 
-- [ ] **Step 6: Verify the sidecar by hand (renders, and the schedule/token wiring is real)**
+- [x] **Step 6: Verify the sidecar by hand (renders, and the schedule/token wiring is real)**
 
 Run from the worktree root:
 
@@ -822,7 +822,7 @@ three `ingest-cron: <source>: starting` / `FAILED (curl error above)` pairs in t
 to connect …` line, with timestamps in `-0700`/`-0800` (not `+0000`) — that is tzdata working. Firing
 against a real API is the slice-4 bring-up step, not a CI job.
 
-- [ ] **Step 7: Add the CI docker-lane assertion**
+- [x] **Step 7: Add the CI docker-lane assertion**
 
 In `.github/workflows/ci.yml`, append to the `docker` job's existing render step (after the
 `test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "2"` line), a second step:
@@ -845,7 +845,7 @@ In `.github/workflows/ci.yml`, append to the `docker` job's existing render step
           fi
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add deploy/ingest-cron.Dockerfile deploy/ingest-cron.crontab deploy/ingest-daily.sh \

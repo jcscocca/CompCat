@@ -87,3 +87,19 @@ jobs:
           grep -q 'published: "8000"' rendered.yml
           grep -q 'MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY' rendered.yml
           test "$(grep -c 'restart: unless-stopped' rendered.yml)" = "2"
+      - name: Ingest sidecar renders only under the ops profile
+        env:
+          POSTGRES_PASSWORD: ci-not-a-real-password
+          MCA_DATABASE_URL: postgresql+psycopg://mca:ci-not-a-real-password@db:5432/mca
+          MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY: "0"
+          MCA_ADMIN_INGEST_TOKEN: ci-not-a-real-token
+        run: |
+          docker compose --env-file /dev/null --profile ops \
+            -f docker-compose.yml -f docker-compose.prod.yml config > rendered-ops.yml
+          grep -q 'ingest-cron' rendered-ops.yml
+          grep -q 'target: /etc/crontabs/root' rendered-ops.yml
+          # rendered.yml is the previous step's no-profile render: the sidecar must be absent.
+          if grep -q 'ingest-cron' rendered.yml; then
+            echo "sidecar must not render without --profile ops" >&2
+            exit 1
+          fi
