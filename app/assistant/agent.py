@@ -358,6 +358,7 @@ def _tool_arguments(
         for key, value in raw_arguments.items()
         if value not in (None, "", [])
     }
+    arguments = _with_explicit_radius(tool_name, arguments, user_text)
     if tool_name not in SELECTION_TOOLS:
         return _with_relative_window(tool_name, dashboard_state, arguments, user_text)
 
@@ -393,9 +394,40 @@ def _tool_arguments(
 # Tools that take an analysis window. update_filters is not a selection tool but still
 # carries the dates, so the backstop has to cover it too.
 _DATE_WINDOW_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
+_RADIUS_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
 _RELATIVE_WINDOW_PATTERN = re.compile(
     r"\b(?:last|past)\s+(?:(\d{1,3})\s+)?(day|week|month|year)s?\b", re.IGNORECASE
 )
+_RADIUS_AFTER_LABEL_PATTERN = re.compile(
+    r"\bradius\s*(?:(?:to|of)\s*|=\s*)?(\d{2,5})"
+    r"(?:\s*(?:m|meters?|metres?))?\b",
+    re.IGNORECASE,
+)
+_RADIUS_WITH_UNIT_PATTERN = re.compile(
+    r"\b(\d{2,5})\s*(?:m|meters?|metres?)\b",
+    re.IGNORECASE,
+)
+
+
+def _with_explicit_radius(
+    tool_name: str,
+    arguments: dict[str, Any],
+    user_text: str,
+) -> dict[str, Any]:
+    """Backfill an explicit meter value when the planner omitted the radius field."""
+    if tool_name not in _RADIUS_TOOLS:
+        return arguments
+    target = "radius_m" if tool_name in {"compare_places", "update_filters"} else "radii_m"
+    if target in arguments:
+        return arguments
+    match = _RADIUS_AFTER_LABEL_PATTERN.search(user_text or "")
+    if match is None:
+        match = _RADIUS_WITH_UNIT_PATTERN.search(user_text or "")
+    if match is None:
+        return arguments
+    radius = int(match.group(1))
+    value: int | list[int] = radius if target == "radius_m" else [radius]
+    return {**arguments, target: value}
 
 
 def _with_relative_window(
@@ -531,4 +563,3 @@ def _final_message(plan: dict[str, Any]) -> str:
     if not isinstance(message, str) or not message.strip():
         raise ValueError("The local model returned an empty assistant answer.")
     return message.strip()
-

@@ -216,6 +216,39 @@ def test_dashboard_state_coerces_an_unknown_layer_to_reported():
     assert _tool_arguments("analyze_places", state, {})["layer"] == "reported"
 
 
+def test_unknown_layer_log_value_is_truncated(caplog):
+    value = "unknown-" + "x" * 500
+
+    AssistantDashboardState(layer=value)
+
+    assert value not in caplog.text
+    assert "unknown-" in caplog.text
+    assert "x" * 81 not in caplog.text
+
+
+def test_semantic_context_marks_active_empty_layer_as_not_loaded(tmp_path):
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+
+    packet = build_semantic_context(
+        session,
+        "user-empty-layer",
+        AssistantDashboardState(
+            analysis_start_date=date(2024, 1, 1),
+            analysis_end_date=date(2024, 1, 31),
+            radii_m=[250],
+            layer="calls",
+        ),
+        get_settings(),
+    )
+    session.close()
+
+    message = " ".join(packet.missing_context).lower()
+    assert "911 calls" in message
+    assert "not loaded" in message
+    assert "zero" in message
+
+
 def test_dashboard_state_bounds_every_field():
     """dashboard_state was entirely unbounded, so a multi-megabyte one validated and was
     interpolated into the planning prompt and sent upstream BEFORE any budget accounting —

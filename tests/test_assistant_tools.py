@@ -261,6 +261,29 @@ def test_update_filters_rejects_bad_values():
         )
 
 
+def test_resolve_or_select_falls_back_to_active_ids_when_queries_miss(monkeypatch):
+    from app.assistant.place_resolution import ResolvedPlaces
+    from app.assistant.tools import _resolve_or_select
+
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: object())
+    monkeypatch.setattr(
+        "app.assistant.tools.resolve_place_queries",
+        lambda session, user_id_hash, queries, provider: ResolvedPlaces(
+            unresolved=list(queries)
+        ),
+    )
+
+    resolved = _resolve_or_select(
+        session=object(),
+        user_id_hash="user-hash",
+        queries=["model hallucination"],
+        place_ids=["active-place"],
+    )
+
+    assert resolved.place_ids == ["active-place"]
+    assert resolved.unresolved == ["model hallucination"]
+
+
 def test_planning_prompt_requests_statistical_interpretation():
     from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
 
