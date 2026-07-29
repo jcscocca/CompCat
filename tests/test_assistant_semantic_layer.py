@@ -216,14 +216,21 @@ def test_dashboard_state_coerces_an_unknown_layer_to_reported():
     assert _tool_arguments("analyze_places", state, {})["layer"] == "reported"
 
 
-def test_unknown_layer_log_value_is_truncated(caplog):
+def test_unknown_layer_log_value_is_truncated(monkeypatch):
+    logged: list[str] = []
+
+    def capture_warning(message, *args):
+        logged.append(message % args)
+
+    monkeypatch.setattr("app.assistant.schemas.logger.warning", capture_warning)
     value = "unknown-" + "x" * 500
 
     AssistantDashboardState(layer=value)
 
-    assert value not in caplog.text
-    assert "unknown-" in caplog.text
-    assert "x" * 81 not in caplog.text
+    assert len(logged) == 1
+    assert value not in logged[0]
+    assert "unknown-" in logged[0]
+    assert "x" * 81 not in logged[0]
 
 
 def test_semantic_context_marks_active_empty_layer_as_not_loaded(tmp_path):
