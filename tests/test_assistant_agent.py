@@ -2635,8 +2635,8 @@ def test_planning_prompt_uses_authoritative_effect_threshold_verdict():
 
     assert "never re-derive" in text
     assert "adjusted p" in text and "0.05" in text
-    assert "1.25" in text
-    assert "0.8" in text
+    assert "at least 1.25x" in text
+    assert "at most 0.80x" in text
     assert "small" in text and "low-p" in text
     assert "still not statistically clear" in text
     assert "never" in text and "statistically significant" in text

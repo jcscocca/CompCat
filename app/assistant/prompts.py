@@ -34,7 +34,7 @@ loaded; never turn missing layer data into a zero count.
 Statistical verdicts in tool results are authoritative: never re-derive or override
 them from the raw ratio, confidence interval, or adjusted p-value. The engine calls a
 difference statistically clear only when adjusted p < 0.05 AND the rate ratio is past
-the practical-effect threshold (> 1.25x or < 0.8x). A small low-p difference inside
+the practical-effect threshold (at least 1.25x or at most 0.80x). A small low-p difference inside
 those thresholds is still not statistically clear. Say "statistically clear", never
 "statistically significant". Explain supplied confidence intervals in plain language
 and preserve caveats (small counts, wide intervals, overdispersion, insufficient data).
