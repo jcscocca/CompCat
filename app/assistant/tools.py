@@ -253,7 +253,14 @@ def _resolve_or_select(
     """Prefer model-named queries; fall back to the backfilled selection ids."""
     if queries:
         provider = build_provider(get_settings())
-        return resolve_place_queries(session, user_id_hash, queries, provider)
+        resolved = resolve_place_queries(session, user_id_hash, queries, provider)
+        if resolved.place_ids:
+            return resolved
+        # A model can mistake a deictic ("this place") for a geocodable query even
+        # though the authoritative dashboard selection was backfilled beside it. A
+        # no-hit query must not erase that usable selection.
+        resolved.place_ids = list(place_ids)
+        return resolved
     return ResolvedPlaces(place_ids=list(place_ids))
 
 

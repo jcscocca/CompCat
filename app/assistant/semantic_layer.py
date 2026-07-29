@@ -9,6 +9,7 @@ from app.assistant.schemas import AssistantDashboardState, SemanticContextPacket
 from app.config import Settings
 from app.models import PlaceCluster, PlaceCrimeSummary
 from app.services.analysis_runs import latest_analysis_run_id
+from app.services.crime_service import dashboard_freshness_by_layer
 from app.services.dashboard_service import dashboard_summary
 
 POLICY_CAVEATS = [
@@ -89,6 +90,8 @@ def build_semantic_context(
     settings: Settings,
 ) -> SemanticContextPacket:
     summary = dashboard_summary(session, user_id_hash, settings)
+    layer_freshness = dashboard_freshness_by_layer(session).get(state.layer) or {}
+    layer_loaded = bool(layer_freshness.get("incident_count"))
     selected_ids = list(dict.fromkeys(state.selected_place_ids))
     selected_places = _selected_places(session, user_id_hash, selected_ids)
     crime_summaries = _crime_summaries(session, user_id_hash, selected_ids)
@@ -112,10 +115,13 @@ def build_semantic_context(
             "offense_subcategory": state.offense_subcategory,
             "nibrs_group": state.nibrs_group,
             "layer": state.layer,
+            "layer_loaded": layer_loaded,
         },
         available_tools=AVAILABLE_TOOLS,
         policy_caveats=POLICY_CAVEATS,
-        missing_context=_missing_context(summary, selected_ids, selected_places, state),
+        missing_context=_missing_context(
+            summary, selected_ids, selected_places, state, layer_loaded
+        ),
     )
 
 
@@ -197,6 +203,7 @@ def _missing_context(
     selected_ids: list[str],
     selected_places: list[PlaceCluster],
     state: AssistantDashboardState,
+    layer_loaded: bool,
 ) -> list[str]:
     missing: list[str] = []
     if summary["totals"]["place_count"] == 0:
@@ -209,4 +216,13 @@ def _missing_context(
         missing.append("No complete analysis date range is selected.")
     if not state.radii_m:
         missing.append("No analysis radius is selected.")
+    if not layer_loaded:
+        noun = {
+            "reported": "reported incidents",
+            "arrests": "arrests",
+            "calls": "911 calls",
+        }[state.layer]
+        missing.append(
+            f"The active {noun} layer is not loaded. Do not report this as zero {noun}."
+        )
     return missing

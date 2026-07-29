@@ -524,6 +524,32 @@ def test_model_radius_override_beats_dashboard_backfill_analyze():
     assert args["layer"] == "reported"
 
 
+def test_explicit_radius_to_is_backfilled_for_update_filters():
+    from app.assistant.agent import _tool_arguments
+
+    args = _tool_arguments(
+        "update_filters",
+        AssistantDashboardState(radii_m=[250]),
+        {},
+        "Set the radius to 500",
+    )
+
+    assert args == {"radius_m": 500}
+
+
+def test_explicit_meter_radius_is_backfilled_for_update_filters():
+    from app.assistant.agent import _tool_arguments
+
+    args = _tool_arguments(
+        "update_filters",
+        AssistantDashboardState(radii_m=[250]),
+        {},
+        "Use 750 meters",
+    )
+
+    assert args == {"radius_m": 750}
+
+
 def test_agent_clarifies_underspecified_request(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
     # compare with only one resolvable place -> AssistantClarification -> clarify token, NOT error.
