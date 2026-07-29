@@ -136,6 +136,11 @@ class SessionActivity(Base):
 
 class CrimeIncident(Base):
     __tablename__ = "crime_incidents"
+    # WARNING: offense_start_utc, offense_end_utc, and report_utc are legacy
+    # misnomers. SPD source values are Seattle local wall-clock times that parsers
+    # historically stamped with UTC tzinfo; they are not UTC instants. Public API
+    # serializers must preserve the clock digits and attach America/Los_Angeles's
+    # real offset (app/time_contract.py), never emit a trailing Z.
     __table_args__ = (
         UniqueConstraint(
             "source_dataset", "external_incident_id", name="uq_crime_source_external_id"

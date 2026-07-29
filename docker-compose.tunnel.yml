@@ -33,6 +33,11 @@ services:
     # `volumes:` block and are simply unused here.
     profiles: ["disabled"]
 
+  api:
+    # The base dev stack can reach a host-side local LLM. This public posture uses hosted
+    # providers and must not retain an unnecessary route back into the ThinkPad host.
+    extra_hosts: !reset []
+
   # The public ingress, inverted: instead of the internet dialling us, cloudflared dials
   # Cloudflare and the tunnel token names which tunnel this is. The hostname routing
   # (compcat.app -> http://api:8000) lives in the Cloudflare dashboard, not in this file —
