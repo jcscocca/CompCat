@@ -252,7 +252,11 @@ class BurstLimitMiddleware:
         ip = _client_ip(scope, settings, headers)
 
         if path.startswith("/tiles/"):
-            if path.lower().endswith(".pmtiles") and not headers.get("range"):
+            if (
+                scope.get("method") == "GET"
+                and path.lower().endswith(".pmtiles")
+                and not headers.get("range")
+            ):
                 size = _pmtiles_size(settings, path)
                 if size is not None:
                     await send(
@@ -278,16 +282,17 @@ class BurstLimitMiddleware:
             return
 
         if path in {"/health", "/health/data"}:
-            if settings.rate_limit_enabled:
-                wait = get_rate_limiter().try_take(
-                    "health",
-                    ip,
-                    capacity=settings.rate_limit_health_per_minute,
-                    per_seconds=60.0,
-                )
-                if wait > 0:
-                    await _send_rate_limit(send, wait)
-                    return
+            # Always finite: unlike ordinary public throttles, readiness/freshness probes
+            # consume pooled DB connections even when the general limiter is disabled.
+            wait = get_rate_limiter().try_take(
+                "health",
+                ip,
+                capacity=settings.rate_limit_health_per_minute,
+                per_seconds=60.0,
+            )
+            if wait > 0:
+                await _send_rate_limit(send, wait)
+                return
             await self.app(scope, receive, send)
             return
 

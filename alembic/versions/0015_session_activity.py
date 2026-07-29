@@ -29,9 +29,18 @@ def upgrade() -> None:
         "session_activity",
         ["last_seen_at"],
     )
+    op.create_index(
+        "ix_place_clusters_updated_at",
+        "place_clusters",
+        ["updated_at"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_place_clusters_updated_at",
+        table_name="place_clusters",
+    )
     op.drop_index(
         "ix_session_activity_last_seen_at",
         table_name="session_activity",

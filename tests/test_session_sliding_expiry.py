@@ -12,6 +12,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import app.sessions as sessions_module
 from app.main import create_app
@@ -137,3 +138,16 @@ def test_resume_does_not_consume_the_session_rate_budget(tmp_path, monkeypatch: 
         response = client.post("/sessions")
         assert response.status_code == 200
         assert response.json()["session_state"] == "resumed"
+
+
+def test_absolute_session_ceiling_defaults_to_thirty_days() -> None:
+    from app.config import Settings
+
+    assert Settings(_env_file=None).session_absolute_max_days == 30
+
+
+def test_absolute_session_ceiling_cannot_be_disabled() -> None:
+    from app.config import Settings
+
+    with pytest.raises(ValidationError, match="session_absolute_max_days"):
+        Settings(_env_file=None, session_absolute_max_days=0)

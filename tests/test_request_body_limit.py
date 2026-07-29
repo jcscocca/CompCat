@@ -100,3 +100,9 @@ def test_upload_path_gets_large_cap_only_when_feature_is_enabled(tmp_path, monke
         files={"file": ("places.csv", payload, "text/csv")},
     )
     assert enabled_response.status_code != 413
+
+
+def test_global_body_limit_defaults_to_one_mibibyte() -> None:
+    from app.config import Settings
+
+    assert Settings(_env_file=None).max_request_bytes == 1024 * 1024

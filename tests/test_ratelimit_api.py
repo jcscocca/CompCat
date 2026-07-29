@@ -170,6 +170,19 @@ def test_health_has_a_dedicated_finite_bucket(tmp_path, monkeypatch) -> None:
     assert statuses == [200, 200, 200, 429]
 
 
+def test_health_bucket_remains_finite_when_general_limiter_is_disabled(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("MCA_RATE_LIMIT_HEALTH_PER_MINUTE", "2")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl-health.sqlite3")
+    client = TestClient(app)
+
+    statuses = [client.get("/health").status_code for _ in range(3)]
+
+    assert statuses == [200, 200, 429]
+
+
 def test_burst_limit_exempts_the_data_freshness_probe(tmp_path, monkeypatch) -> None:
     # The external data-recency monitor shares the intentionally generous health family,
     # rather than the low public API burst bucket.

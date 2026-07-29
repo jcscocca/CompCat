@@ -22,6 +22,7 @@ def test_tiles_file_served_with_byte_ranges(tmp_path, monkeypatch) -> None:
     part = client.get("/tiles/seattle.pmtiles", headers={"Range": "bytes=0-6"})
     assert part.status_code == 206
     assert part.content == b"PMTiles"
+    assert client.head("/tiles/seattle.pmtiles").status_code == 200
 
 
 def test_pmtiles_range_limit_handles_normal_map_panning_volume(tmp_path, monkeypatch) -> None:
@@ -49,6 +50,12 @@ def test_pmtiles_range_limit_is_enforced_per_ip(tmp_path, monkeypatch) -> None:
         for _ in range(3)
     ]
     assert statuses == [206, 206, 429]
+
+
+def test_pmtiles_default_bucket_supports_map_panning_volume() -> None:
+    from app.config import Settings
+
+    assert Settings(_env_file=None).rate_limit_tiles_per_minute == 600
 
 
 def test_missing_tiles_file_is_404_not_boot_failure(tmp_path, monkeypatch) -> None:
