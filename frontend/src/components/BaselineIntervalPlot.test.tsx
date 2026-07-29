@@ -40,7 +40,7 @@ describe("BaselineIntervalPlot", () => {
 
   it("shows relation words verbatim from the payload", () => {
     render(<BaselineIntervalPlot place={place} identity={placeIdentity(0)} noun={noun} domainMax={plotDomainMax([place])} />);
-    expect(screen.getAllByText(/place is above/).length).toBe(2);
+    expect(screen.getAllByText(/place is clearly above/).length).toBe(2);
     // "similar" claimed equivalence a failure to reject never establishes.
     expect(screen.getAllByText(/no clear difference/).length).toBe(2);
     expect(screen.queryByText(/\bsimilar\b/)).not.toBeInTheDocument();
@@ -50,18 +50,29 @@ describe("BaselineIntervalPlot", () => {
   // those rows are densities rescaled to this circle, not counts observed area-wide.
   it("says the baseline rows are scaled to your radius and window", () => {
     render(<BaselineIntervalPlot place={place} identity={placeIdentity(0)} noun={noun} domainMax={plotDomainMax([place])} />);
-    expect(screen.getByText("Baseline rows are scaled to your radius and window for comparison.")).toBeInTheDocument();
+    expect(screen.getByText(/Baseline rows are scaled to your radius and window for comparison/)).toHaveTextContent(
+      /not adjusted for multiple baseline comparisons/i,
+    );
   });
 
   it("pins the interval label to the identity", () => {
     render(<BaselineIntervalPlot place={place} identity={placeIdentity(1)} noun={noun} domainMax={plotDomainMax([place])} />);
-    expect(screen.getByText("B's 95% interval")).toBeInTheDocument();
+    expect(screen.getByText("B's approx. 95% CI")).toBeInTheDocument();
   });
 
-  it("renders nothing without a place-rate interval", () => {
-    const bare = { ...place, place_rate_ci_lower: undefined, place_rate_ci_upper: undefined };
-    const { container } = render(<BaselineIntervalPlot place={bare} identity={placeIdentity(0)} noun={noun} domainMax={1} />);
-    expect(container).toBeEmptyDOMElement();
+  it("withholds the interval below the 3-report floor but keeps the point and explanation", () => {
+    const belowFloor = {
+      ...place,
+      place_incident_count: 2,
+      place_rate_ci_lower: 0.001,
+      place_rate_ci_upper: 500,
+    };
+    const { container } = render(<BaselineIntervalPlot place={belowFloor} identity={placeIdentity(0)} noun={noun} domainMax={plotDomainMax([belowFloor])} />);
+    expect(container.querySelector(".mc-bplot-band")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-bplot-row .bar")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-bplot-row .dot")).toBeInTheDocument();
+    expect(screen.getByText("too few reports to put a range on")).toBeInTheDocument();
+    expect(screen.getByTestId("baseline-plot")).toHaveClass("is-withheld");
   });
 
   it("keeps the band, label, and axis in the same track coordinate system as the marks", () => {
@@ -80,5 +91,18 @@ describe("plotDomainMax", () => {
     const max = plotDomainMax([place]);
     // place ci_upper 0.09 /km²·day is the extreme → domain slightly above its per-year value
     expect(max).toBeGreaterThan(0);
+  });
+
+  it("ignores the interval bound for a place below the report floor", () => {
+    const belowFloor = {
+      ...place,
+      place_incident_count: 2,
+      place_rate_ci_upper: 500,
+    };
+    const withoutInterval = {
+      ...belowFloor,
+      place_rate_ci_upper: undefined,
+    };
+    expect(plotDomainMax([belowFloor])).toBe(plotDomainMax([withoutInterval]));
   });
 });

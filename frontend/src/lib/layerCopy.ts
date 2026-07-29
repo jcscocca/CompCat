@@ -39,9 +39,16 @@ export const CAVEAT_HEADLINE = "Reported incident context, not a personal risk p
 export const CAVEAT_DATA_LIMITS =
   "Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
 
+/** Build the same two-clause caveat with the active layer's nouns. */
+export function resultCaveat(noun: IncidentNoun): string {
+  const singularCap = noun.singular.charAt(0).toUpperCase() + noun.singular.slice(1);
+  const dataNoun = noun.singular === "reported incident" ? "incident" : noun.singular;
+  return `${singularCap} context, not a personal risk prediction. Results use reported Seattle ${dataNoun} data, which can be incomplete, delayed, corrected, or geographically generalized.`;
+}
+
 /** Product invariant, restated wherever results render (compare panel, expanded rail
  * card): reported-incident context, not a personal risk prediction. */
-export const REVISED_CAVEAT = `${CAVEAT_HEADLINE} ${CAVEAT_DATA_LIMITS}`;
+export const REVISED_CAVEAT = resultCaveat(incidentNoun("reported"));
 
 /** Explains what the active data layer actually measures — retired from `CompareTab`
  * (deleted in commit `193e0e7`), which rendered this unconditionally whenever the
