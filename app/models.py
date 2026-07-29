@@ -114,6 +114,7 @@ class PlaceCluster(Base):
         DateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
+        index=True,
     )
 
 

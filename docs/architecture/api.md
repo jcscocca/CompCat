@@ -4,7 +4,7 @@ This document covers the auth model, tier contracts, enforcement invariant, and 
 notes for the CompCat API. The live `/openapi.json` (and Swagger UI at `/docs`) is the
 field-level source of truth; this document covers rules and tier structure only.
 
-> Verified against `2d6d4f3` (2026-07-19).
+> Verified against `367b1fc` (2026-07-28).
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
@@ -17,12 +17,21 @@ invariant applies to code, copy, and any future endpoints.
 
 ### Session cookie
 
-`POST /sessions` creates an anonymous session token (HMAC-signed, 24 h TTL) and sets it
-as an `HttpOnly` cookie named `mca_session` (`MCA_SESSION_SECRET` is the signing key).
-Posting again with a valid cookie is idempotent — the session is resumed, not rotated
-(a reload keeps the same pseudonymous identity for the cookie's 24 h TTL). The cookie is
-`Secure` in `prod`/`production` environments; settable explicitly via
-`MCA_SESSION_COOKIE_SECURE`. Logic lives in `app/sessions.py`.
+`POST /sessions` creates an anonymous HMAC-signed token and sets it as an `HttpOnly`
+cookie named `mca_session` (`MCA_SESSION_SECRET` is the signing key). Its signed payload
+contains the session id, fixed `issued_at`, and a sliding expiry. Posting again with a
+valid cookie re-signs the same identity for up to another 24 hours, bounded by
+`MCA_SESSION_ABSOLUTE_MAX_DAYS` from the original issuance (30 days by default). At or
+past that ceiling, `POST /sessions` creates a fresh identity. `DELETE /sessions`
+idempotently clears the cookie.
+
+Every successful create/resume upserts `SessionActivity(user_id_hash, last_seen_at)`.
+Only the one-way public user hash is stored; there is still no raw session-id database
+record. This makes read-only returning visitors visible to the retention sweep.
+
+The cookie is `Secure` in production-like environments; settable explicitly via
+`MCA_SESSION_COOKIE_SECURE`. Logic lives in `app/sessions.py` and
+`app/services/session_activity_service.py`.
 
 The `public_user_hash` function in `app/sessions.py` derives a stable pseudonymous hash
 from the session token:
@@ -64,7 +73,8 @@ which are unauthenticated or session-creating.
 
 | Endpoint | Method | Router file | Request schema | Response schema |
 |---|---|---|---|---|
-| `/sessions` | POST | `app/api/routes_sessions.py` | — | `{"session_state": "created"}` |
+| `/sessions` | POST | `app/api/routes_sessions.py` | — | `{"session_state": "created"|"resumed"}` |
+| `/sessions` | DELETE | `app/api/routes_sessions.py` | — | 204; clears `mca_session` |
 | `/health` | GET | `app/api/routes_health.py` | — | `{"status": "ok"}` |
 | `/input-modes` | GET | `app/api/routes_input_modes.py` | — | `{"modes": [...]}` |
 | `/places` | GET | `app/api/routes_places.py` | — | `{"count": int, "places": [...]}` |
@@ -216,6 +226,36 @@ not at startup. The `/input-modes` response also reflects this flag via
 
 Default: `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is `false`; uploads are disabled in the
 default configuration.
+
+### Request-edge limits and static PMTiles
+
+`RequestBodyLimitMiddleware` enforces `MCA_MAX_REQUEST_BYTES` before FastAPI routing
+(1 MiB by default). It rejects an oversized declared `Content-Length` immediately and
+also measures bodies whose header is absent or dishonest. `/uploads` uses the larger
+`MCA_MAX_UPLOAD_BYTES` ceiling only while
+`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`; otherwise it remains under the ordinary cap
+before its 404 feature gate.
+
+`/tiles/*.pmtiles` is not an OpenAPI route. It requires an HTTP `Range` header; a
+range-less request receives 416 so the complete ~100 MiB artifact cannot be fetched in
+one GET. Range requests use a dedicated `MCA_RATE_LIMIT_TILES_PER_MINUTE` per-IP bucket
+(600 by default). `/health` and `/health/data` use their own generous but finite
+`MCA_RATE_LIMIT_HEALTH_PER_MINUTE` bucket because both can take pooled database
+connections. That health family remains active even when the general public limiter is
+disabled.
+
+When `MCA_TRUST_PROXY_HEADERS=true`, client identity trusts `CF-Connecting-IP` only.
+XFF fallback remains off unless the separately reviewed
+`MCA_TRUST_X_FORWARDED_FOR=true` gate is set. The named Cloudflare tunnel trusts CF and
+leaves XFF off; the Caddy deployment strips CF, pins XFF to `{client_ip}`, and opts into
+the XFF gate.
+
+### Incident timestamp serialization
+
+SPD source timestamps are Seattle local wall-clock values despite legacy database field
+names ending in `_utc`. Public incident payloads preserve those clock digits and attach
+the real `America/Los_Angeles` offset (`-07:00` or `-08:00`) rather than falsely emitting
+`Z`. See `app/time_contract.py`.
 
 ### Assistant streams (`/assistant/chat`, `/assistant/commands`)
 

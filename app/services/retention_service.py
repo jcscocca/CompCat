@@ -1,13 +1,11 @@
 """Server-side retention sweep for abandoned session data.
 
-A CompCat session is an anonymous 24h token whose expiry now SLIDES: every resume
-re-signs the same identity, so a returning visitor keeps their user hash — and their
-saved places — indefinitely. Row age alone therefore cannot distinguish "abandoned"
-from "long-lived": the sweep keys on the OWNING IDENTITY instead. An identity is live
-if it has written anything (an analysis run or a place) inside the retention window;
-everything belonging to identities silent for the whole window is unaddressable by
-anyone and gets removed, on the window set by MCA_SESSION_DATA_RETENTION_DAYS
-(0 disables).
+A CompCat session is an anonymous 24h token whose expiry SLIDES within a signed
+absolute-age ceiling. Row age alone cannot distinguish "abandoned" from "long-lived":
+the sweep keys on the OWNING IDENTITY instead. An identity is live if it has created or
+resumed a session, run an analysis, created a place, or updated a place inside the
+retention window. Everything belonging to identities silent for the whole window is
+removed on the window set by MCA_SESSION_DATA_RETENTION_DAYS (0 disables).
 
 Deletes run in bounded batches so a large backlog cannot hold a single long transaction
 open against the production database, and children go before parents because the

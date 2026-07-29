@@ -428,8 +428,9 @@ pointer.*
 - [x] **Trade-offs recorded, not glossed:** uptime follows the ThinkPad (no SLA; sleep is the
   enemy), Cloudflare's free tier discourages serving large non-HTML assets at volume and the
   ~100 MB PMTiles extract is the one heavy asset (range-requested, edge-cached, portfolio-scale
-  traffic — but named honestly, with R2 or the VPS as the escape hatch), and Caddy's 1 MB edge
-  body cap is gone (no multipart endpoint is enabled on this posture).
+  traffic — but named honestly, with R2 or the VPS as the escape hatch), and Caddy's outer
+  1 MB cap is gone while the application still enforces its 1 MiB pre-routing default (no
+  multipart endpoint is enabled on this posture; a plan-dependent WAF rule is optional).
 - [ ] **Upgrade trigger:** if uptime or the asset volume ever stops being acceptable, migrate per
   `docs/DEPLOY-VPS.md` — restore the newest dump, swap the tunnel CNAME for an A record. Only the
   edge overlay changes.

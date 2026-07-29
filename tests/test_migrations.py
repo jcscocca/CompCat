@@ -239,13 +239,20 @@ def test_session_activity_migration_is_reversible(tmp_path, monkeypatch):
         assert "ix_session_activity_last_seen_at" in {
             index["name"] for index in inspector.get_indexes("session_activity")
         }
+        assert "ix_place_clusters_updated_at" in {
+            index["name"] for index in inspector.get_indexes("place_clusters")
+        }
     finally:
         engine.dispose()
 
     command.downgrade(cfg, "0014_retention_indexes")
     engine = create_engine(database_url)
     try:
-        assert "session_activity" not in inspect(engine).get_table_names()
+        inspector = inspect(engine)
+        assert "session_activity" not in inspector.get_table_names()
+        assert "ix_place_clusters_updated_at" not in {
+            index["name"] for index in inspector.get_indexes("place_clusters")
+        }
     finally:
         engine.dispose()
 
