@@ -19,7 +19,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select, union
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -28,6 +27,7 @@ from app.models import (
     GeocodeCache,
     PlaceCluster,
     PlaceCrimeSummary,
+    SessionActivity,
     StatisticalComparison,
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
@@ -40,31 +40,28 @@ DEFAULT_BATCH_SIZE = 5000
 
 def _delete_in_batches(session: Session, model, condition, batch_size: int) -> int:
     total = 0
+    primary_key = next(iter(model.__table__.primary_key.columns))
     while True:
-        victims = select(model.id).where(condition).limit(batch_size)
-        try:
-            deleted = (
-                session.execute(delete(model).where(model.id.in_(victims))).rowcount or 0
-            )
-            session.commit()
-        except IntegrityError:
-            # A concurrent write can reference a row mid-batch (the FKs have no
-            # cascade). Earlier batches are committed; stop here and let the next
-            # nightly run pick the remainder up.
-            session.rollback()
-            return total
+        victims = select(primary_key).where(condition).limit(batch_size)
+        deleted = (
+            session.execute(delete(model).where(primary_key.in_(victims))).rowcount or 0
+        )
+        session.commit()
         total += deleted
         if deleted < batch_size:
             return total
 
 
 def _active_identities(cutoff: datetime) -> Any:
-    """Identities with any write inside the window. Runs and places are the only two
-    tables an analyzing-or-saving user appends to; everything else rides along."""
+    """Identities with a recent visit, analysis, place creation, or place update."""
     return select(
         union(
+            select(SessionActivity.user_id_hash).where(
+                SessionActivity.last_seen_at >= cutoff
+            ),
             select(AnalysisRun.user_id_hash).where(AnalysisRun.created_at >= cutoff),
             select(PlaceCluster.user_id_hash).where(PlaceCluster.created_at >= cutoff),
+            select(PlaceCluster.user_id_hash).where(PlaceCluster.updated_at >= cutoff),
         ).subquery()
     )
 
@@ -85,6 +82,7 @@ def sweep_retention(
         "place_crime_summaries": 0,
         "place_clusters": 0,
         "geocode_cache": 0,
+        "session_activity": 0,
     }
 
     retention_days = settings.session_data_retention_days
@@ -132,6 +130,12 @@ def sweep_retention(
             (PlaceCluster.cluster_method == MANUAL_CLUSTER_METHOD)
             & abandoned(PlaceCluster)
             & PlaceCluster.id.not_in(select(PlaceCrimeSummary.place_cluster_id)),
+            batch_size,
+        )
+        counts["session_activity"] = _delete_in_batches(
+            session,
+            SessionActivity,
+            SessionActivity.last_seen_at < cutoff,
             batch_size,
         )
 

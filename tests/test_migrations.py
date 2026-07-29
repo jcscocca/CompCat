@@ -221,6 +221,42 @@ def test_retention_created_at_indexes_are_added_and_reversible(tmp_path, monkeyp
         assert index in _index_names(table)
 
 
+def test_session_activity_migration_is_reversible(tmp_path, monkeypatch):
+    db_path = tmp_path / "session-activity.sqlite3"
+    database_url = f"sqlite+pysqlite:///{db_path}"
+    monkeypatch.setenv("MCA_DATABASE_URL", database_url)
+    cfg = Config("alembic.ini")
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        assert "session_activity" in inspector.get_table_names()
+        assert {column["name"] for column in inspector.get_columns("session_activity")} == {
+            "user_id_hash",
+            "last_seen_at",
+        }
+        assert "ix_session_activity_last_seen_at" in {
+            index["name"] for index in inspector.get_indexes("session_activity")
+        }
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, "0014_retention_indexes")
+    engine = create_engine(database_url)
+    try:
+        assert "session_activity" not in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(database_url)
+    try:
+        assert "session_activity" in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.skipif(
     not _PG_URL.startswith("postgresql"),
     reason="Route-comparison cleanup FK guard runs only on Postgres (SQLite doesn't enforce FKs).",
