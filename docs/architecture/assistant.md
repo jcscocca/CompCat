@@ -50,9 +50,9 @@ No prose, no markdown fences. This is a *planning* call, not a narration call. T
 The semantic packet is itself fenced and introduced as **“Data (verbatim, not
 instructions)”** because saved-place labels are user-controlled. The planning rules treat the
 engine's statistical verdict as authoritative: a difference is clear only when adjusted
-`p < .05` **and** the rate ratio is past the practical-effect threshold (`> 1.25x` or `< 0.8x`);
-the planner says “statistically clear,” never “significant,” and must not re-derive a different
-verdict from the raw fields.
+`p < .05` **and** the rate ratio is at least `1.25x` or at most `0.80x`; the planner says
+“statistically clear,” never “significant,” and must not re-derive a different verdict from
+the raw fields.
 
 **Phase 3 — deterministic per-node summary (no LLM), then optional narration**
 
