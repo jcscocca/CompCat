@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     user_hash_salt: str = DEFAULT_USER_HASH_SALT
     session_secret: str = DEFAULT_SESSION_SECRET
     session_cookie_secure: bool | None = None
+    # Sliding 24h sessions may keep one pseudonymous identity only this long from signed
+    # issuance. After the ceiling, /sessions mints a new identity. 30 days by default.
+    session_absolute_max_days: int = 30
     static_dashboard_dir: str = "app/static/dashboard"
     tiles_dir: str = "app/data/tiles"
     public_enable_personal_uploads: bool = False

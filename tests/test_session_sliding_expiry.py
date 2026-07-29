@@ -15,17 +15,22 @@ from fastapi.testclient import TestClient
 
 import app.sessions as sessions_module
 from app.main import create_app
-from app.sessions import SESSION_MAX_AGE_SECONDS, _sign, public_user_hash, session_id_from_token
+from app.sessions import (
+    SESSION_MAX_AGE_SECONDS,
+    _sign,
+    public_user_hash,
+    session_id_from_token,
+)
 
 
 def _client(tmp_path) -> TestClient:
     return TestClient(create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 's.sqlite3'}"))
 
 
-def _parts(token: str) -> tuple[str, int]:
+def _parts(token: str) -> tuple[str, int, int]:
     payload, _ = token.rsplit(".", 1)
-    session_id, expires_at = payload.rsplit(":", 1)
-    return session_id, int(expires_at)
+    session_id, issued_at, expires_at = payload.rsplit(":", 2)
+    return session_id, int(issued_at), int(expires_at)
 
 
 def test_resume_slides_the_expiry_without_changing_identity(tmp_path, monkeypatch):
@@ -33,7 +38,7 @@ def test_resume_slides_the_expiry_without_changing_identity(tmp_path, monkeypatc
     created = client.post("/sessions")
     assert created.json()["session_state"] == "created"
     first_token = client.cookies.get("mca_session")
-    first_id, first_expiry = _parts(first_token)
+    first_id, first_issued_at, first_expiry = _parts(first_token)
     first_hash = public_user_hash(first_token)
 
     # Advance the clock inside the token factory so the new expiry is provably later.
@@ -47,9 +52,10 @@ def test_resume_slides_the_expiry_without_changing_identity(tmp_path, monkeypatc
     assert "set-cookie" in resumed.headers
 
     second_token = client.cookies.get("mca_session")
-    second_id, second_expiry = _parts(second_token)
+    second_id, second_issued_at, second_expiry = _parts(second_token)
 
     assert second_expiry > first_expiry
+    assert second_issued_at == first_issued_at
     # Identity is untouched: same session id, same derived user hash, same saved data.
     assert second_id == first_id
     assert public_user_hash(second_token) == first_hash
@@ -68,7 +74,8 @@ def test_expired_token_creates_a_fresh_identity(tmp_path):
     created = client.post("/sessions")
     original_hash = public_user_hash(client.cookies.get("mca_session"))
 
-    expired_payload = f"{_parts(client.cookies.get('mca_session'))[0]}:{int(time.time()) - 1}"
+    session_id, issued_at, _ = _parts(client.cookies.get("mca_session"))
+    expired_payload = f"{session_id}:{issued_at}:{int(time.time()) - 1}"
     expired = f"{expired_payload}.{_sign(expired_payload)}"
     assert session_id_from_token(expired) is None
 
@@ -83,6 +90,41 @@ def test_expired_token_creates_a_fresh_identity(tmp_path):
     assert new_hash is not None
     assert new_hash != original_hash
     assert created.status_code == 200
+
+
+def test_session_past_absolute_ceiling_gets_a_fresh_identity(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MCA_SESSION_ABSOLUTE_MAX_DAYS", "30")
+    client = _client(tmp_path)
+    client.post("/sessions")
+    original_token = client.cookies.get("mca_session")
+    original_hash = public_user_hash(original_token)
+    session_id, _, _ = _parts(original_token)
+    now = int(time.time())
+    too_old_issued_at = now - (31 * 24 * 60 * 60)
+    payload = f"{session_id}:{too_old_issued_at}:{now + 3600}"
+    too_old_token = f"{payload}.{_sign(payload)}"
+
+    assert session_id_from_token(too_old_token) is None
+    client.cookies.clear()
+    client.cookies.set("mca_session", too_old_token)
+    response = client.post("/sessions")
+
+    assert response.status_code == 200
+    assert response.json()["session_state"] == "created"
+    assert public_user_hash(response.cookies.get("mca_session")) != original_hash
+
+
+def test_delete_session_clears_the_cookie(tmp_path) -> None:
+    client = _client(tmp_path)
+    client.post("/sessions")
+    assert client.cookies.get("mca_session")
+
+    response = client.delete("/sessions")
+
+    assert response.status_code == 204
+    assert "mca_session=" in response.headers["set-cookie"]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+    assert client.cookies.get("mca_session") is None
 
 
 def test_resume_does_not_consume_the_session_rate_budget(tmp_path, monkeypatch: pytest.MonkeyPatch):

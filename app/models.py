@@ -117,6 +117,23 @@ class PlaceCluster(Base):
     )
 
 
+class SessionActivity(Base):
+    """Last successful create/resume for a pseudonymous public identity.
+
+    The raw session id is never stored; user_id_hash is the same one-way identity key used
+    by user-owned data. Retention uses this row to preserve read-only returning visitors.
+    """
+
+    __tablename__ = "session_activity"
+
+    user_id_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        index=True,
+    )
+
+
 class CrimeIncident(Base):
     __tablename__ = "crime_incidents"
     __table_args__ = (
