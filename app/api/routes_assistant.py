@@ -7,7 +7,9 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -38,7 +40,28 @@ from app.ratelimit import client_ip_from, get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_REQUEST_INVALID_MESSAGE = "That request didn't validate — check the values and try again."
+
+
+class _AssistantValidationRoute(APIRoute):
+    """Keep request-model internals out of both public assistant endpoints."""
+
+    def get_route_handler(self):
+        route_handler = super().get_route_handler()
+
+        async def fixed_validation_copy(request: Request):
+            try:
+                return await route_handler(request)
+            except RequestValidationError:
+                return JSONResponse(
+                    status_code=422,
+                    content={"detail": _REQUEST_INVALID_MESSAGE},
+                )
+
+        return fixed_validation_copy
+
+
+router = APIRouter(route_class=_AssistantValidationRoute)
 
 
 def _no_think_body(disable_thinking: bool) -> dict[str, object] | None:
