@@ -120,6 +120,10 @@ def test_rendered_tunnel_stack_publishes_nothing_and_has_no_caddy() -> None:
     assert "published:" not in rendered
     assert "cloudflared" in rendered
     assert "cloudflare/cloudflared:" in rendered
+    # The base dev stack exposes the host gateway for a local LLM. Public hosted providers
+    # need no route back to the ThinkPad host, so the tunnel overlay must reset it.
+    assert "extra_hosts:" not in rendered
+    assert "host.docker.internal" not in rendered
     # db, api and cloudflared survive a reboot; the sidecar joins them under --profile ops.
     assert rendered.count("restart: unless-stopped") == 3
 
@@ -223,6 +227,7 @@ def test_env_example_explains_why_proxy_headers_are_trusted_here_but_stripped_by
     # is pinned to the file.
     text = _ENV_EXAMPLE.read_text(encoding="utf-8")
     assert "MCA_TRUST_PROXY_HEADERS=true" in text
+    assert "MCA_TRUST_X_FORWARDED_FOR=false" in text
     assert "CF-Connecting-IP" in text
     assert "Caddyfile" in text
     assert "header_up -CF-Connecting-IP" in text
@@ -282,6 +287,9 @@ def test_runbook_carries_the_user_steps_and_the_honest_trade_offs() -> None:
     # Trade-offs stated, not glossed.
     assert "What this trades" in text
     assert "pmtiles" in text.lower()
+    assert "MCA_MAX_REQUEST_BYTES=1048576" in text
+    assert "Security → WAF → Custom" in text
+    assert "Enterprise-only" in text
     assert "DEPLOY-VPS.md" in text  # the migration path stays documented
 
 

@@ -517,11 +517,19 @@ handful of visitors a day. But state it plainly — if the site ever saw sustain
 someone scraped the archive in a loop, this is the term that would be cited. If that happens, move
 the PMTiles to Cloudflare R2 (also free at this scale) or move the whole instance to the VPS.
 
-**3. The edge body cap is gone with Caddy.** `deploy/Caddyfile` caps request bodies at 1 MB; the
-tunnel has no equivalent, so the outer bound becomes Cloudflare's own (100 MB on the free plan).
-The exposure is small: with personal uploads and the internal tier off, **no multipart endpoint is
-enabled at all** — every public route takes JSON — and the per-IP burst limiter still applies. If
-you want the cap back, a free Cloudflare WAF rule on request size is the place to put it.
+**3. The Caddy edge body cap is gone, so the app is the first enforceable byte limit.**
+`deploy/Caddyfile` rejects bodies above 1 MiB before they cross the compose network. The tunnel has
+no equivalent local edge, but the API now enforces `MCA_MAX_REQUEST_BYTES=1048576` before routing,
+including requests with no `Content-Length`; `/uploads` gets `MCA_MAX_UPLOAD_BYTES` only when
+personal uploads are explicitly enabled. Keep uploads off here.
+
+For a second, bandwidth-saving layer, check **Cloudflare dashboard → Security → WAF → Custom
+rules** and add a block rule for request bodies over 1 MiB *if the account exposes a request-body
+size field*. Do not assume the free plan does: Cloudflare currently documents
+[`http.request.body.size`](https://developers.cloudflare.com/ruleset-engine/rules-language/fields/reference/http.request.body.size/)
+as Enterprise-only, and managed-rule inspection limits do not themselves stop the full request
+from reaching the origin. The application cap is therefore mandatory, not a substitute for a
+plan-dependent WAF rule.
 
 Not a trade, but worth naming: this posture **hides your home IP** rather than exposing it.
 `cloudflared` only makes outbound connections, so there is no port forward, no inbound firewall
@@ -557,9 +565,10 @@ compose logs db
 ```
 
 **Data retention:** identical to the VPS path — the 03:50 sidecar job posts
-`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no activity
-in `MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables) and evicts expired
-`geocode_cache` entries. It never touches SPD incident data. See
+`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no session
+create/resume, analysis, place creation, or place update in `MCA_SESSION_DATA_RETENTION_DAYS` days
+(default 30, `0` disables) and evicts expired `geocode_cache` entries. Read-only returning visitors
+are preserved through the `session_activity` record. It never touches SPD incident data. See
 [`DEPLOY-VPS.md`](DEPLOY-VPS.md#routine-operations) for the full description.
 
 **After a reboot:** Docker Desktop starts at login and `restart: unless-stopped` brings `db`,
