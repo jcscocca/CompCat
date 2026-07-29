@@ -23,9 +23,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Runtime dependencies are fully pinned (including transitive packages) and hash-checked.
+COPY requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+
+# Install the local project separately with --no-deps so pyproject metadata is retained
+# without re-resolving its broad developer constraints.
 COPY pyproject.toml README.md ./
 COPY app ./app
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
