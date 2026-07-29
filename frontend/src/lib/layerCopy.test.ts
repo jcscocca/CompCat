@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAVEAT_DATA_LIMITS, CAVEAT_HEADLINE, incidentNoun, layerDisclosure, REVISED_CAVEAT } from "./layerCopy";
+import { CAVEAT_DATA_LIMITS, CAVEAT_HEADLINE, incidentNoun, layerDisclosure, resultCaveat, REVISED_CAVEAT } from "./layerCopy";
 
 describe("incidentNoun arrests", () => {
   it("uses arrest nouns for the arrests layer", () => {
@@ -35,5 +35,13 @@ describe("product caveat", () => {
   it("carries the invariant phrasing, not a paraphrase", () => {
     expect(CAVEAT_HEADLINE).toBe("Reported incident context, not a personal risk prediction.");
     expect(REVISED_CAVEAT).not.toMatch(/safety advice/);
+  });
+
+  it("uses the active layer's nouns without calling 911 calls incidents", () => {
+    const calls = resultCaveat(incidentNoun("calls"));
+    expect(calls).toBe(
+      "911 call context, not a personal risk prediction. Results use reported Seattle 911 call data, which can be incomplete, delayed, corrected, or geographically generalized.",
+    );
+    expect(calls).not.toMatch(/\bincident/i);
   });
 });

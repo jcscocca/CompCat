@@ -47,6 +47,8 @@ describe("methods definitions match the engine", () => {
       expect(baseline.plain.toLowerCase()).toContain(term);
     }
     expect(baseline.plain).toMatch(/EXCLUDE the area inside your radius/);
+    expect(baseline.plain).toMatch(/every neighborhood.*police beat.*circle touches/i);
+    expect(baseline.plain).toMatch(/pooled/i);
     expect(baseline.plain).toMatch(/negligible/);
     // The window is user-selected; the baseline is not fixed to 2018-present.
     expect(baseline.plain).not.toMatch(/2018/);
@@ -69,17 +71,31 @@ describe("methods definitions match the engine", () => {
     expect(floors.plain).toMatch(/too few months to fit/);
   });
 
-  it("calls the interval approximate", () => {
-    const interval = byId.get("confidenceInterval")!;
-    expect(interval.term).toBe("Approximate 95% interval");
-    expect(interval.plain).toMatch(/normal approximation/);
+  it("distinguishes the absolute-rate interval from the rate-ratio interval", () => {
+    const absolute = byId.get("absoluteRateInterval")!;
+    const ratio = byId.get("confidenceInterval")!;
+    expect(absolute.term).toBe("Absolute-rate interval");
+    expect(absolute.plain).toMatch(/one place's own reported-density rate/i);
+    expect(absolute.plain).toMatch(/not the interval for a rate ratio/i);
+    expect(ratio.term).toBe("Rate-ratio interval");
+    expect(ratio.plain).toMatch(/ratio between a place and a comparator/i);
   });
 
-  it("scopes the BH adjustment to one place's baselines, with a separate pass per address set", () => {
+  it("describes the calibrated approximate interval machinery honestly", () => {
+    const interval = byId.get("confidenceInterval")!;
+    expect(interval.plain).toMatch(/large-sample Wald.*log scale/i);
+    expect(interval.plain).toMatch(/Student-t.*φ.*handful of months/i);
+    expect(interval.plain).toMatch(/near, not exactly, 95%/i);
+    expect(interval.plain).toMatch(/about 89%.*very bursty.*small counts/i);
+    expect(interval.howToRead).toMatch(/not adjusted for multiple comparisons/i);
+  });
+
+  it("scopes BH to each run's families and separates baseline and across-place adjustments", () => {
     const bh = byId.get("adjustedPValue")!;
-    expect(bh.plain).toMatch(/four baselines/);
-    expect(bh.plain).toMatch(/second, separate adjustment/);
-    expect(bh.plain).toMatch(/not pooled/);
+    expect(bh.plain).toMatch(/within each run/i);
+    expect(bh.plain).toMatch(/up to four baselines/i);
+    expect(bh.plain).toMatch(/separate adjustment across several places/i);
+    expect(bh.plain).toMatch(/separate runs/i);
   });
 
   // The exact conditional Poisson p-value is computed server-side but never serialized into
@@ -93,5 +109,13 @@ describe("methods definitions match the engine", () => {
     expect(byId.get("radiusMatters")!.howToRead).toMatch(/250 m can legitimately differ at 1000 m/);
     expect(byId.get("manyLooks")!.plain).toMatch(/by chance/);
     expect(byId.get("manyLooks")!.howToRead).toMatch(/caution/);
+  });
+
+  it("calls the compare order descriptive and names the selected-lowest bias", () => {
+    const ranking = byId.get("compareRanking")!;
+    expect(ranking.plain).toMatch(/descriptive/i);
+    expect(ranking.plain).toMatch(/selected after looking at the data/i);
+    expect(ranking.plain).toMatch(/biased low/i);
+    expect(ranking.howToRead).toMatch(/only.*statistically lower.*tested conclusion/i);
   });
 });

@@ -34,6 +34,11 @@ describe("CompareRankedList", () => {
     expect(within(region).getByText(/12 reported incidents/)).toBeInTheDocument();
   });
 
+  it("keeps the descriptive lowest-rate chip visually neutral", () => {
+    render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
+    expect(screen.getByText("lowest rate")).not.toHaveClass("clear");
+  });
+
   it("shows a How-we-know disclosure only for non-lowest rows", () => {
     render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
     const region = screen.getByTestId("compare-ranked");

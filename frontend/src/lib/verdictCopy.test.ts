@@ -28,7 +28,7 @@ describe("aggregateHeadline", () => {
       incidentNoun("reported"),
     );
     expect(headline).toBe(
-      "Cafe's reported incident rate is above its sector (C) and the citywide rate; shows no statistically clear difference from Capitol Hill and its beat (C2).",
+      "Cafe's reported incident rate sits clearly above its sector (C) and the citywide rate; shows no statistically clear difference from Capitol Hill and its beat (C2).",
     );
   });
 
@@ -37,7 +37,7 @@ describe("aggregateHeadline", () => {
       basePlace([entry("city", "Citywide", "above"), entry("sector", "Sector C", "insufficient")]),
       incidentNoun("reported"),
     );
-    expect(headline).toBe("Cafe's reported incident rate is above the citywide rate.");
+    expect(headline).toBe("Cafe's reported incident rate sits clearly above the citywide rate.");
   });
 
   it("explains the radius-too-large case", () => {

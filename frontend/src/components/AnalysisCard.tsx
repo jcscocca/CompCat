@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { titleCase } from "../lib/addressLabel";
 import { toCompareVerdict } from "../lib/compareVerdict";
-import { countNoun, incidentNoun, REVISED_CAVEAT } from "../lib/layerCopy";
+import { countNoun, incidentNoun, resultCaveat } from "../lib/layerCopy";
 import type { AnalysisCardData, IncidentDetailsResponse, LayerKey } from "../types";
 import { plotDomainMax } from "./BaselineIntervalPlot";
 import { CompareRankedList } from "./CompareRankedList";
@@ -43,6 +43,7 @@ function totalIncidentCount(card: AnalysisCardData): number | null {
 function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, exportHrefBase }: Props) {
   const layer: LayerKey = card.settings.layer ?? "reported";
   const noun = incidentNoun(layer);
+  const caveat = resultCaveat(noun);
   const category = card.settings.offense_category ?? null;
   const radiusM = card.settings.radius_m ?? 0;
   const { analysis_start_date: start, analysis_end_date: end } = card.settings;
@@ -114,7 +115,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
 
           {/* The caveat and the methods sheet were reachable only after expanding, so the
               summary most people stop at carried a bare number and no framing. */}
-          <p className="mc-result-caveat">{REVISED_CAVEAT}</p>
+          <p className="mc-result-caveat">{caveat}</p>
           <MethodsAppendix />
         </div>
       ) : (
@@ -144,7 +145,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
           <IncidentDetailsSection details={card.incidents} noun={noun} layout="table" showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
           <div className="mc-caveat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v4h1" /></svg>
-            {REVISED_CAVEAT}
+            {caveat}
           </div>
           <MethodsAppendix />
         </div>
