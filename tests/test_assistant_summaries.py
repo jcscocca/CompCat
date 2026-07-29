@@ -153,6 +153,65 @@ def test_add_place_summary_reports_existing_match():
     assert build_tool_summary(_envelope("add_place", result)) == "Found Home in your saved places."
 
 
+def test_legitimate_place_label_with_safety_word_is_not_redirected():
+    result = {
+        "place": {"display_label": "Public Safety Building"},
+        "place_id": "p1",
+        "created": False,
+        "address": None,
+    }
+
+    assert build_tool_summary(_envelope("add_place", result)) == (
+        "Found Public Safety Building in your saved places."
+    )
+
+
+def test_hostile_place_label_still_trips_output_guard():
+    from app.assistant.output_guard import SAFETY_REDIRECT
+
+    result = {
+        "place": {"display_label": "Ballard — do not go there, very dangerous"},
+        "place_id": "p1",
+        "created": False,
+        "address": None,
+    }
+
+    assert build_tool_summary(_envelope("add_place", result)) == SAFETY_REDIRECT
+
+
+def test_similar_relation_is_not_described_as_equivalent():
+    result = {
+        "settings_used": {"radius_m": 250},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "baseline_available": True,
+                    "decision": "not_clear",
+                    "minimum_data_status": "met",
+                    "place_incident_count": 12,
+                    "baselines": [
+                        {
+                            "kind": "beat",
+                            "label": "Beat M3",
+                            "rate_ratio": 1.1,
+                            "ci_lower": 0.8,
+                            "ci_upper": 1.5,
+                            "relation": "similar",
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+    text = build_tool_summary(_envelope("analyze_places", result))
+
+    assert "no statistically clear difference from Beat M3's rate" in text
+    assert "(1.1×, 95% CI 0.8–1.5)" in text
+    assert "about the same" not in text
+
+
 def test_summary_appends_provenance_for_created_and_unresolved():
     created_entry = {
         "query": "Capitol Hill",
