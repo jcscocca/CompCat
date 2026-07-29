@@ -27,6 +27,42 @@ function incidentIdentifier(incident: IncidentDetail) {
 
 function formatIncidentTime(value: string | null) {
   if (!value) return "Unknown";
+  // The API encodes Seattle wall-clock fields directly. Current payloads carry the real
+  // Seattle UTC offset (-07:00/-08:00); older rows appended Z to the same wall-clock digits,
+  // and still older fixtures have no suffix. Converting any of those to an instant before
+  // displaying it shifts the new offset-aware values by 7–8 hours, so read the validated ISO
+  // wall-clock fields themselves for all three generations.
+  const wallClock = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/,
+  );
+  if (wallClock) {
+    const [, year, month, day, hour, minute, second = "00"] = wallClock;
+    const y = Number(year);
+    const m = Number(month);
+    const d = Number(day);
+    const h = Number(hour);
+    const min = Number(minute);
+    const sec = Number(second);
+    const daysInMonth = m >= 1 && m <= 12
+      ? new Date(Date.UTC(y, m, 0)).getUTCDate()
+      : 0;
+    if (
+      d >= 1
+      && d <= daysInMonth
+      && h >= 0
+      && h <= 23
+      && min >= 0
+      && min <= 59
+      && sec >= 0
+      && sec <= 59
+    ) {
+      return `${year}-${month}-${day} ${hour}:${minute} Seattle time`;
+    }
+    return value;
+  }
+
+  // Defensive fallback for a parseable non-ISO value from an old import. Preserve the
+  // prior behavior instead of inventing a new interpretation for legacy data.
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   const date = [
@@ -38,9 +74,6 @@ function formatIncidentTime(value: string | null) {
     String(parsed.getUTCHours()).padStart(2, "0"),
     String(parsed.getUTCMinutes()).padStart(2, "0"),
   ].join(":");
-  // The SPD `offense_start_utc` field actually holds Seattle local wall-clock time (a known
-  // column misnomer), and the getUTC* reads above pull those exact digits back out. Label it
-  // "Seattle time" — calling it UTC misstated every incident time by 7-8 hours.
   return `${date} ${time} Seattle time`;
 }
 
