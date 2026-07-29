@@ -34,7 +34,11 @@ def create_public_session(
         return {"session_state": "resumed"}
 
     if settings.rate_limit_enabled:
-        ip = client_ip_from(request, trust_proxy_headers=settings.trust_proxy_headers)
+        ip = client_ip_from(
+            request,
+            trust_proxy_headers=settings.trust_proxy_headers,
+            trust_x_forwarded_for=settings.trust_x_forwarded_for,
+        )
         wait = get_rate_limiter().try_take(
             "sessions",
             ip,

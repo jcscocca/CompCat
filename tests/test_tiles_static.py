@@ -16,11 +16,39 @@ def test_tiles_file_served_with_byte_ranges(tmp_path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
 
     full = client.get("/tiles/seattle.pmtiles")
-    assert full.status_code == 200
+    assert full.status_code == 416
+    assert full.headers["content-range"] == "bytes */20"
 
     part = client.get("/tiles/seattle.pmtiles", headers={"Range": "bytes=0-6"})
     assert part.status_code == 206
     assert part.content == b"PMTiles"
+
+
+def test_pmtiles_range_limit_handles_normal_map_panning_volume(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "1")
+    monkeypatch.setenv("MCA_RATE_LIMIT_TILES_PER_MINUTE", "8")
+    (tmp_path / "seattle.pmtiles").write_bytes(b"PMTiles-test-payload")
+    client = _client(tmp_path, monkeypatch)
+
+    statuses = [
+        client.get("/tiles/seattle.pmtiles", headers={"Range": "bytes=0-6"}).status_code
+        for _ in range(8)
+    ]
+    assert statuses == [206] * 8
+
+
+def test_pmtiles_range_limit_is_enforced_per_ip(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_TILES_PER_MINUTE", "2")
+    (tmp_path / "seattle.pmtiles").write_bytes(b"PMTiles-test-payload")
+    client = _client(tmp_path, monkeypatch)
+
+    statuses = [
+        client.get("/tiles/seattle.pmtiles", headers={"Range": "bytes=0-6"}).status_code
+        for _ in range(3)
+    ]
+    assert statuses == [206, 206, 429]
 
 
 def test_missing_tiles_file_is_404_not_boot_failure(tmp_path, monkeypatch) -> None:

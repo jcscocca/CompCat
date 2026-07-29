@@ -163,7 +163,11 @@ async def assistant_chat(
         # checked before the global counter, for the same reason the session bucket is.
         ip_wait = limiter.try_take(
             "assistant_ip",
-            client_ip_from(http_request, trust_proxy_headers=settings.trust_proxy_headers),
+            client_ip_from(
+                http_request,
+                trust_proxy_headers=settings.trust_proxy_headers,
+                trust_x_forwarded_for=settings.trust_x_forwarded_for,
+            ),
             capacity=settings.rate_limit_assistant_per_ip_per_hour,
             per_seconds=3600.0,
         )
