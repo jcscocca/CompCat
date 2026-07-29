@@ -67,7 +67,10 @@ describe("AboutModal", () => {
   it("spells out sliding anonymous sessions, retention, geocode caching, and share links", () => {
     render(<AboutModal onClose={vi.fn()} />);
     expect(screen.getByText(/renewed while you use the app/i)).toBeInTheDocument();
-    expect(screen.getByText(/keeps the same session and saved places/i)).toBeInTheDocument();
+    expect(screen.getByText(/absolute session limit.*about 30 days/i)).toBeInTheDocument();
+    expect(screen.getByText(/new anonymous session starts/i)).toHaveTextContent(
+      /saved places from the earlier session are no longer linked in this browser/i,
+    );
     expect(screen.getByText(/quiet.*automatically deleted.*about 30 days/i)).toBeInTheDocument();
     expect(screen.getByText(/no account, name, email, or personal identity/i)).toBeInTheDocument();
     expect(screen.getByText(/about 110 m/)).toBeInTheDocument();

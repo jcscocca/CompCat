@@ -152,8 +152,10 @@ export function AboutModal({
           <ul>
             <li>
               An anonymous session cookie lasts about 24 hours at a time and is renewed while
-              you use the app. A returning visitor keeps the same session and saved places.
-              There is no account, name, email, or personal identity.
+              you use the app, up to the instance's absolute session limit (currently about
+              30 days). When that limit is reached, a new anonymous session starts, so saved
+              places from the earlier session are no longer linked in this browser. There is
+              no account, name, email, or personal identity.
             </li>
             <li>
               Server-side data for a session that goes quiet is automatically deleted after
