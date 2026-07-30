@@ -6,7 +6,11 @@ import json
 import httpx
 import pytest
 
-from app.assistant.llm_client import LlmUnavailable, OpenAiLlmClient
+from app.assistant.llm_client import (
+    LlmStreamInterrupted,
+    LlmUnavailable,
+    OpenAiLlmClient,
+)
 from app.ratelimit import get_rate_limiter
 
 _DUMMY_REQUEST = httpx.Request("POST", "http://localhost:8080/v1/chat/completions")
@@ -135,6 +139,69 @@ def test_extra_body_is_merged_into_payload(monkeypatch: pytest.MonkeyPatch) -> N
     assert captured["model"] == "test-model"  # base payload still intact
 
 
+def test_structured_completion_sends_response_format_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    response_format = {"type": "json_schema", "json_schema": {"name": "plan"}}
+
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        captured.update(kwargs.get("json") or {})
+        return _json_response({"choices": [{"message": {"content": '{"type":"final"}'}}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    client = _make_client(supports_structured_output=True)
+
+    asyncio.run(
+        client.complete_structured(
+            [{"role": "user", "content": "hello"}],
+            response_format=response_format,
+            role=None,
+        )
+    )
+
+    assert captured["response_format"] == response_format
+
+
+def test_structured_completion_stays_compatible_when_not_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        captured.update(kwargs.get("json") or {})
+        return _json_response({"choices": [{"message": {"content": '{"type":"final"}'}}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    client = _make_client()
+
+    asyncio.run(
+        client.complete_structured(
+            [{"role": "user", "content": "hello"}],
+            response_format={"type": "json_object"},
+            role=None,
+        )
+    )
+
+    assert "response_format" not in captured
+
+
+def test_complete_rejects_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    response_data = {
+        "choices": [{"message": {"content": "partial"}, "finish_reason": "length"}]
+    }
+
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        return _json_response(response_data)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    with pytest.raises(LlmUnavailable, match="truncated"):
+        asyncio.run(
+            _make_client().complete([{"role": "user", "content": "hello"}], role=None)
+        )
+
+
 # ---------- stream() ----------
 
 class _FakeStreamResponse:
@@ -180,6 +247,12 @@ def _patch_stream(monkeypatch: pytest.MonkeyPatch, response: _FakeStreamResponse
 
 def _sse_line(content: str) -> str:
     return "data: " + json.dumps({"choices": [{"delta": {"content": content}}]})
+
+
+def _sse_finish(reason: str) -> str:
+    return "data: " + json.dumps(
+        {"choices": [{"delta": {}, "finish_reason": reason}]}
+    )
 
 
 async def _collect_stream(client: OpenAiLlmClient) -> list[str]:
@@ -231,8 +304,6 @@ def test_stream_pre_delta_http_error_raises_unavailable(monkeypatch: pytest.Monk
 
 
 def test_stream_mid_stream_death_raises_interrupted(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.assistant.llm_client import LlmStreamInterrupted
-
     _patch_stream(
         monkeypatch,
         _FakeStreamResponse([_sse_line("partial"), _sse_line("x")], error_after=1),
@@ -251,8 +322,6 @@ def test_stream_mid_stream_death_raises_interrupted(monkeypatch: pytest.MonkeyPa
 def test_stream_mid_stream_non_http_error_raises_interrupted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.assistant.llm_client import LlmStreamInterrupted
-
     _patch_stream(
         monkeypatch,
         _FakeStreamResponse(
@@ -268,6 +337,32 @@ def test_stream_mid_stream_non_http_error_raises_interrupted(
 
     with pytest.raises(LlmStreamInterrupted):
         asyncio.run(run())
+
+
+def test_stream_length_finish_replaces_partial_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_stream(
+        monkeypatch,
+        _FakeStreamResponse(
+            [_sse_line("partial"), _sse_finish("length"), "data: [DONE]"]
+        ),
+    )
+
+    with pytest.raises(LlmStreamInterrupted, match="truncated"):
+        asyncio.run(_collect_stream(_make_client()))
+
+
+def test_stream_length_finish_without_content_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_stream(
+        monkeypatch,
+        _FakeStreamResponse([_sse_finish("length"), "data: [DONE]"]),
+    )
+
+    with pytest.raises(LlmUnavailable, match="truncated"):
+        asyncio.run(_collect_stream(_make_client()))
 
 
 def test_stream_sets_stream_true_and_merges_extra_body(monkeypatch: pytest.MonkeyPatch) -> None:
