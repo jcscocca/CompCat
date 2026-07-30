@@ -234,7 +234,7 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
               <div className="mc-incident-table-wrap">
                 <table className="mc-incident-table mc-baseline-table">
                   <thead>
-                    <tr><th scope="col">Baseline</th><th scope="col">Rate/yr</th><th scope="col">Ratio</th><th scope="col">95% CI</th><th scope="col">adj p</th><th scope="col">Method</th></tr>
+                    <tr><th scope="col">Baseline</th><th scope="col">Rate/yr</th><th scope="col">Ratio</th><th scope="col">approx. 95% CI</th><th scope="col">adj p</th><th scope="col">Method</th></tr>
                   </thead>
                   <tbody>
                     {place.baselines.map((b) => {

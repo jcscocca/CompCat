@@ -62,6 +62,7 @@ describe("PlaceContextCard", () => {
     const details = summary.closest("details")!;
     expect(within(details).getByText("Capitol Hill")).toBeInTheDocument();
     expect(within(details).getAllByText("0.002").length).toBeGreaterThan(0);
+    expect(within(details).getByText("approx. 95% CI")).toBeInTheDocument();
   });
 
   it("renders the temporal profile with the travel-window callout", () => {

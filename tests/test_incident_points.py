@@ -95,7 +95,9 @@ def test_points_filtered_by_bbox_dates_and_layer(tmp_path) -> None:
     assert point["id"] == "inc-1"
     assert point["latitude"] == 47.610
     assert point["block_address"] == "1XX BLOCK OF PINE ST"
-    assert point["occurred_at"].endswith("Z")
+    # CrimeIncident timestamps store Seattle wall-clock values; public JSON must attach
+    # the real local offset instead of falsely labelling those digits as UTC.
+    assert point["occurred_at"] == "2025-06-01T12:00:00-07:00"
     session.close()
 
 

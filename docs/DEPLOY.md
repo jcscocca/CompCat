@@ -138,8 +138,10 @@ Notes:
   Windows deploy host, `pip install certifi` for the system Python and set
   `$env:SSL_CERT_FILE = python -c "import certifi; print(certifi.where())"` in PowerShell
   before running the script — or fix the system certificate store.
-- The `.pmtiles` file is served with ETag/Last-Modified but no `Cache-Control`; if a
-  reverse proxy is ever added, long-lived caching for `/tiles/` is a cheap win.
+- The `.pmtiles` file requires a byte `Range` request (range-less GET returns 416), is
+  served with ETag/Last-Modified but no `Cache-Control`, and has its own finite per-IP
+  request bucket. If a reverse proxy is ever added, long-lived caching for `/tiles/` is
+  a cheap win.
 
 ## Notes / hardening
 

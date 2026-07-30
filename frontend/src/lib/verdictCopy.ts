@@ -44,7 +44,7 @@ export function aggregateHeadline(
   const parts = RELATION_ORDER.filter((relation) => groups[relation].length > 0).map((relation) =>
     relation === "similar"
       ? `shows no statistically clear difference from ${joinList(groups[relation])}`
-      : `${relation} ${joinList(groups[relation])}`,
+      : `sits clearly ${relation} ${joinList(groups[relation])}`,
   );
-  return `${label}'s ${noun.singular} rate is ${parts.join("; ")}.`;
+  return `${label}'s ${noun.singular} rate ${parts.join("; ")}.`;
 }

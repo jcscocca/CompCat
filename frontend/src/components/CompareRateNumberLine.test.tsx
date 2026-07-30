@@ -52,6 +52,33 @@ describe("CompareRateNumberLine", () => {
     expect(screen.getByTestId("compare-numberline").querySelectorAll(".mc-plot-row .bar")).toHaveLength(1);
   });
 
+  it("withholds a supplied interval below the 3-report place floor and explains the dot", () => {
+    const belowFloor = [
+      { ...row("Tiny", "lowest", 3.9, 0.1, 500, 1), incidentCount: 2 },
+      row("Bell", "similar", 4.4, 3.0, 6.4, 2),
+    ];
+    render(<CompareRateNumberLine rows={belowFloor} noun={noun} radiusM={250} />);
+    const plot = screen.getByTestId("compare-numberline");
+    const tiny = within(plot).getByText("Tiny").closest(".mc-plot-row")!;
+    expect(tiny.querySelector(".bar")).not.toBeInTheDocument();
+    expect(tiny.querySelector(".dot")).toBeInTheDocument();
+    expect(within(tiny as HTMLElement).getByText("too few reports to put a range on")).toBeInTheDocument();
+    expect(tiny).toHaveClass("is-withheld");
+  });
+
+  it("excludes a withheld interval bound from the axis domain", () => {
+    const normal = rows.slice(0, 2);
+    const inflatedWithheld = [
+      ...normal,
+      { ...row("Tiny", "limited", 3.9, 0.1, 500, 3), incidentCount: 2 },
+    ];
+    const { rerender } = render(<CompareRateNumberLine rows={normal} noun={noun} radiusM={250} />);
+    const normalMax = screen.getByTestId("compare-numberline").querySelectorAll(".mc-plot-axis .tick")[2]?.textContent;
+    rerender(<CompareRateNumberLine rows={inflatedWithheld} noun={noun} radiusM={250} />);
+    const withheldMax = screen.getByTestId("compare-numberline").querySelectorAll(".mc-plot-axis .tick")[2]?.textContent;
+    expect(withheldMax).toBe(normalMax);
+  });
+
   it("draws lowest-rate reference guides (same-as-lowest + effect floor)", () => {
     render(<CompareRateNumberLine rows={rows} noun={noun} radiusM={250} />);
     const plot = screen.getByTestId("compare-numberline");
@@ -61,7 +88,9 @@ describe("CompareRateNumberLine", () => {
 
   it("defers to the ranked verdict in an honesty footnote", () => {
     render(<CompareRateNumberLine rows={rows} noun={noun} radiusM={250} />);
-    expect(within(screen.getByTestId("compare-numberline")).getByText(/ranked verdict above is authoritative/i)).toBeInTheDocument();
+    const note = within(screen.getByTestId("compare-numberline")).getByText(/statistically tested verdict above is authoritative/i);
+    expect(note).toHaveTextContent(/approximate 95% intervals/i);
+    expect(note).toHaveTextContent(/not adjusted for multiple comparisons/i);
   });
 
   it("never emits safety-ranking vocabulary", () => {

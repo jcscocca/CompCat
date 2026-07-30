@@ -13,6 +13,9 @@ dependencies = [
   "alembic>=1.13",
   "anthropic>=0.40",
   "fastapi>=0.115",
+  # SQLAlchemy declares greenlet only on selected machine architectures. Keep it explicit so
+  # a lock generated on Apple Silicon still contains the dependency required by Linux images.
+  "greenlet>=1",
   "httpx>=0.27",
   "openai>=1.40",
   "pydantic>=2.8",

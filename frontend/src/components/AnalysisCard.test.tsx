@@ -172,7 +172,7 @@ describe("AnalysisCard", () => {
       />,
     );
     expect(screen.getAllByText("Pike").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/reported incident rate is/)).toHaveLength(2);
+    expect(screen.getAllByText(/reported incident rate (?:sits|shows)/)).toHaveLength(2);
     expect(await screen.findByTestId("trend-chart")).toBeInTheDocument();
     expect(screen.getByLabelText(/near selected places/)).toBeInTheDocument();
   });
@@ -229,6 +229,8 @@ describe("AnalysisCard", () => {
     const { container } = render(<AnalysisCard card={card} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
     expect(container.querySelector(".mc-result-minibar")).not.toBeInTheDocument();
     expect(screen.queryByText("Uncategorized")).not.toBeInTheDocument();
+    expect(screen.getByText(/911 call context, not a personal risk prediction/i)).toBeInTheDocument();
+    expect(container.querySelector(".mc-result-caveat")).not.toHaveTextContent(/\bincident/i);
   });
 
   it("notes when the mini-bars cover only the returned subset of a capped list", () => {

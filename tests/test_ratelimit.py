@@ -52,10 +52,21 @@ def test_client_ip_uses_header_with_trust() -> None:
     assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
 
 
-def test_client_ip_uses_forwarded_for_with_trust() -> None:
-    # Caddy sets X-Forwarded-For; without trusting it every visitor shares one bucket.
+def test_client_ip_does_not_use_forwarded_for_with_cloudflare_trust_alone() -> None:
     req = FakeRequest(host="172.18.0.5", headers={"x-forwarded-for": "8.8.8.8"})
-    assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
+    assert client_ip_from(req, trust_proxy_headers=True) == "172.18.0.5"
+
+
+def test_client_ip_uses_forwarded_for_only_with_the_separate_gate() -> None:
+    req = FakeRequest(host="172.18.0.5", headers={"x-forwarded-for": "8.8.8.8"})
+    assert (
+        client_ip_from(
+            req,
+            trust_proxy_headers=True,
+            trust_x_forwarded_for=True,
+        )
+        == "8.8.8.8"
+    )
 
 
 def test_client_ip_ignores_forwarded_for_without_trust() -> None:
@@ -80,7 +91,14 @@ def test_forwarded_for_takes_the_leftmost_hop() -> None:
     req = FakeRequest(
         host="172.18.0.5", headers={"x-forwarded-for": "8.8.8.8, 203.0.113.7, 172.18.0.1"}
     )
-    assert client_ip_from(req, trust_proxy_headers=True) == "8.8.8.8"
+    assert (
+        client_ip_from(
+            req,
+            trust_proxy_headers=True,
+            trust_x_forwarded_for=True,
+        )
+        == "8.8.8.8"
+    )
 
 
 def test_blank_proxy_headers_fall_back_to_the_socket_peer() -> None:
