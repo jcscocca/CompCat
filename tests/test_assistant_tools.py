@@ -331,6 +331,25 @@ def test_planning_prompt_requires_tool_for_filter_only_changes():
     assert "only a successful" in text
 
 
+def test_planning_prompt_forbids_claiming_actions_without_tools():
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert "never claim that data was retrieved" in text
+    assert "a place was saved or selected" in text
+    assert "requests to read current dashboard data" in text
+    for tool_name in (
+        "get_dashboard_summary",
+        "add_place",
+        "select_places",
+        "update_filters",
+        "analyze_places",
+        "compare_places",
+        "suggest_followups",
+    ):
+        assert tool_name in text
+
+
 def test_planning_prompt_routes_compare_intent_to_compare_places():
     """Live miss: "increase the radius and compare my places again" ran analyze_places,
     so the Compare pane never received the verdict."""

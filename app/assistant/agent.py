@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.assistant.llm_client import (
     AssistantLlmClient,
+    LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
 )
@@ -80,6 +81,10 @@ SELECTION_TOOLS = (
 )
 _UNREACHABLE_MESSAGE = (
     "Couldn't reach the analyst to interpret your request. The rest of CompCat still works."
+)
+_RATE_LIMITED_MESSAGE = (
+    "Tabby's model provider is at its short-term limit. Wait about a minute and try again — "
+    "chips, filters, and the rest of CompCat still work."
 )
 # A syntactically valid plan whose shape we don't recognize (e.g. a small local model emits
 # {"type": "clarify"}) is a soft failure, not an internal error: ask the user to rephrase.
@@ -199,6 +204,12 @@ async def run_assistant_turn(
             settings.assistant_role,
         )
         plan = _parse_model_json(raw_plan)
+    except LlmRateLimited:
+        yield AssistantStreamEvent(
+            event="error",
+            data={"message": _RATE_LIMITED_MESSAGE, "code": "llm_rate_limited"},
+        )
+        return
     except LlmUnavailable:
         yield AssistantStreamEvent(
             event="error", data={"message": _UNREACHABLE_MESSAGE, "code": "llm_unreachable"}

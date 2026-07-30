@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.assistant.agent import _complete_plan, run_assistant_turn
-from app.assistant.llm_client import LlmStreamInterrupted, LlmUnavailable
+from app.assistant.llm_client import LlmRateLimited, LlmStreamInterrupted, LlmUnavailable
 from app.assistant.schemas import AssistantChatMessage, AssistantDashboardState
 from app.assistant.summaries import build_tool_summary
 from app.db import get_sessionmaker
@@ -661,6 +661,30 @@ def test_agent_reports_unreachable_classifier(tmp_path):
     assert events[-1].event == "error"
     assert "Couldn't reach the analyst" in events[-1].data["message"]
     assert events[-1].data["code"] == "llm_unreachable"
+
+
+def test_agent_reports_provider_rate_limit_without_marking_unreachable(tmp_path):
+    class RateLimitedClient:
+        async def complete(self, messages, *, role, temperature=None, max_tokens=None):
+            raise LlmRateLimited("provider limit")
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Summarize the dashboard.")],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                RateLimitedClient(),
+            )
+        )
+    finally:
+        session.close()
+
+    assert events[-1].event == "error"
+    assert events[-1].data["code"] == "llm_rate_limited"
+    assert "about a minute" in events[-1].data["message"]
 
 
 def test_agent_reports_tool_error_code(tmp_path):

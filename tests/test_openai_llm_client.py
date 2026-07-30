@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.assistant.llm_client import (
+    LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
     OpenAiLlmClient,
@@ -117,6 +118,18 @@ def test_http_status_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         asyncio.run(client.complete([{"role": "user", "content": "hello"}], role=None))
 
 
+def test_http_429_raises_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        return _json_response({"error": "rate limited"}, status_code=429)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    with pytest.raises(LlmRateLimited, match="rate limit"):
+        asyncio.run(
+            _make_client().complete([{"role": "user", "content": "hello"}], role=None)
+        )
+
+
 def test_extra_body_is_merged_into_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     """extra_body (e.g. chat_template_kwargs) is merged into the request payload."""
     captured: dict[str, object] = {}
@@ -161,6 +174,34 @@ def test_structured_completion_sends_response_format_when_enabled(
     )
 
     assert captured["response_format"] == response_format
+
+
+def test_structured_completion_overrides_planning_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_post(self_client, url, **kwargs):  # noqa: ANN001
+        captured.update(kwargs.get("json") or {})
+        return _json_response({"choices": [{"message": {"content": '{"type":"final"}'}}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    client = _make_client(
+        extra_body={"reasoning_effort": "low", "reasoning_format": "hidden"},
+        supports_structured_output=True,
+        structured_extra_body={"reasoning_effort": "medium"},
+    )
+
+    asyncio.run(
+        client.complete_structured(
+            [{"role": "user", "content": "hello"}],
+            response_format={"type": "json_object"},
+            role=None,
+        )
+    )
+
+    assert captured["reasoning_effort"] == "medium"
+    assert captured["reasoning_format"] == "hidden"
 
 
 def test_structured_completion_stays_compatible_when_not_enabled(
@@ -300,6 +341,12 @@ def test_stream_empty_raises_unavailable(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_stream_pre_delta_http_error_raises_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_stream(monkeypatch, _FakeStreamResponse([], status_code=503))
     with pytest.raises(LlmUnavailable, match="unavailable"):
+        asyncio.run(_collect_stream(_make_client()))
+
+
+def test_stream_http_429_raises_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_stream(monkeypatch, _FakeStreamResponse([], status_code=429))
+    with pytest.raises(LlmRateLimited, match="rate limit"):
         asyncio.run(_collect_stream(_make_client()))
 
 

@@ -14,6 +14,7 @@ from app.assistant.llm_client import (
 
 _NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}}
 _GROQ_GPT_OSS = {"reasoning_effort": "low", "reasoning_format": "hidden"}
+_GROQ_GPT_OSS_PLANNING = {"reasoning_effort": "medium"}
 
 
 def _settings(**overrides):
@@ -104,6 +105,7 @@ def test_groq_gpt_oss_enables_reasoning_controls_and_structured_output() -> None
     assert isinstance(client, OpenAiLlmClient)
     assert client.extra_body == _GROQ_GPT_OSS
     assert client.supports_structured_output is True
+    assert client.structured_extra_body == _GROQ_GPT_OSS_PLANNING
 
 
 def test_local_gpt_oss_name_does_not_receive_groq_only_options() -> None:
@@ -117,6 +119,7 @@ def test_local_gpt_oss_name_does_not_receive_groq_only_options() -> None:
     assert isinstance(client, OpenAiLlmClient)
     assert client.extra_body == {}
     assert client.supports_structured_output is False
+    assert client.structured_extra_body == {}
 
 
 def test_groq_gpt_oss_options_apply_to_fallback() -> None:
@@ -131,6 +134,7 @@ def test_groq_gpt_oss_options_apply_to_fallback() -> None:
     fallback = client.clients[1]
     assert fallback.extra_body == _GROQ_GPT_OSS
     assert fallback.supports_structured_output is True
+    assert fallback.structured_extra_body == _GROQ_GPT_OSS_PLANNING
 
 
 def test_api_keys_reach_both_clients() -> None:
