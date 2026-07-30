@@ -11,6 +11,7 @@ def test_runtime_lock_is_committed_and_docker_installs_from_it() -> None:
 
     assert "--hash=sha256:" in lock
     assert "fastapi==" in lock
+    assert "greenlet==" in lock
     assert "sqlalchemy==" in lock
     assert "COPY requirements.lock ./" in dockerfile
     assert "pip install --no-cache-dir --require-hashes -r requirements.lock" in dockerfile
