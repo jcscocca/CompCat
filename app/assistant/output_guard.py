@@ -79,8 +79,8 @@ PLACE_CONTEXT_PATTERN = re.compile(
 SAFETY_REDIRECT = (
     "That's not something I can pull from the files — I can't label places safe or unsafe, "
     "rank them by safety, danger, or risk, or produce a personal safety score. I can order "
-    "places by reported incident counts or compare exposure-adjusted incident rates — just "
-    "ask it that way."
+    "places by reported incident counts or compare them with statistically tested geographic "
+    "baselines — just ask it that way."
 )
 
 # The guard already covers Spanish asks; refusing them in English reads as a failure to
@@ -90,13 +90,13 @@ SAFETY_REDIRECT_ES = (
     "Eso no puedo sacarlo de los archivos: no puedo etiquetar lugares como seguros o "
     "inseguros, ni clasificarlos por seguridad, peligro o riesgo, ni generar una puntuación "
     "de seguridad personal. Sí puedo ordenar lugares por número de incidentes reportados o "
-    "comparar tasas de incidentes ajustadas por exposición — pídemelo así."
+    "compararlos con referencias geográficas evaluadas estadísticamente — pídemelo así."
 )
 
 # Presence-claim guard — the third prong of the product invariant: the assistant MUST NOT
 # assert that the user was personally present at, witnessed, or was victimized by a reported
-# incident (CompCat knows only self-reported visit counts near a place, never presence at an
-# event). This catches both a model answer asserting it ("you were present at this incident",
+# incident (CompCat has only place-level context, never a person's presence at an event).
+# This catches both a model answer asserting it ("you were present at this incident",
 # "you were robbed here") and a user asking for it ("was I present at any of these?"). It is
 # deliberately narrow — a first/second-person subject tied to a victimization word, or to a
 # presence/witness word *followed by* an incident noun — so ordinary "a place you visit" /

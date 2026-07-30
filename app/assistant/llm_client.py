@@ -86,6 +86,10 @@ class LlmUnavailable(RuntimeError):
     pass
 
 
+class LlmRateLimited(LlmUnavailable):
+    """The upstream model provider rejected the request at its usage limit."""
+
+
 class LlmStreamInterrupted(RuntimeError):
     """A streaming completion died after emitting at least one delta. Not safe to
     fail over (the consumer already saw text); callers replace the partial answer."""
@@ -102,6 +106,8 @@ class OpenAiLlmClient:
         api_key: str = "",
         max_stream_seconds: float = 300.0,
         include_stream_usage: bool = False,
+        supports_structured_output: bool = False,
+        structured_extra_body: dict[str, object] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -124,6 +130,12 @@ class OpenAiLlmClient:
         # request stays byte-identical to pre-budget behavior for hosts that might 400 on
         # unknown fields (LAN llama-swap).
         self.include_stream_usage = include_stream_usage
+        # Structured planning is opt-in because generic OpenAI-compatible hosts vary in their
+        # response_format support. The builder enables it only for a known-compatible backend.
+        self.supports_structured_output = supports_structured_output
+        # Per-planning overrides for providers where classification benefits from more
+        # reasoning than narration. Applied only by complete_structured().
+        self.structured_extra_body = dict(structured_extra_body or {})
 
     def request_headers(self) -> dict[str, str]:
         if self.api_key:
@@ -138,16 +150,52 @@ class OpenAiLlmClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
+        return await self._complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    async def complete_structured(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: dict[str, object],
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Request structured output when this endpoint is known to support it."""
+        return await self._complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format if self.supports_structured_output else None,
+            request_extra_body=self.structured_extra_body,
+        )
+
+    async def _complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        response_format: dict[str, object] | None = None,
+        request_extra_body: dict[str, object] | None = None,
+    ) -> str:
         # Spread extra_body first so the core fields below always win and can
         # never be clobbered by caller-supplied options.
         payload: dict[str, object] = {
             **self.extra_body,
+            **(request_extra_body or {}),
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
         }
+        if response_format is not None:
+            payload["response_format"] = response_format
         timeout = httpx.Timeout(self.timeout_s, connect=self.connect_timeout_s)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -159,14 +207,17 @@ class OpenAiLlmClient:
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError as exc:
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _http_llm_error(exc) from exc
         try:
-            content = data["choices"][0]["message"].get("content")
-        except (KeyError, IndexError, TypeError) as exc:
+            choice = data["choices"][0]
+            content = choice["message"].get("content")
+        except (AttributeError, KeyError, IndexError, TypeError) as exc:
             raise LlmUnavailable(
                 "LLM endpoint returned an unexpected response shape."
             ) from exc
         record_llm_tokens(messages, content or "", data.get("usage"))
+        if choice.get("finish_reason") == "length":
+            raise LlmUnavailable("LLM response was truncated at the configured token limit.")
         if not content or not content.strip():
             raise LlmUnavailable(
                 "LLM returned empty content (a reasoning model may have spent the token "
@@ -201,6 +252,7 @@ class OpenAiLlmClient:
         reached = False
         usage: dict[str, object] | None = None
         parts: list[str] = []
+        truncated = False
         try:
             # asyncio.timeout bounds the total stream duration (see max_stream_seconds); on
             # expiry it raises TimeoutError, handled by the generic except below (degrades to
@@ -233,9 +285,12 @@ class OpenAiLlmClient:
                             if isinstance(usage_frame, dict):
                                 usage = usage_frame
                             try:
-                                delta = chunk["choices"][0].get("delta") or {}
-                            except (KeyError, IndexError, TypeError):
+                                choice = chunk["choices"][0]
+                                delta = choice.get("delta") or {}
+                            except (AttributeError, KeyError, IndexError, TypeError):
                                 continue
+                            if choice.get("finish_reason") == "length":
+                                truncated = True
                             content = delta.get("content")
                             if content:
                                 yielded = True
@@ -246,7 +301,7 @@ class OpenAiLlmClient:
                 raise LlmStreamInterrupted(
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _http_llm_error(exc) from exc
         except Exception as exc:  # non-HTTP transport/decode oddities degrade the same way
             if yielded:
                 raise LlmStreamInterrupted(
@@ -260,12 +315,24 @@ class OpenAiLlmClient:
             # bill the dead endpoint's prompt on every turn.
             if reached:
                 record_llm_tokens(messages, "".join(parts), usage)
+        if truncated:
+            if yielded:
+                raise LlmStreamInterrupted(
+                    "LLM stream was truncated at the configured token limit."
+                )
+            raise LlmUnavailable("LLM stream was truncated at the configured token limit.")
         if not yielded:
             raise LlmUnavailable(
                 "LLM returned an empty stream (a reasoning model may have spent the "
                 "token budget on reasoning_content — disable thinking or use an "
                 "instruct model)."
             )
+
+
+def _http_llm_error(exc: httpx.HTTPError) -> LlmUnavailable:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        return LlmRateLimited("LLM provider rate limit reached.")
+    return LlmUnavailable(f"LLM endpoint unavailable: {exc}")
 
 
 def _split_anthropic_messages(
@@ -591,6 +658,53 @@ class FailoverLlmClient:
         last_exc: LlmUnavailable | None = None
         for index, client in enumerate(self.clients):
             try:
+                return await client.complete(
+                    messages,
+                    role=role,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except LlmUnavailable as exc:
+                label = getattr(client, "base_url", f"client[{index}]")
+                failures.append(f"{label}: {exc}")
+                last_exc = exc
+                if index + 1 < len(self.clients):
+                    next_label = getattr(
+                        self.clients[index + 1], "base_url", f"client[{index + 1}]"
+                    )
+                    logger.warning(
+                        "LLM endpoint %s unavailable (%s); failing over to %s",
+                        label,
+                        exc,
+                        next_label,
+                    )
+        raise LlmUnavailable(
+            "All LLM endpoints failed: " + "; ".join(failures)
+        ) from last_exc
+
+    async def complete_structured(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: dict[str, object],
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Preserve structured planning on capable endpoints while retaining failover."""
+        failures: list[str] = []
+        last_exc: LlmUnavailable | None = None
+        for index, client in enumerate(self.clients):
+            try:
+                structured_complete = getattr(client, "complete_structured", None)
+                if callable(structured_complete):
+                    return await structured_complete(
+                        messages,
+                        response_format=response_format,
+                        role=role,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
                 return await client.complete(
                     messages,
                     role=role,

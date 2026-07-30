@@ -9,10 +9,10 @@ type Props = {
   analysis: AnalysisSettings;
   availableRadii: number[];
   onChange: (patch: Partial<AnalysisSettings>) => void;
-  /** Runs the deterministic analyze/compare command for the current locations. */
+  /** Runs the direct dashboard analysis for the current places. */
   onRun?: () => void;
   runDisabled?: boolean;
-  /** Saved-location selection belongs to the analysis context, so it is composed into
+  /** Saved-place selection belongs to the analysis context, so it is composed into
    * this single control instead of living in a second toolbar at the top of the rail. */
   locationControls?: ReactNode;
   /** Copies the share link and reports success/failure (the caller owns the URL + the
@@ -60,7 +60,7 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
             type="button"
             className="mc-ctx-summary-action"
             aria-expanded={open}
-            aria-label={`Analysis context filters: ${contextLabel}`}
+            aria-label={`${open ? "Close" : "Edit"} filters — ${contextLabel}`}
             onClick={() => setOpen((o) => !o)}
           >
             {open ? "Close" : "Edit"}
@@ -71,7 +71,7 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
         </span>
         {locationControls ? (
           <span className="mc-ctx-locations">
-            <span className="mc-ctx-locations-label">Locations</span>
+            <span className="mc-ctx-locations-label">Places</span>
             {locationControls}
           </span>
         ) : null}

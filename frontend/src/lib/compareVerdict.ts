@@ -10,7 +10,7 @@ export type CompareVerdictRow = {
   rate: number;
   barFraction: number;
   multipleOfLowest: number | null;
-  /** Absolute 95% interval on this address's own rate (quasi-Poisson), for the number line. Null/absent when the payload omits it. */
+  /** Absolute approximate 95% interval on this address's own rate (quasi-Poisson), for the number line. Null/absent when the payload omits it. */
   rateCiLow?: number | null;
   rateCiHigh?: number | null;
   relationship: CompareRelationship;
@@ -30,6 +30,7 @@ export type CompareCallout = {
 export type CompareVerdictModel = {
   rows: CompareVerdictRow[];
   callout: CompareCallout;
+  comparisonDataAdequate: boolean;
 };
 
 function relationshipFor(pair: SitePairwiseResult | null): CompareRelationship {
@@ -87,5 +88,6 @@ export function toCompareVerdict(comparison: SiteComparison): CompareVerdictMode
   return {
     rows,
     callout: { kind, lowestLabel: candidate ? candidate.label : "", loweredCount, otherCount, caveatText },
+    comparisonDataAdequate: overall !== "insufficient_data",
   };
 }

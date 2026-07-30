@@ -83,9 +83,17 @@ export default defineConfig({
         // Split the heavy, rarely-changing vendor stacks into their own chunks so they
         // cache independently of app code (an app-only change no longer re-downloads
         // ~1MB of map/markdown vendor) and the main bundle stays under the size warning.
-        manualChunks: {
-          markdown: ["react-markdown"],
-          maplibre: ["maplibre-gl", "pmtiles", "@protomaps/basemaps"]
+        manualChunks(id) {
+          if (id.includes("/node_modules/react-markdown/")) {
+            return "markdown";
+          }
+          if (
+            id.includes("/node_modules/maplibre-gl/") ||
+            id.includes("/node_modules/pmtiles/") ||
+            id.includes("/node_modules/@protomaps/basemaps/")
+          ) {
+            return "maplibre";
+          }
         }
       }
     }

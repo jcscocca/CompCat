@@ -1,12 +1,12 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Verified against `2d6d4f3` (2026-07-19).
+> Updated 2026-07-30 for the direct report action and public-runtime hardening.
 
 ---
 
 ## 1. Purpose & product invariant
 
-CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates in a map-centered workspace. A persistent Tabby rail (three-snap bottom sheet on mobile) carries the place list, controls, assistant conversation, and frozen analysis/comparison cards; the manage-places dialog owns add/rename/remove and export privacy controls.
+CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates in a map-centered workspace. A persistent Tabby rail (three-snap bottom sheet on mobile) carries the place list, filters, assistant conversation, and frozen analysis/comparison cards. A visible **Show me the data** action in that same rail lets users run the report directly without sending Tabby a message. The manage-places dialog owns add/rename/remove and export privacy controls.
 
 ⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/agent.py` contains a regex guard (`_SAFETY_SCORE_PATTERN`) that intercepts any chat message matching safety-scoring language and returns a hard refusal before the LLM is ever called. Both enforcement points must be preserved in future changes.
 
@@ -29,13 +29,25 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 | `app/sessions.py` | HMAC-signed session token creation and validation; derives `user_id_hash` from `SESSION_COOKIE_NAME` cookie |
 | `app/config.py` | `Settings` (pydantic-settings, `MCA_`-prefixed env vars) — one call to `get_settings()` per request |
 | `app/input_modes.py` | Pure-Python descriptor for the three supported entry modes (`manual_places`, `bulk_places`, `personal_timeline`) |
+| `app/request_limits.py` | Pre-routing request-body cap; default 1 MiB, with the larger upload cap available only when public uploads are enabled |
+| `app/ratelimit.py` | Per-IP token buckets for API burst traffic plus dedicated finite tile and health-probe families |
+| `app/time_contract.py` | Serializes SPD's stored Seattle wall clocks with their real DST-aware local offset |
 
 **Database strategy:** `app/db.py` `init_db()` runs `Base.metadata.create_all` only when the backend is SQLite (dev/test). Postgres schema is owned by Alembic (`make migrate` = `alembic upgrade head`). Mixing both paths on Postgres would leave `alembic_version` unstamped and mask migration drift.
+
+**Python dependency strategy:** `pyproject.toml` remains the editable developer source
+(`make install` installs `.[dev]`). `requirements.lock` is the Python 3.11 runtime
+resolution with exact versions and hashes; Docker installs it with `--require-hashes`
+before installing the local package with `--no-deps`. After changing runtime dependency
+constraints, regenerate it with
+`pip-compile pyproject.toml --output-file=requirements.lock --generate-hashes --strip-extras`
+using Python 3.11, then build the image.
 
 **Entity set** (`app/models.py`):
 
 - `ImportBatch`, `StagingLocationObservation`, `StopVisit` — personal-data upload pipeline
 - `PlaceCluster` — the canonical saved-place record; carries display coordinates, visit statistics, sensitivity class
+- `SessionActivity` — one-way user hash plus last create/resume time, used to preserve returning read-only identities during retention
 - `CrimeIncident` — SPD reported-incident rows ingested from Seattle Socrata
 - `PlaceCrimeSummary`, `AnalysisRun` — per-place crime tallies and the run metadata that groups them
 - `StatisticalComparison`, `StatisticalComparisonOption`, `StatisticalPairwiseResult` — persisted statistical comparison results
@@ -48,6 +60,10 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 See `./api.md` for full endpoint-by-endpoint detail. Summary:
 
 **Public** — in OpenAPI schema; require a real session token validated by `required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/uploads` (additionally gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`; responds 404 when the flag is off).
+
+`POST /sessions` slides the signed 24-hour window while preserving the original `issued_at`;
+`MCA_SESSION_ABSOLUTE_MAX_DAYS` (30 by default) caps the identity lifetime. `DELETE /sessions`
+clears the cookie.
 
 **Internal** — `include_in_schema=False`; use the permissive `current_user_hash` dependency that accepts the demo-identity fallback header `X-Demo-User-Id`. Prefixed `/internal/...`. Covers `/internal/analysis/*`, `/internal/imports`, `/internal/crime/*`, `/internal/places`, `/internal/exports/*`.
 
@@ -103,7 +119,9 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 
 `frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
 
-The assistant endpoints are consumed as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips and explicit controls. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
+The Tabby rail's **Show me the data** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an expanded `AnalysisCard` in the same rail. The rail keeps one live client-generated quick-report card, so another direct run replaces that card instead of stacking a duplicate “previous analysis”; assistant-produced cards remain part of the conversation.
+
+Tabby's conversational controls consume the assistant endpoints as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
 
 The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's single **Analysis filters** control owns both saved-place selection and unsaved search/share points; result cards are marked as previous analyses as soon as that context changes.
 
@@ -111,6 +129,11 @@ The dashboard freshness response also drives the initial analysis context. Untou
 
 - **Built mode** (production / `make run`): `app/main.py` `mount_dashboard()` serves `app/static/dashboard/index.html` at `/` and `app/static/dashboard/assets/` at `/assets/` using FastAPI's `StaticFiles`. The `MCA_STATIC_DASHBOARD_DIR` setting controls the path; mounting is silently skipped if `index.html` does not exist.
 - **Vite dev mode**: `npm run dev` in `frontend/` starts Vite on its own port; the browser talks to the FastAPI backend (typically `:8000`) directly, with the session cookie shared by same-origin or proxy configuration.
+
+The self-hosted PMTiles artifact is mounted at `/tiles`, but `.pmtiles` requests must carry
+`Range`; a range-less request receives 416 instead of downloading the complete ~100 MiB file.
+Tile ranges use a dedicated per-IP bucket (600/minute by default), separate from ordinary API
+bursts.
 
 ---
 
@@ -122,6 +145,12 @@ The dashboard freshness response also drives the initial analysis context. Untou
 - **Public session required for public endpoints:** `required_public_user_hash` raises HTTP 401 when no valid `mca_session` cookie is present; internal endpoints use the more permissive `current_user_hash`. See `./api.md`.
 - **Geocoder region-locked to Seattle metro:** `NominatimProvider` applies `MCA_GEOCODER_VIEWBOX` and `MCA_GEOCODER_BOUNDED` so ambiguous place names resolve in Seattle, not elsewhere. See `app/config.py` and `app/geocoding/providers.py`.
 - **Personal uploads off by default:** `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=false` causes `/uploads` to 404; the feature must be explicitly enabled. See `./api.md`.
+- **Bodies are bounded before routing:** ordinary request bodies default to 1 MiB; the larger
+  upload ceiling applies only while public uploads are enabled. Missing `Content-Length` is
+  still measured and capped.
+- **Read-only visits count as retention activity:** session create/resume upserts
+  `SessionActivity`; active identity detection also includes recent analyses and place
+  creation/update timestamps.
 
 ---
 

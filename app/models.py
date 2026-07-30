@@ -107,16 +107,41 @@ class PlaceCluster(Base):
     sensitivity_class: Mapped[str] = mapped_column(Text, default="normal")
     display_label: Mapped[str | None] = mapped_column(Text, nullable=True)
     label_source: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
+        index=True,
+    )
+
+
+class SessionActivity(Base):
+    """Last successful create/resume for a pseudonymous public identity.
+
+    The raw session id is never stored; user_id_hash is the same one-way identity key used
+    by user-owned data. Retention uses this row to preserve read-only returning visitors.
+    """
+
+    __tablename__ = "session_activity"
+
+    user_id_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        index=True,
     )
 
 
 class CrimeIncident(Base):
     __tablename__ = "crime_incidents"
+    # WARNING: offense_start_utc, offense_end_utc, and report_utc are legacy
+    # misnomers. SPD source values are Seattle local wall-clock times that parsers
+    # historically stamped with UTC tzinfo; they are not UTC instants. Public API
+    # serializers must preserve the clock digits and attach America/Los_Angeles's
+    # real offset (app/time_contract.py), never emit a trailing Z.
     __table_args__ = (
         UniqueConstraint(
             "source_dataset", "external_incident_id", name="uq_crime_source_external_id"
@@ -172,7 +197,9 @@ class PlaceCrimeSummary(Base):
     # Which analysis layer produced this summary ("reported" or "calls"); null = legacy
     # rows, treated as "reported" on read.
     layer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class AnalysisRun(Base):
@@ -213,7 +240,9 @@ class StatisticalComparison(Base):
     overview_summary_text: Mapped[str] = mapped_column(Text)
     overview_caveat_text: Mapped[str] = mapped_column(Text)
     full_caveat_text: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
 
 
 class StatisticalComparisonOption(Base):
@@ -288,4 +317,6 @@ class GeocodeCache(Base):
     provider: Mapped[str] = mapped_column(Text)
     query_normalized: Mapped[str] = mapped_column(Text)
     results_json: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )

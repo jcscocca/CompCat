@@ -290,7 +290,16 @@ export function MapCanvas({
     if (!map || !mapReady || themeRef.current === theme) return;
     themeRef.current = theme;
     if (import.meta.env.VITE_MAP_BASEMAP === "carto") return; // escape hatch stays light-only
-    map.setStyle(tilesMissingRef.current ? fallbackMapStyle(theme) : buildMapStyle(theme, window.location.origin));
+    // diff:false is load-bearing. maplibre-gl v6 implements setSprite/setGlyphs as diff
+    // operations (v5 rejected them as unimplemented and rebuilt the style from scratch), so
+    // the default diffing path now applies a theme swap in place — and leaves the canvas a
+    // full toggle behind: the map keeps painting the previous style until the *next*
+    // setStyle. Forcing the rebuild restores the v5 behaviour and re-fires style.load, which
+    // is what re-registers the data layers.
+    map.setStyle(
+      tilesMissingRef.current ? fallbackMapStyle(theme) : buildMapStyle(theme, window.location.origin),
+      { diff: false },
+    );
   }, [theme, mapReady]);
 
   useEffect(() => {
@@ -414,7 +423,7 @@ export function MapCanvas({
         </div>
       ) : tilesMissing ? (
         <div className="mc-map-fallback" role="status">
-          Basemap tiles unavailable — run <code>make fetch-tiles</code>. Pins and analysis still work.
+          Basemap tiles are unavailable right now — pins and analysis still work.
         </div>
       ) : null}
     </div>

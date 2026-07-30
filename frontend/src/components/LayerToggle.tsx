@@ -32,11 +32,13 @@ export function LayerToggle({
             className={`mc-chip${layer === option.value ? " on" : ""}`}
             aria-pressed={layer === option.value}
             disabled={unavailable}
-            title={unavailable ? `${option.label} data is not loaded` : undefined}
+            // Includes the visible "No data" text so the accessible name still contains the
+            // label a speech-input user would say (SC 2.5.3).
+            aria-label={unavailable ? `${option.label} — No data loaded` : undefined}
             onClick={() => onChange(option.value)}
           >
             {option.label}
-            {unavailable ? <span className="mc-layer-unavailable" aria-hidden="true">No data</span> : null}
+            {unavailable ? <span className="mc-layer-unavailable">No data</span> : null}
           </button>
         );
       })}

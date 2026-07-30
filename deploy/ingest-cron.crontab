@@ -6,3 +6,7 @@
 # Nightly logical backup, 03:40 — after the ingest above, so the dump holds the fresh data.
 # Prunes itself to 7 daily + 4 weekly archives in the "backups" volume.
 40 3 * * * /bin/sh /etc/ingest/backup.sh >> /proc/1/fd/1 2>&1
+
+# Retention sweep, 03:50 — last, so the night's backup predates the night's deletions.
+# Deletes session-scoped analysis rows past MCA_SESSION_DATA_RETENTION_DAYS; logs row counts.
+50 3 * * * /bin/sh /etc/ingest/retention.sh >> /proc/1/fd/1 2>&1
