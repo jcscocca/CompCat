@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import { FormEvent, useState } from "react";
 
-import { labelOrDefault } from "../lib/placeDefaults";
+import { labelOrDefault, PLACE_LABEL_PLACEHOLDER } from "../lib/placeDefaults";
 import type { PlaceCreate } from "../types";
 
 type Props = {
@@ -44,7 +44,10 @@ export function PlaceForm({ onSubmit }: Props) {
 
     try {
       await onSubmit({
-        display_label: labelOrDefault(displayLabel),
+        display_label: labelOrDefault(displayLabel, {
+          latitude: numericLatitude,
+          longitude: numericLongitude,
+        }),
         latitude: numericLatitude,
         longitude: numericLongitude,
         visit_count: 1,
@@ -75,7 +78,7 @@ export function PlaceForm({ onSubmit }: Props) {
           name="display-label"
           value={displayLabel}
           onChange={(event) => setDisplayLabel(event.target.value)}
-          placeholder="Test location"
+          placeholder={PLACE_LABEL_PLACEHOLDER}
         />
 
         <div className="form-grid">

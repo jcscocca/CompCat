@@ -5,9 +5,12 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -38,7 +41,28 @@ from app.ratelimit import client_ip_from, get_rate_limiter
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_REQUEST_INVALID_MESSAGE = "That request didn't validate — check the values and try again."
+
+
+class _AssistantValidationRoute(APIRoute):
+    """Keep request-model internals out of both public assistant endpoints."""
+
+    def get_route_handler(self):
+        route_handler = super().get_route_handler()
+
+        async def fixed_validation_copy(request: Request):
+            try:
+                return await route_handler(request)
+            except RequestValidationError:
+                return JSONResponse(
+                    status_code=422,
+                    content={"detail": _REQUEST_INVALID_MESSAGE},
+                )
+
+        return fixed_validation_copy
+
+
+router = APIRouter(route_class=_AssistantValidationRoute)
 
 
 def _no_think_body(disable_thinking: bool) -> dict[str, object] | None:
@@ -48,6 +72,32 @@ def _no_think_body(disable_thinking: bool) -> dict[str, object] | None:
     if disable_thinking:
         return {"chat_template_kwargs": {"enable_thinking": False}}
     return None
+
+
+def _is_groq_gpt_oss(base_url: str, model: str) -> bool:
+    """True only for Groq-hosted GPT-OSS, whose request extensions are known."""
+    return (
+        (urlparse(base_url).hostname or "").lower() == "api.groq.com"
+        and model.lower().startswith("openai/gpt-oss-")
+    )
+
+
+def _openai_compatible_options(
+    base_url: str,
+    model: str,
+    disable_thinking: bool,
+) -> tuple[dict[str, object] | None, bool, dict[str, object] | None]:
+    if _is_groq_gpt_oss(base_url, model):
+        # GPT-OSS defaults to medium reasoning. Low is sufficient for Tabby's narration,
+        # while hidden keeps reasoning tokens out of user-visible content.
+        # Planning gets medium effort separately: choosing and parameterizing a tool is the
+        # reasoning-heavy half of the turn.
+        return (
+            {"reasoning_effort": "low", "reasoning_format": "hidden"},
+            True,
+            {"reasoning_effort": "medium"},
+        )
+    return _no_think_body(disable_thinking), False, None
 
 
 def _require_anthropic(settings: Settings) -> AnthropicLlmClient:
@@ -80,12 +130,19 @@ def _build_primary(settings: Settings) -> AssistantLlmClient:
         return _require_anthropic(settings)
     if settings.llm_provider == "openai_native":
         return _require_openai_native(settings)
+    extra_body, supports_structured_output, structured_extra_body = _openai_compatible_options(
+        settings.llm_base_url,
+        settings.llm_model,
+        settings.llm_disable_thinking,
+    )
     return OpenAiLlmClient(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
-        extra_body=_no_think_body(settings.llm_disable_thinking),
+        extra_body=extra_body,
         api_key=settings.llm_api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,
+        supports_structured_output=supports_structured_output,
+        structured_extra_body=structured_extra_body,
     )
 
 
@@ -114,12 +171,19 @@ def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
     model = settings.llm_fallback_model.strip()
     if not (base_url and model):
         return None
+    extra_body, supports_structured_output, structured_extra_body = _openai_compatible_options(
+        base_url,
+        model,
+        settings.llm_fallback_disable_thinking,
+    )
     return OpenAiLlmClient(
         base_url=base_url,
         model=model,
-        extra_body=_no_think_body(settings.llm_fallback_disable_thinking),
+        extra_body=extra_body,
         api_key=settings.effective_llm_fallback_api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,
+        supports_structured_output=supports_structured_output,
+        structured_extra_body=structured_extra_body,
     )
 
 
@@ -163,7 +227,11 @@ async def assistant_chat(
         # checked before the global counter, for the same reason the session bucket is.
         ip_wait = limiter.try_take(
             "assistant_ip",
-            client_ip_from(http_request, trust_proxy_headers=settings.trust_proxy_headers),
+            client_ip_from(
+                http_request,
+                trust_proxy_headers=settings.trust_proxy_headers,
+                trust_x_forwarded_for=settings.trust_x_forwarded_for,
+            ),
             capacity=settings.rate_limit_assistant_per_ip_per_hour,
             per_seconds=3600.0,
         )

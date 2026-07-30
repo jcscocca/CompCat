@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.assistant.llm_client import (
     AssistantLlmClient,
+    LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
 )
@@ -35,6 +36,7 @@ from app.assistant.output_guard import (
     ranks_places,
 )
 from app.assistant.prompts import (
+    PLANNING_RESPONSE_FORMAT,
     build_narration_messages,
     build_planning_messages,
     build_tool_grounding,
@@ -80,6 +82,10 @@ SELECTION_TOOLS = (
 _UNREACHABLE_MESSAGE = (
     "Couldn't reach the analyst to interpret your request. The rest of CompCat still works."
 )
+_RATE_LIMITED_MESSAGE = (
+    "Tabby's model provider is at its short-term limit. Wait about a minute and try again — "
+    "chips, filters, and the rest of CompCat still work."
+)
 # A syntactically valid plan whose shape we don't recognize (e.g. a small local model emits
 # {"type": "clarify"}) is a soft failure, not an internal error: ask the user to rephrase.
 _CLARIFY_FALLBACK = (
@@ -87,9 +93,28 @@ _CLARIFY_FALLBACK = (
     "You can ask me to analyze a place, compare a few addresses, or adjust the filters."
 )
 _NARRATION_TEMPERATURE = 0.4
-_NARRATION_MAX_TOKENS = 256
+_NARRATION_MAX_TOKENS = 512
 _STATUS_INTERPRETING = "interpreting your request…"
 _STATUS_WRITING = "writing up…"
+_FOLLOWUP_REFERENCE_PATTERN = re.compile(
+    r"""
+    ^\s*(?:
+        (?:yes|yeah|yep|ok(?:ay)?|sure)
+        (?:\s+(?:please|do\s+(?:it|that)|anyway|then|now|go\s+ahead))*
+      | please\s+do\s+(?:it|that)
+      | do\s+(?:it|that)(?:\s+anyway)?
+      | go\s+ahead
+      | continue
+      | tell\s+me
+      | which\s+one
+      | (?:s[ií])(?:\s+(?:por\s+favor|hazlo|adelante))?
+      | hazlo
+      | adelante
+      | contin[uú]a
+    )\s*[.!?]*\s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 # Shared daily LLM token budget exhausted. Fixed copy, invariant-safe: it speaks only about the
 # request budget — never about places, addresses, or safety.
@@ -134,6 +159,7 @@ async def run_assistant_turn(
     )
 
     recent_user_texts = _recent_user_texts(messages)
+    guard_user_texts = _guard_user_texts(recent_user_texts)
     # A refusal in the wrong language reads as a failure to understand rather than a
     # deliberate limit. The guard already covers Spanish asks, so answer them in Spanish.
     spanish = any(is_spanish(text) for text in recent_user_texts)
@@ -141,13 +167,13 @@ async def run_assistant_turn(
     def guard(text: str) -> str | None:
         return localized(output_guard_redirect(text), spanish)
 
-    if any(contains_safety_ranking(text) for text in recent_user_texts):
+    if any(contains_safety_ranking(text) for text in guard_user_texts):
         yield AssistantStreamEvent(
             event="token", data={"delta": localized(SAFETY_REDIRECT, spanish)}
         )
         yield AssistantStreamEvent(event="done", data={})
         return
-    if any(claims_user_presence(text) for text in recent_user_texts):
+    if any(claims_user_presence(text) for text in guard_user_texts):
         yield AssistantStreamEvent(
             event="token", data={"delta": localized(PRESENCE_REDIRECT, spanish)}
         )
@@ -172,13 +198,18 @@ async def run_assistant_turn(
     session.rollback()
 
     try:
-        raw_plan = await llm_client.complete(
+        raw_plan = await _complete_plan(
+            llm_client,
             build_planning_messages(messages, context),
-            role=settings.assistant_role,
-            temperature=0.2,
-            max_tokens=1024,
+            settings.assistant_role,
         )
         plan = _parse_model_json(raw_plan)
+    except LlmRateLimited:
+        yield AssistantStreamEvent(
+            event="error",
+            data={"message": _RATE_LIMITED_MESSAGE, "code": "llm_rate_limited"},
+        )
+        return
     except LlmUnavailable:
         yield AssistantStreamEvent(
             event="error", data={"message": _UNREACHABLE_MESSAGE, "code": "llm_unreachable"}
@@ -297,6 +328,45 @@ def _recent_user_texts(
     return [message.content for message in messages[-limit:] if message.role == "user"]
 
 
+def _guard_user_texts(recent_user_texts: list[str]) -> list[str]:
+    """Scope deterministic guards to the current request.
+
+    A short referential confirmation ("ok do it anyway") inherits the immediately preceding
+    user request, so a refused safety-ranking ask cannot bypass the guard on the next turn.
+    A new substantive request starts fresh; otherwise one refused ask would poison every later
+    message still present in the eight-message planning window.
+    """
+    if not recent_user_texts:
+        return []
+    latest = recent_user_texts[-1]
+    if len(recent_user_texts) > 1 and _FOLLOWUP_REFERENCE_PATTERN.fullmatch(latest):
+        return recent_user_texts[-2:]
+    return [latest]
+
+
+async def _complete_plan(
+    llm_client: AssistantLlmClient,
+    planning_messages: list[dict[str, str]],
+    role: str,
+) -> str:
+    """Use schema-constrained planning when the selected adapter supports it."""
+    structured_complete = getattr(llm_client, "complete_structured", None)
+    if callable(structured_complete):
+        return await structured_complete(
+            planning_messages,
+            response_format=PLANNING_RESPONSE_FORMAT,
+            role=role,
+            temperature=0.2,
+            max_tokens=1024,
+        )
+    return await llm_client.complete(
+        planning_messages,
+        role=role,
+        temperature=0.2,
+        max_tokens=1024,
+    )
+
+
 async def _stream_final(
     llm_client: AssistantLlmClient,
     narration_messages: list[dict[str, str]],
@@ -358,6 +428,7 @@ def _tool_arguments(
         for key, value in raw_arguments.items()
         if value not in (None, "", [])
     }
+    arguments = _with_explicit_radius(tool_name, arguments, user_text)
     if tool_name not in SELECTION_TOOLS:
         return _with_relative_window(tool_name, dashboard_state, arguments, user_text)
 
@@ -393,9 +464,40 @@ def _tool_arguments(
 # Tools that take an analysis window. update_filters is not a selection tool but still
 # carries the dates, so the backstop has to cover it too.
 _DATE_WINDOW_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
+_RADIUS_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
 _RELATIVE_WINDOW_PATTERN = re.compile(
     r"\b(?:last|past)\s+(?:(\d{1,3})\s+)?(day|week|month|year)s?\b", re.IGNORECASE
 )
+_RADIUS_AFTER_LABEL_PATTERN = re.compile(
+    r"\bradius\s*(?:(?:to|of)\s*|=\s*)?(\d{2,5})"
+    r"(?:\s*(?:m|meters?|metres?))?\b",
+    re.IGNORECASE,
+)
+_RADIUS_WITH_UNIT_PATTERN = re.compile(
+    r"\b(\d{2,5})\s*(?:m|meters?|metres?)\b",
+    re.IGNORECASE,
+)
+
+
+def _with_explicit_radius(
+    tool_name: str,
+    arguments: dict[str, Any],
+    user_text: str,
+) -> dict[str, Any]:
+    """Backfill an explicit meter value when the planner omitted the radius field."""
+    if tool_name not in _RADIUS_TOOLS:
+        return arguments
+    target = "radius_m" if tool_name in {"compare_places", "update_filters"} else "radii_m"
+    if target in arguments:
+        return arguments
+    match = _RADIUS_AFTER_LABEL_PATTERN.search(user_text or "")
+    if match is None:
+        match = _RADIUS_WITH_UNIT_PATTERN.search(user_text or "")
+    if match is None:
+        return arguments
+    radius = int(match.group(1))
+    value: int | list[int] = radius if target == "radius_m" else [radius]
+    return {**arguments, target: value}
 
 
 def _with_relative_window(
@@ -531,4 +633,3 @@ def _final_message(plan: dict[str, Any]) -> str:
     if not isinstance(message, str) or not message.strip():
         raise ValueError("The local model returned an empty assistant answer.")
     return message.strip()
-

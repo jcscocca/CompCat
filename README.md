@@ -334,9 +334,9 @@ curl -b demo.cookies http://127.0.0.1:8000/exports/tableau/place-summary.csv
 
 The Tableau place-summary export includes recurring-place fields, generalized coordinates, the
 selected analysis range, offense grouping fields, incident counts, nearest-incident distance,
-incidents per expected visit, and incidents per hour of dwell. The expected-weekly-visit
-denominator behind `incidents_per_visit` is routine metadata for context, not a risk score. Frame
-each row as:
+and legacy incidents-per-visit and incidents-per-hour-of-dwell fields. Those legacy fields remain
+in the export schema for compatibility, but are excluded from the public UI and from all assistant
+prompts, semantic context, and tool results. They are not personal-risk metrics. Frame each row as:
 
 > Reported SPD incidents within 500 m of this recurring location during the selected date range.
 

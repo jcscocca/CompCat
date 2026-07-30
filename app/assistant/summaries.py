@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from app.assistant.output_guard import guarded
+from app.assistant.output_guard import output_guard_redirect
 
 DECISION_PHRASES = {
     "above_clear": "above its surrounding-area baseline, statistically clear",
@@ -37,8 +38,9 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
 
     The text is user-bound on every path that calls this — the chat turn's kill-switch
     and fallback emissions, and the /assistant/commands route, which streams it with no
-    model in the loop — and it interpolates user-controlled place labels. So the finished
-    line runs through the output guard here, once, rather than at each emission site."""
+    model in the loop. User-controlled labels are masked while the generated prose is
+    checked, then restored; otherwise a legitimate proper name such as "Public Safety
+    Building" trips a guard intended for assistant-authored safety claims."""
     result = tool_result.get("result") or {}
     handler = {
         "add_place": _add_place_summary,
@@ -51,7 +53,81 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
     }.get(tool_result.get("tool_name"))
     if handler is None:
         return "Done."
-    return guarded(handler(result) or "Done.")
+    return _guard_summary_with_labels(handler(result) or "Done.", result)
+
+
+_HOSTILE_LABEL_PROSE = re.compile(
+    r"\b(?:do\s+not|don't|never|ignore|disregard|avoid|stay\s+away|go\s+there"
+    r"|recommend(?:ed|ing)?|very\s+(?:dangerous|unsafe|risky)"
+    r"|(?:is|are)\s+(?:safe|unsafe|dangerous|risky))\b",
+    re.IGNORECASE,
+)
+
+
+def _guard_summary_with_labels(summary: str, result: dict[str, Any]) -> str:
+    """Guard assistant-authored prose without treating proper-name words as claims.
+
+    Labels remain untrusted: sentence-like instructions or assertions inside one still
+    receive the normal output redirect. Benign proper names are replaced by inert tokens
+    during the prose scan, then restored byte-for-byte.
+    """
+    labels = sorted(_interpolated_labels(result), key=len, reverse=True)
+    for label in labels:
+        redirect = output_guard_redirect(label)
+        if redirect is not None and _HOSTILE_LABEL_PROSE.search(label):
+            return redirect
+
+    masked = summary
+    replacements: list[tuple[str, str]] = []
+    for index, label in enumerate(labels):
+        token = f"COMPCATLABELTOKEN{index}"
+        if label in masked:
+            masked = masked.replace(label, token)
+            replacements.append((token, label))
+
+    redirect = output_guard_redirect(masked)
+    if redirect is not None:
+        return redirect
+    for token, label in replacements:
+        masked = masked.replace(token, label)
+    return masked
+
+
+def _interpolated_labels(result: dict[str, Any]) -> set[str]:
+    """Return only free-text fields summary builders interpolate as labels/addresses.
+
+    Deliberately do not recurse through every string: service-authored ``summary_text``
+    must remain visible to the output guard even when it contains a violating claim.
+    """
+    labels: set[str] = set()
+
+    def add(value: Any) -> None:
+        if isinstance(value, str) and value:
+            labels.add(value)
+
+    place = result.get("place") or {}
+    add(place.get("display_label"))
+    add(result.get("address"))
+    for key in ("matched", "created"):
+        entries = result.get(key)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            for field in ("query", "label", "address"):
+                add(entry.get(field))
+    for query in result.get("unresolved") or []:
+        add(query)
+    for place_entry in (result.get("neighborhood") or {}).get("places") or []:
+        add(place_entry.get("place_label"))
+        for baseline in place_entry.get("baselines") or []:
+            add(baseline.get("label"))
+    comparison = result.get("comparison") or {}
+    for option in (comparison.get("overview") or {}).get("options") or []:
+        add(option.get("label"))
+    for entry in (comparison.get("analytical") or {}).get("pairwise_results") or []:
+        add(entry.get("option_a_label"))
+        add(entry.get("option_b_label"))
+    return labels
 
 
 def _add_place_summary(result: dict[str, Any]) -> str:
@@ -79,7 +155,6 @@ def _select_places_summary(result: dict[str, Any]) -> str:
 _RELATION_PHRASES = {
     "above": "above",
     "below": "below",
-    "similar": "about the same as",
 }
 
 
@@ -122,6 +197,16 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
             sentences.append(
                 f"{label}: {entry['rate_ratio']:.1f}× — {_RELATION_PHRASES[relation]} "
                 f"{entry.get('label')}'s rate{ci}; {count} {noun} within {radius} m."
+            )
+        elif entry and relation == "similar" and entry.get("rate_ratio") is not None:
+            interval = ""
+            lower, upper = entry.get("ci_lower"), entry.get("ci_upper")
+            if lower is not None and upper is not None:
+                interval = f", 95% CI {lower:.1f}–{upper:.1f}"
+            sentences.append(
+                f"{label}: no statistically clear difference from {entry.get('label')}'s "
+                f"rate ({entry['rate_ratio']:.1f}×{interval}); {count} {noun} within "
+                f"{radius} m."
             )
         else:
             phrase = DECISION_PHRASES.get(place.get("decision"), "no area comparison")
