@@ -77,6 +77,29 @@ Use exactly one of these shapes:
 {"type":"final","message":"..."}
 {"type":"tool_call","tool_name":"...","arguments":{...}}"""
 
+# Groq's GPT-OSS models can constrain the planning response to this schema. It is deliberately
+# best-effort rather than strict: tool arguments vary by tool, while the agent's Pydantic models
+# remain the authoritative validators for those arguments. Other OpenAI-compatible backends keep
+# using the prompt-only JSON contract above.
+PLANNING_RESPONSE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "compcat_assistant_plan",
+        "strict": False,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["final", "tool_call"]},
+                "message": {"type": "string"},
+                "tool_name": {"type": "string"},
+                "arguments": {"type": "object"},
+            },
+            "required": ["type"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 def build_planning_messages(
     messages: list[AssistantChatMessage],

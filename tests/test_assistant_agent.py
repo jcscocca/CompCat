@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from app.assistant.agent import run_assistant_turn
+from app.assistant.agent import _complete_plan, run_assistant_turn
 from app.assistant.llm_client import LlmStreamInterrupted, LlmUnavailable
 from app.assistant.schemas import AssistantChatMessage, AssistantDashboardState
 from app.assistant.summaries import build_tool_summary
@@ -39,6 +39,33 @@ class FakeClient:
     ) -> str:
         self.calls.append(messages)
         return self.responses.pop(0)
+
+
+def test_planning_uses_structured_completion_when_available() -> None:
+    class StructuredClient:
+        captured: dict[str, object] = {}
+
+        async def complete_structured(self, messages, **kwargs):
+            self.captured = kwargs
+            return '{"type":"final","message":"ok"}'
+
+        async def complete(self, messages, **kwargs):
+            raise AssertionError("regular completion should not be used")
+
+    client = StructuredClient()
+    result = asyncio.run(
+        _complete_plan(
+            client,  # type: ignore[arg-type]
+            [{"role": "user", "content": "hello"}],
+            "analyst",
+        )
+    )
+
+    assert result == '{"type":"final","message":"ok"}'
+    response_format = client.captured["response_format"]
+    assert response_format["type"] == "json_schema"  # type: ignore[index]
+    assert client.captured["temperature"] == 0.2
+    assert client.captured["max_tokens"] == 1024
 
 
 # The safety/presence guards answer a Spanish ask in Spanish (see output_guard.localized),

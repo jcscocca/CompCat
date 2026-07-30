@@ -35,6 +35,7 @@ from app.assistant.output_guard import (
     ranks_places,
 )
 from app.assistant.prompts import (
+    PLANNING_RESPONSE_FORMAT,
     build_narration_messages,
     build_planning_messages,
     build_tool_grounding,
@@ -87,7 +88,7 @@ _CLARIFY_FALLBACK = (
     "You can ask me to analyze a place, compare a few addresses, or adjust the filters."
 )
 _NARRATION_TEMPERATURE = 0.4
-_NARRATION_MAX_TOKENS = 256
+_NARRATION_MAX_TOKENS = 512
 _STATUS_INTERPRETING = "interpreting your request…"
 _STATUS_WRITING = "writing up…"
 
@@ -172,11 +173,10 @@ async def run_assistant_turn(
     session.rollback()
 
     try:
-        raw_plan = await llm_client.complete(
+        raw_plan = await _complete_plan(
+            llm_client,
             build_planning_messages(messages, context),
-            role=settings.assistant_role,
-            temperature=0.2,
-            max_tokens=1024,
+            settings.assistant_role,
         )
         plan = _parse_model_json(raw_plan)
     except LlmUnavailable:
@@ -295,6 +295,29 @@ def _recent_user_texts(
     # messages[-8:]), not just the newest one, so a safety-score request split across
     # turns or carried by a short "yes, do that" follow-up still trips the guard.
     return [message.content for message in messages[-limit:] if message.role == "user"]
+
+
+async def _complete_plan(
+    llm_client: AssistantLlmClient,
+    planning_messages: list[dict[str, str]],
+    role: str,
+) -> str:
+    """Use schema-constrained planning when the selected adapter supports it."""
+    structured_complete = getattr(llm_client, "complete_structured", None)
+    if callable(structured_complete):
+        return await structured_complete(
+            planning_messages,
+            response_format=PLANNING_RESPONSE_FORMAT,
+            role=role,
+            temperature=0.2,
+            max_tokens=1024,
+        )
+    return await llm_client.complete(
+        planning_messages,
+        role=role,
+        temperature=0.2,
+        max_tokens=1024,
+    )
 
 
 async def _stream_final(
