@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_admin_crime import router as admin_crime_router
+from app.api.routes_admin_maintenance import router as admin_maintenance_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_assistant import router as assistant_router
 from app.api.routes_crime import router as crime_router
@@ -27,6 +28,7 @@ from app.api.routes_uploads import router as uploads_router
 from app.config import Settings, get_settings
 from app.db import configure_database, init_db
 from app.ratelimit import BurstLimitMiddleware
+from app.request_limits import RequestBodyLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +132,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(uploads_router)
     app.include_router(crime_router)
     app.include_router(admin_crime_router)
+    app.include_router(admin_maintenance_router)
     app.include_router(dashboard_router)
     app.include_router(public_dashboard_router)
     app.include_router(assistant_router)
@@ -144,6 +147,9 @@ def create_app(database_url: str | None = None) -> FastAPI:
         name="tiles",
     )
     mount_dashboard(app)
+    # Added in this order so the burst/internal gate is outermost, then accepted requests
+    # hit the body cap before FastAPI routing or multipart parsing.
+    app.add_middleware(RequestBodyLimitMiddleware, get_settings_fn=get_settings)
     app.add_middleware(BurstLimitMiddleware, get_settings_fn=get_settings)
     return app
 

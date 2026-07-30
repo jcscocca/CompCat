@@ -1,5 +1,10 @@
 # Public instance runbook — compcat.app on a VPS
 
+> **Zero-cost alternative:** [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) reaches the same public
+> compcat.app from the ThinkPad through a named Cloudflare tunnel — same app, same env posture,
+> same nightly ops, no VPS and no TLS to manage. Read its "what this trades" section before
+> choosing; the two runbooks diverge only at the edge.
+
 This document takes a **fresh Ubuntu 24.04 box to an always-on public CompCat at
 <https://compcat.app>**: TLS-terminated, rate-limited, ingesting SPD data nightly, backing itself
 up nightly, and monitored from outside. It assumes no prior knowledge of the deployment — following
@@ -23,7 +28,7 @@ Four containers under one `docker compose` project, three open ports:
 | `caddy` | `caddy:2-alpine` | host :80, :443, :443/udp | TLS termination + reverse proxy. The **only** ingress. |
 | `api` | built from this repo | compose network only | FastAPI + the built React UI on `api:8000`. |
 | `db` | `postgres:16` | compose network only | Data. Never published on the host. |
-| `ingest-cron` | built from `deploy/ingest-cron.Dockerfile` | compose network only | 03:10 SPD ingest, 03:40 `pg_dump` backup. `ops` profile. |
+| `ingest-cron` | built from `deploy/ingest-cron.Dockerfile` | compose network only | 03:10 SPD ingest, 03:40 `pg_dump` backup, 03:50 retention sweep. `ops` profile. |
 
 Every command below uses one compose invocation. Define it once per shell session:
 
@@ -306,12 +311,12 @@ Pass conditions:
 - `curl -s -o /dev/null -w '%{http_code}\n' https://compcat.app/health/data` → `200`
 - the dashboard's "Data through" pill shows a recent date.
 
-From here it is automatic: **03:10** ingest and **03:40** backup, every night, America/Los_Angeles
-(the sidecar sets `TZ` and ships `tzdata`, so the times do not drift across DST). Both jobs log to
-the container log:
+From here it is automatic: **03:10** ingest, **03:40** backup and **03:50** retention sweep, every
+night, America/Los_Angeles (the sidecar sets `TZ` and ships `tzdata`, so the times do not drift
+across DST). All three jobs log to the container log:
 
 ```bash
-compose logs ingest-cron | grep -E 'ingest-cron:|backup-daily:'
+compose logs ingest-cron | grep -E 'ingest-cron:|backup-daily:|retention-sweep:'
 ```
 
 ---
@@ -500,8 +505,32 @@ cd /opt/compcat && git pull && scripts/prod/start-compcat.sh
 ```bash
 compose logs -f api          # application
 compose logs -f caddy        # TLS, certificate renewal, HTTP errors
-compose logs ingest-cron     # nightly ingest (03:10) and backup (03:40)
+compose logs ingest-cron     # nightly ingest (03:10), backup (03:40), retention sweep (03:50)
 compose logs db
+```
+
+**Data retention:** a CompCat session is an anonymous token with a sliding 24-hour window and a
+signed absolute ceiling (`MCA_SESSION_ABSOLUTE_MAX_DAYS`, default 30). Rows an analysis writes —
+entered-place clusters, analysis runs, crime summaries, statistical comparisons and their
+options/pairwise children — outlive an individual window. Every create/resume upserts a
+one-way `session_activity` record, so a returning read-only visitor counts as active. The
+03:50 sidecar job posts
+`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no
+create/resume, analysis, place creation, or place update in
+`MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep), in foreign-key
+order and bounded batches, and evicts `geocode_cache` entries past their own
+`MCA_GEOCODER_CACHE_TTL_DAYS`. It never touches personal-upload clusters — those have their own
+delete path — nor SPD incident data. A persistent integrity failure returns 5xx, which makes
+the sidecar's `curl --fail` job fail visibly. The sweep runs after the backup, so each night's
+dump still contains what that night removed.
+
+> Migration note: `0014_retention_indexes` creates plain (non-CONCURRENT) indexes and
+> `0015_session_activity` creates the activity table/index. Fine
+> on a fresh or small database; if you ever apply it after months of accumulated data,
+> expect the indexed tables to be write-locked for the build's duration. To run it by hand and read the per-table row counts:
+
+```bash
+compose exec ingest-cron /bin/sh /etc/ingest/retention.sh
 ```
 
 **After a host reboot:** nothing to do. `restart: unless-stopped` brings `db`, `api`, `caddy` and

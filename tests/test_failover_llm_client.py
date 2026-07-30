@@ -122,6 +122,52 @@ def test_kwargs_are_forwarded() -> None:
     assert primary.calls[0] == {"role": "analyst", "temperature": 0.2, "max_tokens": 512}
 
 
+def test_structured_completion_uses_capable_primary() -> None:
+    class StructuredClient(_FakeClient):
+        async def complete_structured(
+            self,
+            messages,
+            *,
+            response_format,
+            role=None,
+            temperature=None,
+            max_tokens=None,
+        ):
+            self.calls.append({"response_format": response_format})
+            return "structured"
+
+    primary = StructuredClient(base_url="primary", content="unused")
+    client = FailoverLlmClient([primary])
+    response_format = {"type": "json_object"}
+
+    result = asyncio.run(
+        client.complete_structured(
+            _MESSAGES,
+            response_format=response_format,
+            role="analyst",
+        )
+    )
+
+    assert result == "structured"
+    assert primary.calls == [{"response_format": response_format}]
+
+
+def test_structured_completion_falls_back_to_regular_client() -> None:
+    primary = _FakeClient(base_url="primary", content="regular")
+    client = FailoverLlmClient([primary])
+
+    result = asyncio.run(
+        client.complete_structured(
+            _MESSAGES,
+            response_format={"type": "json_object"},
+            role="analyst",
+        )
+    )
+
+    assert result == "regular"
+    assert len(primary.calls) == 1
+
+
 def test_non_availability_error_propagates_without_failover() -> None:
     """A non-LlmUnavailable error is not masked and stops failover."""
     primary = _FakeClient(base_url="primary", error=RuntimeError("unexpected bug"))

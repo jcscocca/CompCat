@@ -1,4 +1,4 @@
-FROM node:22-slim AS frontend
+FROM node:26-slim AS frontend
 
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -10,7 +10,7 @@ ARG VITE_CANONICAL_ORIGIN=""
 ENV VITE_CANONICAL_ORIGIN=$VITE_CANONICAL_ORIGIN
 RUN npm run build
 
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -23,9 +23,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Runtime dependencies are fully pinned (including transitive packages) and hash-checked.
+COPY requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
+
+# Install the local project separately with --no-deps so pyproject metadata is retained
+# without re-resolving its broad developer constraints.
 COPY pyproject.toml README.md ./
 COPY app ./app
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini

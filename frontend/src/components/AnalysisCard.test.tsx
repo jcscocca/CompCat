@@ -149,10 +149,9 @@ describe("AnalysisCard", () => {
     expect(screen.queryByText(/2021-07-01/)).not.toBeInTheDocument();
     expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
     expect(screen.queryByText(/reported incident rate is/)).not.toBeInTheDocument();
-    // compact: no trend/incident/methods sections
+    // compact: no trend/incident sections (methods + caveat stay — see below)
     expect(screen.queryByTestId("trend-section")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/near selected places/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Methods/ })).not.toBeInTheDocument();
   });
 
   it("compact compare card renders the CompareVerdict callout", () => {
@@ -173,9 +172,46 @@ describe("AnalysisCard", () => {
       />,
     );
     expect(screen.getAllByText("Pike").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/reported incident rate is/)).toHaveLength(2);
+    expect(screen.getAllByText(/reported incident rate (?:sits|shows)/)).toHaveLength(2);
     expect(await screen.findByTestId("trend-chart")).toBeInTheDocument();
     expect(screen.getByLabelText(/near selected places/)).toBeInTheDocument();
+  });
+
+  it("withholds all absolute-rate intervals when the comparison misses its data floor", () => {
+    const options = [
+      { ...opt("a", "Pike", 2, 3.9), rate_ci_lower: 0.1, rate_ci_upper: 500 },
+      { ...opt("b", "Bell", 3, 4.4), rate_ci_lower: 0.1, rate_ci_upper: 500 },
+    ];
+    const lowNeighborhood = neighborhood("Test Hill", "North");
+    lowNeighborhood.places = lowNeighborhood.places.map((place, index) => ({
+      ...place,
+      place_incident_count: index + 2,
+      place_rate: index === 0 ? 3.9 : 4.4,
+      place_rate_ci_lower: 0.1,
+      place_rate_ci_upper: 500,
+    }));
+    const card = compareCard({
+      comparison: comparison(
+        "insufficient_data",
+        options,
+        [pair("a", "b", "insufficient_data", null, 1.1)],
+        null,
+      ),
+      neighborhood: lowNeighborhood,
+    });
+
+    const { container } = render(
+      <AnalysisCard
+        card={card}
+        expanded
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+
+    expect(container.querySelectorAll(".mc-numberline .bar")).toHaveLength(0);
+    expect(container.querySelectorAll(".mc-bplot-band")).toHaveLength(0);
+    expect(screen.getAllByText(/comparison did not meet the data floor/i).length).toBeGreaterThan(0);
   });
 
   it("renders a run-scoped export link when runId is set and omits it when null", () => {
@@ -200,13 +236,26 @@ describe("AnalysisCard", () => {
     expect(onExpandChange).toHaveBeenCalledWith(false);
   });
 
-  it("shows the product caveat above the methods appendix only when expanded", () => {
-    render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
-    expect(screen.queryByText(/not a personal risk prediction/)).not.toBeInTheDocument();
+  // Most readers never expand a card, so the caveat and the methods sheet have to be
+  // reachable from the summary — they used to live only in the expanded branch.
+  it("shows the product caveat and a methods link in both states", () => {
+    const { container } = render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
+    expect(screen.getByText(/not a personal risk prediction/)).toBeInTheDocument();
+    expect(container.querySelector(".mc-result-summary .mc-result-caveat")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Methods/ })).toBeInTheDocument();
     cleanup();
 
     render(<AnalysisCard card={analyzeCard()} expanded onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
     expect(screen.getByText(/not a personal risk prediction/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Methods/ })).toBeInTheDocument();
+  });
+
+  it("opens the methods sheet from a collapsed card without expanding it", () => {
+    const onExpandChange = vi.fn();
+    render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={onExpandChange} exportHrefBase={EXPORT_BASE} />);
+    fireEvent.click(screen.getByRole("button", { name: /Methods/ }));
+    expect(screen.getByRole("dialog", { name: /Methods and definitions/i })).toBeInTheDocument();
+    expect(onExpandChange).not.toHaveBeenCalled();
   });
 
   it("skips the category mini-bars on the calls layer (911 calls carry no category)", () => {
@@ -217,6 +266,8 @@ describe("AnalysisCard", () => {
     const { container } = render(<AnalysisCard card={card} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
     expect(container.querySelector(".mc-result-minibar")).not.toBeInTheDocument();
     expect(screen.queryByText("Uncategorized")).not.toBeInTheDocument();
+    expect(screen.getByText(/911 call context, not a personal risk prediction/i)).toBeInTheDocument();
+    expect(container.querySelector(".mc-result-caveat")).not.toHaveTextContent(/\bincident/i);
   });
 
   it("notes when the mini-bars cover only the returned subset of a capped list", () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
-import { createPlace } from "../api/client";
+import { createPlace, friendlyMessageOr } from "../api/client";
 import { labelOrDefault } from "./placeDefaults";
 import type { SavedPlaceRef } from "./offers";
 import type { DraftPin, GeocodeResult, LatLng } from "../types";
@@ -98,7 +98,7 @@ export function usePinDraft({
     setDraftError("");
     try {
       const created = await createPlace({
-        display_label: labelOrDefault(draft.display_label),
+        display_label: labelOrDefault(draft.display_label, draft),
         latitude: draft.latitude,
         longitude: draft.longitude,
         visit_count: 1,
@@ -107,8 +107,8 @@ export function usePinDraft({
       selectPlaceIds([created.id], [created]);
       setDraft(null);
       await refreshWithFallback("Saved, but dashboard totals could not refresh.");
-    } catch {
-      setDraftError("Unable to save pin. Try again.");
+    } catch (cause) {
+      setDraftError(friendlyMessageOr(cause, "Unable to save pin. Try again."));
     } finally {
       setDraftSaving(false);
     }

@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 
+import { PLACE_LABEL_PLACEHOLDER } from "../lib/placeDefaults";
 import type { DraftPin } from "../types";
 
 type Props = {
@@ -29,7 +30,7 @@ export function PinDraftPopover({ draft, saving, error, onChange, onSave, onCanc
       <input
         id="draft-label"
         value={draft.display_label}
-        placeholder="Test location"
+        placeholder={PLACE_LABEL_PLACEHOLDER}
         onChange={(event) => onChange({ display_label: event.target.value })}
       />
       {error ? <p className="mc-draft-error" role="alert">{error}</p> : null}

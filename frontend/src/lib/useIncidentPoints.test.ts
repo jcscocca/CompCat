@@ -2,12 +2,16 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { useIncidentPoints } from "./useIncidentPoints";
 import type { AnalysisSettings, IncidentPointsResponse, MapBounds } from "../types";
 
 const fetchPoints = vi.fn();
 
-vi.mock("../api/client", () => ({
+// The status->copy mapping helpers are pure and are the behaviour under test here, so keep
+// the real ones; only the network call is faked.
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
   getIncidentPoints: (...args: unknown[]) => fetchPoints(...args),
 }));
 
@@ -145,12 +149,31 @@ describe("useIncidentPoints", () => {
     expect(result.current.geojson.features).toHaveLength(1);
     const priorGeojson = result.current.geojson;
 
+    // An arbitrary rejection is not shippable copy — this surface renders `error`, so an
+    // unrecognised message must be replaced rather than shown.
     fetchPoints.mockRejectedValueOnce(new Error("boom"));
     rerender({ bounds: { ...BOUNDS, north: 47.7 } });
     await act(async () => {
       vi.advanceTimersByTime(300);
     });
-    expect(result.current.error).toBe("boom");
+    expect(result.current.error).toBe("Incident pins could not load for this view.");
     expect(result.current.geojson).toBe(priorGeojson);
+  });
+
+  it("surfaces a status-mapped message verbatim", async () => {
+    const { result, rerender } = renderHook(
+      ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
+      { initialProps: { bounds: BOUNDS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    fetchPoints.mockRejectedValueOnce(new Error(SESSION_EXPIRED_MESSAGE));
+    rerender({ bounds: { ...BOUNDS, north: 47.7 } });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.error).toBe(SESSION_EXPIRED_MESSAGE);
   });
 });

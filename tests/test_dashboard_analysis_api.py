@@ -280,7 +280,7 @@ def test_dashboard_incidents_returns_selected_place_rows(tmp_path):
     assert body["incidents"][0]["place_id"] == places[0]["id"]
     assert body["incidents"][0]["place_label"] == "Downtown transfer stop"
     assert body["incidents"][0]["incident_id"] == "incident-a"
-    assert body["incidents"][0]["occurred_at"] == "2024-01-10T00:00:00Z"
+    assert body["incidents"][0]["occurred_at"] == "2024-01-10T00:00:00-08:00"
     assert body["incidents"][0]["reported_at"] is None
     assert body["incidents"][0]["offense_category"] == "PROPERTY"
     assert body["incidents"][0]["distance_m"] < 70

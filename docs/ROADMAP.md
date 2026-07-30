@@ -379,6 +379,62 @@ as the registered domain, "Built by Jacob Scocca" + GitHub link as the in-app op
   real keys, run the start script, rehearse the restore, create the uptime monitor, run the soak
   (closes the pending H2 run), then add the live link to the README.
 
+## Phase 9 — Pre-launch audit & fixes (2026-07-28)
+*Seven-lane audit (live UX walkthrough, 16-turn assistant battery on Groq, frontend, backend
+with reproduced measurements, statistical communication, security + DoS/robustness sub-audits),
+then four review-gated fix batches. Report: `docs/reviews/2026-07-28-pre-launch-audit.md`.*
+
+- [x] **Assistant quality (#173):** output guard on every emission path, compact grounding,
+  honest data-floor summaries, deterministic relative dates, bilingual refusals, arg bounds.
+- [x] **Backend hardening (#174):** DoS caps (radii/date/absolute/filters/body), event-loop
+  offloads, delete-after-analyze fix, CSV formula escaping, per-IP assistant bucket, sliding
+  session expiry, access-log privacy + rotation, /docs off in prod.
+- [x] **Frontend (#183):** save-searched-address contract fix, Enter-in-search, chat
+  auto-scroll, theme-toggle maplibre-6 regression, session-expiry surfacing, "no clear
+  difference" + Methods-sheet corrections, contrast/a11y/mobile fixes.
+- [x] **Retention (#184):** identity-scoped nightly sweep for abandoned session data +
+  geocode-cache eviction (a live visitor's data is never touched), created_at indexes.
+- [ ] **Fast-follow backlog** (from the audit, not launch-blocking): combobox ARIA pattern,
+  tab order/aria-live restructure, mobile keyboard-crush snap, numeric-score guard patterns,
+  ranked-surface selective-inference disclosure line, Python lockfile, ErrorBoundary,
+  share-link fragment migration.
+- [x] **Product decisions from the audit:** the dead MCPP locator subsystem is deleted (it
+  never rendered); **place** is the primary noun in user-facing copy, with "address" kept
+  only where the user literally types or searches one and "pin" kept for the map-drop
+  gesture; the mobile map key is no longer `display:none` but a toggle-opened overlay. The
+  assistant caps shipped with #173/#174.
+
+## Phase 10 — Launch posture: named tunnel, VPS retained (2026-07-28)
+*Phase 8 built the public instance but left the edge assuming a rented box. The launch path is
+now the **zero-cost named Cloudflare tunnel from the ThinkPad**: Cloudflare terminates TLS at its
+own edge and a `cloudflared` container dials out, so there is no Caddy, no certificate, no
+published host port and no inbound firewall hole. Everything else from Phase 8 — required
+secrets, unpublished Postgres, restart policies, the nightly ops sidecar, log rotation — is
+reused unchanged. `docs/DEPLOY-VPS.md` is retained as the upgrade, unmodified except for a
+pointer.*
+
+- [x] **Tunnel overlay + posture — repo-side shipped; bring-up pending on the user steps in
+  `docs/DEPLOY-TUNNEL.md`:** `docker-compose.tunnel.yml` (caddy parked on a dead profile,
+  pinned `cloudflared` with the token required at render time, api still unpublished),
+  `.env.tunnel.example` (`MCA_TRUST_PROXY_HEADERS=true` because here Cloudflare *is* the edge and
+  `CF-Connecting-IP` is authoritative — the inverse of the Caddyfile's strip),
+  `scripts/public/start-public.ps1` / `stop-public.ps1` as an isolated third compose project
+  (`compcat-public`, own volumes, uploads off — never the personal instance), the full runbook,
+  and render assertions in `tests/test_compose_tunnel_overlay.py`.
+  **Still manual, by hand:** create the Cloudflare account, add the `compcat.app` zone, move the
+  registrar's nameservers, create the named tunnel and copy its token, add the
+  `compcat.app -> http://api:8000` public hostname, fill `.env.tunnel`, run the start script,
+  rehearse the restore, create the uptime monitor, then add the live link to the README.
+- [x] **Trade-offs recorded, not glossed:** uptime follows the ThinkPad (no SLA; sleep is the
+  enemy), Cloudflare's free tier discourages serving large non-HTML assets at volume and the
+  ~100 MB PMTiles extract is the one heavy asset (range-requested, edge-cached, portfolio-scale
+  traffic — but named honestly, with R2 or the VPS as the escape hatch), and Caddy's outer
+  1 MB cap is gone while the application still enforces its 1 MiB pre-routing default (no
+  multipart endpoint is enabled on this posture; a plan-dependent WAF rule is optional).
+- [ ] **Upgrade trigger:** if uptime or the asset volume ever stops being acceptable, migrate per
+  `docs/DEPLOY-VPS.md` — restore the newest dump, swap the tunnel CNAME for an A record. Only the
+  edge overlay changes.
+
 ## Conventions
 - Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
 - Keep this file current as phases land — it is the one roadmap concurrent agents should read.

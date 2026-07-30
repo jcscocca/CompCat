@@ -61,6 +61,11 @@ export function BottomSheet({
     if (!drag || !panel) return;
     const dy = event.clientY - drag.startY;
     if (Math.abs(dy) <= GRABBER_TAP_SLOP) return;
+    // The panel carries `transition:height .22s`, so every drag frame was animated and the
+    // sheet trailed the finger. Suppress it for the duration of the drag; the snap on
+    // release re-enables it, so the settle is still animated. Toggled on the node rather
+    // than through state to avoid a React render per pointermove.
+    panel.classList.add("is-dragging");
     const height = Math.max(80, Math.min(window.innerHeight * 0.95, drag.startHeight - dy));
     panel.style.height = `${height}px`; // live drag, uncommitted
   }
@@ -70,6 +75,7 @@ export function BottomSheet({
     const panel = panelRef.current;
     dragState.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
+    panel?.classList.remove("is-dragging");
     if (!drag || !panel) return;
     panel.style.height = ""; // hand height back to the snap class
     const dy = event.clientY - drag.startY;
@@ -95,6 +101,7 @@ export function BottomSheet({
   function onGrabberPointerCancel(event: PointerEvent<HTMLDivElement>) {
     dragState.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
+    panelRef.current?.classList.remove("is-dragging");
     if (panelRef.current) panelRef.current.style.height = "";
   }
 

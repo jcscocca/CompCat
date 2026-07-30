@@ -32,6 +32,7 @@ function setup(overrides: Partial<PanelProps> = {}) {
   const onSend = vi.fn();
   const onRetry = vi.fn();
   const onRunCommand = vi.fn();
+  const onShowData = vi.fn();
   const onFollowupChip = vi.fn();
   const onCardExpandChange = vi.fn();
   const onAction = vi.fn();
@@ -45,6 +46,7 @@ function setup(overrides: Partial<PanelProps> = {}) {
     onSend,
     onRetry,
     onRunCommand,
+    onShowData,
     followupChips: [],
     onFollowupChip,
     expandedCard: null,
@@ -56,7 +58,7 @@ function setup(overrides: Partial<PanelProps> = {}) {
   };
   const view = render(<AssistantPanel {...props} />);
   const rerender = (next: Partial<PanelProps>) => view.rerender(<AssistantPanel {...props} {...next} />);
-  return { onSend, onRetry, onRunCommand, onFollowupChip, onCardExpandChange, onAction, rerender };
+  return { onSend, onRetry, onRunCommand, onShowData, onFollowupChip, onCardExpandChange, onAction, rerender };
 }
 
 beforeEach(() => localStorage.clear());
@@ -102,6 +104,25 @@ describe("AssistantPanel", () => {
     expect(onSend).toHaveBeenCalledWith("What's on file around here?");
   });
 
+  it("keeps a direct Show me the data action on the Tabby panel", () => {
+    const { onShowData } = setup();
+    const button = screen.getByRole("button", { name: "Show me the data" });
+    expect(button.closest(".mc-direct-run")).toHaveTextContent("Quick report");
+    fireEvent.click(button);
+    expect(onShowData).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows report progress without disabling Tabby's offline fallback", () => {
+    const { rerender } = setup({ offline: true });
+    expect(screen.getByRole("button", { name: "Show me the data" })).toBeEnabled();
+
+    rerender({ showDataBusy: true });
+    expect(screen.getByRole("button", { name: "Building report…" })).toBeDisabled();
+
+    rerender({ showDataBusy: false, showDataDisabled: true });
+    expect(screen.getByRole("button", { name: "Show me the data" })).toBeDisabled();
+  });
+
   it("offline disables the composer and prompt chip but keeps command chips live", () => {
     const { onRunCommand } = setup({ offline: true });
     expect(screen.getByLabelText("Analyst message")).toBeDisabled();
@@ -131,7 +152,7 @@ describe("AssistantPanel", () => {
       ] as ThreadItem[],
     });
     expect(screen.getByText("Analysis result")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Location analysis" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Place analysis" })).toBeInTheDocument();
     expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(onCardExpandChange).toHaveBeenCalledWith(analyzeCard, true);
@@ -267,6 +288,7 @@ describe("AssistantPanel", () => {
       setup({ hasPlaces: false });
       expect(screen.queryByRole("button", { name: "Compare my places" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "What's near this pin?" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
     });
 
     it("disables action chips while busy but keeps them live while offline", () => {
@@ -314,5 +336,65 @@ describe("AssistantPanel", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     rerender({ errorLine: undefined });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  describe("thread auto-scroll", () => {
+    // jsdom has no layout: scrollHeight/clientHeight are permanently 0 and scrollTop never
+    // moves on its own. Stub the geometry so the log looks like an overflowing, scrollable
+    // container and record what the component assigns to scrollTop.
+    function stubScrollableLog(overflowPx = 1000) {
+      const log = document.querySelector(".mc-dock-log") as HTMLDivElement;
+      const clientHeight = 400;
+      Object.defineProperty(log, "clientHeight", { value: clientHeight, configurable: true });
+      Object.defineProperty(log, "scrollHeight", { value: clientHeight + overflowPx, configurable: true });
+      let scrollTop = 0;
+      Object.defineProperty(log, "scrollTop", {
+        get: () => scrollTop,
+        set: (next: number) => { scrollTop = next; },
+        configurable: true,
+      });
+      return log;
+    }
+
+    it("scrolls to the bottom when a new entry lands", () => {
+      const { rerender } = setup({ items: [{ kind: "user_text", text: "hello" }] });
+      const log = stubScrollableLog();
+      expect(log.scrollTop).toBe(0);
+
+      rerender({ items: [{ kind: "user_text", text: "hello" }, { kind: "tabby_text", text: "Hi." }] });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+    });
+
+    it("keeps following the bottom while an answer streams", () => {
+      const items: ThreadItem[] = [{ kind: "user_text", text: "hello" }];
+      const { rerender } = setup({ items, draft: "Check" });
+      const log = stubScrollableLog();
+
+      rerender({ items, draft: "Checking the" });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+
+      log.scrollTop = 0; // a growing draft must re-pin it, not leave it where it was
+      rerender({ items, draft: "Checking the files…" });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+    });
+
+    it("leaves the view alone once the reader has scrolled up", () => {
+      const items: ThreadItem[] = [{ kind: "user_text", text: "hello" }];
+      const { rerender } = setup({ items, draft: "Check" });
+      const log = stubScrollableLog();
+
+      // Scroll well clear of the bottom, as a reader going back over an earlier answer would.
+      log.scrollTop = 120;
+      fireEvent.scroll(log);
+
+      rerender({ items, draft: "Checking the files…" });
+      expect(log.scrollTop).toBe(120);
+
+      // Returning to the bottom re-arms the follow behaviour.
+      log.scrollTop = log.scrollHeight - log.clientHeight;
+      fireEvent.scroll(log);
+      rerender({ items, draft: "Checking the files… done." });
+      expect(log.scrollTop).toBe(log.scrollHeight);
+    });
   });
 });

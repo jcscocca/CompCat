@@ -37,6 +37,93 @@ describe("SearchPill", () => {
     expect(screen.getByRole("combobox", { name: /search address/i })).toHaveAttribute("id", "mc-search-input");
   });
 
+  // Typing an address and pressing Enter is the first thing anyone tries; before this the
+  // key did nothing and the only way to pick a suggestion was the mouse.
+  it("selects the sole suggestion on Enter", async () => {
+    const onSelect = vi.fn();
+    render(<SearchPill search={search} onSelect={onSelect} addPinMode={false} onToggleAddPin={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: /search address/i });
+    fireEvent.change(input, { target: { value: "8800 Del" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith(RESULT);
+  });
+
+  it("selects the highlighted suggestion on Enter", async () => {
+    const onSelect = vi.fn();
+    const second: GeocodeResult = { label: "8800 Delridge Way S", latitude: 47.53, longitude: -122.37, source: "nominatim" };
+    search.mockResolvedValue([RESULT, second]);
+    render(<SearchPill search={search} onSelect={onSelect} addPinMode={false} onToggleAddPin={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: /search address/i });
+    fireEvent.change(input, { target: { value: "8800 Del" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith(second);
+  });
+
+  it("tracks the active option with aria-activedescendant and aria-selected", async () => {
+    const second: GeocodeResult = { label: "8800 Delridge Way S", latitude: 47.53, longitude: -122.37, source: "nominatim" };
+    search.mockResolvedValue([RESULT, second]);
+    render(<SearchPill search={search} onSelect={vi.fn()} addPinMode={false} onToggleAddPin={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: /search address/i });
+    fireEvent.change(input, { target: { value: "8800 Del" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+
+    expect(input).not.toHaveAttribute("aria-activedescendant");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const options = screen.getAllByRole("option");
+    expect(input).toHaveAttribute("aria-activedescendant", options[0].id);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    expect(options[1]).toHaveAttribute("aria-selected", "false");
+
+    // ArrowUp from the first option wraps to the last.
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input).toHaveAttribute("aria-activedescendant", options[1].id);
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("closes the list on Escape without selecting", async () => {
+    const onSelect = vi.fn();
+    render(<SearchPill search={search} onSelect={onSelect} addPinMode={false} onToggleAddPin={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: /search address/i });
+    fireEvent.change(input, { target: { value: "8800 Del" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(screen.getByRole("option", { name: /8800 Delridge/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("closes the list on an outside pointer press", async () => {
+    render(<SearchPill search={search} onSelect={vi.fn()} addPinMode={false} onToggleAddPin={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: /search address/i });
+    fireEvent.change(input, { target: { value: "8800 Del" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(screen.getByRole("option", { name: /8800 Delridge/i })).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+
+  it("keeps the list open when focus moves to an option", async () => {
+    const onSelect = vi.fn();
+    render(<SearchPill search={search} onSelect={onSelect} addPinMode={false} onToggleAddPin={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: /search address/i });
+    fireEvent.change(input, { target: { value: "8800 Del" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+
+    const option = screen.getByRole("option", { name: /8800 Delridge/i });
+    fireEvent.blur(input, { relatedTarget: option });
+    expect(screen.queryByRole("option")).toBeInTheDocument();
+    fireEvent.click(option);
+    expect(onSelect).toHaveBeenCalledWith(RESULT);
+  });
+
   it("arms pin-drop mode via the pin button", () => {
     const onToggleAddPin = vi.fn();
     render(<SearchPill search={search} onSelect={vi.fn()} addPinMode={false} onToggleAddPin={onToggleAddPin} />);

@@ -5,22 +5,19 @@
 # Deliberately three directives. Anything more is another thing to review before a deploy.
 compcat.app {
 	encode gzip
-	# Hard body cap at the edge. The largest legitimate request is the 200 KB bulk-places
-	# CSV (personal uploads are off on the public instance), so 1 MB is generous. This is
-	# also the only real bound on an upload: the app's own 413 fires from a dependency that
-	# runs after FastAPI has already spooled the multipart body to disk.
+	# Hard body cap at the outer edge. The largest legitimate request is the 200 KB
+	# bulk-places CSV (personal uploads are off on the public instance), so 1 MB is
+	# generous. The app enforces the same default before routing; this edge rejects before
+	# the request crosses the compose network.
 	request_body {
 		max_size 1MB
 	}
 	reverse_proxy api:8000 {
-		# The limiter consults CF-Connecting-IP before X-Forwarded-For when
-		# MCA_TRUST_PROXY_HEADERS is on. Caddy manages only X-Forwarded-* — a
-		# client-sent CF-Connecting-IP would pass through verbatim and mint a fresh
-		# rate bucket per request. Strip it; only Cloudflare's own edge may set it.
+		# Caddy is not Cloudflare: strip client-sent CF-Connecting-IP so the app cannot
+		# accept a forged value under MCA_TRUST_PROXY_HEADERS.
 		header_up -CF-Connecting-IP
-		# Caddy already replaces XFF from untrusted peers, but pin it explicitly so a
-		# future trusted_proxies addition can't silently hand the leftmost hop to
-		# clients.
+		# The VPS env separately opts into XFF. Pin it to one authoritative value so a
+		# future trusted_proxies addition cannot hand the leftmost hop to clients.
 		header_up X-Forwarded-For {client_ip}
 	}
 }

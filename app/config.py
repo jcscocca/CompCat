@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     user_hash_salt: str = DEFAULT_USER_HASH_SALT
     session_secret: str = DEFAULT_SESSION_SECRET
     session_cookie_secure: bool | None = None
+    # Sliding 24h sessions may keep one pseudonymous identity only this long from signed
+    # issuance. After the ceiling, /sessions mints a new identity. 30 days by default.
+    session_absolute_max_days: int = Field(default=30, ge=1)
     static_dashboard_dir: str = "app/static/dashboard"
     tiles_dir: str = "app/data/tiles"
     public_enable_personal_uploads: bool = False
@@ -57,10 +60,18 @@ class Settings(BaseSettings):
     # never restarts the container.
     data_staleness_days: int = 7
     raw_upload_retention: bool = False
+    # How long server-side, session-scoped analysis data (place clusters, analysis runs,
+    # crime summaries, statistical comparisons) is kept before the retention sweep
+    # (POST /admin/maintenance/retention-sweep) deletes it. Sessions themselves are 24h
+    # anonymous tokens, so these rows are unreachable by anyone long before this. 0 disables.
+    session_data_retention_days: int = 30
     # Hard ceiling on personal-upload / import request bodies, read into memory before
     # parsing. Bounds a memory-exhaustion DoS; generous enough for real location-history
     # exports. 100 MiB default.
     max_upload_bytes: int = 100 * 1024 * 1024
+    # Global request-body ceiling enforced at the ASGI edge before routing. Uploads use
+    # max_upload_bytes only while the public upload feature is explicitly enabled.
+    max_request_bytes: int = 1024 * 1024
     assistant_role: str = "compcat_analyst"
     # Streamed Tabby narration finals + turn status events. Off = the pre-streaming
     # behavior (deterministic template finals, no status events) — a deploy-side kill
@@ -107,11 +118,13 @@ class Settings(BaseSettings):
     # Demo/public rate limiting (see docs/superpowers/specs/2026-07-10-demo-on-demand-design.md).
     # All enforcement is OFF unless rate_limit_enabled — dev and tests are unaffected.
     rate_limit_enabled: bool = False
-    # Trust proxy headers for client identity: CF-Connecting-IP first, then the leftmost
-    # X-Forwarded-For hop. Set true only when a proxy we control is the sole ingress
-    # (cloudflared for the demo, the Caddy edge in docker-compose.prod.yml) — otherwise both
-    # headers are attacker-controlled and every caller can mint a fresh rate bucket.
+    # Trust Cloudflare's single-valued CF-Connecting-IP for client identity. Set true only
+    # when cloudflared is the sole ingress; otherwise the header is attacker-controlled.
     trust_proxy_headers: bool = False
+    # X-Forwarded-For is a weaker, chain-dependent identity signal and stays off even when
+    # CF header trust is on. Enable separately only behind an edge that overwrites inbound
+    # XFF and makes the leftmost hop authoritative.
+    trust_x_forwarded_for: bool = False
     rate_limit_sessions_per_hour: int = 10
     rate_limit_assistant_per_hour: int = 20
     # Per-IP companion to the per-session bucket above. A caller can reset the per-session
@@ -122,6 +135,12 @@ class Settings(BaseSettings):
     rate_limit_assistant_global_per_day: int = 100
     rate_limit_assistant_commands_per_hour: int = 120
     rate_limit_burst_per_minute: int = 120
+    # PMTiles readers make many small byte-range requests while panning; keep them out of
+    # the low API burst bucket but bound downloads with their own finite per-IP family.
+    rate_limit_tiles_per_minute: int = 600
+    # Readiness/data-recency probes take pooled DB connections. This generous finite family
+    # accommodates orchestrator + uptime polling while preventing an unmetered pool drain.
+    rate_limit_health_per_minute: int = 120
     # Shared daily LLM token budget (prompt + completion, all assistant calls, UTC day).
     # 0 = disabled. Enforced only when rate_limit_enabled — and the boot guard above makes the
     # limiter mandatory whenever a hosted LLM key is configured in a prod-like environment.

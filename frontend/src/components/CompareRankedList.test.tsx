@@ -34,6 +34,11 @@ describe("CompareRankedList", () => {
     expect(within(region).getByText(/12 reported incidents/)).toBeInTheDocument();
   });
 
+  it("keeps the descriptive lowest-rate chip visually neutral", () => {
+    render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
+    expect(screen.getByText("lowest rate")).not.toHaveClass("clear");
+  });
+
   it("shows a How-we-know disclosure only for non-lowest rows", () => {
     render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
     const region = screen.getByTestId("compare-ranked");
@@ -48,6 +53,41 @@ describe("CompareRankedList", () => {
     for (const banned of ["safe", "unsafe", "safety", "danger", "dangerous", "risk", "risky"]) {
       expect(text).not.toContain(banned);
     }
+  });
+
+  it("names the method and the data floor in words, not enum identifiers", () => {
+    render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
+    const region = screen.getByTestId("compare-ranked");
+    expect(within(region).getByText("met")).toBeInTheDocument();
+    expect(region.textContent).not.toMatch(/_/); // no raw snake_case identifiers on screen
+  });
+
+  // The engine returns a placeholder row (1.0x, CI 1.0-1.0, p 1.0) for a pair below the data
+  // floor. Printing it claims a precisely measured "no difference" that was never computed.
+  it("renders dashes, not fabricated 1.0s, for a pair that was never tested", () => {
+    const untested: SitePairwiseResult = {
+      ...pair,
+      decision_class: "not_statistically_clear",
+      winner_option_id: null,
+      winner_label: null,
+      method: "not_tested_minimum_data",
+      minimum_data_status: "combined_count_too_low",
+      rate_ratio: 1.0, ci_lower: 1.0, ci_upper: 1.0, p_value: 1.0, adjusted_p_value: 1.0,
+    };
+    render(
+      <CompareRankedList
+        rows={[rows[0], { ...rows[1], relationship: "limited", pairwise: untested }]}
+        noun={incidentNoun("reported")}
+        radiusM={250}
+      />,
+    );
+    const region = screen.getByTestId("compare-ranked");
+    expect(within(region).getByText("not tested — below the data floor")).toBeInTheDocument();
+    expect(within(region).getByText("fewer than 10 incidents combined")).toBeInTheDocument();
+    expect(within(region).getAllByText("—").length).toBeGreaterThanOrEqual(3);
+    expect(region.textContent).not.toContain("1.00×");
+    expect(region.textContent).not.toContain("1.00–1.00");
+    expect(region.textContent).not.toContain("1.000");
   });
 
   it("renders a Full context disclosure only for rows with an expansion", () => {
