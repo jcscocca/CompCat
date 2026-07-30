@@ -15,7 +15,6 @@ from app.services.dashboard_service import dashboard_summary
 POLICY_CAVEATS = [
     "CompCat describes reported incident context, not personal safety.",
     "Do not label places as safe or unsafe.",
-    "Expected weekly visits are routine metadata, not a risk denominator.",
     (
         "Reported incident data can be incomplete, delayed, or filtered by the "
         "current analysis settings."
@@ -97,7 +96,8 @@ def build_semantic_context(
     crime_summaries = _crime_summaries(session, user_id_hash, selected_ids)
     return SemanticContextPacket(
         dashboard_totals={
-            **summary["totals"],
+            "place_count": summary["totals"]["place_count"],
+            "incident_count": summary["totals"]["incident_count"],
             "available_radii_m": settings.crime_radii_m,
         },
         selected_places=[_place_payload(place) for place in selected_places],
@@ -132,14 +132,15 @@ def _selected_places(
 ) -> list[PlaceCluster]:
     if not selected_ids:
         return []
-    return list(
-        session.scalars(
+    places_by_id = {
+        place.id: place
+        for place in session.scalars(
             select(PlaceCluster)
             .where(PlaceCluster.user_id_hash == user_id_hash)
             .where(PlaceCluster.id.in_(selected_ids))
-            .order_by(PlaceCluster.visit_count.desc(), PlaceCluster.display_label.asc())
         )
-    )
+    }
+    return [places_by_id[place_id] for place_id in selected_ids if place_id in places_by_id]
 
 
 def _crime_summaries(
@@ -162,9 +163,6 @@ def _place_payload(place: PlaceCluster) -> dict[str, Any]:
         "display_label": place.display_label,
         "latitude": place.display_latitude,
         "longitude": place.display_longitude,
-        "visit_count": place.visit_count,
-        "total_dwell_minutes": place.total_dwell_minutes,
-        "median_dwell_minutes": place.median_dwell_minutes,
         "inferred_place_type": place.inferred_place_type,
         "sensitivity_class": place.sensitivity_class,
     }
@@ -183,16 +181,6 @@ def _summary_payload(summary: PlaceCrimeSummary) -> dict[str, Any]:
         "nearest_incident_m": (
             float(summary.nearest_incident_m)
             if summary.nearest_incident_m is not None
-            else None
-        ),
-        "incidents_per_visit": (
-            float(summary.incidents_per_visit)
-            if summary.incidents_per_visit is not None
-            else None
-        ),
-        "incidents_per_hour_dwell": (
-            float(summary.incidents_per_hour_dwell)
-            if summary.incidents_per_hour_dwell is not None
             else None
         ),
     }

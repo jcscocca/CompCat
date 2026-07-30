@@ -36,10 +36,10 @@ That lexicon is pinned by tests rather than by good intentions. `tests/test_stat
 asserts that the comparison engine's summary text contains none of *safe*, *unsafe*, *safety*,
 *danger*, *dangerous*, *risk*, or *risky* — including on a comparison where one address
 "wins". The same discipline shows up in small places: the Tableau export computes an
-`incidents_per_visit` column, and both the README and the assistant's policy caveats state
-flatly that the expected-weekly-visit denominator behind it is routine metadata, not a risk
-denominator. A number that could be misread as a personal exposure rate gets an explicit label
-saying it isn't one.
+`incidents_per_visit` column for legacy compatibility, while the public UI and the assistant's
+prompts, semantic packet, and tool results exclude visit, dwell, and derived exposure-rate
+fields. A number that could be misread as a personal exposure rate is not handed to the language
+model at all.
 
 ## How do you make a language model refuse reliably?
 
@@ -73,7 +73,7 @@ The guard runs on both sides of the model. On input, `_asks_for_safety_score` sc
 eight user messages — the same window the model itself sees — so an ask split across turns, or
 carried by a short "yes, do that" follow-up, still trips it, and the turn short-circuits before
 the LLM is contacted at all: a pre-written redirect streams, telling the user they can ask for
-reported-incident counts or exposure-adjusted rates instead. On output, the same predicate
+reported-incident counts or statistically tested geographic comparisons instead. On output, the same predicate
 re-runs against the model's own answer, so a paraphrase that slips past the input side and
 provokes banned-lexicon output is still caught on the way out.
 
