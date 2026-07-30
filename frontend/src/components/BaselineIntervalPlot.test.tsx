@@ -75,6 +75,28 @@ describe("BaselineIntervalPlot", () => {
     expect(screen.getByTestId("baseline-plot")).toHaveClass("is-withheld");
   });
 
+  it("withholds an exact-floor interval when the overall comparison is inadequate", () => {
+    const exactFloor = {
+      ...place,
+      place_incident_count: 3,
+      place_rate_ci_lower: 0.001,
+      place_rate_ci_upper: 500,
+    };
+    const { container } = render(
+      <BaselineIntervalPlot
+        place={exactFloor}
+        identity={placeIdentity(0)}
+        noun={noun}
+        domainMax={plotDomainMax([exactFloor], false)}
+        comparisonDataAdequate={false}
+      />,
+    );
+    expect(container.querySelector(".mc-bplot-band")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-bplot-row .bar")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-bplot-row .dot")).toBeInTheDocument();
+    expect(screen.getByText(/comparison did not meet the data floor; interval withheld/i)).toBeInTheDocument();
+  });
+
   it("keeps the band, label, and axis in the same track coordinate system as the marks", () => {
     const { container } = render(<BaselineIntervalPlot place={place} identity={placeIdentity(0)} noun={noun} domainMax={plotDomainMax([place])} />);
     const band = container.querySelector(".mc-bplot-band");
@@ -104,5 +126,18 @@ describe("plotDomainMax", () => {
       place_rate_ci_upper: undefined,
     };
     expect(plotDomainMax([belowFloor])).toBe(plotDomainMax([withoutInterval]));
+  });
+
+  it("ignores every interval bound when the overall comparison is inadequate", () => {
+    const exactFloor = {
+      ...place,
+      place_incident_count: 3,
+      place_rate_ci_upper: 500,
+    };
+    const withoutInterval = {
+      ...exactFloor,
+      place_rate_ci_upper: undefined,
+    };
+    expect(plotDomainMax([exactFloor], false)).toBe(plotDomainMax([withoutInterval]));
   });
 });

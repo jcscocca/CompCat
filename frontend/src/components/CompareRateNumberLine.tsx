@@ -16,9 +16,22 @@ type PlotRow = {
   intervalWithheld: boolean;
 };
 
-export function CompareRateNumberLine({ rows, noun, radiusM }: { rows: CompareVerdictRow[]; noun: IncidentNoun; radiusM: number }) {
+export function CompareRateNumberLine({
+  rows,
+  noun,
+  radiusM,
+  comparisonDataAdequate = true,
+}: {
+  rows: CompareVerdictRow[];
+  noun: IncidentNoun;
+  radiusM: number;
+  comparisonDataAdequate?: boolean;
+}) {
   const plot: PlotRow[] = rows.map((row) => {
-    const intervalWithheld = row.incidentCount < MIN_REPORTS_FOR_INTERVAL;
+    const intervalWithheld = (
+      !comparisonDataAdequate
+      || row.incidentCount < MIN_REPORTS_FOR_INTERVAL
+    );
     return {
       row,
       perYear: annualIncidentsWithin(row.rate, radiusM),
@@ -36,7 +49,10 @@ export function CompareRateNumberLine({ rows, noun, radiusM }: { rows: CompareVe
 
   return (
     <div className="mc-plot mc-numberline" data-testid="compare-numberline">
-      <p className="mc-label">{noun.pluralCap} per year within {radiusM} m — approximate 95% interval</p>
+      <p className="mc-label">
+        {noun.pluralCap} per year within {radiusM} m —{" "}
+        {comparisonDataAdequate ? "approximate 95% interval" : "intervals withheld"}
+      </p>
       <div className="mc-plot-chart">
         <div className="mc-plot-guides" aria-hidden>
           <span className="name" />
@@ -59,7 +75,9 @@ export function CompareRateNumberLine({ rows, noun, radiusM }: { rows: CompareVe
               </div>
               <span className="val">
                 {formatPerYear(perYear)}
-                {intervalWithheld ? <small>too few reports to put a range on</small> : null}
+                {row.incidentCount < MIN_REPORTS_FOR_INTERVAL
+                  ? <small>too few reports to put a range on</small>
+                  : null}
               </span>
             </div>
           );
@@ -74,7 +92,11 @@ export function CompareRateNumberLine({ rows, noun, radiusM }: { rows: CompareVe
           <span className="val" />
         </div>
       </div>
-      <p className="mc-plot-foot">Bars are approximate 95% intervals on each place’s {noun.singular} rate; the dashed line marks the lowest place’s rate. The bars are not adjusted for multiple comparisons. When intervals overlap, the statistically tested verdict above is authoritative.</p>
+      <p className="mc-plot-foot">
+        {comparisonDataAdequate
+          ? <>Bars are approximate 95% intervals on each place’s {noun.singular} rate; the dashed line marks the lowest place’s rate. The bars are not adjusted for multiple comparisons. When intervals overlap, the statistically tested verdict above is authoritative.</>
+          : <>Interval bars are withheld because this comparison did not meet the data floor; dots show the observed {noun.singular} rates. The statistically tested verdict above is authoritative.</>}
+      </p>
     </div>
   );
 }

@@ -79,6 +79,27 @@ describe("CompareRateNumberLine", () => {
     expect(withheldMax).toBe(normalMax);
   });
 
+  it("withholds every interval when the overall comparison misses the data floor", () => {
+    const inadequate = [
+      { ...row("Tiny", "lowest", 3.9, 0.1, 500, 1), incidentCount: 2 },
+      { ...row("Floor", "limited", 4.4, 0.1, 500, 2), incidentCount: 3 },
+    ];
+    render(
+      <CompareRateNumberLine
+        rows={inadequate}
+        noun={noun}
+        radiusM={250}
+        comparisonDataAdequate={false}
+      />,
+    );
+    const plot = screen.getByTestId("compare-numberline");
+    expect(plot.querySelectorAll(".mc-plot-row .bar")).toHaveLength(0);
+    expect(plot.querySelectorAll(".mc-plot-row .dot")).toHaveLength(2);
+    expect(within(plot).getByText(/intervals withheld/i)).toBeInTheDocument();
+    expect(within(plot).getByText(/comparison did not meet the data floor/i)).toBeInTheDocument();
+    expect(within(plot).queryByText("500")).not.toBeInTheDocument();
+  });
+
   it("draws lowest-rate reference guides (same-as-lowest + effect floor)", () => {
     render(<CompareRateNumberLine rows={rows} noun={noun} radiusM={250} />);
     const plot = screen.getByTestId("compare-numberline");

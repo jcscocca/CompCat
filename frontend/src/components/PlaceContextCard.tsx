@@ -23,6 +23,7 @@ export type PlaceContextCardProps = {
   windowLabel: string;
   noun: IncidentNoun;
   domainMax: number;
+  comparisonDataAdequate?: boolean;
   onHoverPlace?: (placeId: string | null) => void;
 };
 
@@ -199,7 +200,15 @@ function CoordinateCoverageNote({ coverage, noun }: { coverage: NeighborhoodPlac
   );
 }
 
-export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, onHoverPlace }: PlaceContextCardProps) {
+export function PlaceContextCard({
+  place,
+  index,
+  windowLabel,
+  noun,
+  domainMax,
+  comparisonDataAdequate = true,
+  onHoverPlace,
+}: PlaceContextCardProps) {
   const identity = placeIdentity(index);
   const headline = aggregateHeadline(place, noun);
   return (
@@ -220,7 +229,13 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
           <p className="mc-verdict-sub">
             {place.place_incident_count} {countNoun(noun, place.place_incident_count)} within {place.radius_m} m · {windowLabel}
           </p>
-          <BaselineIntervalPlot place={place} identity={identity} noun={noun} domainMax={domainMax} />
+          <BaselineIntervalPlot
+            place={place}
+            identity={identity}
+            noun={noun}
+            domainMax={domainMax}
+            comparisonDataAdequate={comparisonDataAdequate}
+          />
           {place.monthly_counts?.length ? (
             <div className="mc-spark" aria-hidden="true">
               {place.monthly_counts.map((n, i) => (
@@ -267,7 +282,13 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
       ) : (
         <>
           <p className="mc-verdict-sub">{place.place_incident_count} {countNoun(noun, place.place_incident_count)} in range; no beat baseline.</p>
-          <BaselineIntervalPlot place={place} identity={identity} noun={noun} domainMax={domainMax} />
+          <BaselineIntervalPlot
+            place={place}
+            identity={identity}
+            noun={noun}
+            domainMax={domainMax}
+            comparisonDataAdequate={comparisonDataAdequate}
+          />
           <CategoryBreakdown rows={place.category_breakdown} />
         </>
       )}
