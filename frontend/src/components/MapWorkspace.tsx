@@ -115,6 +115,9 @@ export function MapWorkspace() {
   }, [data.freshness, data.freshnessLoaded, initialView]);
   const { selectedIds, setSelectedIds, restored } = usePersistedSelection(data.places);
   const [pendingAutoRun, setPendingAutoRun] = useState(false);
+  // Recomputed every render: useDrawer's window-resize listener always produces a new
+  // drawer object, so viewport changes re-render. No extra state needed.
+  const isMobile = window.innerWidth <= MOBILE_MAX_WIDTH;
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset, onSnap } = useDrawer();
   // Which thread card is expanded (by object identity — the thread cap shifts indices but
   // card references survive), plus the drawer width to restore when it collapses (null
@@ -122,6 +125,16 @@ export function MapWorkspace() {
   const [expandedCard, setExpandedCard] = useState<AnalysisCardData | null>(null);
   const [currentCard, setCurrentCard] = useState<AnalysisCardData | null>(null);
   const prevWidthRef = useRef<number | null>(null);
+  const localCardRef = useRef<AnalysisCardData | null>(null);
+  const expandCard = useCallback(
+    (card: AnalysisCardData) => {
+      if (prevWidthRef.current === null) prevWidthRef.current = drawer.collapsed ? null : drawer.widthPx;
+      setExpandedCard(card);
+      if (!isMobile) onPreset("wide");
+      else onSnap("full");
+    },
+    [drawer.collapsed, drawer.widthPx, isMobile, onPreset, onSnap],
+  );
 
   // The single address list: seeded from the restored saved selection (share links replace
   // it on mount below). Saved ids write back through so returning sessions keep their list.
@@ -250,6 +263,7 @@ export function MapWorkspace() {
   // server badges: client runs can't route raw points through the assistant tools). Armed
   // here; the completion effect below fires it once when the results land.
   const pendingCardRef = useRef(false);
+  const pendingCardExpandRef = useRef(false);
   useEffect(() => {
     if (!pendingAutoRun || list.entries.length === 0) return;
     if (!data.freshnessLoaded) return;
@@ -259,19 +273,20 @@ export function MapWorkspace() {
       return;
     }
     setPendingAutoRun(false);
+    pendingCardExpandRef.current = false;
     pendingCardRef.current = true;
     void compare.run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAutoRun, list.entries, activeLayerAvailable, data.freshnessLoaded]);
 
-  // Synthesize the armed auto-run's payload into a card once its results land. Keyed on the
-  // result slices (not `running`): it can't fire on the arming commit — the slices are
-  // unchanged there — and fires exactly when useCompare commits a payload, sidestepping the
-  // batching that can collapse `running` false→true→false without a committed `true` render.
-  // pendingCardRef gates a single append (cleared once a card is produced; StrictMode's
-  // double-run and any re-fire find it disarmed). A fully-failed run leaves both slices null,
-  // so the effect never fires and nothing lands. useCompare writes all slices in one batch,
-  // so reading incidents alongside neighborhood here is safe.
+  // Synthesize an armed client-side run into the rail's one live quick-report card once its
+  // results land. Keyed on the result slices (not `running`): it can't fire on the arming
+  // commit — the slices are unchanged there — and fires exactly when useCompare commits a
+  // payload, sidestepping batching that can collapse running false→true→false without a
+  // committed true render. pendingCardRef gates a single update (cleared once a card is
+  // produced; StrictMode's double-run and any re-fire find it disarmed). A fully-failed run
+  // leaves both slices null, so the effect never fires and nothing lands. useCompare writes
+  // all slices in one batch, so reading incidents alongside neighborhood here is safe.
   useEffect(() => {
     if (!pendingCardRef.current) return;
     const card = cardFromCompareResults({
@@ -282,9 +297,13 @@ export function MapWorkspace() {
       placeIds: list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id)),
     });
     if (!card) return;
+    const shouldExpand = pendingCardExpandRef.current;
     pendingCardRef.current = false;
-    thread.append({ kind: "analysis_card", card });
+    pendingCardExpandRef.current = false;
+    thread.replaceAnalysisCard(localCardRef.current, card);
+    localCardRef.current = card;
     setCurrentCard(card);
+    if (shouldExpand) expandCard(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compare.comparison, compare.neighborhood]);
 
@@ -292,6 +311,7 @@ export function MapWorkspace() {
     // Any context invalidation cancels a pending auto-run card: if the armed run failed
     // (ref left armed), a later result landing in the same slices must not revive it.
     pendingCardRef.current = false;
+    pendingCardExpandRef.current = false;
     compare.invalidate();
     // Filter/selection changes detach presence badges — they describe a specific run's
     // results, which no longer reflect the current context once it changes.
@@ -389,9 +409,9 @@ export function MapWorkspace() {
   function handleLookup(result: GeocodeResult) {
     pinDraft.previewSearch(result);
     invalidateAnalysisContext();
+    setPendingAutoRun(false);
     setSharedBanner(false);
     list.replaceAll([{ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) }]);
-    setPendingAutoRun(true);
   }
 
   function handleToggleSelect(id: string) {
@@ -501,6 +521,7 @@ export function MapWorkspace() {
     // leaves the ref armed, and applyAssistant writing the same result slices the completion
     // effect keys on would append a LOCAL card alongside the bridge card (double-card).
     pendingCardRef.current = false;
+    pendingCardExpandRef.current = false;
     if (effect.selection || effect.neighborhood !== undefined || effect.incidents !== undefined || effect.comparison !== undefined) {
       pinDraft.setDraft(null);
       setSharedBanner(false);
@@ -645,29 +666,24 @@ export function MapWorkspace() {
     void turn.runCommand(label, command, args);
   }
 
-  // ContextStrip's Run analysis button: same deterministic command path as the panel's own
-  // chips, choosing compare vs. analyze from the saved-place count (2+ compares, 1 analyzes).
-  function handleContextStripRun() {
+  // The quick-report button lives in Tabby's rail but bypasses the assistant command stream.
+  // useCompare calls the public dashboard endpoints for saved and ad-hoc places alike, then
+  // the completion effect freezes the returned slices into the same rich result card.
+  function handleDirectReportRun() {
     if (!activeLayerAvailable || list.entries.length === 0) return;
-    if (list.entries.some((entry) => !entry.savedPlaceId)) {
-      pendingCardRef.current = true;
-      void compare.run();
-      return;
-    }
-    runPanelCommand("Run analysis", savedIdSet.size >= 2 ? "compare_places" : "analyze_places");
+    setOffer(null);
+    pendingCardExpandRef.current = true;
+    pendingCardRef.current = true;
+    void compare.run();
   }
 
-  // Tabby onboarding chips route to the three ways to point the assistant at a place: focus
-  // the top search pill, arm pin-drop mode, or open the manual-add modal.
+  // Tabby's onboarding chips route through these place actions.
   function handlePanelAction(action: "search" | "add-pin" | "manual") {
     if (action === "search") document.getElementById("mc-search-input")?.focus();
     else if (action === "add-pin") pinDraft.startAddPin();
     else setManagePlaces("manual");
   }
 
-  // Recomputed every render: useDrawer's window-resize listener always produces a new
-  // drawer object, so viewport changes re-render. No extra state needed.
-  const isMobile = window.innerWidth <= MOBILE_MAX_WIDTH;
   // Focus mode is a desktop side-panel concept — force it off on mobile (the bottom sheet).
   const isFocus = !isMobile && !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
 
@@ -741,10 +757,7 @@ export function MapWorkspace() {
   const handleCardExpandChange = useCallback(
     (card: AnalysisCardData, expanded: boolean) => {
       if (expanded) {
-        if (prevWidthRef.current === null) prevWidthRef.current = drawer.collapsed ? null : drawer.widthPx;
-        setExpandedCard(card);
-        if (!isMobile) onPreset("wide");
-        else onSnap("full");
+        expandCard(card);
       } else {
         setExpandedCard(null);
         if (!isMobile && prevWidthRef.current !== null) onDrawerResize(prevWidthRef.current);
@@ -752,7 +765,7 @@ export function MapWorkspace() {
         prevWidthRef.current = null;
       }
     },
-    [drawer.collapsed, drawer.widthPx, isMobile, onPreset, onSnap, onDrawerResize],
+    [expandCard, isMobile, onSnap, onDrawerResize],
   );
 
   // The run-scoped export param is appended per-card; strip any query the summary path carries.
@@ -975,6 +988,9 @@ export function MapWorkspace() {
               onSend={(text) => { setOffer(null); void turn.sendChat(text); }}
               onRetry={() => void turn.sendChat(null)}
               onRunCommand={runPanelCommand}
+              onShowData={handleDirectReportRun}
+              showDataBusy={compare.running}
+              showDataDisabled={!activeLayerAvailable || list.entries.length === 0}
               hasPlaces={data.places.length > 0 || list.entries.length > 0}
               onAction={handlePanelAction}
               followupChips={chipRow}
@@ -991,7 +1007,7 @@ export function MapWorkspace() {
                   analysis={analysis}
                   availableRadii={data.availableRadii}
                   onChange={handleAnalysisChange}
-                  onRun={handleContextStripRun}
+                  onRun={handleDirectReportRun}
                   runDisabled={list.entries.length === 0 || !activeLayerAvailable}
                   locationControls={locationControls}
                   onCopyLink={handleCopyLink}
