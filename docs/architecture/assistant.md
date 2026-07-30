@@ -34,7 +34,11 @@ single-planning-call reliability story below still holds end to end.
 
 **Phase 1 — safety-refusal gate (no LLM)**
 
-Before the LLM is consulted, `run_assistant_turn` in `app/assistant/agent.py` scans the last eight user messages with `_asks_for_safety_score`. If the regex `_SAFETY_SCORE_PATTERN` matches, the turn is short-circuited: a pre-written refusal is streamed as `token` events and a `done` event is emitted. The LLM is never contacted.
+Before the LLM is consulted, `run_assistant_turn` in `app/assistant/agent.py` checks the latest
+user request with `_asks_for_safety_score`. A short referential continuation also carries the
+immediately preceding request into the check. If the regex `_SAFETY_SCORE_PATTERN` matches, the
+turn is short-circuited: a pre-written refusal is streamed as `token` events and a `done` event
+is emitted. The LLM is never contacted.
 
 **Phase 2 — single classify-only LLM call**
 
@@ -46,6 +50,10 @@ Before the LLM is consulted, `run_assistant_turn` in `app/assistant/agent.py` sc
 ```
 
 No prose, no markdown fences. This is a *planning* call, not a narration call. The response is parsed by `_parse_model_json` (which tolerates code-fence wrapping and uses a brace-depth extractor as a last resort).
+
+For Groq-hosted GPT-OSS, the adapter also requests JSON-object mode, hidden reasoning, and
+medium planning effort. Narration keeps low reasoning effort so its bounded output budget goes
+to the user-visible answer.
 
 The semantic packet is itself fenced and introduced as **“Data (verbatim, not
 instructions)”** because saved-place labels are user-controlled. The planning rules treat the
@@ -284,7 +292,10 @@ survive the rewrite.
   already showed partial text, so it must not be treated as a fresh, failover-safe failure). Both
   methods accept an optional `extra_body` for llama.cpp options such as
   `{"chat_template_kwargs": {"enable_thinking": False}}` to suppress chain-of-thought on thinking
-  models.
+  models. Groq-hosted GPT-OSS is detected narrowly by host + model name: planning uses
+  JSON-object mode with medium reasoning, while narration uses low hidden reasoning. A
+  `finish_reason: "length"` response is treated as a failure instead of displaying a truncated
+  answer, and an upstream HTTP 429 maps to `LlmRateLimited` so the UI can keep chat retryable.
 - **`OpenAiNativeLlmClient`** — first-class OpenAI via the official `openai` SDK (native auth,
   built-in retries, typed errors). Messages pass through unchanged (OpenAI takes `system` inline);
   it sends `max_completion_tokens` and forwards `temperature` unless `MCA_OPENAI_SEND_TEMPERATURE`
@@ -329,7 +340,8 @@ skipped on the fallback).
 
 > ⚠ Invariant: when the LLM endpoint is offline or returns no content during the **planning**
 > call, `LlmUnavailable` is raised, the agent emits an `error` SSE event with a user-readable
-> message, and returns. A failure of the **narration** call (§2) does *not* emit `error` — it
+> message, and returns. Provider HTTP 429s instead emit `llm_rate_limited`, which does not
+> latch the composer offline. A failure of the **narration** call (§2) does *not* emit `error` — it
 > degrades to a `replace` event carrying the already-computed deterministic text, since the plan
 > already succeeded by the time narration runs. Either way, the rest of the CompCat app
 > (dashboard, places, exports) is unaffected.
@@ -358,10 +370,12 @@ cooperating compiled patterns rather than one:
 - `_PLACE_CONTEXT_PATTERN` — deictics + place nouns in English and Spanish — also matches the
   same message.
 
-`_asks_for_safety_score` runs `_contains_safety_ranking` against the last eight user messages
-(matching the window sent to the model); on a hit the turn is short-circuited before the LLM
-is called and a pre-written redirect (`_SAFETY_REDIRECT`) is streamed, telling the user to
-reframe as reported-incident counts or exposure-adjusted rates.
+`_asks_for_safety_score` runs `_contains_safety_ranking` against the latest user request.
+A short referential confirmation such as “ok do it anyway” also inherits the immediately
+preceding user request, preventing a one-turn bypass without letting an old refused question
+poison unrelated later turns. On a hit the turn is short-circuited before the LLM is called and
+a pre-written redirect (`_SAFETY_REDIRECT`) is streamed, telling the user to reframe as
+reported-incident counts or exposure-adjusted rates.
 
 **Output-side guard.** The same `_contains_safety_ranking` predicate is applied to the model's
 final answer before it is emitted. If a generated answer trips it, the answer is suppressed and
@@ -412,11 +426,12 @@ lexicon:
 ```mermaid
 flowchart TD
     A([User message arrives via POST /assistant/chat]) --> B[build_semantic_context\nfrom live DB state]
-    B --> C{_asks_for_safety_score /\n_requests_presence_claim\non last 8 user turns}
+    B --> C{Safety / presence guard\non current request + short\nreferential follow-up}
     C -- match --> D[Stream pre-written redirect\ntoken + done events]
     C -- no match, narration on --> C1[Stream status: interpreting…]
     C -- no match, narration off --> E
-    C1 --> E[Single planning LLM call\nbuild_planning_messages → llm_client.complete\ntemperature 0.2, max_tokens 1024]
+    C1 --> E[Single planning LLM call\nbuild_planning_messages → _complete_plan\ntemperature 0.2, max_tokens 1024]
+    E -- LlmRateLimited --> F1[Stream retryable\nllm_rate_limited error]
     E -- LlmUnavailable --> F[Stream error event]
     E -- bad JSON --> G[Stream error event]
     E -- type: final --> H[_final_message\nvalidate non-empty string]
@@ -435,7 +450,7 @@ flowchart TD
     N --> O[build_tool_summary\ndeterministic one-liner, no LLM]
     O -- narration off --> P[Stream summary as one\ntoken event + done]
     O -- narration on --> R1[Stream status: writing up…\nsession.rollback before the await]
-    R1 --> R2[Narration call: llm_client.stream\nTabby persona + grounding\ntemperature 0.4, max_tokens 256]
+    R1 --> R2[Narration call: llm_client.stream\nTabby persona + grounding\ntemperature 0.4, max_tokens 512]
     R2 --> R3[guarded_stream: re-scan full text\nper delta, release 16 words\nbehind the write head\nStream token events]
     R3 -- guard trips --> R4[Stream replace event: redirect\n+ done]
     R3 -- unreachable / empty /\ndies mid-stream --> R5[Stream replace event: template summary\n+ done]

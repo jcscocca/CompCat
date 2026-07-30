@@ -86,12 +86,18 @@ def _openai_compatible_options(
     base_url: str,
     model: str,
     disable_thinking: bool,
-) -> tuple[dict[str, object] | None, bool]:
+) -> tuple[dict[str, object] | None, bool, dict[str, object] | None]:
     if _is_groq_gpt_oss(base_url, model):
-        # GPT-OSS defaults to medium reasoning. Low is sufficient for Tabby's routing and
-        # narration calls, while hidden keeps reasoning tokens out of user-visible content.
-        return {"reasoning_effort": "low", "reasoning_format": "hidden"}, True
-    return _no_think_body(disable_thinking), False
+        # GPT-OSS defaults to medium reasoning. Low is sufficient for Tabby's narration,
+        # while hidden keeps reasoning tokens out of user-visible content.
+        # Planning gets medium effort separately: choosing and parameterizing a tool is the
+        # reasoning-heavy half of the turn.
+        return (
+            {"reasoning_effort": "low", "reasoning_format": "hidden"},
+            True,
+            {"reasoning_effort": "medium"},
+        )
+    return _no_think_body(disable_thinking), False, None
 
 
 def _require_anthropic(settings: Settings) -> AnthropicLlmClient:
@@ -124,7 +130,7 @@ def _build_primary(settings: Settings) -> AssistantLlmClient:
         return _require_anthropic(settings)
     if settings.llm_provider == "openai_native":
         return _require_openai_native(settings)
-    extra_body, supports_structured_output = _openai_compatible_options(
+    extra_body, supports_structured_output, structured_extra_body = _openai_compatible_options(
         settings.llm_base_url,
         settings.llm_model,
         settings.llm_disable_thinking,
@@ -136,6 +142,7 @@ def _build_primary(settings: Settings) -> AssistantLlmClient:
         api_key=settings.llm_api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,
         supports_structured_output=supports_structured_output,
+        structured_extra_body=structured_extra_body,
     )
 
 
@@ -164,7 +171,7 @@ def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
     model = settings.llm_fallback_model.strip()
     if not (base_url and model):
         return None
-    extra_body, supports_structured_output = _openai_compatible_options(
+    extra_body, supports_structured_output, structured_extra_body = _openai_compatible_options(
         base_url,
         model,
         settings.llm_fallback_disable_thinking,
@@ -176,6 +183,7 @@ def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
         api_key=settings.effective_llm_fallback_api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,
         supports_structured_output=supports_structured_output,
+        structured_extra_body=structured_extra_body,
     )
 
 

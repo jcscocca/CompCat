@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPlace, deletePlace, friendlyMessageOr, friendlyRequestError, getDashboardFreshness, getDashboardSummary, getTrends, isFriendlyRequestError, isSessionExpired, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
+import { createPlace, deletePlace, friendlyMessageOr, friendlyRequestError, getDashboardFreshness, getDashboardSummary, getTrends, isFriendlyRequestError, isRateLimited, isSessionExpired, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
 import type { AssistantDashboardState } from "../types";
 
 afterEach(() => {
@@ -312,6 +312,8 @@ describe("failure-message helpers", () => {
   it("identifies an expired session, which only a reload can fix", () => {
     expect(isSessionExpired(new Error(SESSION_EXPIRED_MESSAGE))).toBe(true);
     expect(isSessionExpired(new Error(SERVER_ERROR_MESSAGE))).toBe(false);
+    expect(isRateLimited(new Error(RATE_LIMITED_MESSAGE))).toBe(true);
+    expect(isRateLimited(new Error(SERVER_ERROR_MESSAGE))).toBe(false);
     expect(friendlyRequestError(401)).toBe(SESSION_EXPIRED_MESSAGE);
   });
 });
