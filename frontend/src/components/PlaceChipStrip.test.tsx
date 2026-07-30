@@ -30,19 +30,29 @@ function setup() {
 }
 
 describe("PlaceChipStrip", () => {
-  it("renders only the active scope and marks ad-hoc locations unsaved", () => {
+  it("renders only the active scope and marks ad-hoc places unsaved", () => {
     setup();
-    expect(screen.getByRole("group", { name: "Locations" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Places" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Home" })).toHaveTextContent("A");
-    expect(screen.getByRole("button", { name: "Show Downtown test on map" })).toHaveTextContent("Unsaved");
-    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show Downtown test on map — Unsaved" })).toHaveTextContent("Unsaved");
+    expect(screen.getByRole("button", { name: "Save Downtown test" })).toBeInTheDocument();
+  });
+
+  // Several unsaved chips can be on screen at once, so "Save" alone named none of them.
+  it("keeps each control's visible text inside its accessible name", () => {
+    setup();
+    const chip = screen.getByRole("button", { name: "Show Downtown test on map — Unsaved" });
+    expect(chip.getAttribute("aria-label")).toContain("Unsaved");
+    const save = screen.getByRole("button", { name: "Save Downtown test" });
+    expect(save).toHaveTextContent("Save");
+    expect(save.getAttribute("aria-label")).toContain("Save");
   });
 
   it("focuses, saves, and removes without nested interactive controls", () => {
     const handlers = setup();
-    fireEvent.click(screen.getByRole("button", { name: "Show Downtown test on map" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Downtown test on map — Unsaved" }));
     expect(handlers.onFocus).toHaveBeenCalledWith(entries[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Downtown test" }));
     expect(handlers.onSave).toHaveBeenCalledWith(entries[1]);
     fireEvent.click(screen.getByRole("button", { name: "Remove Downtown test from analysis" }));
     expect(handlers.onRemove).toHaveBeenCalledWith(1);

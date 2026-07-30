@@ -19,6 +19,7 @@ from app.services.analysis_points import point_clusters
 from app.services.analysis_runs import create_analysis_run
 from app.services.analysis_service import compare_site_options
 from app.services.crime_service import _cluster_data, _incident_data, _summary_model
+from app.time_contract import seattle_wall_clock_json
 
 METERS_PER_LATITUDE_DEGREE = 111_320
 MIN_LONGITUDE_COSINE = 0.01
@@ -326,8 +327,8 @@ def _incident_detail_rows(
                     "external_incident_id": incident.external_incident_id,
                     "source_dataset": incident.source_dataset,
                     "report_number": incident.report_number,
-                    "occurred_at": _utc_json_datetime(incident.offense_start_utc),
-                    "reported_at": _utc_json_datetime(incident.report_utc),
+                    "occurred_at": seattle_wall_clock_json(incident.offense_start_utc),
+                    "reported_at": seattle_wall_clock_json(incident.report_utc),
                     "offense_category": incident.offense_category,
                     "offense_subcategory": incident.offense_subcategory,
                     "nibrs_group": incident.nibrs_group,
@@ -344,16 +345,6 @@ def _incident_detail_rows(
             str(row["incident_id"]),
         ),
     )
-
-
-def _utc_json_datetime(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
 def validate_date_range(analysis_start_date: date, analysis_end_date: date) -> None:
     if analysis_end_date < analysis_start_date:
         raise ValueError("analysis_end_date must be on or after analysis_start_date.")

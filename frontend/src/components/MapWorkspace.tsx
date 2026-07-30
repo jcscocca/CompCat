@@ -6,7 +6,7 @@
 // the selection orchestrator, assistant-effect application) are noted in the repo review.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { createBulkPlaces, createPlace, deletePlace, getBeatPolygons, updatePlace, type AssistantCommandName } from "../api/client";
+import { createBulkPlaces, createPlace, deletePlace, friendlyMessageOr, getBeatPolygons, SESSION_EXPIRED_MESSAGE, updatePlace, type AssistantCommandName } from "../api/client";
 import { availableDataAnalysisWindow, currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
 import { interpretToolResult } from "../lib/assistantBridge";
@@ -115,6 +115,9 @@ export function MapWorkspace() {
   }, [data.freshness, data.freshnessLoaded, initialView]);
   const { selectedIds, setSelectedIds, restored } = usePersistedSelection(data.places);
   const [pendingAutoRun, setPendingAutoRun] = useState(false);
+  // Recomputed every render: useDrawer's window-resize listener always produces a new
+  // drawer object, so viewport changes re-render. No extra state needed.
+  const isMobile = window.innerWidth <= MOBILE_MAX_WIDTH;
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset, onSnap } = useDrawer();
   // Which thread card is expanded (by object identity — the thread cap shifts indices but
   // card references survive), plus the drawer width to restore when it collapses (null
@@ -122,6 +125,16 @@ export function MapWorkspace() {
   const [expandedCard, setExpandedCard] = useState<AnalysisCardData | null>(null);
   const [currentCard, setCurrentCard] = useState<AnalysisCardData | null>(null);
   const prevWidthRef = useRef<number | null>(null);
+  const localCardRef = useRef<AnalysisCardData | null>(null);
+  const expandCard = useCallback(
+    (card: AnalysisCardData) => {
+      if (prevWidthRef.current === null) prevWidthRef.current = drawer.collapsed ? null : drawer.widthPx;
+      setExpandedCard(card);
+      if (!isMobile) onPreset("wide");
+      else onSnap("full");
+    },
+    [drawer.collapsed, drawer.widthPx, isMobile, onPreset, onSnap],
+  );
 
   // The single address list: seeded from the restored saved selection (share links replace
   // it on mount below). Saved ids write back through so returning sessions keep their list.
@@ -177,6 +190,11 @@ export function MapWorkspace() {
     [savedIdSet, adhocPlaces],
   );
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
+  const [dismissedIncidentError, setDismissedIncidentError] = useState("");
+  // Mobile has no room for the standing legend, so it hides behind a toggle (desktop keeps
+  // the legend on screen and never renders the button).
+  const [mapKeyOpen, setMapKeyOpen] = useState(false);
+  const mapKeyToggleRef = useRef<HTMLButtonElement>(null);
 
   const compare = useCompare({
     entries: list.entries,
@@ -216,6 +234,18 @@ export function MapWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The shared view is now in component state, so the ?view= blob has done its job. Strip it
+  // (replaceState, so no history entry and no reload) — otherwise a reload or a bookmark
+  // silently re-applies the shared scope over whatever the user has since built, and the
+  // address bar keeps advertising someone else's link. The Exit affordance reads
+  // `sharedBanner`, not the URL, so it keeps working.
+  useEffect(() => {
+    if (!hadViewParam) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("view");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [hadViewParam]);
+
   // "Analysis greets you": one shot after the persisted selection seeds the list. Share
   // links own their first run above; landing lookups arm pendingAutoRun themselves.
   const autoRunArmedRef = useRef(false);
@@ -233,6 +263,7 @@ export function MapWorkspace() {
   // server badges: client runs can't route raw points through the assistant tools). Armed
   // here; the completion effect below fires it once when the results land.
   const pendingCardRef = useRef(false);
+  const pendingCardExpandRef = useRef(false);
   useEffect(() => {
     if (!pendingAutoRun || list.entries.length === 0) return;
     if (!data.freshnessLoaded) return;
@@ -242,19 +273,20 @@ export function MapWorkspace() {
       return;
     }
     setPendingAutoRun(false);
+    pendingCardExpandRef.current = false;
     pendingCardRef.current = true;
     void compare.run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAutoRun, list.entries, activeLayerAvailable, data.freshnessLoaded]);
 
-  // Synthesize the armed auto-run's payload into a card once its results land. Keyed on the
-  // result slices (not `running`): it can't fire on the arming commit — the slices are
-  // unchanged there — and fires exactly when useCompare commits a payload, sidestepping the
-  // batching that can collapse `running` false→true→false without a committed `true` render.
-  // pendingCardRef gates a single append (cleared once a card is produced; StrictMode's
-  // double-run and any re-fire find it disarmed). A fully-failed run leaves both slices null,
-  // so the effect never fires and nothing lands. useCompare writes all slices in one batch,
-  // so reading incidents alongside neighborhood here is safe.
+  // Synthesize an armed client-side run into the rail's one live quick-report card once its
+  // results land. Keyed on the result slices (not `running`): it can't fire on the arming
+  // commit — the slices are unchanged there — and fires exactly when useCompare commits a
+  // payload, sidestepping batching that can collapse running false→true→false without a
+  // committed true render. pendingCardRef gates a single update (cleared once a card is
+  // produced; StrictMode's double-run and any re-fire find it disarmed). A fully-failed run
+  // leaves both slices null, so the effect never fires and nothing lands. useCompare writes
+  // all slices in one batch, so reading incidents alongside neighborhood here is safe.
   useEffect(() => {
     if (!pendingCardRef.current) return;
     const card = cardFromCompareResults({
@@ -265,9 +297,13 @@ export function MapWorkspace() {
       placeIds: list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id)),
     });
     if (!card) return;
+    const shouldExpand = pendingCardExpandRef.current;
     pendingCardRef.current = false;
-    thread.append({ kind: "analysis_card", card });
+    pendingCardExpandRef.current = false;
+    thread.replaceAnalysisCard(localCardRef.current, card);
+    localCardRef.current = card;
     setCurrentCard(card);
+    if (shouldExpand) expandCard(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compare.comparison, compare.neighborhood]);
 
@@ -275,6 +311,7 @@ export function MapWorkspace() {
     // Any context invalidation cancels a pending auto-run card: if the armed run failed
     // (ref left armed), a later result landing in the same slices must not revive it.
     pendingCardRef.current = false;
+    pendingCardExpandRef.current = false;
     compare.invalidate();
     // Filter/selection changes detach presence badges — they describe a specific run's
     // results, which no longer reflect the current context once it changes.
@@ -372,9 +409,9 @@ export function MapWorkspace() {
   function handleLookup(result: GeocodeResult) {
     pinDraft.previewSearch(result);
     invalidateAnalysisContext();
+    setPendingAutoRun(false);
     setSharedBanner(false);
     list.replaceAll([{ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) }]);
-    setPendingAutoRun(true);
   }
 
   function handleToggleSelect(id: string) {
@@ -425,14 +462,15 @@ export function MapWorkspace() {
         display_label: entry.label,
         latitude: entry.latitude,
         longitude: entry.longitude,
-        visit_count: 0,
+        // ManualPlaceCreate requires ge=1; 0 made every save of a searched address a 422.
+        visit_count: 1,
         sensitivity_class: "normal",
       });
       list.markSaved(entryKey, created.id);
       setSelectedIds((current) => new Set([...current, created.id]));
       await data.refreshWithFallback("Saved, but dashboard places could not refresh.");
-    } catch {
-      data.setError("Unable to save this location. Try again.");
+    } catch (cause) {
+      data.setError(friendlyMessageOr(cause, "Unable to save this place. Try again."));
     } finally {
       setSavingEntryKey(null);
     }
@@ -457,8 +495,8 @@ export function MapWorkspace() {
       if (entryIndex >= 0) list.removeAt(entryIndex);
       setSelectedIds((current) => { const next = new Set(current); next.delete(id); return next; });
       await data.refreshWithFallback("Removed place, but dashboard totals could not refresh.");
-    } catch {
-      data.setError("Unable to remove place. Try again.");
+    } catch (cause) {
+      data.setError(friendlyMessageOr(cause, "Unable to remove place. Try again."));
     }
   }
 
@@ -483,6 +521,7 @@ export function MapWorkspace() {
     // leaves the ref armed, and applyAssistant writing the same result slices the completion
     // effect keys on would append a LOCAL card alongside the bridge card (double-card).
     pendingCardRef.current = false;
+    pendingCardExpandRef.current = false;
     if (effect.selection || effect.neighborhood !== undefined || effect.incidents !== undefined || effect.comparison !== undefined) {
       pinDraft.setDraft(null);
       setSharedBanner(false);
@@ -627,31 +666,49 @@ export function MapWorkspace() {
     void turn.runCommand(label, command, args);
   }
 
-  // ContextStrip's Run analysis button: same deterministic command path as the panel's own
-  // chips, choosing compare vs. analyze from the saved-place count (2+ compares, 1 analyzes).
-  function handleContextStripRun() {
+  // The quick-report button lives in Tabby's rail but bypasses the assistant command stream.
+  // useCompare calls the public dashboard endpoints for saved and ad-hoc places alike, then
+  // the completion effect freezes the returned slices into the same rich result card.
+  function handleDirectReportRun() {
     if (!activeLayerAvailable || list.entries.length === 0) return;
-    if (list.entries.some((entry) => !entry.savedPlaceId)) {
-      pendingCardRef.current = true;
-      void compare.run();
-      return;
-    }
-    runPanelCommand("Run analysis", savedIdSet.size >= 2 ? "compare_places" : "analyze_places");
+    setOffer(null);
+    pendingCardExpandRef.current = true;
+    pendingCardRef.current = true;
+    void compare.run();
   }
 
-  // Tabby onboarding chips route to the three ways to point the assistant at a place: focus
-  // the top search pill, arm pin-drop mode, or open the manual-add modal.
+  // Tabby's onboarding chips route through these place actions.
   function handlePanelAction(action: "search" | "add-pin" | "manual") {
     if (action === "search") document.getElementById("mc-search-input")?.focus();
     else if (action === "add-pin") pinDraft.startAddPin();
     else setManagePlaces("manual");
   }
 
-  // Recomputed every render: useDrawer's window-resize listener always produces a new
-  // drawer object, so viewport changes re-render. No extra state needed.
-  const isMobile = window.innerWidth <= MOBILE_MAX_WIDTH;
   // Focus mode is a desktop side-panel concept — force it off on mobile (the bottom sheet).
   const isFocus = !isMobile && !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
+
+  // The rest of the bottom-left map chrome is pinned clear of the sheet's peek snap only, so
+  // it disappears under a raised sheet. The map key instead rides above whichever snap is
+  // live. The 240 floor clears the incident chip, which is pinned at +164 px and runs to
+  // ~217 px when its citywide-redaction clause wraps. Capped at the half snap: at full there
+  // is no map left to key. Read back by the CSS as --mapkey-bottom to size the overlay.
+  const mapKeyBottomPx = Math.max(
+    snapHeightPx(drawer.snap === "full" ? "half" : drawer.snap, window.innerHeight) + 12,
+    240,
+  );
+
+  // The open map key is a dismissible overlay, so Escape closes it and hands focus back to
+  // the toggle that opened it.
+  useEffect(() => {
+    if (!mapKeyOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMapKeyOpen(false);
+      mapKeyToggleRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mapKeyOpen]);
 
   // Follow-up chips key off the newest card's OWN frozen scope, so they re-run against what
   // the card shows even after the live dashboard has moved on.
@@ -700,10 +757,7 @@ export function MapWorkspace() {
   const handleCardExpandChange = useCallback(
     (card: AnalysisCardData, expanded: boolean) => {
       if (expanded) {
-        if (prevWidthRef.current === null) prevWidthRef.current = drawer.collapsed ? null : drawer.widthPx;
-        setExpandedCard(card);
-        if (!isMobile) onPreset("wide");
-        else onSnap("full");
+        expandCard(card);
       } else {
         setExpandedCard(null);
         if (!isMobile && prevWidthRef.current !== null) onDrawerResize(prevWidthRef.current);
@@ -711,7 +765,7 @@ export function MapWorkspace() {
         prevWidthRef.current = null;
       }
     },
-    [drawer.collapsed, drawer.widthPx, isMobile, onPreset, onSnap, onDrawerResize],
+    [expandCard, isMobile, onSnap, onDrawerResize],
   );
 
   // The run-scoped export param is appended per-card; strip any query the summary path carries.
@@ -792,6 +846,9 @@ export function MapWorkspace() {
         />
 
         <header className="mc-topbar">
+          {/* The wordmark is a styled span, so the page had no h1 for screen readers or
+              document outline. */}
+          <h1 className="mc-sr">CompCat — reported Seattle incident context around addresses</h1>
           <div className="mc-brand">
             <span className="mc-logo">
               <svg width="16" height="16" viewBox="0 0 24 24"><path d="M4 9 L4 4 L9 7 Q12 6 15 7 L20 4 L20 9 Q21.5 11.5 21.5 14 Q21.5 20 12 20 Q2.5 20 2.5 14 Q2.5 11.5 4 9 Z" fill="var(--on-accent)" /><circle cx="8.5" cy="13" r="1.3" fill="var(--accent)" /><circle cx="15.5" cy="13" r="1.3" fill="var(--accent)" /></svg>
@@ -824,7 +881,25 @@ export function MapWorkspace() {
           <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
         ) : null}
 
-        <MapLegend />
+        {isMobile ? (
+          <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
+            <button
+              type="button"
+              ref={mapKeyToggleRef}
+              className="mc-mapkey-toggle"
+              aria-label="Map key"
+              title="Map key"
+              aria-expanded={mapKeyOpen}
+              aria-controls="mc-map-legend"
+              onClick={() => setMapKeyOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 7h.01M5 12h.01M5 17h.01M10 7h9M10 12h9M10 17h9" /></svg>
+            </button>
+            <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
+          </div>
+        ) : (
+          <MapLegend layer={analysis.layer} id="mc-map-legend" />
+        )}
         <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}
@@ -834,7 +909,26 @@ export function MapWorkspace() {
         />
 
         {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (
-          <p className="mc-error" role="alert">{data.error}</p>
+          <p className="mc-error" role="alert">
+            {data.error}{" "}
+            {/* A dead session cannot be retried in place — only a reload mints a new one. */}
+            {data.sessionFailed ? (
+              data.error === SESSION_EXPIRED_MESSAGE ? (
+                <button type="button" onClick={() => window.location.reload()}>Reload</button>
+              ) : (
+                <button type="button" onClick={data.retryBootstrap}>Retry</button>
+              )
+            ) : null}
+          </p>
+        ) : null}
+
+        {/* The dot layer failed silently before: the map just showed no incidents, which
+            reads as "nothing happened here" rather than "this did not load". */}
+        {incidentLayer.error && dismissedIncidentError !== incidentLayer.error ? (
+          <div className="mc-banner mc-banner-warn" role="alert">
+            {incidentLayer.error}{" "}
+            <button type="button" onClick={() => setDismissedIncidentError(incidentLayer.error ?? "")}>Dismiss</button>
+          </div>
         ) : null}
 
         {sharedBanner ? (
@@ -894,6 +988,9 @@ export function MapWorkspace() {
               onSend={(text) => { setOffer(null); void turn.sendChat(text); }}
               onRetry={() => void turn.sendChat(null)}
               onRunCommand={runPanelCommand}
+              onShowData={handleDirectReportRun}
+              showDataBusy={compare.running}
+              showDataDisabled={!activeLayerAvailable || list.entries.length === 0}
               hasPlaces={data.places.length > 0 || list.entries.length > 0}
               onAction={handlePanelAction}
               followupChips={chipRow}
@@ -910,7 +1007,7 @@ export function MapWorkspace() {
                   analysis={analysis}
                   availableRadii={data.availableRadii}
                   onChange={handleAnalysisChange}
-                  onRun={handleContextStripRun}
+                  onRun={handleDirectReportRun}
                   runDisabled={list.entries.length === 0 || !activeLayerAvailable}
                   locationControls={locationControls}
                   onCopyLink={handleCopyLink}
@@ -950,7 +1047,12 @@ export function MapWorkspace() {
           />
         ) : null}
 
-        {aboutOpen ? <AboutModal onClose={() => setAboutOpen(false)} /> : null}
+        {aboutOpen ? (
+          <AboutModal
+            onClose={() => setAboutOpen(false)}
+            personalUploadsEnabled={data.personalUploadsEnabled}
+          />
+        ) : null}
       </div>
     </div>
   );

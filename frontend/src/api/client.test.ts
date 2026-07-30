@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPlace, deletePlace, getDashboardFreshness, getDashboardSummary, getTrends, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
+import { createPlace, deletePlace, friendlyMessageOr, friendlyRequestError, getDashboardFreshness, getDashboardSummary, getTrends, isFriendlyRequestError, isRateLimited, isSessionExpired, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
 import type { AssistantDashboardState } from "../types";
 
 afterEach(() => {
@@ -288,5 +288,32 @@ describe("api client", () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain("/assistant/commands");
     expect(events).toEqual(["meta", "tool", "token", "done"]);
+  });
+});
+
+describe("failure-message helpers", () => {
+  it("recognises only the messages `request` itself throws", () => {
+    for (const message of [SESSION_EXPIRED_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, GENERIC_ERROR_MESSAGE]) {
+      expect(isFriendlyRequestError(new Error(message))).toBe(true);
+    }
+    // Anything else could be a raw response body or a stack trace — never renderable.
+    expect(isFriendlyRequestError(new Error("<html>502 Bad Gateway</html>"))).toBe(false);
+    expect(isFriendlyRequestError("a string")).toBe(false);
+    expect(isFriendlyRequestError(null)).toBe(false);
+  });
+
+  it("prefers the status-mapped message over the caller's fallback", () => {
+    expect(friendlyMessageOr(new Error(SESSION_EXPIRED_MESSAGE), "generic")).toBe(SESSION_EXPIRED_MESSAGE);
+    expect(friendlyMessageOr(new Error(RATE_LIMITED_MESSAGE), "generic")).toBe(RATE_LIMITED_MESSAGE);
+    expect(friendlyMessageOr(new Error("kaboom"), "generic")).toBe("generic");
+    expect(friendlyMessageOr(undefined, "generic")).toBe("generic");
+  });
+
+  it("identifies an expired session, which only a reload can fix", () => {
+    expect(isSessionExpired(new Error(SESSION_EXPIRED_MESSAGE))).toBe(true);
+    expect(isSessionExpired(new Error(SERVER_ERROR_MESSAGE))).toBe(false);
+    expect(isRateLimited(new Error(RATE_LIMITED_MESSAGE))).toBe(true);
+    expect(isRateLimited(new Error(SERVER_ERROR_MESSAGE))).toBe(false);
+    expect(friendlyRequestError(401)).toBe(SESSION_EXPIRED_MESSAGE);
   });
 });

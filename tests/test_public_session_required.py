@@ -20,6 +20,7 @@ from app.main import create_app
 # Anything else visible in the OpenAPI schema must return 401 without a cookie.
 SESSION_EXEMPT: set[tuple[str, str]] = {
     ("POST", "/sessions"),                    # creates the session itself
+    ("DELETE", "/sessions"),                  # idempotently clears even a stale cookie
     ("GET", "/health"),                       # unauthenticated liveness probe
     ("GET", "/input-modes"),                  # static input-mode config, no user data
     ("POST", "/admin/crime/ingest/socrata"),  # admin tier: X-Admin-Token (403 without it)

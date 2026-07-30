@@ -1,12 +1,12 @@
 import { useState } from "react";
 
 import type { CategoryShare, NeighborhoodPlace, TemporalProfile } from "../types";
+import { isNotTested, methodLabel, minimumDataStatusLabel, NO_VALUE, NOT_TESTED_LABEL } from "../lib/analysisTerms";
 import { countNoun, type IncidentNoun } from "../lib/layerCopy";
 import { aggregateHeadline } from "../lib/verdictCopy";
 import { placeIdentity } from "../lib/placeIdentity";
 import { annualIncidentsWithin, formatPerYear } from "../lib/rateFormat";
 import { BaselineIntervalPlot } from "./BaselineIntervalPlot";
-import { LocatorChip, type LocatorData } from "./LocatorChip";
 import {
   clampInt,
   DAYSET_DAYS,
@@ -23,10 +23,8 @@ export type PlaceContextCardProps = {
   windowLabel: string;
   noun: IncidentNoun;
   domainMax: number;
+  comparisonDataAdequate?: boolean;
   onHoverPlace?: (placeId: string | null) => void;
-  locator: LocatorData | null;
-  coords: { latitude: number; longitude: number } | null;
-  onFlyTo?: (target: { latitude: number; longitude: number }) => void;
 };
 
 function barHeight(value: number, all: number[]) {
@@ -202,7 +200,15 @@ function CoordinateCoverageNote({ coverage, noun }: { coverage: NeighborhoodPlac
   );
 }
 
-export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, onHoverPlace, locator, coords, onFlyTo }: PlaceContextCardProps) {
+export function PlaceContextCard({
+  place,
+  index,
+  windowLabel,
+  noun,
+  domainMax,
+  comparisonDataAdequate = true,
+  onHoverPlace,
+}: PlaceContextCardProps) {
   const identity = placeIdentity(index);
   const headline = aggregateHeadline(place, noun);
   return (
@@ -215,16 +221,6 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
       onBlur={() => onHoverPlace?.(null)}
     >
       <div className="mc-verdict-head">
-        {locator && coords ? (
-          <LocatorChip
-            locator={locator}
-            latitude={coords.latitude}
-            longitude={coords.longitude}
-            mcppLabel={place.baselines.find((b) => b.kind === "mcpp")?.label ?? null}
-            identity={identity}
-            onActivate={coords && onFlyTo ? () => onFlyTo(coords) : undefined}
-          />
-        ) : null}
         <span className={`mc-idbadge id-${identity.slot}`} aria-hidden="true">{identity.letter}</span>
         <p className="mc-verdict-headline">{headline}</p>
       </div>
@@ -233,7 +229,13 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
           <p className="mc-verdict-sub">
             {place.place_incident_count} {countNoun(noun, place.place_incident_count)} within {place.radius_m} m · {windowLabel}
           </p>
-          <BaselineIntervalPlot place={place} identity={identity} noun={noun} domainMax={domainMax} />
+          <BaselineIntervalPlot
+            place={place}
+            identity={identity}
+            noun={noun}
+            domainMax={domainMax}
+            comparisonDataAdequate={comparisonDataAdequate}
+          />
           {place.monthly_counts?.length ? (
             <div className="mc-spark" aria-hidden="true">
               {place.monthly_counts.map((n, i) => (
@@ -247,26 +249,31 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
               <div className="mc-incident-table-wrap">
                 <table className="mc-incident-table mc-baseline-table">
                   <thead>
-                    <tr><th scope="col">Baseline</th><th scope="col">Rate/yr</th><th scope="col">Ratio</th><th scope="col">95% CI</th><th scope="col">adj p</th><th scope="col">Method</th></tr>
+                    <tr><th scope="col">Baseline</th><th scope="col">Rate/yr</th><th scope="col">Ratio</th><th scope="col">approx. 95% CI</th><th scope="col">adj p</th><th scope="col">Method</th></tr>
                   </thead>
                   <tbody>
-                    {place.baselines.map((b) => (
-                      <tr key={b.kind}>
-                        <td>{b.label}</td>
-                        <td>{formatPerYear(annualIncidentsWithin(b.baseline_rate, place.radius_m))}</td>
-                        <td>{b.rate_ratio.toFixed(1)}×</td>
-                        <td>{b.ci_lower.toFixed(1)}–{b.ci_upper.toFixed(1)}×</td>
-                        <td>{b.adjusted_p_value.toFixed(3)}</td>
-                        <td>{b.method}</td>
-                      </tr>
-                    ))}
+                    {place.baselines.map((b) => {
+                      // An untested baseline still carries numbers; they are placeholders or
+                      // under-powered noise, not a finding, so they render as "—".
+                      const notTested = isNotTested(b);
+                      return (
+                        <tr key={b.kind}>
+                          <td>{b.label}</td>
+                          <td>{formatPerYear(annualIncidentsWithin(b.baseline_rate, place.radius_m))}</td>
+                          <td>{notTested ? NO_VALUE : `${b.rate_ratio.toFixed(1)}×`}</td>
+                          <td>{notTested ? NO_VALUE : `${b.ci_lower.toFixed(1)}–${b.ci_upper.toFixed(1)}×`}</td>
+                          <td>{notTested ? NO_VALUE : b.adjusted_p_value.toFixed(3)}</td>
+                          <td>{notTested ? NOT_TESTED_LABEL : methodLabel(b.method)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : null}
             <dl>
               <div><dt>Baseline beats</dt><dd>{place.baseline_beats?.length ? place.baseline_beats.join(" + ") : (place.beat ?? "—")}</dd></div>
-              <div><dt>Adequacy</dt><dd>{place.minimum_data_status}</dd></div>
+              <div><dt>Adequacy</dt><dd>{minimumDataStatusLabel(place.minimum_data_status)}</dd></div>
               <div><dt>Nearest</dt><dd>{place.nearest_incident_m != null ? `${Math.round(place.nearest_incident_m)} m` : "—"}</dd></div>
             </dl>
             <CategoryBreakdown rows={place.category_breakdown} />
@@ -275,7 +282,13 @@ export function PlaceContextCard({ place, index, windowLabel, noun, domainMax, o
       ) : (
         <>
           <p className="mc-verdict-sub">{place.place_incident_count} {countNoun(noun, place.place_incident_count)} in range; no beat baseline.</p>
-          <BaselineIntervalPlot place={place} identity={identity} noun={noun} domainMax={domainMax} />
+          <BaselineIntervalPlot
+            place={place}
+            identity={identity}
+            noun={noun}
+            domainMax={domainMax}
+            comparisonDataAdequate={comparisonDataAdequate}
+          />
           <CategoryBreakdown rows={place.category_breakdown} />
         </>
       )}

@@ -43,6 +43,34 @@ from app.services.neighborhood_service import neighborhood_analysis_for_places
 # demo tunnel. The UI already shows "Showing nearest N of M" when capped.
 AGENT_INCIDENT_LIMIT = 30
 
+# These legacy exposure fields remain in the storage/export schema for compatibility, but the
+# public product no longer presents them and the assistant must not receive them through any
+# tool result. Keep the scrub at the tool boundary so newly composed results cannot accidentally
+# reintroduce one of the retired fields.
+_RETIRED_ASSISTANT_FIELDS = frozenset(
+    {
+        "visit_count",
+        "total_dwell_minutes",
+        "median_dwell_minutes",
+        "incidents_per_visit",
+        "incidents_per_hour_dwell",
+    }
+)
+
+
+def _without_retired_assistant_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_retired_assistant_fields(item)
+            for key, item in value.items()
+            if key not in _RETIRED_ASSISTANT_FIELDS
+        }
+    if isinstance(value, list):
+        return [_without_retired_assistant_fields(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_without_retired_assistant_fields(item) for item in value)
+    return value
+
 
 @lru_cache(maxsize=1)
 def _beat_areas() -> dict[str, float]:
@@ -253,7 +281,14 @@ def _resolve_or_select(
     """Prefer model-named queries; fall back to the backfilled selection ids."""
     if queries:
         provider = build_provider(get_settings())
-        return resolve_place_queries(session, user_id_hash, queries, provider)
+        resolved = resolve_place_queries(session, user_id_hash, queries, provider)
+        if resolved.place_ids:
+            return resolved
+        # A model can mistake a deictic ("this place") for a geocodable query even
+        # though the authoritative dashboard selection was backfilled beside it. A
+        # no-hit query must not erase that usable selection.
+        resolved.place_ids = list(place_ids)
+        return resolved
     return ResolvedPlaces(place_ids=list(place_ids))
 
 
@@ -574,7 +609,7 @@ def execute_tool(
     return {
         "tool_name": tool_name,
         "arguments": validated_arguments,
-        "result": result,
+        "result": _without_retired_assistant_fields(result),
     }
 
 

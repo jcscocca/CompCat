@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   createSession,
+  friendlyMessageOr,
   getDashboardFreshness,
   getDashboardSummary,
   getInputModes,
@@ -17,6 +18,9 @@ export interface DashboardData {
   freshnessLoaded: boolean;
   personalUploadsEnabled: boolean;
   error: string;
+  /** The session bootstrap itself failed — nothing else can load, so offer a retry. */
+  sessionFailed: boolean;
+  retryBootstrap: () => void;
   setError: (message: string) => void;
   refresh: () => Promise<void>;
   refreshWithFallback: (fallbackMessage: string) => Promise<void>;
@@ -38,6 +42,9 @@ export function useDashboardData(): DashboardData {
   const [freshnessLoaded, setFreshnessLoaded] = useState(false);
   const [personalUploadsEnabled, setPersonalUploadsEnabled] = useState(false);
   const [error, setError] = useState("");
+  const [sessionFailed, setSessionFailed] = useState(false);
+  // Bumping this re-runs the bootstrap effect, which is the whole of "Retry".
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
 
   const refresh = async () => {
     setSummary(await getDashboardSummary());
@@ -45,14 +52,19 @@ export function useDashboardData(): DashboardData {
   const refreshWithFallback = async (fallbackMessage: string) => {
     try {
       await refresh();
-    } catch {
-      setError(fallbackMessage);
+    } catch (cause) {
+      // A 401/429/5xx already has copy that says what actually happened; the caller's
+      // fallback is only for the cases we can't name.
+      setError(friendlyMessageOr(cause, fallbackMessage));
     }
   };
+
+  const retryBootstrap = useCallback(() => setBootstrapAttempt((n) => n + 1), []);
 
   useEffect(() => {
     let isMounted = true;
     setError("");
+    setSessionFailed(false);
     createSession()
       .then(() => {
         if (!isMounted) return;
@@ -63,8 +75,8 @@ export function useDashboardData(): DashboardData {
             setError("");
             setSummary(value);
           })
-          .catch(() => {
-            if (isMounted) setError("Unable to load dashboard data. Try again shortly.");
+          .catch((cause) => {
+            if (isMounted) setError(friendlyMessageOr(cause, "Unable to load dashboard data. Try again shortly."));
           });
         void getDashboardFreshness()
           .then((value) => {
@@ -77,16 +89,17 @@ export function useDashboardData(): DashboardData {
             if (isMounted) setFreshnessLoaded(true);
           });
       })
-      .catch(() => {
+      .catch((cause) => {
         if (isMounted) {
           setFreshnessLoaded(true);
-          setError("Unable to start a dashboard session. Try again shortly.");
+          setSessionFailed(true);
+          setError(friendlyMessageOr(cause, "Unable to start a dashboard session. Try again shortly."));
         }
       });
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [bootstrapAttempt]);
 
   useEffect(() => {
     let active = true;
@@ -113,6 +126,8 @@ export function useDashboardData(): DashboardData {
     freshnessLoaded,
     personalUploadsEnabled,
     error,
+    sessionFailed,
+    retryBootstrap,
     setError,
     refresh,
     refreshWithFallback,
