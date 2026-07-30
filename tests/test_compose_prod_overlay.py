@@ -356,7 +356,7 @@ def test_rendered_overlay_forwards_the_retention_window_when_set() -> None:
 
 def test_sidecar_image_is_pinned_and_installs_its_tools() -> None:
     text = _DOCKERFILE.read_text(encoding="utf-8")
-    assert "FROM alpine:3.22" in text
+    assert "FROM alpine:3.24" in text
     # tzdata is load-bearing: without it musl resolves TZ=America/Los_Angeles to UTC.
     assert "tzdata" in text
     assert "curl" in text
