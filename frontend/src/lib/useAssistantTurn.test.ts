@@ -2,12 +2,18 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../api/client", () => ({
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
   streamAssistantChat: vi.fn(),
   streamAssistantCommand: vi.fn(),
 }));
 
-import { streamAssistantChat, streamAssistantCommand } from "../api/client";
+import {
+  RATE_LIMITED_MESSAGE,
+  SESSION_EXPIRED_MESSAGE,
+  streamAssistantChat,
+  streamAssistantCommand,
+} from "../api/client";
 import { COMMAND_FAILURE_MESSAGE, useAssistantTurn, OFFLINE_MESSAGE } from "./useAssistantTurn";
 import type { ThreadItem } from "./threadItems";
 import type { AssistantDashboardState, AssistantStreamEvent } from "../types";
@@ -126,6 +132,48 @@ describe("useAssistantTurn", () => {
     await act(() => hook.result.current.sendChat("hi"));
     expect(append).toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
     expect(hook.result.current.offline).toBe(true);
+  });
+
+  // A 401 is not "Tabby is unreachable": latching offline hides the composer and points the
+  // user at the wrong problem, when a reload is the fix.
+  it("a 401 shows the session message and does not go offline", async () => {
+    vi.mocked(streamAssistantChat).mockRejectedValue(new Error(SESSION_EXPIRED_MESSAGE));
+    const { hook, append } = setup();
+    await act(() => hook.result.current.sendChat("hi"));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: SESSION_EXPIRED_MESSAGE });
+    expect(append).not.toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
+    expect(hook.result.current.offline).toBe(false);
+    expect(hook.result.current.busy).toBe(false);
+  });
+
+  it("a 429 shows the rate-limit message and keeps chat online", async () => {
+    vi.mocked(streamAssistantChat).mockRejectedValue(new Error(RATE_LIMITED_MESSAGE));
+    const { hook, append } = setup();
+    await act(() => hook.result.current.sendChat("hi"));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: RATE_LIMITED_MESSAGE });
+    expect(append).not.toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
+    expect(hook.result.current.offline).toBe(false);
+  });
+
+  it("an upstream model-limit event keeps chat online", async () => {
+    vi.mocked(streamAssistantChat).mockImplementation(async (_p, { onEvent }) => {
+      onEvent({
+        event: "error",
+        data: { code: "llm_rate_limited", message: "Wait about a minute." },
+      });
+    });
+    const { hook, append } = setup();
+    await act(() => hook.result.current.sendChat("hi"));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: "Wait about a minute." });
+    expect(hook.result.current.offline).toBe(false);
+  });
+
+  it("a 401 on a command shows the session message too", async () => {
+    vi.mocked(streamAssistantCommand).mockRejectedValue(new Error(SESSION_EXPIRED_MESSAGE));
+    const { hook, append } = setup();
+    await act(() => hook.result.current.runCommand("Analyze", "analyze_places", {}));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: SESSION_EXPIRED_MESSAGE });
+    expect(append).not.toHaveBeenCalledWith({ kind: "notice", text: COMMAND_FAILURE_MESSAGE });
   });
 
   it("a thrown command transport uses a command notice and leaves chat online", async () => {

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
-from app.assistant.schemas import AssistantDashboardState
+from app.assistant.prompts import build_planning_messages
+from app.assistant.schemas import AssistantChatMessage, AssistantDashboardState
 from app.assistant.semantic_layer import _crime_summaries, build_semantic_context
 from app.config import get_settings
 from app.db import get_sessionmaker
@@ -80,6 +82,23 @@ def test_semantic_context_includes_selected_places_summaries_and_caveats(tmp_pat
     assert packet.active_filters["radii_m"] == [500]
     assert any("reported incident" in caveat.lower() for caveat in packet.policy_caveats)
     assert "user-1" not in packet.model_dump_json()
+
+    planning_messages = build_planning_messages(
+        [AssistantChatMessage(role="user", content="Summarize the selected place.")],
+        packet,
+    )
+    assistant_input = json.dumps(planning_messages).lower()
+    for retired_term in (
+        "visit_count",
+        "total_dwell_minutes",
+        "median_dwell_minutes",
+        "incidents_per_visit",
+        "incidents_per_hour_dwell",
+        "expected weekly visits",
+        "expected visits",
+        "exposure-adjusted incident rates",
+    ):
+        assert retired_term not in assistant_input
 
 
 def test_crime_summaries_scopes_to_latest_run_not_all_runs(tmp_path):
@@ -214,6 +233,46 @@ def test_dashboard_state_coerces_an_unknown_layer_to_reported():
 
     state = AssistantDashboardState(selected_place_ids=["p1"], radii_m=[250], layer="bogus")
     assert _tool_arguments("analyze_places", state, {})["layer"] == "reported"
+
+
+def test_unknown_layer_log_value_is_truncated(monkeypatch):
+    logged: list[str] = []
+
+    def capture_warning(message, *args):
+        logged.append(message % args)
+
+    monkeypatch.setattr("app.assistant.schemas.logger.warning", capture_warning)
+    value = "unknown-" + "x" * 500
+
+    AssistantDashboardState(layer=value)
+
+    assert len(logged) == 1
+    assert value not in logged[0]
+    assert "unknown-" in logged[0]
+    assert "x" * 81 not in logged[0]
+
+
+def test_semantic_context_marks_active_empty_layer_as_not_loaded(tmp_path):
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+
+    packet = build_semantic_context(
+        session,
+        "user-empty-layer",
+        AssistantDashboardState(
+            analysis_start_date=date(2024, 1, 1),
+            analysis_end_date=date(2024, 1, 31),
+            radii_m=[250],
+            layer="calls",
+        ),
+        get_settings(),
+    )
+    session.close()
+
+    message = " ".join(packet.missing_context).lower()
+    assert "911 calls" in message
+    assert "not loaded" in message
+    assert "zero" in message
 
 
 def test_dashboard_state_bounds_every_field():

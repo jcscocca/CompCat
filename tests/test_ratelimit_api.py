@@ -58,25 +58,40 @@ def test_trusted_proxy_header_separates_clients(tmp_path, monkeypatch) -> None:
     assert client.post("/sessions", headers={"CF-Connecting-IP": "8.8.8.1"}).status_code == 429
 
 
-def test_trusted_forwarded_for_separates_clients_through_the_middleware(
+def test_forwarded_for_is_ignored_when_only_cloudflare_proxy_trust_is_enabled(
     tmp_path, monkeypatch
 ) -> None:
-    # The burst tier reads the scope headers directly (BurstLimitMiddleware), not client_ip_from,
-    # so the X-Forwarded-For step has to exist in both places or the two tiers key differently.
     monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "2")
     monkeypatch.setenv("MCA_TRUST_PROXY_HEADERS", "true")
     app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl8.sqlite3")
     client = TestClient(app)
-    first = [
+    statuses = [
         client.get("/input-modes", headers={"X-Forwarded-For": "8.8.8.1, 172.18.0.1"}).status_code
-        for _ in range(3)
+        for _ in range(2)
     ]
-    assert first[:2] == [200, 200]
-    assert first[2] == 429
-    # A different leftmost hop is a different client and gets its own bucket.
+    statuses.append(
+        client.get(
+            "/input-modes", headers={"X-Forwarded-For": "8.8.8.2, 172.18.0.1"}
+        ).status_code
+    )
+    assert statuses == [200, 200, 429]
+
+
+def test_forwarded_for_can_be_enabled_with_its_separate_gate(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "1")
+    monkeypatch.setenv("MCA_TRUST_PROXY_HEADERS", "true")
+    monkeypatch.setenv("MCA_TRUST_X_FORWARDED_FOR", "true")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl-xff.sqlite3")
+    client = TestClient(app)
+
     assert (
-        client.get("/input-modes", headers={"X-Forwarded-For": "8.8.8.2, 172.18.0.1"}).status_code
+        client.get("/input-modes", headers={"X-Forwarded-For": "8.8.8.1"}).status_code
+        == 200
+    )
+    assert (
+        client.get("/input-modes", headers={"X-Forwarded-For": "8.8.8.2"}).status_code
         == 200
     )
 
@@ -145,20 +160,35 @@ def test_burst_limit_on_api_routes(tmp_path, monkeypatch) -> None:
     assert 429 in statuses[5:]
 
 
-def test_burst_limit_exempts_health(tmp_path, monkeypatch) -> None:
+def test_health_has_a_dedicated_finite_bucket(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "1")
+    monkeypatch.setenv("MCA_RATE_LIMIT_HEALTH_PER_MINUTE", "3")
     app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl6.sqlite3")
     client = TestClient(app)
-    for _ in range(5):
-        assert client.get("/health").status_code == 200
+    statuses = [client.get("/health").status_code for _ in range(4)]
+    assert statuses == [200, 200, 200, 429]
+
+
+def test_health_bucket_remains_finite_when_general_limiter_is_disabled(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("MCA_RATE_LIMIT_HEALTH_PER_MINUTE", "2")
+    app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl-health.sqlite3")
+    client = TestClient(app)
+
+    statuses = [client.get("/health").status_code for _ in range(3)]
+
+    assert statuses == [200, 200, 429]
 
 
 def test_burst_limit_exempts_the_data_freshness_probe(tmp_path, monkeypatch) -> None:
-    # An external monitor polls /health/data every minute; the /health prefix in
-    # _BURST_EXEMPT_PREFIXES must keep covering it.
+    # The external data-recency monitor shares the intentionally generous health family,
+    # rather than the low public API burst bucket.
     monkeypatch.setenv("MCA_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setenv("MCA_RATE_LIMIT_BURST_PER_MINUTE", "1")
+    monkeypatch.setenv("MCA_RATE_LIMIT_HEALTH_PER_MINUTE", "5")
     app = create_app(f"sqlite+pysqlite:///{tmp_path}/rl7.sqlite3")
     client = TestClient(app)
     for _ in range(5):

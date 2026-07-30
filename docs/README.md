@@ -31,6 +31,9 @@ update its doc in the same PR.
 - **`DEMO.md`** — demo-on-demand runbook: spin up a public, shareable demo from the
   ThinkPad in ~2 minutes, tear it down when done.
 - **`DEPLOY.md`** — deployment guide for the single-host stack.
-- **`DEPLOY-VPS.md`** — public-instance runbook: provisioning, hardening, TLS, nightly
-  ingest/backup, restore rehearsal, launch checklist and teardown for compcat.app.
+- **`DEPLOY-TUNNEL.md`** — public-instance runbook, zero-cost path: compcat.app served from the
+  ThinkPad through a named Cloudflare tunnel (no VPS, no published port), with the Cloudflare
+  account/zone/tunnel user steps, launch checklist, and an honest account of what it trades.
+- **`DEPLOY-VPS.md`** — public-instance runbook, rented-box path: provisioning, hardening, TLS,
+  nightly ingest/backup, restore rehearsal, launch checklist and teardown for compcat.app.
 - **`IOS.md`** — CompCat on iOS — personal build runbook (Tailscale + Capacitor shell).
