@@ -23,6 +23,11 @@ type Props = {
   onSend: (text: string) => void;
   onRetry: () => void;
   onRunCommand: (label: string, command: AssistantCommandName) => void;
+  /** Runs the current places and filters directly through the dashboard APIs without
+   * requiring an assistant message or command. */
+  onShowData: () => void;
+  showDataBusy?: boolean;
+  showDataDisabled?: boolean;
   /** False on a truly fresh session (no saved places, no ad-hoc list entries) — drives
    * which empty-state copy + chips render. */
   hasPlaces: boolean;
@@ -80,6 +85,9 @@ export function AssistantPanel({
   onSend,
   onRetry,
   onRunCommand,
+  onShowData,
+  showDataBusy = false,
+  showDataDisabled = false,
   hasPlaces,
   onAction,
   followupChips,
@@ -285,6 +293,23 @@ export function AssistantPanel({
       ) : null}
 
       {errorLine ? <p className="mc-inline-error" role="alert">{errorLine}</p> : null}
+
+      {hasPlaces ? (
+        <div className="mc-direct-run">
+          <div>
+            <strong>Quick report</strong>
+            <span>Use the selected places and filters—no message needed.</span>
+          </div>
+          <button
+            type="button"
+            className="mc-cta"
+            disabled={showDataDisabled || showDataBusy}
+            onClick={onShowData}
+          >
+            {showDataBusy ? "Building report…" : "Show me the data"}
+          </button>
+        </div>
+      ) : null}
 
       {contextStrip}
 

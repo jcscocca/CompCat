@@ -1,6 +1,6 @@
 Reference for the CompCat Analyst — the optional chat assistant that is grounded in the user's current dashboard data and answers questions about reported SPD incident context.
 
-> Verified against `2d6d4f3` (2026-07-19).
+> Updated 2026-07-29 for the direct report action in the Tabby rail.
 
 ## Persona — "Tabby, case desk"
 
@@ -14,11 +14,16 @@ records cat"), and a layer-aware lead-in on `analyze_places`/`compare_places` su
 content, the guards, and the planning prompt carry no persona. Tabby wears no SPD insignia and
 never claims official status; "analyst" remains the product term (and the dock's aria-label).
 
+Tabby remains the workspace rail, but a user is not required to chat with it. Once a place is
+selected, a persistent **Show me the data** action in the same rail calls the public dashboard
+endpoints directly and inserts the same frozen `AnalysisCard` used by assistant results. The
+conversation, command chips, and composer remain available around that direct path.
+
 ---
 
 ## 1. Decision-tree architecture
 
-There are two public execution paths. Free text uses the guarded, LLM-backed decision tree at
+There are two assistant execution paths. Free text uses the guarded, LLM-backed decision tree at
 `POST /assistant/chat`. Suggestion chips and explicit rail controls use
 `POST /assistant/commands`, whose fixed command enum dispatches directly to `execute_tool`
 without an LLM call. Both paths stream the same structured event vocabulary and converge in the

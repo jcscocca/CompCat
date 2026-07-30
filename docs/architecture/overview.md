@@ -1,12 +1,12 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Verified against `2d6d4f3` (2026-07-19).
+> Updated 2026-07-29 for the direct report action in the Tabby rail.
 
 ---
 
 ## 1. Purpose & product invariant
 
-CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates in a map-centered workspace. A persistent Tabby rail (three-snap bottom sheet on mobile) carries the place list, controls, assistant conversation, and frozen analysis/comparison cards; the manage-places dialog owns add/rename/remove and export privacy controls.
+CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates in a map-centered workspace. A persistent Tabby rail (three-snap bottom sheet on mobile) carries the place list, filters, assistant conversation, and frozen analysis/comparison cards. A visible **Show me the data** action in that same rail lets users run the report directly without sending Tabby a message. The manage-places dialog owns add/rename/remove and export privacy controls.
 
 ⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/agent.py` contains a regex guard (`_SAFETY_SCORE_PATTERN`) that intercepts any chat message matching safety-scoring language and returns a hard refusal before the LLM is ever called. Both enforcement points must be preserved in future changes.
 
@@ -103,7 +103,9 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 
 `frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
 
-The assistant endpoints are consumed as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips and explicit controls. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
+The Tabby rail's **Show me the data** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an `AnalysisCard` in the same rail.
+
+Tabby's conversational controls consume the assistant endpoints as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
 
 The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's single **Analysis filters** control owns both saved-place selection and unsaved search/share points; result cards are marked as previous analyses as soon as that context changes.
 

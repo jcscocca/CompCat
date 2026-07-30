@@ -389,9 +389,9 @@ export function MapWorkspace() {
   function handleLookup(result: GeocodeResult) {
     pinDraft.previewSearch(result);
     invalidateAnalysisContext();
+    setPendingAutoRun(false);
     setSharedBanner(false);
     list.replaceAll([{ latitude: result.latitude, longitude: result.longitude, label: compactGeocodeLabel(result.label) }]);
-    setPendingAutoRun(true);
   }
 
   function handleToggleSelect(id: string) {
@@ -645,20 +645,17 @@ export function MapWorkspace() {
     void turn.runCommand(label, command, args);
   }
 
-  // ContextStrip's Run analysis button: same deterministic command path as the panel's own
-  // chips, choosing compare vs. analyze from the saved-place count (2+ compares, 1 analyzes).
-  function handleContextStripRun() {
+  // The quick-report button lives in Tabby's rail but bypasses the assistant command stream.
+  // useCompare calls the public dashboard endpoints for saved and ad-hoc places alike, then
+  // the completion effect freezes the returned slices into the same rich result card.
+  function handleDirectReportRun() {
     if (!activeLayerAvailable || list.entries.length === 0) return;
-    if (list.entries.some((entry) => !entry.savedPlaceId)) {
-      pendingCardRef.current = true;
-      void compare.run();
-      return;
-    }
-    runPanelCommand("Run analysis", savedIdSet.size >= 2 ? "compare_places" : "analyze_places");
+    setOffer(null);
+    pendingCardRef.current = true;
+    void compare.run();
   }
 
-  // Tabby onboarding chips route to the three ways to point the assistant at a place: focus
-  // the top search pill, arm pin-drop mode, or open the manual-add modal.
+  // Tabby's onboarding chips route through these place actions.
   function handlePanelAction(action: "search" | "add-pin" | "manual") {
     if (action === "search") document.getElementById("mc-search-input")?.focus();
     else if (action === "add-pin") pinDraft.startAddPin();
@@ -975,6 +972,9 @@ export function MapWorkspace() {
               onSend={(text) => { setOffer(null); void turn.sendChat(text); }}
               onRetry={() => void turn.sendChat(null)}
               onRunCommand={runPanelCommand}
+              onShowData={handleDirectReportRun}
+              showDataBusy={compare.running}
+              showDataDisabled={!activeLayerAvailable || list.entries.length === 0}
               hasPlaces={data.places.length > 0 || list.entries.length > 0}
               onAction={handlePanelAction}
               followupChips={chipRow}
@@ -991,7 +991,7 @@ export function MapWorkspace() {
                   analysis={analysis}
                   availableRadii={data.availableRadii}
                   onChange={handleAnalysisChange}
-                  onRun={handleContextStripRun}
+                  onRun={handleDirectReportRun}
                   runDisabled={list.entries.length === 0 || !activeLayerAvailable}
                   locationControls={locationControls}
                   onCopyLink={handleCopyLink}

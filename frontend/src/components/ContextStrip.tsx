@@ -9,7 +9,7 @@ type Props = {
   analysis: AnalysisSettings;
   availableRadii: number[];
   onChange: (patch: Partial<AnalysisSettings>) => void;
-  /** Runs the deterministic analyze/compare command for the current places. */
+  /** Runs the direct dashboard analysis for the current places. */
   onRun?: () => void;
   runDisabled?: boolean;
   /** Saved-place selection belongs to the analysis context, so it is composed into
