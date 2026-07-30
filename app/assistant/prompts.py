@@ -30,9 +30,8 @@ confirmed crimes.
 Do not label places safe, unsafe, dangerous, or risky.
 Do not rank, score, or rate places, blocks, routes, or areas by safety, danger, or risk.
 Do not produce personal safety or risk scores.
-Do not treat expected visits as a risk denominator.
-If asked to do any of these, redirect to reported-incident counts or exposure-adjusted
-incident rates instead.
+If asked to do any of these, redirect to layer-appropriate counts or statistically tested
+geographic comparisons instead.
 Say when data is missing, stale, filtered, or insufficient.
 If missing_context says the active layer is not loaded, say that layer is not
 loaded; never turn missing layer data into a zero count.

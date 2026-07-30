@@ -243,7 +243,7 @@ connects badge taps back to the newest matching card.
 
 **`app/assistant/semantic_layer.py`**
 
-`build_semantic_context` assembles a `SemanticContextPacket` from live database state before the planning call. It includes: dashboard totals (saved place count, available radii), metadata for the currently selected places (label, coordinates, visit statistics, sensitivity class), the most recent `PlaceCrimeSummary` rows for those places, the user's active filters, the `AVAILABLE_TOOLS` list, and `POLICY_CAVEATS` (invariant statements injected directly into the model's context, e.g. "Do not label places as safe or unsafe."). A `missing_context` list flags gaps (no saved places, no selection, no date range, no radius) that the model is expected to mention or work around.
+`build_semantic_context` assembles a `SemanticContextPacket` from live database state before the planning call. It includes: explicitly selected dashboard totals (saved place count, incident count, available radii), metadata for the currently selected places (label, coordinates, inferred type, sensitivity class), the most recent incident-count `PlaceCrimeSummary` fields for those places, the user's active filters, the `AVAILABLE_TOOLS` list, and `POLICY_CAVEATS` (invariant statements injected directly into the model's context, e.g. "Do not label places as safe or unsafe."). Visit counts, dwell fields, and their derived incident-rate fields are deliberately excluded from both this packet and every assistant tool result; a recursive tool-boundary scrub prevents a composed result from reintroducing them. A `missing_context` list flags gaps (no saved places, no selection, no date range, no radius) that the model is expected to mention or work around.
 
 `missing_context` also distinguishes an active layer with no loaded source rows from a real
 zero-result analysis. In that state it explicitly says the layer is **not loaded** and forbids
@@ -375,7 +375,7 @@ A short referential confirmation such as “ok do it anyway” also inherits the
 preceding user request, preventing a one-turn bypass without letting an old refused question
 poison unrelated later turns. On a hit the turn is short-circuited before the LLM is called and
 a pre-written redirect (`_SAFETY_REDIRECT`) is streamed, telling the user to reframe as
-reported-incident counts or exposure-adjusted rates.
+reported-incident counts or statistically tested geographic comparisons.
 
 **Output-side guard.** The same `_contains_safety_ranking` predicate is applied to the model's
 final answer before it is emitted. If a generated answer trips it, the answer is suppressed and

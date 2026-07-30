@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
-from app.assistant.schemas import AssistantDashboardState
+from app.assistant.prompts import build_planning_messages
+from app.assistant.schemas import AssistantChatMessage, AssistantDashboardState
 from app.assistant.semantic_layer import _crime_summaries, build_semantic_context
 from app.config import get_settings
 from app.db import get_sessionmaker
@@ -80,6 +82,23 @@ def test_semantic_context_includes_selected_places_summaries_and_caveats(tmp_pat
     assert packet.active_filters["radii_m"] == [500]
     assert any("reported incident" in caveat.lower() for caveat in packet.policy_caveats)
     assert "user-1" not in packet.model_dump_json()
+
+    planning_messages = build_planning_messages(
+        [AssistantChatMessage(role="user", content="Summarize the selected place.")],
+        packet,
+    )
+    assistant_input = json.dumps(planning_messages).lower()
+    for retired_term in (
+        "visit_count",
+        "total_dwell_minutes",
+        "median_dwell_minutes",
+        "incidents_per_visit",
+        "incidents_per_hour_dwell",
+        "expected weekly visits",
+        "expected visits",
+        "exposure-adjusted incident rates",
+    ):
+        assert retired_term not in assistant_input
 
 
 def test_crime_summaries_scopes_to_latest_run_not_all_runs(tmp_path):
