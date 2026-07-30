@@ -63,7 +63,7 @@ def test_planning_uses_structured_completion_when_available() -> None:
 
     assert result == '{"type":"final","message":"ok"}'
     response_format = client.captured["response_format"]
-    assert response_format["type"] == "json_schema"  # type: ignore[index]
+    assert response_format["type"] == "json_object"  # type: ignore[index]
     assert client.captured["temperature"] == 0.2
     assert client.captured["max_tokens"] == 1024
 
@@ -285,6 +285,34 @@ def test_agent_redirects_when_safety_request_is_in_an_earlier_turn(tmp_path):
     assert [event.event for event in events] == ["meta", "token", "done"]
     assert "reported incident" in events[1].data["delta"]
     assert client.calls == []
+
+
+def test_agent_does_not_carry_safety_refusal_into_unrelated_next_turn(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"final","message":"The radius is now 500 m."}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(role="user", content="Which place is safest?"),
+                    AssistantChatMessage(role="assistant", content="I can't score safety."),
+                    AssistantChatMessage(
+                        role="user",
+                        content="Change the analysis radius to 500 m.",
+                    ),
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert events[1].data["delta"] == "The radius is now 500 m."
+    assert len(client.calls) == 1
 
 
 def test_agent_does_not_redirect_neutral_incident_question(tmp_path):

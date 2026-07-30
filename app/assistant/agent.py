@@ -91,6 +91,25 @@ _NARRATION_TEMPERATURE = 0.4
 _NARRATION_MAX_TOKENS = 512
 _STATUS_INTERPRETING = "interpreting your request…"
 _STATUS_WRITING = "writing up…"
+_FOLLOWUP_REFERENCE_PATTERN = re.compile(
+    r"""
+    ^\s*(?:
+        (?:yes|yeah|yep|ok(?:ay)?|sure)
+        (?:\s+(?:please|do\s+(?:it|that)|anyway|then|now|go\s+ahead))*
+      | please\s+do\s+(?:it|that)
+      | do\s+(?:it|that)(?:\s+anyway)?
+      | go\s+ahead
+      | continue
+      | tell\s+me
+      | which\s+one
+      | (?:s[ií])(?:\s+(?:por\s+favor|hazlo|adelante))?
+      | hazlo
+      | adelante
+      | contin[uú]a
+    )\s*[.!?]*\s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 # Shared daily LLM token budget exhausted. Fixed copy, invariant-safe: it speaks only about the
 # request budget — never about places, addresses, or safety.
@@ -135,6 +154,7 @@ async def run_assistant_turn(
     )
 
     recent_user_texts = _recent_user_texts(messages)
+    guard_user_texts = _guard_user_texts(recent_user_texts)
     # A refusal in the wrong language reads as a failure to understand rather than a
     # deliberate limit. The guard already covers Spanish asks, so answer them in Spanish.
     spanish = any(is_spanish(text) for text in recent_user_texts)
@@ -142,13 +162,13 @@ async def run_assistant_turn(
     def guard(text: str) -> str | None:
         return localized(output_guard_redirect(text), spanish)
 
-    if any(contains_safety_ranking(text) for text in recent_user_texts):
+    if any(contains_safety_ranking(text) for text in guard_user_texts):
         yield AssistantStreamEvent(
             event="token", data={"delta": localized(SAFETY_REDIRECT, spanish)}
         )
         yield AssistantStreamEvent(event="done", data={})
         return
-    if any(claims_user_presence(text) for text in recent_user_texts):
+    if any(claims_user_presence(text) for text in guard_user_texts):
         yield AssistantStreamEvent(
             event="token", data={"delta": localized(PRESENCE_REDIRECT, spanish)}
         )
@@ -295,6 +315,22 @@ def _recent_user_texts(
     # messages[-8:]), not just the newest one, so a safety-score request split across
     # turns or carried by a short "yes, do that" follow-up still trips the guard.
     return [message.content for message in messages[-limit:] if message.role == "user"]
+
+
+def _guard_user_texts(recent_user_texts: list[str]) -> list[str]:
+    """Scope deterministic guards to the current request.
+
+    A short referential confirmation ("ok do it anyway") inherits the immediately preceding
+    user request, so a refused safety-ranking ask cannot bypass the guard on the next turn.
+    A new substantive request starts fresh; otherwise one refused ask would poison every later
+    message still present in the eight-message planning window.
+    """
+    if not recent_user_texts:
+        return []
+    latest = recent_user_texts[-1]
+    if len(recent_user_texts) > 1 and _FOLLOWUP_REFERENCE_PATTERN.fullmatch(latest):
+        return recent_user_texts[-2:]
+    return [latest]
 
 
 async def _complete_plan(
