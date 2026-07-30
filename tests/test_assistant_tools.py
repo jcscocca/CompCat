@@ -322,6 +322,15 @@ def test_planning_prompt_documents_adjustable_knobs():
     assert "never straight to" in text
 
 
+def test_planning_prompt_requires_tool_for_filter_only_changes():
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert "must call update_filters" in text
+    assert "never return a final answer" in text
+    assert "only a successful" in text
+
+
 def test_planning_prompt_routes_compare_intent_to_compare_places():
     """Live miss: "increase the radius and compare my places again" ran analyze_places,
     so the Compare pane never received the verdict."""

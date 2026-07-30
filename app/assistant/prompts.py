@@ -55,6 +55,10 @@ user to select or name a place instead of calling a tool.
 When the user asks to compare — "compare", "versus", "vs", "which has fewer" —
 with two or more places selected or named, call compare_places, which produces
 the side-by-side verdict; not analyze_places.
+When the user asks ONLY to change a dashboard filter or analysis parameter — especially
+"do not run an analysis" — you MUST call update_filters. Never return a final answer
+claiming that a filter, radius, date, category, or layer changed: only a successful
+update_filters tool result can confirm a dashboard state change.
 Analysis parameters ("knobs") you may adjust when the user asks: pass only the changed
 field(s) in "arguments" — everything you omit is filled from the current dashboard
 state, so never restate unchanged knobs.
