@@ -341,6 +341,9 @@ describe("MapWorkspace", () => {
       layer: "reported",
     }));
     expect(streamAssistantCommand).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
   });
 
   it("lets bulk imported places run a direct comparison report", async () => {
@@ -841,8 +844,8 @@ describe("MapWorkspace", () => {
     });
     expect(analyzePlaces).not.toHaveBeenCalled();
     expect(createPlace).not.toHaveBeenCalled();
-    // Incident details live in the local card's expanded view on the rail.
-    fireEvent.click(await screen.findByRole("button", { name: "View details" }));
+    // The explicit report action opens the card directly; no second "View details" click.
+    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
   });
 
@@ -980,6 +983,32 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
     expect(screen.queryByText(/details in the card/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
+  });
+
+  it("replaces the restored quick report and opens the requested report in place", async () => {
+    localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
+    vi.mocked(getNeighborhoodAnalysis).mockImplementation(async () => makeNeighborhoodAnalysis());
+    vi.mocked(getIncidentDetails).mockImplementation(async () => makeIncidentDetails());
+
+    render(<MapWorkspace />);
+
+    // A returning session gets one collapsed quick report automatically.
+    await waitFor(() => expect(analyzePlaces).toHaveBeenCalledTimes(1));
+    await screen.findByRole("button", { name: "View details" });
+    expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+
+    // The explicit report replaces that live quick report and expands it. It must not leave
+    // the automatic card behind as a second, historical "Previous analysis" card.
+    await waitFor(() => expect(analyzePlaces).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
+    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
+    expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
+    expect(screen.queryByText("Previous analysis")).not.toBeInTheDocument();
   });
 
   it("auto-runs with all places when nothing is stored", async () => {

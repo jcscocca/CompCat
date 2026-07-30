@@ -16,8 +16,10 @@ never claims official status; "analyst" remains the product term (and the dock's
 
 Tabby remains the workspace rail, but a user is not required to chat with it. Once a place is
 selected, a persistent **Show me the data** action in the same rail calls the public dashboard
-endpoints directly and inserts the same frozen `AnalysisCard` used by assistant results. The
-conversation, command chips, and composer remain available around that direct path.
+endpoints directly and opens the resulting frozen `AnalysisCard` without another details click.
+That client-generated quick report is a single live card: rerunning replaces it rather than
+stacking a duplicate historical card. Assistant-produced cards, conversation, command chips,
+and the composer remain available around that direct path.
 
 ---
 
