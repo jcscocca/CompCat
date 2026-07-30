@@ -19,13 +19,17 @@ const RELATION_TEXT: Record<BaselineEntry["relation"], string> = {
  * every baseline tick, zero-anchored with 5% headroom, so the citywide tick lands in
  * the same visual position on every card. */
 // Assumes one global radius per run (true today): mixing per-place radii would silently mix axis scales.
-export function plotDomainMax(places: NeighborhoodPlace[]): number {
+export function plotDomainMax(
+  places: NeighborhoodPlace[],
+  comparisonDataAdequate = true,
+): number {
   let max = 0;
   for (const place of places) {
     const radius = place.radius_m;
     const values = [
       place.place_rate,
-      place.place_incident_count >= MIN_REPORTS_FOR_INTERVAL
+      comparisonDataAdequate
+        && place.place_incident_count >= MIN_REPORTS_FOR_INTERVAL
         ? place.place_rate_ci_upper
         : null,
     ];
@@ -47,17 +51,22 @@ export function BaselineIntervalPlot({
   identity,
   noun,
   domainMax,
+  comparisonDataAdequate = true,
 }: {
   place: NeighborhoodPlace;
   identity: PlaceIdentity;
   noun: IncidentNoun;
   domainMax: number;
+  comparisonDataAdequate?: boolean;
 }) {
   const radius = place.radius_m;
   if (place.place_rate == null) {
     return null;
   }
-  const intervalWithheld = place.place_incident_count < MIN_REPORTS_FOR_INTERVAL;
+  const intervalWithheld = (
+    !comparisonDataAdequate
+    || place.place_incident_count < MIN_REPORTS_FOR_INTERVAL
+  );
   const hasBand = (
     !intervalWithheld
     && place.place_rate_ci_lower != null
@@ -74,7 +83,10 @@ export function BaselineIntervalPlot({
 
   return (
     <div className={`mc-bplot id-${identity.slot}${intervalWithheld ? " is-withheld" : ""}`} data-testid="baseline-plot">
-      <p className="mc-label">{noun.pluralCap} per year within {radius} m — approximate 95% interval</p>
+      <p className="mc-label">
+        {noun.pluralCap} per year within {radius} m —{" "}
+        {comparisonDataAdequate ? "approximate 95% interval" : "interval withheld"}
+      </p>
       <div className="mc-bplot-chart">
         {hasBand ? <div className="mc-bplot-overlay" aria-hidden="true">
           <span className="name" />
@@ -124,7 +136,13 @@ export function BaselineIntervalPlot({
       {/* The baseline rows are area-time densities rescaled to this circle and window, not
           counts observed in the neighborhood — the header's "within {radius} m" applies to
           every row, which is easy to miss on the baseline ticks. */}
-      {intervalWithheld ? <p className="mc-bplot-withheld">too few reports to put a range on</p> : null}
+      {intervalWithheld ? (
+        <p className="mc-bplot-withheld">
+          {comparisonDataAdequate
+            ? "too few reports to put a range on"
+            : "comparison did not meet the data floor; interval withheld"}
+        </p>
+      ) : null}
       <p className="mc-bplot-note">Baseline rows are scaled to your radius and window for comparison. The place's interval bar is not adjusted for multiple baseline comparisons.</p>
     </div>
   );

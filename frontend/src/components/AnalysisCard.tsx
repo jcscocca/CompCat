@@ -52,6 +52,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
   const comparison = card.comparison;
   const neighborhood = card.neighborhood;
   const verdict = comparison ? toCompareVerdict(comparison) : null;
+  const comparisonDataAdequate = verdict?.comparisonDataAdequate ?? true;
 
   // 911 calls carry no offense category — a single "Uncategorized" bar says nothing.
   const cats = layer === "calls" ? [] : categoryCounts(card.incidents);
@@ -123,7 +124,12 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
           {verdict ? (
             <section className="mc-result-comparison" aria-label="Comparison overview">
               <CompareVerdict callout={verdict.callout} noun={noun} />
-              <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={radiusM} />
+              <CompareRateNumberLine
+                rows={verdict.rows}
+                noun={noun}
+                radiusM={radiusM}
+                comparisonDataAdequate={comparisonDataAdequate}
+              />
               <CompareRankedList rows={verdict.rows} noun={noun} radiusM={radiusM} />
             </section>
           ) : null}
@@ -136,7 +142,11 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
                   index={index}
                   windowLabel={windowLabel}
                   noun={noun}
-                  domainMax={plotDomainMax(neighborhood.places)}
+                  domainMax={plotDomainMax(
+                    neighborhood.places,
+                    comparisonDataAdequate,
+                  )}
+                  comparisonDataAdequate={comparisonDataAdequate}
                 />
               ))}
             </div>

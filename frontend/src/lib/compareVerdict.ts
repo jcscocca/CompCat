@@ -30,6 +30,7 @@ export type CompareCallout = {
 export type CompareVerdictModel = {
   rows: CompareVerdictRow[];
   callout: CompareCallout;
+  comparisonDataAdequate: boolean;
 };
 
 function relationshipFor(pair: SitePairwiseResult | null): CompareRelationship {
@@ -87,5 +88,6 @@ export function toCompareVerdict(comparison: SiteComparison): CompareVerdictMode
   return {
     rows,
     callout: { kind, lowestLabel: candidate ? candidate.label : "", loweredCount, otherCount, caveatText },
+    comparisonDataAdequate: overall !== "insufficient_data",
   };
 }
