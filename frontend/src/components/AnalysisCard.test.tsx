@@ -172,9 +172,46 @@ describe("AnalysisCard", () => {
       />,
     );
     expect(screen.getAllByText("Pike").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/reported incident rate is/)).toHaveLength(2);
+    expect(screen.getAllByText(/reported incident rate (?:sits|shows)/)).toHaveLength(2);
     expect(await screen.findByTestId("trend-chart")).toBeInTheDocument();
     expect(screen.getByLabelText(/near selected places/)).toBeInTheDocument();
+  });
+
+  it("withholds all absolute-rate intervals when the comparison misses its data floor", () => {
+    const options = [
+      { ...opt("a", "Pike", 2, 3.9), rate_ci_lower: 0.1, rate_ci_upper: 500 },
+      { ...opt("b", "Bell", 3, 4.4), rate_ci_lower: 0.1, rate_ci_upper: 500 },
+    ];
+    const lowNeighborhood = neighborhood("Test Hill", "North");
+    lowNeighborhood.places = lowNeighborhood.places.map((place, index) => ({
+      ...place,
+      place_incident_count: index + 2,
+      place_rate: index === 0 ? 3.9 : 4.4,
+      place_rate_ci_lower: 0.1,
+      place_rate_ci_upper: 500,
+    }));
+    const card = compareCard({
+      comparison: comparison(
+        "insufficient_data",
+        options,
+        [pair("a", "b", "insufficient_data", null, 1.1)],
+        null,
+      ),
+      neighborhood: lowNeighborhood,
+    });
+
+    const { container } = render(
+      <AnalysisCard
+        card={card}
+        expanded
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+
+    expect(container.querySelectorAll(".mc-numberline .bar")).toHaveLength(0);
+    expect(container.querySelectorAll(".mc-bplot-band")).toHaveLength(0);
+    expect(screen.getAllByText(/comparison did not meet the data floor/i).length).toBeGreaterThan(0);
   });
 
   it("renders a run-scoped export link when runId is set and omits it when null", () => {
@@ -229,6 +266,8 @@ describe("AnalysisCard", () => {
     const { container } = render(<AnalysisCard card={card} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />);
     expect(container.querySelector(".mc-result-minibar")).not.toBeInTheDocument();
     expect(screen.queryByText("Uncategorized")).not.toBeInTheDocument();
+    expect(screen.getByText(/911 call context, not a personal risk prediction/i)).toBeInTheDocument();
+    expect(container.querySelector(".mc-result-caveat")).not.toHaveTextContent(/\bincident/i);
   });
 
   it("notes when the mini-bars cover only the returned subset of a capped list", () => {

@@ -1,5 +1,10 @@
 # Public instance runbook — compcat.app on a VPS
 
+> **Zero-cost alternative:** [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) reaches the same public
+> compcat.app from the ThinkPad through a named Cloudflare tunnel — same app, same env posture,
+> same nightly ops, no VPS and no TLS to manage. Read its "what this trades" section before
+> choosing; the two runbooks diverge only at the edge.
+
 This document takes a **fresh Ubuntu 24.04 box to an always-on public CompCat at
 <https://compcat.app>**: TLS-terminated, rate-limited, ingesting SPD data nightly, backing itself
 up nightly, and monitored from outside. It assumes no prior knowledge of the deployment — following
@@ -504,20 +509,23 @@ compose logs ingest-cron     # nightly ingest (03:10), backup (03:40), retention
 compose logs db
 ```
 
-**Data retention:** a CompCat session is a 24-hour anonymous token, but the rows an analysis
-writes — entered-place clusters, analysis runs, crime summaries, statistical comparisons and
-their options/pairwise children — outlive it. Session expiry slides on every visit, so a
-returning visitor keeps one identity indefinitely; only identities silent for the whole
-retention window are truly abandoned. The 03:50 sidecar job posts
+**Data retention:** a CompCat session is an anonymous token with a sliding 24-hour window and a
+signed absolute ceiling (`MCA_SESSION_ABSOLUTE_MAX_DAYS`, default 30). Rows an analysis writes —
+entered-place clusters, analysis runs, crime summaries, statistical comparisons and their
+options/pairwise children — outlive an individual window. Every create/resume upserts a
+one-way `session_activity` record, so a returning read-only visitor counts as active. The
+03:50 sidecar job posts
 `/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no
-activity in `MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep) —
-an active visitor's data, however old, is never swept — in foreign-key order and
-in bounded batches, and evicts `geocode_cache` entries past their own
+create/resume, analysis, place creation, or place update in
+`MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep), in foreign-key
+order and bounded batches, and evicts `geocode_cache` entries past their own
 `MCA_GEOCODER_CACHE_TTL_DAYS`. It never touches personal-upload clusters — those have their own
-delete path — nor SPD incident data. It runs after the backup, so each night's dump still
-contains what that night removed.
+delete path — nor SPD incident data. A persistent integrity failure returns 5xx, which makes
+the sidecar's `curl --fail` job fail visibly. The sweep runs after the backup, so each night's
+dump still contains what that night removed.
 
-> Migration note: `0014_retention_indexes` creates plain (non-CONCURRENT) indexes. Fine
+> Migration note: `0014_retention_indexes` creates plain (non-CONCURRENT) indexes and
+> `0015_session_activity` creates the activity table/index. Fine
 > on a fresh or small database; if you ever apply it after months of accumulated data,
 > expect the indexed tables to be write-locked for the build's duration. To run it by hand and read the per-table row counts:
 

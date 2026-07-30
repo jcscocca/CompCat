@@ -30,9 +30,9 @@ function setup() {
 }
 
 describe("PlaceChipStrip", () => {
-  it("renders only the active scope and marks ad-hoc locations unsaved", () => {
+  it("renders only the active scope and marks ad-hoc places unsaved", () => {
     setup();
-    expect(screen.getByRole("group", { name: "Locations" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Places" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Home" })).toHaveTextContent("A");
     expect(screen.getByRole("button", { name: "Show Downtown test on map — Unsaved" })).toHaveTextContent("Unsaved");
     expect(screen.getByRole("button", { name: "Save Downtown test" })).toBeInTheDocument();

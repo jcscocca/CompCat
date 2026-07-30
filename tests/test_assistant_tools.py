@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 
 import pytest
@@ -10,6 +11,20 @@ from app.geocoding.providers import GeocodeHit
 from app.main import create_app
 from app.models import CrimeIncident, PlaceCluster
 from tests.helpers_dashboard import session_with_places_and_beat_crime
+
+_RETIRED_EXPOSURE_FIELDS = (
+    "visit_count",
+    "total_dwell_minutes",
+    "median_dwell_minutes",
+    "incidents_per_visit",
+    "incidents_per_hour_dwell",
+)
+
+
+def _assert_retired_exposure_fields_absent(payload) -> None:
+    serialized = json.dumps(payload, default=str)
+    for field in _RETIRED_EXPOSURE_FIELDS:
+        assert field not in serialized
 
 
 def _session_with_place_and_crime(tmp_path):
@@ -261,6 +276,29 @@ def test_update_filters_rejects_bad_values():
         )
 
 
+def test_resolve_or_select_falls_back_to_active_ids_when_queries_miss(monkeypatch):
+    from app.assistant.place_resolution import ResolvedPlaces
+    from app.assistant.tools import _resolve_or_select
+
+    monkeypatch.setattr("app.assistant.tools.build_provider", lambda settings: object())
+    monkeypatch.setattr(
+        "app.assistant.tools.resolve_place_queries",
+        lambda session, user_id_hash, queries, provider: ResolvedPlaces(
+            unresolved=list(queries)
+        ),
+    )
+
+    resolved = _resolve_or_select(
+        session=object(),
+        user_id_hash="user-hash",
+        queries=["model hallucination"],
+        place_ids=["active-place"],
+    )
+
+    assert resolved.place_ids == ["active-place"]
+    assert resolved.unresolved == ["model hallucination"]
+
+
 def test_planning_prompt_requests_statistical_interpretation():
     from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
 
@@ -297,6 +335,34 @@ def test_planning_prompt_documents_adjustable_knobs():
     # Live miss: Groq stepped 250→1000 on a vague "increase the radius".
     assert "adjacent" in text
     assert "never straight to" in text
+
+
+def test_planning_prompt_requires_tool_for_filter_only_changes():
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert "must call update_filters" in text
+    assert "never return a final answer" in text
+    assert "only a successful" in text
+
+
+def test_planning_prompt_forbids_claiming_actions_without_tools():
+    from app.assistant.prompts import PLANNING_SYSTEM_PROMPT
+
+    text = PLANNING_SYSTEM_PROMPT.lower()
+    assert "never claim that data was retrieved" in text
+    assert "a place was saved or selected" in text
+    assert "requests to read current dashboard data" in text
+    for tool_name in (
+        "get_dashboard_summary",
+        "add_place",
+        "select_places",
+        "update_filters",
+        "analyze_places",
+        "compare_places",
+        "suggest_followups",
+    ):
+        assert tool_name in text
 
 
 def test_planning_prompt_routes_compare_intent_to_compare_places():
@@ -342,6 +408,43 @@ def test_add_place_geocodes_and_creates(tmp_path, monkeypatch):
     assert payload["created"] is True
     assert payload["place"]["display_label"] == "Pike Place Market"
     assert payload["address"] == "Pike Place Market, Seattle"
+    _assert_retired_exposure_fields_absent(result)
+
+
+def test_dashboard_summary_tool_excludes_retired_exposure_fields(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    try:
+        result = execute_tool(session, user_hash, "get_dashboard_summary", {})
+    finally:
+        session.close()
+
+    assert result["result"]["totals"]["place_count"] == 1
+    _assert_retired_exposure_fields_absent(result)
+
+
+def test_tool_boundary_recursively_excludes_every_retired_exposure_field(monkeypatch):
+    monkeypatch.setattr(
+        "app.assistant.tools.dashboard_summary",
+        lambda *args: {
+            "totals": {"place_count": 1, "visit_count": 17},
+            "places": [
+                {
+                    "display_label": "Library",
+                    "total_dwell_minutes": 90,
+                    "nested": {"median_dwell_minutes": 30},
+                }
+            ],
+            "crime_summaries": [
+                {"incidents_per_visit": 0.5, "incidents_per_hour_dwell": 0.25}
+            ],
+        },
+    )
+
+    result = execute_tool(None, "user-1", "get_dashboard_summary", {})
+
+    assert result["result"]["totals"] == {"place_count": 1}
+    assert result["result"]["places"][0]["display_label"] == "Library"
+    _assert_retired_exposure_fields_absent(result)
 
 
 def test_select_places_resolves_and_passes_mode(tmp_path, monkeypatch):

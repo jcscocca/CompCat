@@ -8,9 +8,13 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.dml import Delete
 
+import app.api.routes_admin_maintenance as maintenance_routes
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.main import create_app
@@ -19,6 +23,7 @@ from app.models import (
     GeocodeCache,
     PlaceCluster,
     PlaceCrimeSummary,
+    SessionActivity,
     StatisticalComparison,
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
@@ -38,7 +43,11 @@ def _session(tmp_path, name: str = "retention"):
     return get_sessionmaker()()
 
 
-def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD, owner: str = "user-dormant") -> PlaceCluster:
+def _cluster(
+    created_at: datetime,
+    method: str = MANUAL_CLUSTER_METHOD,
+    owner: str = "user-dormant",
+) -> PlaceCluster:
     return PlaceCluster(
         user_id_hash=owner,
         cluster_version="manual-1",
@@ -54,7 +63,9 @@ def _cluster(created_at: datetime, method: str = MANUAL_CLUSTER_METHOD, owner: s
     )
 
 
-def _summary(cluster_id: str, created_at: datetime, owner: str = "user-dormant") -> PlaceCrimeSummary:
+def _summary(
+    cluster_id: str, created_at: datetime, owner: str = "user-dormant"
+) -> PlaceCrimeSummary:
     return PlaceCrimeSummary(
         user_id_hash=owner,
         place_cluster_id=cluster_id,
@@ -76,7 +87,9 @@ def _run(created_at: datetime, owner: str = "user-dormant") -> AnalysisRun:
     )
 
 
-def _comparison(created_at: datetime, owner: str = "user-dormant") -> StatisticalComparison:
+def _comparison(
+    created_at: datetime, owner: str = "user-dormant"
+) -> StatisticalComparison:
     return StatisticalComparison(
         user_id_hash=owner,
         comparison_type="site",
@@ -92,7 +105,9 @@ def _comparison(created_at: datetime, owner: str = "user-dormant") -> Statistica
     )
 
 
-def _option(comparison_id: str, created_at: datetime, owner: str = "user-dormant") -> StatisticalComparisonOption:
+def _option(
+    comparison_id: str, created_at: datetime, owner: str = "user-dormant"
+) -> StatisticalComparisonOption:
     return StatisticalComparisonOption(
         comparison_id=comparison_id,
         user_id_hash=owner,
@@ -108,7 +123,9 @@ def _option(comparison_id: str, created_at: datetime, owner: str = "user-dormant
     )
 
 
-def _pairwise(comparison_id: str, created_at: datetime, owner: str = "user-dormant") -> StatisticalPairwiseResult:
+def _pairwise(
+    comparison_id: str, created_at: datetime, owner: str = "user-dormant"
+) -> StatisticalPairwiseResult:
     return StatisticalPairwiseResult(
         comparison_id=comparison_id,
         user_id_hash=owner,
@@ -155,6 +172,38 @@ def test_sweep_never_touches_a_live_identitys_old_places(tmp_path):
 
     assert counts["place_clusters"] == 0
     assert session.get(PlaceCluster, home_id) is not None
+
+
+def test_sweep_preserves_old_places_for_a_returning_read_only_identity(tmp_path):
+    session = _session(tmp_path, "read-only")
+    place = _cluster(OLD, owner="user-reader")
+    session.add_all(
+        [
+            place,
+            SessionActivity(user_id_hash="user-reader", last_seen_at=FRESH),
+        ]
+    )
+    session.commit()
+    place_id = place.id
+
+    counts = sweep_retention(session, get_settings(), now=NOW)
+
+    assert counts["place_clusters"] == 0
+    assert counts["session_activity"] == 0
+    assert session.get(PlaceCluster, place_id) is not None
+
+
+def test_sweep_treats_a_recent_place_rename_as_identity_activity(tmp_path):
+    session = _session(tmp_path, "updated-place")
+    place = _cluster(OLD, owner="user-renamed")
+    place.updated_at = FRESH
+    session.add(place)
+    session.commit()
+
+    counts = sweep_retention(session, get_settings(), now=NOW)
+
+    assert counts["place_clusters"] == 0
+    assert session.get(PlaceCluster, place.id) is not None
 
 
 def test_sweep_removes_a_fully_dormant_identitys_data(tmp_path):
@@ -207,6 +256,7 @@ def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
         "place_crime_summaries": 1,
         "place_clusters": 1,
         "geocode_cache": 0,
+        "session_activity": 0,
     }
     assert _count(session, PlaceCluster) == 1
     assert _count(session, PlaceCrimeSummary) == 1
@@ -228,7 +278,8 @@ def test_sweep_never_touches_upload_derived_clusters(tmp_path):
     manual_cluster = _cluster(OLD)
     session.add_all([upload_cluster, direct_cluster, manual_cluster])
     session.commit()
-    upload_id, direct_id, manual_id = upload_cluster.id, direct_cluster.id, manual_cluster.id
+    upload_id, direct_id = upload_cluster.id, direct_cluster.id
+    manual_id = manual_cluster.id
 
     counts = sweep_retention(session, get_settings(), now=NOW)
 
@@ -266,6 +317,35 @@ def test_sweep_batches_until_the_backlog_is_gone(tmp_path):
     assert counts["analysis_runs"] == 7
     assert _count(session, AnalysisRun) == 0
     session.close()
+
+
+def test_sweep_deletes_abandoned_session_activity(tmp_path):
+    session = _session(tmp_path, "activity")
+    session.add(SessionActivity(user_id_hash="user-gone", last_seen_at=OLD))
+    session.commit()
+
+    counts = sweep_retention(session, get_settings(), now=NOW)
+
+    assert counts["session_activity"] == 1
+    assert session.get(SessionActivity, "user-gone") is None
+    session.close()
+
+
+def test_delete_in_batches_propagates_persistent_integrity_error(tmp_path, monkeypatch):
+    session = _session(tmp_path, "integrity")
+    session.add(_run(OLD))
+    session.commit()
+    original_execute = session.execute
+
+    def fail_deletes(statement, *args, **kwargs):
+        if isinstance(statement, Delete):
+            raise IntegrityError("DELETE", {}, RuntimeError("persistent FK failure"))
+        return original_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "execute", fail_deletes)
+
+    with pytest.raises(IntegrityError, match="persistent FK failure"):
+        sweep_retention(session, get_settings(), now=NOW)
 
 
 def test_sweep_is_disabled_by_a_zero_window(tmp_path, monkeypatch):
@@ -361,6 +441,25 @@ def test_retention_sweep_endpoint_returns_counts_only(tmp_path, monkeypatch):
     assert payload["place_clusters"] == 1
     assert payload["analysis_runs"] == 1
     assert all(isinstance(value, int) for value in payload.values())
+
+
+def test_retention_sweep_endpoint_surfaces_integrity_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    get_settings.cache_clear()
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'failure.sqlite3'}")
+
+    def fail_sweep(*_args, **_kwargs):
+        raise IntegrityError("DELETE", {}, RuntimeError("persistent FK failure"))
+
+    monkeypatch.setattr(maintenance_routes, "sweep_retention", fail_sweep)
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/admin/maintenance/retention-sweep",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+
+    # The ops sidecar invokes curl --fail, so a 5xx makes the scheduled job fail visibly
+    # instead of recording a misleading partial-success counts payload.
+    assert response.status_code == 500
 
 
 def test_retention_sweep_endpoint_is_absent_from_the_public_schema(tmp_path):

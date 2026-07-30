@@ -8,7 +8,12 @@ vi.mock("../api/client", async (importOriginal) => ({
   streamAssistantCommand: vi.fn(),
 }));
 
-import { SESSION_EXPIRED_MESSAGE, streamAssistantChat, streamAssistantCommand } from "../api/client";
+import {
+  RATE_LIMITED_MESSAGE,
+  SESSION_EXPIRED_MESSAGE,
+  streamAssistantChat,
+  streamAssistantCommand,
+} from "../api/client";
 import { COMMAND_FAILURE_MESSAGE, useAssistantTurn, OFFLINE_MESSAGE } from "./useAssistantTurn";
 import type { ThreadItem } from "./threadItems";
 import type { AssistantDashboardState, AssistantStreamEvent } from "../types";
@@ -139,6 +144,28 @@ describe("useAssistantTurn", () => {
     expect(append).not.toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
     expect(hook.result.current.offline).toBe(false);
     expect(hook.result.current.busy).toBe(false);
+  });
+
+  it("a 429 shows the rate-limit message and keeps chat online", async () => {
+    vi.mocked(streamAssistantChat).mockRejectedValue(new Error(RATE_LIMITED_MESSAGE));
+    const { hook, append } = setup();
+    await act(() => hook.result.current.sendChat("hi"));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: RATE_LIMITED_MESSAGE });
+    expect(append).not.toHaveBeenCalledWith({ kind: "notice", text: OFFLINE_MESSAGE });
+    expect(hook.result.current.offline).toBe(false);
+  });
+
+  it("an upstream model-limit event keeps chat online", async () => {
+    vi.mocked(streamAssistantChat).mockImplementation(async (_p, { onEvent }) => {
+      onEvent({
+        event: "error",
+        data: { code: "llm_rate_limited", message: "Wait about a minute." },
+      });
+    });
+    const { hook, append } = setup();
+    await act(() => hook.result.current.sendChat("hi"));
+    expect(append).toHaveBeenCalledWith({ kind: "notice", text: "Wait about a minute." });
+    expect(hook.result.current.offline).toBe(false);
   });
 
   it("a 401 on a command shows the session message too", async () => {

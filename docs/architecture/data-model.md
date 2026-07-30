@@ -1,6 +1,6 @@
-SQLAlchemy/Alembic schema for CompCat's FastAPI backend: 11 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, statistical comparison, and infrastructure.
+SQLAlchemy/Alembic schema for CompCat's FastAPI backend: 12 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, statistical comparison, and infrastructure.
 
-> Verified against `5fe1da0` (2026-07-03); route tables dropped by migration 0012, arrests foundation adds source_dataset discrimination.
+> Verified against `367b1fc` (2026-07-28).
 
 ---
 
@@ -25,6 +25,12 @@ user-scoped table carries `user_id_hash` (a hashed session identity; see §2). S
 |---|---|---|---|
 | `CrimeIncident` | `crime_incidents` | Imported SPD incident-context record (reported crime, arrest, or 911 call). Not user-scoped — shared across all sessions. Uniqueness is composite `(source_dataset, external_incident_id)`; `source_dataset` (indexed) is `seattle_spd_crime` (reported incidents), `seattle_spd_arrests` (enforcement activity), or `seattle_spd_911` (calls for service). `offense_subcategory` is overloaded per source: offense parent group (crime), NIBRS offense description (arrests), or final call type (911). Arrest rows carry a **best-effort NIBRS-crosswalked** `offense_category` (PROPERTY/PERSON/SOCIETY) + `nibrs_group`, derived from the arrest offense description at ingest (`app/crime/nibrs_crosswalk.py`) and backfilled on existing rows (migration `0011`); an unrecognized description stays null. For 911 rows `offense_category`/`nibrs_group` are null. 911 rows use `cad_event_number` as `external_incident_id`, which collapses the dataset's per-responding-unit rows to one row per call; redacted dispatch coordinates ("REDACTED") map to null lat/long. | `source_dataset` (indexed), `external_incident_id`, `offense_start_utc`, `offense_category`, `offense_subcategory`, `nibrs_group`, `precinct`, `sector`, `beat`, `mcpp`, `latitude`, `longitude` |
 | `PlaceCrimeSummary` | `place_crime_summaries` | Pre-aggregated incident counts for a `PlaceCluster` at a given radius and date window. Invalidated and regenerated whenever normalization reruns. `layer` records which analysis layer produced it (`reported`/`arrests`/`calls`; null = legacy, read as `reported`) so the summary totals, chip-strip and manage-places counts, and exports label themselves correctly. | `place_cluster_id` → `place_clusters`, `radius_m`, `analysis_start_date`, `analysis_end_date`, `offense_category`, `incident_count`, `nearest_incident_m`, `incidents_per_visit`, `incidents_per_hour_dwell`, `analysis_run_id`, `layer` |
+
+**Crime timestamp warning.** `offense_start_utc`, `offense_end_utc`, and `report_utc`
+are legacy misnomers: the SPD feeds contain Seattle local wall-clock values, and the
+parsers historically attached UTC tzinfo without converting them. Filtering deliberately
+uses those clock digits. Public JSON must preserve them and attach the real
+`America/Los_Angeles` offset through `app/time_contract.py`; a trailing `Z` is false.
 
 **Sources, layers, and the `report_number` linkage.** Each `source_dataset` value maps one-to-one onto
 its own analysis *layer* (`app/crime/sources.py::LAYERS`), giving three disjoint, mutually-exclusive
@@ -69,26 +75,40 @@ is the union of all beats (area = sum of the beat area CSV).
 | Entity | Table | Purpose | Key columns |
 |---|---|---|---|
 | `GeocodeCache` | `geocode_cache` | Deduplicates geocoder calls. Unique on `(provider, query_normalized)`. | `provider`, `query_normalized`, `results_json` |
+| `SessionActivity` | `session_activity` | Last successful public session create/resume for retention activity; stores only the one-way identity hash, never a raw session id or token. | `user_id_hash` (primary key), `last_seen_at` (indexed) |
 
-Total: **11 tables** matching all 11 `__tablename__` declarations in `app/models.py`.
+Total: **12 tables** matching all 12 `__tablename__` declarations in `app/models.py`.
 
 ---
 
-## 2. User identity is not a table
+## 2. Pseudonymous identity and activity
 
-There is no `User` or `Session` model. User identity is handled entirely in
-`app/sessions.py`:
+There is no account, raw-session, or token table. Signed identity is handled in
+`app/sessions.py`; `SessionActivity` stores only the derived one-way hash needed for
+retention:
 
 - A **session cookie** (`mca_session`) holds a HMAC-signed token containing a UUID session
-  ID and expiry timestamp. The token is verified without a database lookup.
+  ID, fixed issuance timestamp, and sliding expiry timestamp. It is verified without a
+  database lookup. The sliding window is 24 hours and the signed absolute ceiling is
+  `MCA_SESSION_ABSOLUTE_MAX_DAYS` (30 days by default).
 - The `public_user_hash` function derives a stable per-session identifier:
   `sha256(f"{MCA_USER_HASH_SALT}:public-session:{session_id}")`. This hash appears as
   `user_id_hash` on every user-scoped row. The raw session ID and the mapping from hash
   back to identity are never stored.
+- `POST /sessions` upserts that hash into `session_activity.last_seen_at` on both create
+  and resume. This prevents a returning read-only visitor's saved places from looking
+  abandoned merely because they did not write analysis data.
 - **Public endpoints** require a valid session (enforced via `required_public_user_hash`
-  dependency). **Internal endpoints** allow the demo-identity fallback (`current_user_hash`).
+  dependency), except session creation/deletion and the documented probes/static config.
+  **Internal endpoints** allow the demo-identity fallback (`current_user_hash`).
 - `MCA_USER_HASH_SALT` must be overridden from its default in production; the
   `Settings.require_production_secret_overrides` validator enforces this at startup.
+
+The retention sweep treats an identity as active when any of these is recent:
+`SessionActivity.last_seen_at`, `AnalysisRun.created_at`, `PlaceCluster.created_at`, or
+`PlaceCluster.updated_at`. Abandoned `SessionActivity` rows are pruned after their user
+data, and a persistent foreign-key `IntegrityError` aborts the sweep instead of returning
+misleading success counts.
 
 ---
 
@@ -151,7 +171,7 @@ responses visible to the user. Exact centroids are internal.
 
 ## 5. Migrations
 
-Alembic manages the Postgres production schema; 12 migration scripts live in
+Alembic manages the Postgres production schema; 15 migration scripts live in
 `alembic/versions/`:
 
 | File | Content |
@@ -168,6 +188,9 @@ Alembic manages the Postgres production schema; 12 migration scripts live in
 | `0010_route_layer.py` | Adds a nullable `layer` column to `route_requests` (tables dropped by 0012) |
 | `0011_arrest_category_backfill.py` | Backfills `offense_category`/`nibrs_group` on existing arrest `crime_incidents` rows via the NIBRS crosswalk |
 | `0012_drop_route_tables.py` | Drops the four route tables and the `statistical_comparisons.source_route_request_id` FK/index; deletes route-sourced comparison rows (routes feature removed 2026-07) |
+| `0013_option_rate_ci.py` | Adds per-option rate interval columns to statistical comparison options. |
+| `0014_retention_indexes.py` | Adds age-filter indexes used by the bounded retention sweep. |
+| `0015_session_activity.py` | Creates `session_activity` with a hash primary key and indexed `last_seen_at`, and indexes `place_clusters.updated_at` for the active-identity union; downgrade reverses both. |
 
 **Dual bootstrap path** (`app/db.init_db`):
 
@@ -302,6 +325,11 @@ erDiagram
         string provider
         string query_normalized
         string results_json
+    }
+
+    SessionActivity {
+        string user_id_hash PK
+        datetime last_seen_at
     }
 
     ImportBatch ||--o{ StagingLocationObservation : "import_id"

@@ -9,12 +9,12 @@ from app.assistant.schemas import AssistantDashboardState, SemanticContextPacket
 from app.config import Settings
 from app.models import PlaceCluster, PlaceCrimeSummary
 from app.services.analysis_runs import latest_analysis_run_id
+from app.services.crime_service import dashboard_freshness_by_layer
 from app.services.dashboard_service import dashboard_summary
 
 POLICY_CAVEATS = [
     "CompCat describes reported incident context, not personal safety.",
     "Do not label places as safe or unsafe.",
-    "Expected weekly visits are routine metadata, not a risk denominator.",
     (
         "Reported incident data can be incomplete, delayed, or filtered by the "
         "current analysis settings."
@@ -89,12 +89,15 @@ def build_semantic_context(
     settings: Settings,
 ) -> SemanticContextPacket:
     summary = dashboard_summary(session, user_id_hash, settings)
+    layer_freshness = dashboard_freshness_by_layer(session).get(state.layer) or {}
+    layer_loaded = bool(layer_freshness.get("incident_count"))
     selected_ids = list(dict.fromkeys(state.selected_place_ids))
     selected_places = _selected_places(session, user_id_hash, selected_ids)
     crime_summaries = _crime_summaries(session, user_id_hash, selected_ids)
     return SemanticContextPacket(
         dashboard_totals={
-            **summary["totals"],
+            "place_count": summary["totals"]["place_count"],
+            "incident_count": summary["totals"]["incident_count"],
             "available_radii_m": settings.crime_radii_m,
         },
         selected_places=[_place_payload(place) for place in selected_places],
@@ -112,10 +115,13 @@ def build_semantic_context(
             "offense_subcategory": state.offense_subcategory,
             "nibrs_group": state.nibrs_group,
             "layer": state.layer,
+            "layer_loaded": layer_loaded,
         },
         available_tools=AVAILABLE_TOOLS,
         policy_caveats=POLICY_CAVEATS,
-        missing_context=_missing_context(summary, selected_ids, selected_places, state),
+        missing_context=_missing_context(
+            summary, selected_ids, selected_places, state, layer_loaded
+        ),
     )
 
 
@@ -126,14 +132,15 @@ def _selected_places(
 ) -> list[PlaceCluster]:
     if not selected_ids:
         return []
-    return list(
-        session.scalars(
+    places_by_id = {
+        place.id: place
+        for place in session.scalars(
             select(PlaceCluster)
             .where(PlaceCluster.user_id_hash == user_id_hash)
             .where(PlaceCluster.id.in_(selected_ids))
-            .order_by(PlaceCluster.visit_count.desc(), PlaceCluster.display_label.asc())
         )
-    )
+    }
+    return [places_by_id[place_id] for place_id in selected_ids if place_id in places_by_id]
 
 
 def _crime_summaries(
@@ -156,9 +163,6 @@ def _place_payload(place: PlaceCluster) -> dict[str, Any]:
         "display_label": place.display_label,
         "latitude": place.display_latitude,
         "longitude": place.display_longitude,
-        "visit_count": place.visit_count,
-        "total_dwell_minutes": place.total_dwell_minutes,
-        "median_dwell_minutes": place.median_dwell_minutes,
         "inferred_place_type": place.inferred_place_type,
         "sensitivity_class": place.sensitivity_class,
     }
@@ -179,16 +183,6 @@ def _summary_payload(summary: PlaceCrimeSummary) -> dict[str, Any]:
             if summary.nearest_incident_m is not None
             else None
         ),
-        "incidents_per_visit": (
-            float(summary.incidents_per_visit)
-            if summary.incidents_per_visit is not None
-            else None
-        ),
-        "incidents_per_hour_dwell": (
-            float(summary.incidents_per_hour_dwell)
-            if summary.incidents_per_hour_dwell is not None
-            else None
-        ),
     }
 
 
@@ -197,6 +191,7 @@ def _missing_context(
     selected_ids: list[str],
     selected_places: list[PlaceCluster],
     state: AssistantDashboardState,
+    layer_loaded: bool,
 ) -> list[str]:
     missing: list[str] = []
     if summary["totals"]["place_count"] == 0:
@@ -209,4 +204,13 @@ def _missing_context(
         missing.append("No complete analysis date range is selected.")
     if not state.radii_m:
         missing.append("No analysis radius is selected.")
+    if not layer_loaded:
+        noun = {
+            "reported": "reported incidents",
+            "arrests": "arrests",
+            "calls": "911 calls",
+        }[state.layer]
+        missing.append(
+            f"The active {noun} layer is not loaded. Do not report this as zero {noun}."
+        )
     return missing

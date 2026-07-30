@@ -6,7 +6,7 @@ import type { IncidentNoun } from "../lib/layerCopy";
 import type { CompareRelationship, CompareVerdictRow } from "../lib/compareVerdict";
 
 const CHIP: Record<CompareRelationship, { label: string; clear: boolean }> = {
-  lowest: { label: "lowest rate", clear: true },
+  lowest: { label: "lowest rate", clear: false },
   similar: { label: "no clear difference", clear: false },
   higher: { label: "clearly higher", clear: false },
   limited: { label: "limited data", clear: false },
@@ -44,7 +44,7 @@ export function CompareRankedList({ rows, noun, radiusM, expansionByOptionId, on
                   <summary>How we know</summary>
                   <dl>
                     <div><dt>rate-ratio</dt><dd>{notTested ? NO_VALUE : `${row.pairwise.rate_ratio.toFixed(2)}×`}</dd></div>
-                    <div><dt>95% CI</dt><dd>{notTested ? NO_VALUE : `${row.pairwise.ci_lower.toFixed(2)}–${row.pairwise.ci_upper.toFixed(2)}`}</dd></div>
+                    <div><dt>approx. 95% CI</dt><dd>{notTested ? NO_VALUE : `${row.pairwise.ci_lower.toFixed(2)}–${row.pairwise.ci_upper.toFixed(2)}`}</dd></div>
                     <div><dt>adjusted p</dt><dd>{notTested ? NO_VALUE : row.pairwise.adjusted_p_value.toFixed(3)}</dd></div>
                     <div><dt>method</dt><dd>{notTested ? NOT_TESTED_LABEL : methodLabel(row.pairwise.method)}</dd></div>
                     <div><dt>data floor</dt><dd>{minimumDataStatusLabel(row.pairwise.minimum_data_status)}</dd></div>

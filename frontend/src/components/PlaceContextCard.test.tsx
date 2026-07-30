@@ -44,8 +44,6 @@ function renderCard(place: NeighborhoodPlace = homePlace) {
       windowLabel="2026-01-01 – 2026-06-30"
       noun={noun}
       domainMax={6}
-      locator={null}
-      coords={{ latitude: 47.61, longitude: -122.33 }}
     />,
   );
 }
@@ -64,6 +62,7 @@ describe("PlaceContextCard", () => {
     const details = summary.closest("details")!;
     expect(within(details).getByText("Capitol Hill")).toBeInTheDocument();
     expect(within(details).getAllByText("0.002").length).toBeGreaterThan(0);
+    expect(within(details).getByText("approx. 95% CI")).toBeInTheDocument();
   });
 
   it("renders the temporal profile with the travel-window callout", () => {

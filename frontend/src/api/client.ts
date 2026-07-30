@@ -8,7 +8,6 @@ import type {
   IncidentDetailsResponse,
   IncidentPointsResponse,
   MapBounds,
-  McppFeatureCollection,
   NeighborhoodAnalysis,
   Place,
   PlaceCreate,
@@ -97,6 +96,11 @@ export function friendlyMessageOr(error: unknown, fallback: string): string {
 /** A 401: the session is gone, so retrying the same call cannot help — only a reload can. */
 export function isSessionExpired(error: unknown): boolean {
   return error instanceof Error && error.message === SESSION_EXPIRED_MESSAGE;
+}
+
+/** A 429 is temporary capacity, not an offline assistant. */
+export function isRateLimited(error: unknown): boolean {
+  return error instanceof Error && error.message === RATE_LIMITED_MESSAGE;
 }
 
 function isAbort(cause: unknown): boolean {
@@ -219,10 +223,6 @@ export function getIncidentDetails(
 
 export function getBeatPolygons(): Promise<BeatFeatureCollection> {
   return request<BeatFeatureCollection>("/dashboard/beats");
-}
-
-export function getMcppPolygons(): Promise<McppFeatureCollection> {
-  return request<McppFeatureCollection>("/dashboard/mcpp");
 }
 
 export function getIncidentPoints(

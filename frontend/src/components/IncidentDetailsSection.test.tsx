@@ -54,3 +54,49 @@ describe("IncidentDetailsSection NIBRS gloss", () => {
     expect(screen.getByText("All reported")).toBeInTheDocument();
   });
 });
+
+describe("IncidentDetailsSection Seattle wall-clock time", () => {
+  it.each([
+    ["summer offset", "2026-07-02T14:30:00-07:00", "2026-07-02 14:30 Seattle time"],
+    ["winter offset", "2026-01-02T14:30:00-08:00", "2026-01-02 14:30 Seattle time"],
+    ["legacy fake UTC", "2026-03-02T14:30:00Z", "2026-03-02 14:30 Seattle time"],
+    ["legacy naive", "2026-03-02T14:30:00", "2026-03-02 14:30 Seattle time"],
+  ])("keeps the API's encoded Seattle wall clock for %s timestamps", (_label, value, expected) => {
+    render(
+      <IncidentDetailsSection
+        details={details(incident({ occurred_at: value }))}
+        noun={noun}
+        layout="table"
+        showCategory
+        subcategoryHeader="Subcategory"
+      />,
+    );
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it("returns an unparseable source value instead of inventing a time", () => {
+    render(
+      <IncidentDetailsSection
+        details={details(incident({ occurred_at: "date pending" }))}
+        noun={noun}
+        layout="cards"
+        showCategory
+        subcategoryHeader="Subcategory"
+      />,
+    );
+    expect(screen.getByText("date pending")).toBeInTheDocument();
+  });
+
+  it("does not normalize an invalid ISO wall-clock date into another day", () => {
+    render(
+      <IncidentDetailsSection
+        details={details(incident({ occurred_at: "2026-02-30T14:30:00-08:00" }))}
+        noun={noun}
+        layout="table"
+        showCategory
+        subcategoryHeader="Subcategory"
+      />,
+    );
+    expect(screen.getByText("2026-02-30T14:30:00-08:00")).toBeInTheDocument();
+  });
+});

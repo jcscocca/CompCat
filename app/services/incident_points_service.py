@@ -25,16 +25,9 @@ from app.api.dashboard_schemas import (
 from app.crime.sources import sources_for_layer
 from app.models import CrimeIncident
 from app.services.dashboard_analysis_service import validate_date_range
+from app.time_contract import seattle_wall_clock_json
 
 INCIDENT_POINTS_LIMIT = 5000
-
-
-def _utc_json(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def incident_points(
@@ -128,7 +121,9 @@ def incident_points(
             "longitude": row.longitude,
             "offense_category": row.offense_category,
             "offense_subcategory": row.offense_subcategory,
-            "occurred_at": _utc_json(row.offense_start_utc or row.report_utc),
+            "occurred_at": seattle_wall_clock_json(
+                row.offense_start_utc or row.report_utc
+            ),
             "block_address": row.block_address,
             "source_dataset": row.source_dataset,
         }
