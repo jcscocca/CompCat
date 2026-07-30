@@ -44,8 +44,6 @@ function renderCard(place: NeighborhoodPlace = homePlace) {
       windowLabel="2026-01-01 – 2026-06-30"
       noun={noun}
       domainMax={6}
-      locator={null}
-      coords={{ latitude: 47.61, longitude: -122.33 }}
     />,
   );
 }
@@ -64,6 +62,7 @@ describe("PlaceContextCard", () => {
     const details = summary.closest("details")!;
     expect(within(details).getByText("Capitol Hill")).toBeInTheDocument();
     expect(within(details).getAllByText("0.002").length).toBeGreaterThan(0);
+    expect(within(details).getByText("approx. 95% CI")).toBeInTheDocument();
   });
 
   it("renders the temporal profile with the travel-window callout", () => {
@@ -106,6 +105,31 @@ describe("PlaceContextCard", () => {
       coordinate_coverage: { total: 20, with_coordinates: 20, area_kind: "beat" },
     });
     expect(screen.queryByText(/had usable coordinates/)).not.toBeInTheDocument();
+  });
+
+  it("spells out the adequacy status and method instead of the raw enum", () => {
+    renderCard({
+      ...homePlace,
+      minimum_data_status: "place_count_too_low",
+      baselines: [{ ...homePlace.baselines[0], method: "wald_log_rate_ratio" }],
+    });
+    expect(screen.getByText("fewer than 3 incidents at this place")).toBeInTheDocument();
+    expect(screen.queryByText("place_count_too_low")).not.toBeInTheDocument();
+    expect(screen.queryByText("wald_log_rate_ratio")).not.toBeInTheDocument();
+  });
+
+  it("blanks the analytical columns for a baseline that was not tested", () => {
+    renderCard({
+      ...homePlace,
+      baselines: [{ ...homePlace.baselines[0], relation: "insufficient" }],
+    });
+    const table = document.querySelector(".mc-baseline-table") as HTMLElement;
+    const row = within(table).getByText("Capitol Hill").closest("tr") as HTMLElement;
+    expect(within(row).getByText("not tested — below the data floor")).toBeInTheDocument();
+    expect(within(row).getAllByText("—")).toHaveLength(3);
+    // The under-powered ratio/interval/p must not read as a finding.
+    expect(row.textContent).not.toContain("3.4×");
+    expect(row.textContent).not.toContain("0.002");
   });
 
   it("never emits safety-ranking vocabulary", () => {

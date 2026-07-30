@@ -147,7 +147,7 @@ export function ManagePlacesModal({
         <div className="mc-modal-tabs">
           <button type="button" className={`mc-modal-tab${view === "manage" ? " on" : ""}`} onClick={() => setView("manage")}>Manage</button>
           <button type="button" className={`mc-modal-tab${view === "manual" ? " on" : ""}`} onClick={() => setView("manual")}>Manual</button>
-          <button type="button" className={`mc-modal-tab${view === "import" ? " on" : ""}`} onClick={() => setView("import")}>Bulk CSV</button>
+          <button type="button" className={`mc-modal-tab${view === "import" ? " on" : ""}`} onClick={() => setView("import")}>Paste list</button>
           {onUploaded ? <button type="button" className={`mc-modal-tab${view === "upload" ? " on" : ""}`} onClick={() => setView("upload")}>Upload</button> : null}
         </div>
         {view === "manage" ? (

@@ -30,10 +30,25 @@ export function countNoun(noun: IncidentNoun, count: number): string {
   return count === 1 ? noun.singular : noun.plural;
 }
 
+/** The invariant clause. One phrasing everywhere — surfaces that render the caveat as two
+ * elements (Notice) compose it from these instead of paraphrasing it, which is how "not
+ * safety advice" drifted in alongside "not a personal risk prediction". */
+export const CAVEAT_HEADLINE = "Reported incident context, not a personal risk prediction.";
+
+/** The data-limits clause that follows it. */
+export const CAVEAT_DATA_LIMITS =
+  "Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
+
+/** Build the same two-clause caveat with the active layer's nouns. */
+export function resultCaveat(noun: IncidentNoun): string {
+  const singularCap = noun.singular.charAt(0).toUpperCase() + noun.singular.slice(1);
+  const dataNoun = noun.singular === "reported incident" ? "incident" : noun.singular;
+  return `${singularCap} context, not a personal risk prediction. Results use reported Seattle ${dataNoun} data, which can be incomplete, delayed, corrected, or geographically generalized.`;
+}
+
 /** Product invariant, restated wherever results render (compare panel, expanded rail
  * card): reported-incident context, not a personal risk prediction. */
-export const REVISED_CAVEAT =
-  "Reported incident context, not a personal risk prediction. Results use reported Seattle incident data, which can be incomplete, delayed, corrected, or geographically generalized.";
+export const REVISED_CAVEAT = resultCaveat(incidentNoun("reported"));
 
 /** Explains what the active data layer actually measures — retired from `CompareTab`
  * (deleted in commit `193e0e7`), which rendered this unconditionally whenever the

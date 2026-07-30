@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { titleCase } from "../lib/addressLabel";
 import { toCompareVerdict } from "../lib/compareVerdict";
-import { countNoun, incidentNoun, REVISED_CAVEAT } from "../lib/layerCopy";
+import { countNoun, incidentNoun, resultCaveat } from "../lib/layerCopy";
 import type { AnalysisCardData, IncidentDetailsResponse, LayerKey } from "../types";
 import { plotDomainMax } from "./BaselineIntervalPlot";
 import { CompareRankedList } from "./CompareRankedList";
@@ -43,6 +43,7 @@ function totalIncidentCount(card: AnalysisCardData): number | null {
 function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, exportHrefBase }: Props) {
   const layer: LayerKey = card.settings.layer ?? "reported";
   const noun = incidentNoun(layer);
+  const caveat = resultCaveat(noun);
   const category = card.settings.offense_category ?? null;
   const radiusM = card.settings.radius_m ?? 0;
   const { analysis_start_date: start, analysis_end_date: end } = card.settings;
@@ -51,6 +52,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
   const comparison = card.comparison;
   const neighborhood = card.neighborhood;
   const verdict = comparison ? toCompareVerdict(comparison) : null;
+  const comparisonDataAdequate = verdict?.comparisonDataAdequate ?? true;
 
   // 911 calls carry no offense category — a single "Uncategorized" bar says nothing.
   const cats = layer === "calls" ? [] : categoryCounts(card.incidents);
@@ -61,8 +63,8 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
   const resultTitle = card.kind === "compare"
     ? comparisonLabels.length === 2
       ? `${comparisonLabels[0]} vs ${comparisonLabels[1]}`
-      : `${comparisonLabels.length || card.placeIds.length} locations compared`
-    : neighborhood?.places[0]?.place_label ?? "Location analysis";
+      : `${comparisonLabels.length || card.placeIds.length} places compared`
+    : neighborhood?.places[0]?.place_label ?? "Place analysis";
 
   const showCategory = layer !== "calls";
   const subcategoryHeader = layer === "calls" ? "Call type" : layer === "arrests" ? "Charge" : "Subcategory";
@@ -111,13 +113,23 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
               {capped ? <p className="mc-result-minibar-note">of the {card.incidents!.returned_count} nearest</p> : null}
             </div>
           ) : null}
+
+          {/* The caveat and the methods sheet were reachable only after expanding, so the
+              summary most people stop at carried a bare number and no framing. */}
+          <p className="mc-result-caveat">{caveat}</p>
+          <MethodsAppendix />
         </div>
       ) : (
         <div className="mc-result-detail">
           {verdict ? (
             <section className="mc-result-comparison" aria-label="Comparison overview">
               <CompareVerdict callout={verdict.callout} noun={noun} />
-              <CompareRateNumberLine rows={verdict.rows} noun={noun} radiusM={radiusM} />
+              <CompareRateNumberLine
+                rows={verdict.rows}
+                noun={noun}
+                radiusM={radiusM}
+                comparisonDataAdequate={comparisonDataAdequate}
+              />
               <CompareRankedList rows={verdict.rows} noun={noun} radiusM={radiusM} />
             </section>
           ) : null}
@@ -130,9 +142,11 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
                   index={index}
                   windowLabel={windowLabel}
                   noun={noun}
-                  domainMax={plotDomainMax(neighborhood.places)}
-                  locator={null}
-                  coords={null}
+                  domainMax={plotDomainMax(
+                    neighborhood.places,
+                    comparisonDataAdequate,
+                  )}
+                  comparisonDataAdequate={comparisonDataAdequate}
                 />
               ))}
             </div>
@@ -141,7 +155,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
           <IncidentDetailsSection details={card.incidents} noun={noun} layout="table" showCategory={showCategory} subcategoryHeader={subcategoryHeader} />
           <div className="mc-caveat">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v4h1" /></svg>
-            {REVISED_CAVEAT}
+            {caveat}
           </div>
           <MethodsAppendix />
         </div>

@@ -1,8 +1,10 @@
 # Deploying CompCat for a small internal trial (~5 testers)
 
-> **Public VPS instance?** This document is the single-host trial (ThinkPad, HTTP, ~5 testers).
-> For the always-on public instance at compcat.app — TLS, hardening, nightly ingest and backups —
-> see [`DEPLOY-VPS.md`](DEPLOY-VPS.md).
+> **Public instance?** This document is the single-host trial (ThinkPad, HTTP, ~5 testers).
+> For the always-on public instance at compcat.app — TLS, nightly ingest and backups — there are
+> two runbooks with the same posture and different edges:
+> [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) (zero cost: this same ThinkPad, published through a named
+> Cloudflare tunnel) and [`DEPLOY-VPS.md`](DEPLOY-VPS.md) (a rented box, hardened, TLS via Caddy).
 
 This runs the whole app — FastAPI API **and** the built React UI — in one container,
 with Postgres alongside, via `docker compose`. Each tester's browser gets its own
@@ -136,8 +138,10 @@ Notes:
   Windows deploy host, `pip install certifi` for the system Python and set
   `$env:SSL_CERT_FILE = python -c "import certifi; print(certifi.where())"` in PowerShell
   before running the script — or fix the system certificate store.
-- The `.pmtiles` file is served with ETag/Last-Modified but no `Cache-Control`; if a
-  reverse proxy is ever added, long-lived caching for `/tiles/` is a cheap win.
+- The `.pmtiles` file requires a byte `Range` request (range-less GET returns 416), is
+  served with ETag/Last-Modified but no `Cache-Control`, and has its own finite per-IP
+  request bucket. If a reverse proxy is ever added, long-lived caching for `/tiles/` is
+  a cheap win.
 
 ## Notes / hardening
 

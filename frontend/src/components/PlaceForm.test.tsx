@@ -8,7 +8,7 @@ import { PlaceForm } from "./PlaceForm";
 afterEach(cleanup);
 
 describe("PlaceForm", () => {
-  it("uses a default test location label when submitted without a name", async () => {
+  it("labels an unnamed place with its coordinates", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(<PlaceForm onSubmit={onSubmit} />);
@@ -18,12 +18,17 @@ describe("PlaceForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /add place/i }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      display_label: "Test location",
+      display_label: "Pin at 47.621, -122.321",
       latitude: 47.621,
       longitude: -122.321,
       visit_count: 1,
       sensitivity_class: "normal",
     });
+  });
+
+  it("prompts for an optional name rather than suggesting a test label", () => {
+    render(<PlaceForm onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText(/label/i)).toHaveAttribute("placeholder", "Name this place (optional)");
   });
 
   it("does not ask users for visits and submits the default visit count", async () => {

@@ -73,6 +73,24 @@ describe("index.html link metadata", () => {
     expect(html).toMatch(/rel=["']manifest["'][^>]*href=["']\/assets\/site\.webmanifest["']/);
   });
 
+  it("sets the persisted theme before first paint, in agreement with useTheme", () => {
+    const useTheme = readFileSync(new URL("../src/lib/useTheme.ts", import.meta.url), "utf-8");
+    const storageKey = /STORAGE_KEY = "([^"]+)"/.exec(useTheme)?.[1];
+    expect(storageKey).toBe("compcat.theme");
+
+    // The bootstrap must run in <head> — after </head> it cannot beat the first paint.
+    const head = html.slice(0, html.indexOf("</head>"));
+    const bootstrap = /<script>([\s\S]*?)<\/script>/.exec(head)?.[1] ?? "";
+    expect(bootstrap).toContain(storageKey!);
+    expect(bootstrap).toMatch(/setAttribute\(\s*["']data-theme["']/);
+    // Same default as useTheme's `stored() ?? "dark"`, or the flash just moves.
+    expect(useTheme).toMatch(/stored\(\)\s*\?\?\s*"dark"/);
+    expect(bootstrap).toMatch(/"light"\s*:\s*"dark"/);
+    // Inline only: an external script would be blocked by the privacy guard above and
+    // would not be parse-blocking in the right place anyway.
+    expect(head).not.toMatch(/<script[^>]+src=/);
+  });
+
   it("keeps every static reference under a path the server actually mounts", () => {
     // app/main.py mounts only /assets, /basemaps-assets and /fonts from the built dashboard;
     // a root-level public file (e.g. /favicon.svg) would 404 in production.
