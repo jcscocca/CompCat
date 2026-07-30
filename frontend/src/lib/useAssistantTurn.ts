@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import {
+  isRateLimited,
   isSessionExpired,
   streamAssistantChat,
   streamAssistantCommand,
@@ -110,6 +111,12 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
         // An expired session is not Tabby being unreachable: saying so, and latching the
         // composer into offline mode, hides the one thing that fixes it (a reload).
         if (isSessionExpired(error)) {
+          append({ kind: "notice", text: (error as Error).message });
+          return;
+        }
+        // The API's own request cap is temporary and known-good; keep the composer available
+        // instead of latching the assistant into its unreachable/offline state.
+        if (isRateLimited(error)) {
           append({ kind: "notice", text: (error as Error).message });
           return;
         }

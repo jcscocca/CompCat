@@ -78,6 +78,23 @@ def test_assistant_chat_rejects_oversized_payload(tmp_path):
     assert too_many_messages.status_code == 422
 
 
+def test_assistant_chat_empty_or_absent_messages_use_fixed_validation_copy(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+
+    for payload in ({"messages": [], "dashboard_state": {}}, {"dashboard_state": {}}):
+        response = client.post("/assistant/chat", json=payload)
+
+        assert response.status_code == 422
+        assert response.json() == {
+            "detail": "That request didn't validate — check the values and try again."
+        }
+        body = response.text.lower()
+        for leaked in ("pydantic", "validation error", "errors.pydantic.dev", "input_value"):
+            assert leaked not in body
+
+
 def test_assistant_chat_rejects_oversized_dashboard_state(tmp_path, monkeypatch):
     # dashboard_state is interpolated verbatim into the planning prompt, so leaving it
     # unbounded was the payload cap without the payload: every message under
@@ -191,4 +208,3 @@ def test_assistant_chat_emits_terminal_error_frame_when_turn_raises(monkeypatch,
     assert "event: error" in response.text
     assert "Couldn't reach the analyst" in response.text
     assert '"code": "internal"' in response.text
-

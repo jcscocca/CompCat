@@ -88,7 +88,7 @@ describe("AboutModal", () => {
       /OpenStreetMap's Nominatim service/i,
     );
     expect(screen.getByText(/If you use the Analyst/i)).toHaveTextContent(
-      /place names and coordinates.*configured LLM provider/i,
+      /place names and coordinates.*language-model provider that powers the Analyst/i,
     );
     expect(screen.queryByText(/No third-party requests/i)).not.toBeInTheDocument();
   });

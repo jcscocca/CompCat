@@ -174,7 +174,7 @@ export function AboutModal({
             <li>
               The server sends address lookups to OpenStreetMap's Nominatim service. If you use
               the Analyst, the server sends place names and coordinates from the analysis
-              context to its configured LLM provider.
+              context to the language-model provider that powers the Analyst.
             </li>
             <li>
               {personalUploadsEnabled

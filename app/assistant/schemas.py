@@ -61,7 +61,8 @@ class AssistantDashboardState(BaseModel):
         if value in ("reported", "arrests", "calls"):
             return value
         if value is not None:
-            logger.warning("assistant dashboard_state carried an unknown layer %r", value)
+            rendered = str(value)[:MAX_FILTER_CHARS]
+            logger.warning("assistant dashboard_state carried an unknown layer %r", rendered)
         return "reported"
 
 
@@ -99,4 +100,3 @@ class AssistantCommandRequest(BaseModel):
 class AssistantStreamEvent(BaseModel):
     event: Literal["meta", "tool", "token", "status", "replace", "done", "error"]
     data: dict[str, Any]
-

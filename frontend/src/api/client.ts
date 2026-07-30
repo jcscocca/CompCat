@@ -98,6 +98,11 @@ export function isSessionExpired(error: unknown): boolean {
   return error instanceof Error && error.message === SESSION_EXPIRED_MESSAGE;
 }
 
+/** A 429 is temporary capacity, not an offline assistant. */
+export function isRateLimited(error: unknown): boolean {
+  return error instanceof Error && error.message === RATE_LIMITED_MESSAGE;
+}
+
 function isAbort(cause: unknown): boolean {
   return (cause as { name?: string } | null)?.name === "AbortError";
 }
