@@ -43,7 +43,15 @@ Tune via `MCA_RATE_LIMIT_*` in `.env.demo`.
 
 ## The "for-real" launch (built)
 
-The always-on public instance at **compcat.app** is now documented end to end in
-[`DEPLOY-VPS.md`](DEPLOY-VPS.md): the same env vars and limiter on a small VPS, TLS via Caddy,
-nightly ingest and backups. Nothing in this demo path changed — the ThinkPad quick tunnel remains
-the two-minute option for showing CompCat to someone in person.
+The always-on public instance at **compcat.app** is documented end to end in two runbooks that
+share everything but the edge:
+
+- [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) — **the chosen launch path.** This same ThinkPad, but a
+  *named* tunnel: a durable hostname that survives restarts, its own isolated compose project
+  (`compcat-public`, uploads off), no published port, zero cost.
+- [`DEPLOY-VPS.md`](DEPLOY-VPS.md) — a small VPS with TLS via Caddy; the upgrade if uptime ever
+  has to stop following the laptop.
+
+Both run the same env vars, limiter, nightly ingest and backups. Nothing in this demo path
+changed — the **ephemeral** quick tunnel here remains the two-minute option for showing CompCat to
+someone in person, and its URL still dies with the process.

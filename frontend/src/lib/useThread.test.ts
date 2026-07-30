@@ -3,6 +3,23 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { THREAD_CAP, useThread } from "./useThread";
+import type { AnalysisCardData } from "../types";
+
+const localCard: AnalysisCardData = {
+  runId: null,
+  kind: "analyze",
+  placeIds: ["p1"],
+  settings: {
+    radius_m: 250,
+    analysis_start_date: "2026-01-01",
+    analysis_end_date: "2026-07-29",
+    offense_category: null,
+    layer: "reported",
+  },
+  comparison: null,
+  neighborhood: null,
+  incidents: null,
+};
 
 describe("useThread", () => {
   it("appends items in order", () => {
@@ -20,6 +37,33 @@ describe("useThread", () => {
     const first = result.current.append;
     rerender();
     expect(result.current.append).toBe(first);
+  });
+
+  it("replaces one analysis card without disturbing the rest of the thread", () => {
+    const assistantCard: AnalysisCardData = { ...localCard, runId: "run-assistant" };
+    const replacement: AnalysisCardData = {
+      ...localCard,
+      settings: { ...localCard.settings, radius_m: 500 },
+    };
+    const { result } = renderHook(() => useThread());
+
+    act(() => result.current.append({ kind: "tabby_text", text: "Here is the context." }));
+    act(() => result.current.append({ kind: "analysis_card", card: assistantCard }));
+    act(() => result.current.append({ kind: "analysis_card", card: localCard }));
+    act(() => result.current.replaceAnalysisCard(localCard, replacement));
+
+    expect(result.current.items).toEqual([
+      { kind: "tabby_text", text: "Here is the context." },
+      { kind: "analysis_card", card: assistantCard },
+      { kind: "analysis_card", card: replacement },
+    ]);
+  });
+
+  it("keeps replaceAnalysisCard identity stable across renders", () => {
+    const { result, rerender } = renderHook(() => useThread());
+    const first = result.current.replaceAnalysisCard;
+    rerender();
+    expect(result.current.replaceAnalysisCard).toBe(first);
   });
 
   it("caps the thread at THREAD_CAP items, dropping the oldest", () => {

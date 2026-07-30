@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 
 import {
+  isRateLimited,
+  isSessionExpired,
   streamAssistantChat,
   streamAssistantCommand,
   type AssistantCommandName,
@@ -106,6 +108,18 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
         // touches `offline`. Abort rejections vary by runtime, so check both the error
         // name and the controller's own aborted flag.
         if ((error as Error)?.name === "AbortError" || controller.signal.aborted || !live()) return;
+        // An expired session is not Tabby being unreachable: saying so, and latching the
+        // composer into offline mode, hides the one thing that fixes it (a reload).
+        if (isSessionExpired(error)) {
+          append({ kind: "notice", text: (error as Error).message });
+          return;
+        }
+        // The API's own request cap is temporary and known-good; keep the composer available
+        // instead of latching the assistant into its unreachable/offline state.
+        if (isRateLimited(error)) {
+          append({ kind: "notice", text: (error as Error).message });
+          return;
+        }
         append({ kind: "notice", text: kind === "chat" ? OFFLINE_MESSAGE : COMMAND_FAILURE_MESSAGE });
         if (kind === "chat") setOffline(true);
       } finally {

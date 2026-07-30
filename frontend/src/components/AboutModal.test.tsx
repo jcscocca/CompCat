@@ -64,18 +64,48 @@ describe("AboutModal", () => {
     expect(screen.getByText(/“Data through”/)).toBeInTheDocument();
   });
 
-  it("spells out what is stored, including the 24-hour session and 110 m share links", () => {
+  it("spells out sliding anonymous sessions, retention, geocode caching, and share links", () => {
     render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/anonymous session cookie that lasts about 24 hours/i)).toBeInTheDocument();
-    expect(screen.getByText(/expire with it/i)).toBeInTheDocument();
+    expect(screen.getByText(/renewed while you use the app/i)).toBeInTheDocument();
+    expect(screen.getByText(/absolute session limit.*about 30 days/i)).toBeInTheDocument();
+    expect(screen.getByText(/new anonymous session starts/i)).toHaveTextContent(
+      /saved places from the earlier session are no longer linked in this browser/i,
+    );
+    expect(screen.getByText(/quiet.*automatically deleted.*about 30 days/i)).toBeInTheDocument();
+    expect(screen.getByText(/no account, name, email, or personal identity/i)).toBeInTheDocument();
     expect(screen.getByText(/about 110 m/)).toBeInTheDocument();
-    expect(screen.getByText(/No third-party requests/i)).toBeInTheDocument();
+    expect(screen.getByText(/normalized address you typed and the returned coordinates/i)).toBeInTheDocument();
+    expect(screen.getByText(/cache is shared across visitors.*about 30 days/i)).toBeInTheDocument();
     expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
   });
 
-  it("states the honest limits and links the MIT license", () => {
+  it("distinguishes browser-local assets from the server's address and Analyst providers", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByText(/Your browser does not contact third parties/i)).toHaveTextContent(
+      /map tiles, fonts, and address-search requests load from this server/i,
+    );
+    expect(screen.getByText(/server sends address lookups/i)).toHaveTextContent(
+      /OpenStreetMap's Nominatim service/i,
+    );
+    expect(screen.getByText(/If you use the Analyst/i)).toHaveTextContent(
+      /place names and coordinates.*language-model provider that powers the Analyst/i,
+    );
+    expect(screen.queryByText(/No third-party requests/i)).not.toBeInTheDocument();
+  });
+
+  it("states the statistical and data limits and links the MIT license", () => {
     render(<AboutModal onClose={vi.fn()} />);
     expect(screen.getByText(/incomplete, delayed, corrected, or geographically generalized/)).toBeInTheDocument();
+    expect(screen.getByText(/density per square kilometre per day/i)).toHaveTextContent(
+      /not a per-person or per-visit rate/i,
+    );
+    expect(screen.getByText(/Results depend on the radius/i)).toBeInTheDocument();
+    expect(screen.getByText(/within one analysis run/i)).toHaveTextContent(
+      /not across the many filter, layer, or radius combinations/i,
+    );
+    expect(screen.getByText(/Intervals are approximate/i)).toHaveTextContent(
+      /near, not exactly, 95%.*estimated from a small number of months/i,
+    );
     expect(screen.getByText(/no accounts, no production authentication, and no encryption at rest/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "MIT License" })).toHaveAttribute(
       "href",
@@ -137,9 +167,28 @@ describe("AboutModal", () => {
 const BANNED = ["safe", "unsafe", "safety", "danger", "dangerous", "risk", "risky"];
 const FIXED_CAVEATS = [ABOUT_INVARIANT, ABOUT_RELIANCE_LIMIT, ABOUT_DATA_CAVEAT];
 
+describe("AboutModal personal uploads line", () => {
+  it("says uploads are disabled when the instance has them off", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
+  });
+
+  // The line was hard-coded, so an instance with uploads switched on told users the
+  // opposite of the truth.
+  it("describes uploads as opt-in and deletable when the instance has them on", () => {
+    render(<AboutModal onClose={vi.fn()} personalUploadsEnabled />);
+    expect(screen.queryByText(/uploads are disabled on this instance/i)).not.toBeInTheDocument();
+    const line = screen.getByText(/Personal location-history uploads are opt-in/i);
+    expect(line).toHaveTextContent(/nothing is uploaded unless you choose to/i);
+    expect(line).toHaveTextContent(/delete what you uploaded at any time/i);
+  });
+});
+
 describe("AboutModal invariant sweep", () => {
-  it("confines safety/risk vocabulary to the three fixed caveat constants", () => {
-    const { container } = render(<AboutModal onClose={vi.fn()} />);
+  // Both branches of the runtime uploads line are swept: new copy on either side of that
+  // conditional is still copy the invariant applies to.
+  it.each([[false], [true]])("confines safety/risk vocabulary to the three fixed caveat constants (uploads enabled: %s)", (uploadsEnabled) => {
+    const { container } = render(<AboutModal onClose={vi.fn()} personalUploadsEnabled={uploadsEnabled} />);
     const rendered = (container.textContent ?? "").toLowerCase();
 
     let remaining = rendered;

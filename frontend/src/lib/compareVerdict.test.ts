@@ -85,7 +85,16 @@ describe("toCompareVerdict", () => {
     const m = toCompareVerdict(c);
     expect(m.callout.kind).toBe("inconclusive");
     expect(m.callout.caveatText).toBe("full cav");
+    expect(m.comparisonDataAdequate).toBe(false);
     expect(m.rows.find((r) => r.label === "Yesler")!.relationship).toBe("higher");
+  });
+
+  it("keeps intervals available for a model warning that passes the data floor", () => {
+    const c = comparison("model_warning",
+      [opt("a", "Pike", 12, 3.9), opt("b", "Bell", 31, 10.1)],
+      [pair("a", "b", "model_warning", null, 2.6)], null);
+
+    expect(toCompareVerdict(c).comparisonDataAdequate).toBe(true);
   });
 
   it("insufficient pair -> row relationship 'limited'", () => {
