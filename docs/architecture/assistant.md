@@ -381,6 +381,7 @@ prompt requires all of these qualifiers to survive the rewrite.
 | `MCA_LLM_FALLBACK_PROVIDER` | `openai` | Backend for the optional failover slot (chosen independently) |
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Primary endpoint (provider `openai`) |
 | `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent in each request (provider `openai`) |
+| `MCA_LLM_TIMEOUT_S` | `120` | OpenAI-compatible read timeout; streamed calls still have a separate 300-second overall ceiling |
 | `MCA_LLM_DISABLE_THINKING` | `false` | Suppress chain-of-thought on thinking models |
 | `MCA_LLM_FALLBACK_BASE_URL` | `""` | Second endpoint; the `openai` fallback activates only when this and `MCA_LLM_FALLBACK_MODEL` are both set |
 | `MCA_LLM_FALLBACK_MODEL` | `""` | Model for the fallback endpoint |

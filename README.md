@@ -290,6 +290,7 @@ salt/secret and forces secure cookies.
 | `MCA_LLM_PROVIDER` | `openai` | Analyst backend: `openai` (OpenAI-compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK). `MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently. |
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL (provider `openai`). |
 | `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent to the endpoint (provider `openai`). |
+| `MCA_LLM_TIMEOUT_S` | `120` | Read timeout in seconds for OpenAI-compatible calls. Raising it does not slow providers that respond sooner. |
 | `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | _unset_ / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`). |
 | `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | _unset_ / `gpt-4o` | OpenAI credentials + model (provider `openai_native`). |
 | `MCA_ASSISTANT_ROLE` | `compcat_analyst` | Analyst role label included in assistant responses. |

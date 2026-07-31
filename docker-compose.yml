@@ -49,6 +49,7 @@ services:
       MCA_ADMIN_INGEST_TOKEN: ${MCA_ADMIN_INGEST_TOKEN:-}
       MCA_LLM_BASE_URL: ${MCA_LLM_BASE_URL:-http://127.0.0.1:8080/v1}
       MCA_LLM_MODEL: ${MCA_LLM_MODEL:-gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k}
+      MCA_LLM_TIMEOUT_S: "${MCA_LLM_TIMEOUT_S:-120}"
       # Assistant failover (used only when both fallback vars are set).
       MCA_LLM_FALLBACK_BASE_URL: ${MCA_LLM_FALLBACK_BASE_URL:-}
       MCA_LLM_FALLBACK_MODEL: ${MCA_LLM_FALLBACK_MODEL:-}
