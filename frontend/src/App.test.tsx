@@ -38,6 +38,8 @@ describe("App", () => {
   it("renders the map-first workspace shell", async () => {
     render(<App />);
     expect(await screen.findByText("CompCat")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Workspace panel" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "Map and reported incident context" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Tabby" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Workspace panel" })).not.toBeInTheDocument();
   });
 });

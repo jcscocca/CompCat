@@ -51,7 +51,7 @@ export function iconHtml(
   const fill = opts.identity
     ? `var(--id-${opts.identity.slot})`
     : kind === "low"
-      ? "#74858E"
+      ? "var(--id-x)"
       : kind === "selected"
         ? "var(--accent)"
         : "#3A3F46";
@@ -152,6 +152,8 @@ type Props = {
   onMapClick: (latlng: LatLng) => void;
   onMarkerClick: (placeId: string) => void;
   onBadgeClick?: (placeId: string) => void;
+  /** Preserve the locator-strip visual while removing covered map controls from focus/AT. */
+  interactionDisabled?: boolean;
 };
 
 export function MapCanvas({
@@ -174,6 +176,7 @@ export function MapCanvas({
   onMapClick,
   onMarkerClick,
   onBadgeClick,
+  interactionDisabled = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -415,7 +418,11 @@ export function MapCanvas({
   }, [fitTo, mapReady]);
 
   return (
-    <div className={`mc-map${addPinMode ? " is-adding" : ""}`}>
+    <div
+      className={`mc-map${addPinMode ? " is-adding" : ""}`}
+      inert={interactionDisabled ? true : undefined}
+      aria-hidden={interactionDisabled || undefined}
+    >
       <div ref={containerRef} className="mc-map-canvas" />
       {mapFailed ? (
         <div className="mc-map-fallback" role="status">

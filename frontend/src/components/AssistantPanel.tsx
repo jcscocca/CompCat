@@ -156,13 +156,13 @@ export function AssistantPanel({
   }, [focusCard]);
 
   return (
-    <aside className="mc-dock mc-rail" aria-label="Tabby">
+    <div className="mc-dock mc-rail">
       <div className="mc-dock-head">
-        <h3>
+        <h2>
           <TabbyAvatar variant="mark" size={20} className={greeted ? undefined : "mc-tabby-pulse"} />
           Tabby
           <span className="mc-dock-role">case desk · analyst</span>
-        </h3>
+        </h2>
         <span className="mc-dock-status">{busy ? "Checking the files…" : "At the desk"}</span>
         {paneActions}
       </div>
@@ -328,6 +328,6 @@ export function AssistantPanel({
           Send
         </button>
       </form>
-    </aside>
+    </div>
   );
 }

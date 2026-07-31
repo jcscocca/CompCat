@@ -67,7 +67,7 @@ export function PlaceForm({ onSubmit }: Props) {
       <div className="panel-heading">
         <div>
           <p className="panel-label">Manual entry</p>
-          <h2 id="place-form-title">Add a place</h2>
+          <h3 id="place-form-title">Add a place</h3>
         </div>
       </div>
 
@@ -89,6 +89,8 @@ export function PlaceForm({ onSubmit }: Props) {
               name="latitude"
               inputMode="decimal"
               value={latitude}
+              aria-invalid={error.startsWith("Enter a latitude") || undefined}
+              aria-describedby={error.startsWith("Enter a latitude") ? "place-form-error" : undefined}
               onChange={(event) => setLatitude(event.target.value)}
               placeholder="47.621"
             />
@@ -100,13 +102,15 @@ export function PlaceForm({ onSubmit }: Props) {
               name="longitude"
               inputMode="decimal"
               value={longitude}
+              aria-invalid={error.startsWith("Enter a longitude") || undefined}
+              aria-describedby={error.startsWith("Enter a longitude") ? "place-form-error" : undefined}
               onChange={(event) => setLongitude(event.target.value)}
               placeholder="-122.321"
             />
           </div>
         </div>
 
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <p className="error" id="place-form-error" role="alert">{error}</p> : null}
 
         <button type="submit">
           <Plus size={18} />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
 import { BulkPlaceEntry } from "./BulkPlaceEntry";
 import { Notice } from "./Notice";
@@ -74,14 +74,44 @@ export function ManagePlacesModal({
   onToggleExport,
   exportHref,
 }: Props) {
-  const [view, setView] = useState<ManageView>(initialView);
+  const [view, setView] = useState<ManageView>(
+    initialView === "upload" && !onUploaded ? "manage" : initialView,
+  );
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
   const analyzedAtRadius = summary?.crime_summaries.some((entry) => entry.radius_m === radiusM) ?? false;
   const modalRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   // onClose is a fresh arrow each parent render; read it through a ref so the focus/trap effect
   // runs once on open (not on every render, which would steal focus back to the first control).
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const availableViews: { view: ManageView; label: string }[] = [
+    { view: "manage", label: "Manage" },
+    { view: "manual", label: "Manual" },
+    { view: "import", label: "Paste list" },
+    ...(onUploaded ? [{ view: "upload" as const, label: "Upload" }] : []),
+  ];
+
+  function activateView(next: ManageView, moveFocus = false) {
+    setView(next);
+    if (moveFocus) {
+      tabsRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-view="${next}"]`)
+        ?.focus();
+    }
+  }
+
+  function onTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, current: ManageView) {
+    const index = availableViews.findIndex((tab) => tab.view === current);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % availableViews.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + availableViews.length) % availableViews.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = availableViews.length - 1;
+    if (nextIndex == null) return;
+    event.preventDefault();
+    activateView(availableViews[nextIndex].view, true);
+  }
 
   // Dialog accessibility: move focus into the dialog on open, trap Tab within it, close on
   // Escape, and restore focus to the trigger on close. Without this a keyboard/screen-reader
@@ -91,7 +121,7 @@ export function ManagePlacesModal({
     const focusable = () =>
       Array.from(
         modalRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       ).filter((el) => el.offsetParent !== null);
 
@@ -131,7 +161,7 @@ export function ManagePlacesModal({
       className="mc-modal-scrim"
       role="dialog"
       aria-modal="true"
-      aria-label={modalLabel(view)}
+      aria-labelledby="manage-places-title"
       onMouseDown={(event) => {
         // Dismiss only on a click of the scrim itself, never a click bubbling from the dialog.
         if (event.target === event.currentTarget) onClose();
@@ -139,19 +169,37 @@ export function ManagePlacesModal({
     >
       <div className="mc-modal" ref={modalRef}>
         <div className="mc-modal-head">
-          <h3>{modalLabel(view)}</h3>
+          <h2 id="manage-places-title">{modalLabel(view)}</h2>
           <button type="button" className="mc-iconbtn" aria-label="Close" onClick={onClose}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        <div className="mc-modal-tabs">
-          <button type="button" className={`mc-modal-tab${view === "manage" ? " on" : ""}`} onClick={() => setView("manage")}>Manage</button>
-          <button type="button" className={`mc-modal-tab${view === "manual" ? " on" : ""}`} onClick={() => setView("manual")}>Manual</button>
-          <button type="button" className={`mc-modal-tab${view === "import" ? " on" : ""}`} onClick={() => setView("import")}>Paste list</button>
-          {onUploaded ? <button type="button" className={`mc-modal-tab${view === "upload" ? " on" : ""}`} onClick={() => setView("upload")}>Upload</button> : null}
+        <div className="mc-modal-tabs" role="tablist" aria-label="Place management views" ref={tabsRef}>
+          {availableViews.map((tab) => (
+            <button
+              key={tab.view}
+              type="button"
+              role="tab"
+              id={`manage-places-tab-${tab.view}`}
+              data-view={tab.view}
+              aria-controls="manage-places-panel"
+              aria-selected={view === tab.view}
+              tabIndex={view === tab.view ? 0 : -1}
+              className={`mc-modal-tab${view === tab.view ? " on" : ""}`}
+              onClick={() => activateView(tab.view)}
+              onKeyDown={(event) => onTabKeyDown(event, tab.view)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-        {view === "manage" ? (
-          <div className="mc-manage">
+        <div
+          role="tabpanel"
+          id="manage-places-panel"
+          aria-labelledby={`manage-places-tab-${view}`}
+        >
+          {view === "manage" ? (
+            <div className="mc-manage">
             <div className="mc-head-actions">
               <button type="button" className={`mc-tinybtn${addPinMode ? " on" : ""}`} onClick={onStartAddPin}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -185,26 +233,34 @@ export function ManagePlacesModal({
                       <span className="gly">{pinSvg(selected)}</span>
                       <div className="meta">
                         {editing?.id === place.id ? (
-                          <input
-                            className="mc-rename-input"
-                            aria-label={`New name for ${place.display_label}`}
-                            value={editing.value}
-                            autoFocus
-                            onChange={(e) => setEditing({ id: place.id, value: e.target.value })}
-                            onKeyDown={async (e) => {
-                              if (e.key === "Escape") {
-                                // Cancel the rename only; don't let the dialog's Escape close the modal.
-                                e.stopPropagation();
-                                setEditing(null);
-                              }
-                              if (e.key === "Enter") {
-                                const label = editing.value.trim();
-                                if (!label) return;
-                                await onRename(place.id, label);
-                                setEditing(null);
-                              }
-                            }}
-                          />
+                          <>
+                            <input
+                              className="mc-rename-input"
+                              aria-label={`New name for ${place.display_label}`}
+                              aria-required="true"
+                              aria-invalid={editing.value.trim() === ""}
+                              aria-describedby={`rename-help-${place.id}`}
+                              value={editing.value}
+                              autoFocus
+                              onChange={(e) => setEditing({ id: place.id, value: e.target.value })}
+                              onKeyDown={async (e) => {
+                                if (e.key === "Escape") {
+                                  // Cancel the rename only; don't let the dialog's Escape close the modal.
+                                  e.stopPropagation();
+                                  setEditing(null);
+                                }
+                                if (e.key === "Enter") {
+                                  const label = editing.value.trim();
+                                  if (!label) return;
+                                  await onRename(place.id, label);
+                                  setEditing(null);
+                                }
+                              }}
+                            />
+                            <p className="mc-sr" id={`rename-help-${place.id}`}>
+                              Enter a name, or press Escape to cancel.
+                            </p>
+                          </>
                         ) : (
                           <div className="nm">{place.display_label}</div>
                         )}
@@ -236,14 +292,15 @@ export function ManagePlacesModal({
             )}
             <p className="mc-places-expiry">Saved places last for this session (about a day). Keep a result with a share link.</p>
             <div className="mc-places-note"><Notice /></div>
-          </div>
-        ) : view === "manual" ? (
-          <PlaceForm onSubmit={async (place) => { await onManualSubmit(place); setView("manage"); }} />
-        ) : view === "import" ? (
-          <BulkPlaceEntry onSubmit={async (csv) => { await onImportSubmit(csv); setView("manage"); }} />
-        ) : (
-          <PersonalUpload onUploaded={onUploaded ?? (() => {})} />
-        )}
+            </div>
+          ) : view === "manual" ? (
+            <PlaceForm onSubmit={async (place) => { await onManualSubmit(place); activateView("manage"); }} />
+          ) : view === "import" ? (
+            <BulkPlaceEntry onSubmit={async (csv) => { await onImportSubmit(csv); activateView("manage"); }} />
+          ) : (
+            <PersonalUpload onUploaded={onUploaded ?? (() => {})} />
+          )}
+        </div>
         <div className="mc-modal-foot">
           <a className="mc-link-copy" href={exportHref}>Export CSV</a>
           <p className="mc-export-note">Tableau-ready place summary for the current session.</p>

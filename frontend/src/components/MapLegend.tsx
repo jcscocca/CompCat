@@ -16,9 +16,10 @@ function sentenceCase(value: string): string {
 
 export function MapLegend({ layer, id, hidden }: Props) {
   const noun = incidentNoun(layer);
+  const headingId = id ? `${id}-heading` : "mc-map-legend-heading";
   return (
-    <div className="mc-legend" id={id} hidden={hidden} aria-label="Map key">
-      <h3>Map key</h3>
+    <section className="mc-legend" id={id} hidden={hidden} aria-labelledby={headingId}>
+      <h2 id={headingId}>Map key</h2>
       <div className="mc-leg-row">
         <span className="g">
           <svg width="15" height="19" viewBox="0 0 24 32"><path d="M12 0C5.4 0 0 5.2 0 11.6 0 20 12 32 12 32s12-12 12-20.4C24 5.2 18.6 0 12 0z" fill="#3A3F46" /><circle cx="12" cy="11.5" r="4.4" fill="#fff" /></svg>
@@ -39,7 +40,7 @@ export function MapLegend({ layer, id, hidden }: Props) {
       </div>
       <div className="mc-leg-row">
         <span className="g">
-          <svg width="15" height="19" viewBox="0 0 24 32"><path d="M12 0C5.4 0 0 5.2 0 11.6 0 20 12 32 12 32s12-12 12-20.4C24 5.2 18.6 0 12 0z" fill="#74858E" /><text x="12" y="16" fontSize="13" fill="#fff" textAnchor="middle" fontFamily="Archivo">?</text></svg>
+          <svg width="15" height="19" viewBox="0 0 24 32"><path d="M12 0C5.4 0 0 5.2 0 11.6 0 20 12 32 12 32s12-12 12-20.4C24 5.2 18.6 0 12 0z" fill="var(--id-x)" /><text x="12" y="16" fontSize="13" fill="#fff" textAnchor="middle" fontFamily="Archivo">?</text></svg>
         </span>
         <span>Low data<small>needs review</small></span>
       </div>
@@ -55,6 +56,6 @@ export function MapLegend({ layer, id, hidden }: Props) {
         </span>
         <span>{sentenceCase(noun.singular)} cluster<small>count</small></span>
       </div>
-    </div>
+    </section>
   );
 }

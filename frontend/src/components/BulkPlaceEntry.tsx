@@ -26,7 +26,7 @@ export function BulkPlaceEntry({ onSubmit }: Props) {
   return (
     <section className="panel bulk-entry" aria-labelledby="bulk-entry-title">
       <div className="panel-heading">
-        <h2 id="bulk-entry-title">Paste a place list</h2>
+        <h3 id="bulk-entry-title">Paste a place list</h3>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -35,11 +35,13 @@ export function BulkPlaceEntry({ onSubmit }: Props) {
           id="bulk-place-list"
           name="bulk-place-list"
           value={csvText}
+          aria-invalid={!!error || undefined}
+          aria-describedby={error ? "bulk-entry-error" : undefined}
           onChange={(event) => setCsvText(event.target.value)}
           rows={7}
         />
 
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <p className="error" id="bulk-entry-error" role="alert">{error}</p> : null}
 
         <button type="submit">
           <ClipboardList size={18} />

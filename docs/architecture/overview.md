@@ -1,6 +1,7 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Updated 2026-07-30 for the direct report action and public-runtime hardening.
+> Updated 2026-07-30 for the direct report action, public-runtime hardening, and
+> the WCAG 2.2 Level AA frontend contract.
 
 ---
 
@@ -125,6 +126,15 @@ Tabby's conversational controls consume the assistant endpoints as Server-Sent E
 
 The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's single **Analysis filters** control owns both saved-place selection and unsaved search/share points; result cards are marked as previous analyses as soon as that context changes.
 
+**Accessibility contract:** the React dashboard targets WCAG 2.2 Level AA. The page exposes
+a named `main` map workspace and a named complementary Tabby region; cards, dialogs, forms,
+tables, disclosures, and modal tabs use their native or corresponding ARIA semantics. On
+mobile, the map is removed from both the accessibility and keyboard trees while the full
+bottom sheet covers it. All chart values have keyboard-operable tabular alternatives, all
+modal dialogs trap and restore focus, and pointer-drag operations have keyboard/button
+equivalents. Theme tokens preserve text, focus, control-boundary, and data-mark contrast in
+both light and dark modes. See `../accessibility.md` for the maintained verification record.
+
 **Serving modes:**
 
 - **Built mode** (production / `make run`): `app/main.py` `mount_dashboard()` serves `app/static/dashboard/index.html` at `/` and `app/static/dashboard/assets/` at `/assets/` using FastAPI's `StaticFiles`. The `MCA_STATIC_DASHBOARD_DIR` setting controls the path; mounting is silently skipped if `index.html` does not exist.
@@ -140,6 +150,9 @@ bursts.
 ## 7. Invariants index
 
 - **Reported-context-only (no safety scoring):** enforced in `app/assistant/agent.py` (`_SAFETY_SCORE_PATTERN` guard) and in all UI copy. See `./assistant.md` for agent-level detail.
+- **WCAG 2.2 Level AA frontend:** semantic structure, keyboard alternatives, unobscured
+  focus, reflow, text spacing, and theme contrast are regression-tested. See
+  `../accessibility.md`.
 - **Internal routers not re-exposed publicly:** enforced by `tests/test_internal_surface.py`. See `./api.md` for the full tier map.
 - **No `create_all` on Postgres:** `app/db.py` `init_db()` skips `create_all` when the backend is not SQLite; schema is owned exclusively by Alembic. See `./data-model.md` for migration guidance.
 - **Public session required for public endpoints:** `required_public_user_hash` raises HTTP 401 when no valid `mca_session` cookie is present; internal endpoints use the more permissive `current_user_hash`. See `./api.md`.

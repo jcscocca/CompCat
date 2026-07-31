@@ -174,11 +174,11 @@ export function BottomSheet({
   }
 
   return (
-    <section
+    <aside
       ref={panelRef}
       className={`mc-workspace-panel ${isMobile ? `is-${effectiveSnap}` : collapsed ? "is-collapsed" : "is-open"}`}
       style={!isMobile && !collapsed ? { width: widthPx } : undefined}
-      aria-label="Workspace panel"
+      aria-label="Tabby"
     >
       {isMobile ? (
         <>
@@ -227,6 +227,6 @@ export function BottomSheet({
         </>
       )}
       <div className="mc-panels">{children}</div>
-    </section>
+    </aside>
   );
 }

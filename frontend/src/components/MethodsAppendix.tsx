@@ -1,17 +1,25 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { METHODS_DEFINITIONS } from "../lib/methodsDefinitions";
 
 export function MethodsAppendix({ openId }: { openId?: string }) {
   const [open, setOpen] = useState<boolean>(false);
+  const panelId = useId();
+  const headingId = `${panelId}-heading`;
   return (
     <div className="mc-methods">
-      <button type="button" className="mc-methods-btn" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="mc-methods-btn"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((current) => !current)}
+      >
         ⓘ Methods
       </button>
       {open ? (
-        <div className="mc-methods-sheet" role="dialog" aria-label="Methods and definitions">
+        <section className="mc-methods-sheet" id={panelId} aria-labelledby={headingId}>
           <div className="mc-methods-head">
-            <h5>Methods &amp; definitions</h5>
+            <h4 id={headingId}>Methods &amp; definitions</h4>
             <button type="button" aria-label="Close" onClick={() => setOpen(false)}>×</button>
           </div>
           <div className="mc-methods-body">
@@ -25,7 +33,7 @@ export function MethodsAppendix({ openId }: { openId?: string }) {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       ) : null}
     </div>
   );

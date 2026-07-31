@@ -80,7 +80,7 @@ export function TrendChart({ months, area, rolling, citywide, label }: TrendChar
         viewBox={`0 0 ${W} ${H}`}
         data-testid="trend-chart"
         role="img"
-        aria-label={`Monthly volume${label ? ` for ${label}` : ""}${window ? `, ${window}` : ""}`}
+        aria-label={`Monthly volume${label ? ` for ${label}` : ""}${window ? `, ${window}` : ""}. Exact values are available in the data table that follows.`}
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >
@@ -106,6 +106,32 @@ export function TrendChart({ months, area, rolling, citywide, label }: TrendChar
           <line className="mc-trend-cursor" x1={x(hover)} x2={x(hover)} y1={PAD_T} y2={H - PAD_B} />
         ) : null}
       </svg>
+      <details className="mc-chart-data">
+        <summary>View monthly data</summary>
+        <div className="mc-chart-data-wrap">
+          <table className="mc-chart-data-table">
+            <caption>Monthly trend values</caption>
+            <thead>
+              <tr>
+                <th scope="col">Month</th>
+                <th scope="col">Monthly count</th>
+                <th scope="col">12-month average</th>
+                {citywide ? <th scope="col">Citywide indexed</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((month, index) => (
+                <tr key={month}>
+                  <th scope="row">{month}</th>
+                  <td>{Math.round(area[index] ?? 0)}</td>
+                  <td>{rolling[index] == null ? "—" : Math.round(rolling[index] as number)}</td>
+                  {citywide ? <td>{Math.round(citywide[index] ?? 0)}</td> : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }

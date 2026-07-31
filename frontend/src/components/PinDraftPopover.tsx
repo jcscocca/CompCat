@@ -31,9 +31,11 @@ export function PinDraftPopover({ draft, saving, error, onChange, onSave, onCanc
         id="draft-label"
         value={draft.display_label}
         placeholder={PLACE_LABEL_PLACEHOLDER}
+        aria-invalid={!!error || undefined}
+        aria-describedby={error ? "draft-pin-error" : undefined}
         onChange={(event) => onChange({ display_label: event.target.value })}
       />
-      {error ? <p className="mc-draft-error" role="alert">{error}</p> : null}
+      {error ? <p className="mc-draft-error" id="draft-pin-error" role="alert">{error}</p> : null}
       <div className="mc-draft-actions">
         <button type="button" className="mc-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className="mc-cta" disabled={saving}>

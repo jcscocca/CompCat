@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ManagePlacesModal } from "./ManagePlacesModal";
@@ -53,8 +53,31 @@ describe("ManagePlacesModal", () => {
 
   it("switches to the Manual view and submits a place", async () => {
     render(<ManagePlacesModal {...baseProps} initialView="manage" />);
-    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Manual" }));
     expect(screen.getByRole("dialog", { name: "Add a place manually" })).toBeInTheDocument();
+  });
+
+  it("exposes the view switcher as tabs and supports arrow-key navigation", () => {
+    render(<ManagePlacesModal {...baseProps} initialView="manage" onUploaded={vi.fn()} />);
+    const tabs = screen.getByRole("tablist", { name: "Place management views" });
+    const manage = within(tabs).getByRole("tab", { name: "Manage" });
+    const manual = within(tabs).getByRole("tab", { name: "Manual" });
+    const upload = within(tabs).getByRole("tab", { name: "Upload" });
+
+    expect(manage).toHaveAttribute("aria-selected", "true");
+    expect(manage).toHaveAttribute("tabindex", "0");
+    expect(manual).toHaveAttribute("aria-selected", "false");
+    expect(manual).toHaveAttribute("tabindex", "-1");
+
+    manage.focus();
+    fireEvent.keyDown(manage, { key: "ArrowRight" });
+    expect(manual).toHaveFocus();
+    expect(manual).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Manual" })).toBeInTheDocument();
+
+    fireEvent.keyDown(manual, { key: "End" });
+    expect(upload).toHaveFocus();
+    expect(upload).toHaveAttribute("aria-selected", "true");
   });
 
   it("opens directly on a non-manage view when asked", () => {

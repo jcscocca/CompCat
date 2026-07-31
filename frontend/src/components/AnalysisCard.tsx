@@ -74,7 +74,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
       <header className="mc-result-head">
         <div className="mc-result-heading">
           <span className="mc-result-kind">{historical ? "Previous analysis" : card.kind === "compare" ? "Comparison" : "Analysis result"}</span>
-          <h4 className="mc-result-title">{resultTitle}</h4>
+          <h3 className="mc-result-title">{resultTitle}</h3>
         </div>
         <div className="mc-result-actions">
           {card.runId ? (

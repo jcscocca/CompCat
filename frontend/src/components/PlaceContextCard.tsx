@@ -37,23 +37,52 @@ function ProfileBars({
   highlight,
   labelFor,
   summary,
+  tableLabel,
+  disclosureLabel,
 }: {
   counts: number[];
   highlight: Set<number>;
   labelFor: (index: number) => string;
   summary: string;
+  tableLabel: string;
+  disclosureLabel: string;
 }) {
   const max = Math.max(1, ...counts);
   return (
-    <div className="mc-temporal-bars" role="img" aria-label={summary}>
-      {counts.map((n, i) => (
-        <span
-          key={i}
-          className={`mc-temporal-bar${highlight.has(i) ? " on" : ""}`}
-          style={{ height: `${Math.round((n / max) * 100)}%` }}
-          title={`${labelFor(i)}: ${n}`}
-        />
-      ))}
+    <div className="mc-temporal-data">
+      <div className="mc-temporal-bars" role="img" aria-label={`${summary} Exact values are available in the table that follows.`}>
+        {counts.map((n, i) => (
+          <span
+            key={i}
+            aria-hidden="true"
+            className={`mc-temporal-bar${highlight.has(i) ? " on" : ""}`}
+            style={{ height: `${Math.round((n / max) * 100)}%` }}
+            title={`${labelFor(i)}: ${n}`}
+          />
+        ))}
+      </div>
+      <details className="mc-chart-data mc-temporal-table">
+        <summary>{disclosureLabel}</summary>
+        <div className="mc-chart-data-wrap">
+          <table className="mc-chart-data-table">
+            <caption>{tableLabel}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                <th scope="col">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {counts.map((count, index) => (
+                <tr key={index}>
+                  <th scope="row">{labelFor(index)}</th>
+                  <td>{count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }
@@ -64,7 +93,7 @@ function TemporalSection({ temporal, windowLabel, noun }: { temporal: TemporalPr
   if (temporal.total_with_time === 0) {
     return (
       <div className="mc-temporal">
-        <h6 className="mc-temporal-title">When {noun.plural} occurred</h6>
+        <h4 className="mc-temporal-title">When {noun.plural} occurred</h4>
         <p className="mc-empty-list">No {noun.plural} with a recorded time in this area.</p>
       </div>
     );
@@ -79,7 +108,7 @@ function TemporalSection({ temporal, windowLabel, noun }: { temporal: TemporalPr
 
   return (
     <div className="mc-temporal">
-      <h6 className="mc-temporal-title">When {noun.plural} occurred</h6>
+      <h4 className="mc-temporal-title">When {noun.plural} occurred</h4>
 
       <div className="mc-temporal-profile">
         <span className="mc-temporal-axis">By hour</span>
@@ -88,6 +117,8 @@ function TemporalSection({ temporal, windowLabel, noun }: { temporal: TemporalPr
           highlight={hourHighlight}
           labelFor={(h) => `${h}:00`}
           summary={`${noun.pluralCap} by hour of day; most around ${hourPeak}:00.`}
+          tableLabel={`${noun.pluralCap} by hour of day`}
+          disclosureLabel="View hourly values"
         />
       </div>
       <div className="mc-temporal-profile">
@@ -97,6 +128,8 @@ function TemporalSection({ temporal, windowLabel, noun }: { temporal: TemporalPr
           highlight={dayHighlight}
           labelFor={(d) => DOW_LABELS[d]}
           summary={`${noun.pluralCap} by day of week; most on ${DOW_LABELS[dayPeak]}.`}
+          tableLabel={`${noun.pluralCap} by day of week`}
+          disclosureLabel="View daily values"
         />
       </div>
 

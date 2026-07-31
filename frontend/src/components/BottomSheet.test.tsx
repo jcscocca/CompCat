@@ -41,6 +41,13 @@ describe("BottomSheet", () => {
     expect(screen.queryByRole("button", { name: "Focus" })).not.toBeInTheDocument();
   });
 
+  it("uses one top-level complementary landmark for the whole workspace panel", () => {
+    const { container } = renderSheet();
+    expect(container.querySelector(".mc-workspace-panel")?.tagName).toBe("ASIDE");
+    expect(screen.getByRole("complementary", { name: "Tabby" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Workspace panel" })).not.toBeInTheDocument();
+  });
+
   it("renders a Tabby edge tab when collapsed and restores the pane from it", () => {
     const { props } = renderSheet({ collapsed: true });
     const restore = screen.getByRole("button", { name: "Expand Tabby pane" });
