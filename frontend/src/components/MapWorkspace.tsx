@@ -14,7 +14,7 @@ import { buildRerunArgs, followupChipsFor, type FollowupChip } from "../lib/foll
 import { offerForPlaces, type SavedPlaceRef } from "../lib/offers";
 import { clampWidth, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH, snapHeightPx } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
-import { cardFromCompareResults } from "../lib/localCard";
+import { cardFromCompareResults, cardWithSavedPlaceIds } from "../lib/localCard";
 import { incidentNoun } from "../lib/layerCopy";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { decodeView, encodeView } from "../lib/savedView";
@@ -468,6 +468,20 @@ export function MapWorkspace() {
       });
       list.markSaved(entryKey, created.id);
       setSelectedIds((current) => new Set([...current, created.id]));
+      const currentLocalCard = localCardRef.current;
+      if (currentLocalCard && currentCard === currentLocalCard) {
+        const reconciledCard = cardWithSavedPlaceIds(
+          currentLocalCard,
+          list.entries.map((candidate) =>
+            keyOf(candidate) === entryKey ? created.id : candidate.savedPlaceId
+          ),
+        );
+        if (reconciledCard !== currentLocalCard) {
+          thread.replaceAnalysisCard(currentLocalCard, reconciledCard);
+          localCardRef.current = reconciledCard;
+          setCurrentCard(reconciledCard);
+        }
+      }
       await data.refreshWithFallback("Saved, but dashboard places could not refresh.");
     } catch (cause) {
       data.setError(friendlyMessageOr(cause, "Unable to save this place. Try again."));

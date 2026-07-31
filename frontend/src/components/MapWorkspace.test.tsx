@@ -2057,6 +2057,62 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
+  it("promotes a point-backed result to result-aware context after its place is saved", async () => {
+    const saved: Place = {
+      ...home,
+      id: "saved-pike",
+      display_label: "Pike Place",
+      latitude: 47.61,
+      longitude: -122.34,
+    };
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary)
+      .mockResolvedValueOnce(makeSummary())
+      .mockResolvedValue(makeSummary([saved]));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+    vi.mocked(createPlace).mockResolvedValue(saved);
+    vi.mocked(streamAssistantChat).mockResolvedValue(undefined);
+
+    const view = encodeView({
+      points: [{ latitude: 47.61, longitude: -122.34, label: "Pike Place" }],
+      radiusM: 250,
+      startDate: "2024-01-01",
+      endDate: "2024-01-31",
+      layer: "reported",
+      offenseCategory: "",
+    });
+    window.history.replaceState({}, "", `/?view=${view}`);
+    render(<MapWorkspace />);
+
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    fireEvent.click(await screen.findByRole("button", { name: "Save Pike Place" }));
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: "Pike Place" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Analyst message"), {
+      target: { value: "Why wasn't that result statistically clear?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(streamAssistantChat).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(streamAssistantChat).mock.calls[0][0].latest_result_context).toEqual({
+      kind: "analyze",
+      place_ids: ["saved-pike"],
+      analysis_start_date: "2024-01-01",
+      analysis_end_date: "2024-01-31",
+      radius_m: 250,
+      offense_category: null,
+      offense_subcategory: null,
+      nibrs_group: null,
+      layer: "reported",
+    });
+  });
+
   // The blob has done its job once the view is in state. Leaving it in the address bar means
   // a reload silently re-applies someone else's scope over whatever the user built since.
   it("strips ?view= from the URL once the shared view has loaded, keeping the in-app state", async () => {

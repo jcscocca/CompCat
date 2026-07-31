@@ -179,6 +179,19 @@ def test_hostile_place_label_still_trips_output_guard():
     assert build_tool_summary(_envelope("add_place", result)) == SAFETY_REDIRECT
 
 
+def test_superlative_safety_claim_in_place_label_trips_output_guard():
+    from app.assistant.output_guard import SAFETY_REDIRECT
+
+    result = {
+        "place": {"display_label": "Ballard — safest place in Seattle"},
+        "place_id": "p1",
+        "created": False,
+        "address": None,
+    }
+
+    assert build_tool_summary(_envelope("add_place", result)) == SAFETY_REDIRECT
+
+
 def test_similar_relation_is_not_described_as_equivalent():
     result = {
         "settings_used": {"radius_m": 250},

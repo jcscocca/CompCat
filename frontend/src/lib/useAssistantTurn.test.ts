@@ -51,6 +51,51 @@ describe("useAssistantTurn", () => {
     expect(hook.result.current.offline).toBe(false);
   });
 
+  it("sendChat includes only the newest frozen result scope", async () => {
+    vi.mocked(streamAssistantChat).mockResolvedValue();
+    const items: ThreadItem[] = [
+      {
+        kind: "analysis_card",
+        card: {
+          runId: "run-1",
+          kind: "compare",
+          placeIds: ["a", "b"],
+          settings: {
+            radius_m: 500,
+            analysis_start_date: "2025-01-01",
+            analysis_end_date: "2025-06-30",
+            offense_category: "PROPERTY",
+            offense_subcategory: "THEFT",
+            nibrs_group: "A",
+            layer: "reported",
+          },
+          comparison: null,
+          neighborhood: null,
+          incidents: null,
+        },
+      },
+    ];
+    const { hook } = setup(items);
+
+    await act(() => hook.result.current.sendChat("Why wasn't that clear?"));
+
+    expect(vi.mocked(streamAssistantChat).mock.calls[0][0]).toEqual({
+      messages: [{ role: "user", content: "Why wasn't that clear?" }],
+      dashboard_state: dashboardState,
+      latest_result_context: {
+        kind: "compare",
+        place_ids: ["a", "b"],
+        analysis_start_date: "2025-01-01",
+        analysis_end_date: "2025-06-30",
+        radius_m: 500,
+        offense_category: "PROPERTY",
+        offense_subcategory: "THEFT",
+        nibrs_group: "A",
+        layer: "reported",
+      },
+    });
+  });
+
   it("llm_unreachable error on chat sets offline and appends the notice", async () => {
     vi.mocked(streamAssistantChat).mockImplementation(async (_p, { onEvent }) => {
       onEvent({ event: "error", data: { message: "Couldn't reach the analyst.", code: "llm_unreachable" } });

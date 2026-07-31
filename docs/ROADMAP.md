@@ -260,6 +260,12 @@ spec → plan → PR.*
   adjust radius / dates / category / layer conversationally ("increase radius to 500")
   and re-run; changes sync the dashboard controls so they stick across turns. Spec:
   `docs/superpowers/specs/2026-07-10-analyst-knob-control-design.md`.
+- [x] **Follow-up — Result-aware Analyst:** the newest frozen analysis card now contributes a
+  compact typed scope to chat (kind, place IDs, settings — never cached evidence). Questions
+  about that result use a read-only server tool that recomputes authoritative evidence, while
+  referential reruns can retain the frozen scope even if the live dashboard has moved. The
+  slice also closed multi-turn refusal, hostile-label, named-place fallback, and provider
+  rate-limit propagation gaps with transcript-style regressions.
 - [x] **Follow-up — Analyst persona, now Tabby:** the original Copper chrome shipped first;
   Tabby-central renamed the case-desk persona to Tabby, a fictional records cat (no SPD
   insignia, never claims official status). The avatar header, in-voice status, greeting,

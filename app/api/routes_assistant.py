@@ -258,6 +258,7 @@ async def assistant_chat(
                     request.messages,
                     request.dashboard_state,
                     llm_client,
+                    request.latest_result_context,
                 )
             ) as stream:
                 async for event in stream:

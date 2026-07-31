@@ -176,14 +176,16 @@ export type TrendsResponse = {
   citywide_counts: number[];
 };
 
-// Mirrors the backend `_settings_used` echo (app/assistant/tools.py): only the fields the
-// dashboard's AnalysisSettings can apply. offense_subcategory / nibrs_group are honored as
-// filters server-side but intentionally not echoed (no UI control), keeping the contract 1:1.
+// Mirrors the backend `_settings_used` echo (app/assistant/tools.py). The bridge applies only
+// fields represented by AnalysisSettings, while cards retain narrower filters for exact
+// result explanation and reruns.
 export type SettingsUsed = {
   radius_m?: number;
   analysis_start_date?: string;
   analysis_end_date?: string;
   offense_category?: string | null;
+  offense_subcategory?: string | null;
+  nibrs_group?: string | null;
   layer?: LayerKey;
 };
 
@@ -229,6 +231,19 @@ export type AssistantDashboardState = {
   analysis_start_date: string | null;
   analysis_end_date: string | null;
   radii_m: number[];
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  nibrs_group: string | null;
+  layer: LayerKey;
+};
+
+/** Minimal, server-recomputable scope for the newest frozen result card. */
+export type AssistantResultContext = {
+  kind: "analyze" | "compare";
+  place_ids: string[];
+  analysis_start_date: string;
+  analysis_end_date: string;
+  radius_m: number;
   offense_category: string | null;
   offense_subcategory: string | null;
   nibrs_group: string | null;

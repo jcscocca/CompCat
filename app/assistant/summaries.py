@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.assistant.output_guard import output_guard_redirect
+from app.assistant.output_guard import SAFETY_REDIRECT, output_guard_redirect
 
 DECISION_PHRASES = {
     "above_clear": "above its surrounding-area baseline, statistically clear",
@@ -47,6 +47,7 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
         "select_places": _select_places_summary,
         "analyze_places": _analyze_places_summary,
         "compare_places": _compare_places_summary,
+        "explain_result": _explain_result_summary,
         "get_dashboard_summary": _dashboard_summary,
         "suggest_followups": _suggest_followups_summary,
         "update_filters": _update_filters_summary,
@@ -59,7 +60,10 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
 _HOSTILE_LABEL_PROSE = re.compile(
     r"\b(?:do\s+not|don't|never|ignore|disregard|avoid|stay\s+away|go\s+there"
     r"|recommend(?:ed|ing)?|very\s+(?:dangerous|unsafe|risky)"
-    r"|(?:is|are)\s+(?:safe|unsafe|dangerous|risky))\b",
+    r"|safe(?:r|st)?|unsafe|dangerous|risky"
+    r"|(?:is|are)\s+(?:safe|unsafe|dangerous|risky))\b"
+    r"|\b(?:best|worst|number\s+one)\b[^.?!]{0,24}\bsafety\b"
+    r"|\bsafety\b[^.?!]{0,24}\b(?:score|rank|rating|best|worst)\b",
     re.IGNORECASE,
 )
 
@@ -74,8 +78,8 @@ def _guard_summary_with_labels(summary: str, result: dict[str, Any]) -> str:
     labels = sorted(_interpolated_labels(result), key=len, reverse=True)
     for label in labels:
         redirect = output_guard_redirect(label)
-        if redirect is not None and _HOSTILE_LABEL_PROSE.search(label):
-            return redirect
+        if _HOSTILE_LABEL_PROSE.search(label):
+            return redirect or SAFETY_REDIRECT
 
     masked = summary
     replacements: list[tuple[str, str]] = []
@@ -233,6 +237,12 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
     parts.extend(_untested_pair_sentences(result))
     summary = (lead_in + " ".join(parts)) if parts else "Compared the selected places."
     return _with_provenance(summary, result)
+
+
+def _explain_result_summary(result: dict[str, Any]) -> str:
+    if result.get("kind") == "compare":
+        return _compare_places_summary(result)
+    return _analyze_places_summary(result)
 
 
 # app/analysis/comparison.py fills an untested pair's rate_ratio/CI/p with 1.0 placeholders so

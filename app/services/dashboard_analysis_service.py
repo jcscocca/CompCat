@@ -103,6 +103,7 @@ def compare_selected_places(
     offense_subcategory: str | None,
     nibrs_group: str | None,
     sources: Sequence[str] | None = None,
+    persist: bool | None = None,
 ) -> dict[str, Any]:
     clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     if len(clusters) < 2:
@@ -133,7 +134,7 @@ def compare_selected_places(
         # Same rule as analyze_selected_places: points are synthetic, non-persisted
         # clusters, so a comparison written for them is an audit row nothing can look up
         # again. Saved place_ids still persist — the run-scoped export reads them back.
-        persist=points is None,
+        persist=points is None if persist is None else persist,
     )
 
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toApiMessages, type ThreadItem } from "./threadItems";
+import { latestResultContext, toApiMessages, type ThreadItem } from "./threadItems";
 
 describe("toApiMessages", () => {
   it("maps user_text and tabby_text to chat roles in order", () => {
@@ -54,5 +54,81 @@ describe("toApiMessages", () => {
       { role: "user", content: "analyze Alpha" },
       { role: "assistant", content: "Here's Alpha." },
     ]);
+  });
+});
+
+describe("latestResultContext", () => {
+  it("returns only the newest saved-place card scope", () => {
+    const items: ThreadItem[] = [
+      {
+        kind: "analysis_card",
+        card: {
+          runId: "old",
+          kind: "analyze",
+          placeIds: ["old-place"],
+          settings: {
+            radius_m: 250,
+            analysis_start_date: "2024-01-01",
+            analysis_end_date: "2024-06-30",
+            offense_category: null,
+            layer: "reported",
+          },
+          comparison: null,
+          neighborhood: null,
+          incidents: null,
+        },
+      },
+      {
+        kind: "analysis_card",
+        card: {
+          runId: "new",
+          kind: "compare",
+          placeIds: ["a", "b", "a"],
+          settings: {
+            radius_m: 500,
+            analysis_start_date: "2025-01-01",
+            analysis_end_date: "2025-12-31",
+            offense_category: "PROPERTY",
+            offense_subcategory: "THEFT",
+            nibrs_group: "A",
+            layer: "calls",
+          },
+          comparison: { raw: "must not be sent" } as never,
+          neighborhood: { raw: "must not be sent" } as never,
+          incidents: { incidents: [{ raw: "must not be sent" }] } as never,
+        },
+      },
+    ];
+
+    expect(latestResultContext(items)).toEqual({
+      kind: "compare",
+      place_ids: ["a", "b"],
+      analysis_start_date: "2025-01-01",
+      analysis_end_date: "2025-12-31",
+      radius_m: 500,
+      offense_category: "PROPERTY",
+      offense_subcategory: "THEFT",
+      nibrs_group: "A",
+      layer: "calls",
+    });
+  });
+
+  it("returns null for an ad-hoc or incomplete newest card", () => {
+    const items: ThreadItem[] = [
+      {
+        kind: "analysis_card",
+        card: {
+          runId: null,
+          kind: "analyze",
+          placeIds: [],
+          settings: {},
+          comparison: null,
+          neighborhood: null,
+          incidents: null,
+        },
+      },
+    ];
+
+    expect(latestResultContext(items)).toBeNull();
   });
 });

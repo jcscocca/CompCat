@@ -7,7 +7,12 @@ import logging
 import pytest
 
 from app.assistant import llm_client
-from app.assistant.llm_client import FailoverLlmClient, LlmStreamInterrupted, LlmUnavailable
+from app.assistant.llm_client import (
+    FailoverLlmClient,
+    LlmRateLimited,
+    LlmStreamInterrupted,
+    LlmUnavailable,
+)
 
 _MESSAGES = [{"role": "user", "content": "hi"}]
 
@@ -110,6 +115,24 @@ def test_all_clients_failing_raises_with_all_labels() -> None:
     message = str(excinfo.value)
     assert "primary" in message
     assert "fallback" in message
+
+
+def test_any_rate_limited_backend_preserves_retryable_failure() -> None:
+    primary = _FakeClient(base_url="primary", error=LlmUnavailable("primary down"))
+    fallback = _FakeClient(base_url="fallback", error=LlmRateLimited("429"))
+    client = FailoverLlmClient([primary, fallback])
+
+    with pytest.raises(LlmRateLimited, match="All LLM endpoints failed"):
+        asyncio.run(client.complete(_MESSAGES, role="x"))
+
+    with pytest.raises(LlmRateLimited, match="All LLM endpoints failed"):
+        asyncio.run(
+            client.complete_structured(
+                _MESSAGES,
+                response_format={"type": "json_object"},
+                role="x",
+            )
+        )
 
 
 def test_kwargs_are_forwarded() -> None:
@@ -236,6 +259,12 @@ class _StreamUnavailable:
         raise AttributeError(name)
 
 
+class _StreamRateLimited:
+    async def stream(self, messages, *, role, temperature=None, max_tokens=None):
+        raise LlmRateLimited("429")
+        yield  # pragma: no cover - makes this an async generator
+
+
 class _StreamInterrupted:
     async def stream(self, messages, *, role, temperature=None, max_tokens=None):
         yield "partial "
@@ -263,6 +292,11 @@ def test_stream_fails_over_before_first_delta() -> None:
 def test_stream_raises_when_all_fail() -> None:
     with pytest.raises(LlmUnavailable, match="All LLM endpoints failed"):
         asyncio.run(_drain(FailoverLlmClient([_StreamUnavailable(), _StreamUnavailable()])))
+
+
+def test_stream_preserves_rate_limited_failure() -> None:
+    with pytest.raises(LlmRateLimited, match="All LLM endpoints failed"):
+        asyncio.run(_drain(FailoverLlmClient([_StreamUnavailable(), _StreamRateLimited()])))
 
 
 def test_stream_mid_stream_interrupt_propagates_without_failover() -> None:
