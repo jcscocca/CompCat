@@ -259,3 +259,130 @@ def test_export_without_run_id_unchanged(tmp_path):
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
+
+
+def test_analysis_export_uses_current_detail_fields_and_selected_places(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+    user_hash = public_user_hash(client.cookies.get("mca_session"))
+    assert user_hash is not None
+
+    selected = client.post(
+        "/places",
+        json={
+            "display_label": "Selected zero-count place",
+            "latitude": 47.609,
+            "longitude": -122.333,
+            "visit_count": 12,
+        },
+    )
+    unselected = client.post(
+        "/places",
+        json={
+            "display_label": "Unselected place",
+            "latitude": 47.61,
+            "longitude": -122.334,
+            "visit_count": 99,
+        },
+    )
+    assert selected.status_code == 201
+    assert unselected.status_code == 201
+
+    analyze = client.post(
+        "/dashboard/analyze",
+        json={
+            "place_ids": [selected.json()["id"]],
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [250],
+            "offense_category": "PROPERTY",
+            "layer": "reported",
+        },
+    )
+    assert analyze.status_code == 200
+    with get_sessionmaker()() as query_session:
+        run_id = latest_analysis_run_id(query_session, user_hash)
+    assert run_id is not None
+
+    response = client.get(f"/exports/analysis.csv?run_id={run_id}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="compcat-analysis.csv"'
+    )
+    reader = csv.DictReader(StringIO(response.text))
+    rows = list(reader)
+    assert {row["place_label"] for row in rows} == {"Selected zero-count place"}
+    assert {row["reference_geography_level"] for row in rows} == {
+        "mcpp",
+        "sector",
+        "city",
+    }
+    assert all(row["target_incident_count"] == "0" for row in rows)
+    assert all(row["reference_method"] == "empirical_reference_circles" for row in rows)
+    assert all(row["layer"] == "reported" for row in rows)
+    assert all(row["offense_category"] == "PROPERTY" for row in rows)
+    assert not any(
+        forbidden in column
+        for column in (reader.fieldnames or [])
+        for forbidden in ("visit", "dwell", "rate_ratio", "adjusted_p")
+    )
+
+
+def test_analysis_export_respects_export_privacy_and_run_ownership(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    owner = TestClient(app)
+    owner.post("/sessions")
+    owner_hash = public_user_hash(owner.cookies.get("mca_session"))
+    assert owner_hash is not None
+
+    included = owner.post(
+        "/places",
+        json={
+            "display_label": "Included place",
+            "latitude": 47.609,
+            "longitude": -122.333,
+            "visit_count": 1,
+            "sensitivity_class": "normal",
+        },
+    )
+    hidden = owner.post(
+        "/places",
+        json={
+            "display_label": "Hidden place",
+            "latitude": 47.61,
+            "longitude": -122.334,
+            "visit_count": 1,
+            "sensitivity_class": "suppress_from_public_export",
+        },
+    )
+    assert included.status_code == 201
+    assert hidden.status_code == 201
+    analyze = owner.post(
+        "/dashboard/analyze",
+        json={
+            "place_ids": [included.json()["id"], hidden.json()["id"]],
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [250],
+        },
+    )
+    assert analyze.status_code == 200
+    with get_sessionmaker()() as query_session:
+        run_id = latest_analysis_run_id(query_session, owner_hash)
+    assert run_id is not None
+
+    response = owner.get(f"/exports/analysis.csv?run_id={run_id}")
+    labels = {
+        row["place_label"] for row in csv.DictReader(StringIO(response.text))
+    }
+    assert labels == {"Included place"}
+
+    stranger = TestClient(app)
+    stranger.post("/sessions")
+    assert stranger.get(f"/exports/analysis.csv?run_id={run_id}").status_code == 404
+    assert (
+        owner.get("/exports/analysis.csv?run_id=not-a-real-run").status_code == 404
+    )

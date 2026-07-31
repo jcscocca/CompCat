@@ -5,7 +5,11 @@ from datetime import date
 from pathlib import Path
 
 from app.assistant.prompts import build_planning_messages
-from app.assistant.schemas import AssistantChatMessage, AssistantDashboardState
+from app.assistant.schemas import (
+    AssistantChatMessage,
+    AssistantDashboardState,
+    AssistantResultContext,
+)
 from app.assistant.semantic_layer import _crime_summaries, build_semantic_context
 from app.config import get_settings
 from app.db import get_sessionmaker
@@ -99,6 +103,46 @@ def test_semantic_context_includes_selected_places_summaries_and_caveats(tmp_pat
         "exposure-adjusted incident rates",
     ):
         assert retired_term not in assistant_input
+
+
+def test_semantic_context_carries_only_latest_result_scope(tmp_path):
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    context = AssistantResultContext(
+        kind="compare",
+        place_ids=["place-1", "place-2"],
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 6, 30),
+        radius_m=500,
+        offense_category="PROPERTY",
+        offense_subcategory="THEFT",
+        nibrs_group="A",
+        layer="calls",
+    )
+
+    packet = build_semantic_context(
+        session,
+        "user-1",
+        AssistantDashboardState(),
+        get_settings(),
+        context,
+    )
+    session.close()
+
+    assert packet.latest_result_context == {
+        "kind": "compare",
+        "place_ids": ["place-1", "place-2"],
+        "analysis_start_date": "2024-01-01",
+        "analysis_end_date": "2024-06-30",
+        "radius_m": 500,
+        "offense_category": "PROPERTY",
+        "offense_subcategory": "THEFT",
+        "nibrs_group": "A",
+        "layer": "calls",
+    }
+    serialized = json.dumps(packet.latest_result_context)
+    assert "incidents" not in serialized
+    assert "comparison" not in serialized
 
 
 def test_crime_summaries_scopes_to_latest_run_not_all_runs(tmp_path):

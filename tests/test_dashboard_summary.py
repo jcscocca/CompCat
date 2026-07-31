@@ -103,4 +103,5 @@ def test_dashboard_summary_returns_places_totals_privacy_and_exports(tmp_path):
     assert payload["exports"]["tableau_place_summary_csv"].endswith(
         "/exports/tableau/place-summary.csv"
     )
+    assert payload["exports"]["analysis_csv"].endswith("/exports/analysis.csv")
     assert payload["places"][0]["display_label"]

@@ -35,11 +35,11 @@ to a person.
 That lexicon is pinned by tests rather than by good intentions. `tests/test_statistical_comparison_service.py`
 asserts that the comparison engine's summary text contains none of *safe*, *unsafe*, *safety*,
 *danger*, *dangerous*, *risk*, or *risky* — including on a comparison where one address
-"wins". The same discipline shows up in small places: the Tableau export computes an
-`incidents_per_visit` column for legacy compatibility, while the public UI and the assistant's
-prompts, semantic packet, and tool results exclude visit, dwell, and derived exposure-rate
-fields. A number that could be misread as a personal exposure rate is not handed to the language
-model at all.
+"wins". The same discipline shows up in small places: the session-wide Tableau export retains
+an `incidents_per_visit` column for legacy compatibility, while the analytical card's CSV, the
+public UI, and the assistant's prompts, semantic packet, and tool results exclude visit, dwell,
+and derived exposure-rate fields. A number that could be misread as a personal exposure rate is
+not handed to the language model or presented as a current analysis result.
 
 ## How do you make a language model refuse reliably?
 
@@ -69,13 +69,16 @@ descriptors — *violent*, *threatening*, *menacing* — are deliberately exclud
 guard. They describe incidents, which is exactly what the product reports; they do not rank
 places.
 
-The guard runs on both sides of the model. On input, `_asks_for_safety_score` scans the last
-eight user messages — the same window the model itself sees — so an ask split across turns, or
-carried by a short "yes, do that" follow-up, still trips it, and the turn short-circuits before
-the LLM is contacted at all: a pre-written redirect streams, telling the user they can ask for
-reported-incident counts or statistically tested geographic comparisons instead. On output, the same predicate
-re-runs against the model's own answer, so a paraphrase that slips past the input side and
-provokes banned-lexicon output is still caught on the way out.
+The guard runs on both sides of the model. On input, it checks the current request and treats an
+ambiguous continuation of an immediately refused safety or presence request as part of that
+same request. Only a clearly new supported incident, place, or filter request resets the scope.
+That fail-closed rule catches "yes, do that", "give me the ordering", and "run it again"
+without letting an old refusal contaminate a later explicit data question. The turn
+short-circuits before the LLM is contacted at all: a pre-written redirect streams, telling the
+user they can ask for reported-incident counts or statistically tested geographic comparisons
+instead. On output, the same predicate re-runs against the model's own answer, so a paraphrase
+that slips past the input side and provokes banned-lexicon output is still caught on the way
+out.
 
 `_PRESENCE_CLAIM_PATTERN` enforces the invariant's third prong — never assert the user was at
 an incident — and runs on both sides too: it matches a first- or second-person subject tied to

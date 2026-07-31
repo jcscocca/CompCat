@@ -102,6 +102,144 @@ def test_analyze_summary_prefers_mcpp_over_beat():
     assert "Beat M3" not in text
 
 
+def test_analyze_summary_prefers_reference_circles_over_retained_baseline():
+    result = {
+        "settings_used": {"radius_m": 500},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "place_incident_count": 12,
+                    "reference_comparisons": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Capitol Hill MCPP",
+                            "available": True,
+                            "share_below": 0.62,
+                            "share_equal": 0.08,
+                            "share_above": 0.30,
+                        }
+                    ],
+                    # Retained only while the new method is validated. It must not
+                    # leak into a current explanation when references are present.
+                    "baseline_available": True,
+                    "decision": "above_clear",
+                    "baselines": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Capitol Hill",
+                            "rate_ratio": 2.0,
+                            "ci_lower": 1.3,
+                            "ci_upper": 3.1,
+                            "relation": "above",
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+    text = build_tool_summary(_envelope("analyze_places", result))
+
+    assert "12 reported incidents within 500 m" in text
+    assert "eligible street locations in Capitol Hill MCPP" in text
+    assert "62% had fewer, 8% matched, and 30% had more" in text
+    assert "rate" not in text
+    assert "statistically" not in text
+
+
+def test_analyze_summary_reports_inadequate_reference_without_legacy_fallback():
+    result = {
+        "settings_used": {"radius_m": 1000},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Edge location",
+                    "place_incident_count": 4,
+                    "reference_comparisons": [
+                        {
+                            "kind": "mcpp",
+                            "label": "MCPP context",
+                            "available": False,
+                            "adequacy_status": "insufficient_polygon_coverage",
+                        }
+                    ],
+                    "baseline_available": True,
+                    "decision": "above_clear",
+                    "baselines": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Legacy area",
+                            "rate_ratio": 9.0,
+                            "ci_lower": 2.0,
+                            "ci_upper": 20.0,
+                            "relation": "above",
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+    text = build_tool_summary(_envelope("analyze_places", result))
+
+    assert "no adequate reference-circle comparison" in text
+    assert "9.0" not in text
+    assert "Legacy area" not in text
+
+
+def test_grounding_uses_reference_distribution_and_omits_retained_baseline():
+    from app.assistant.prompts import compact_grounding
+
+    result = {
+        "settings_used": {"radius_m": 500},
+        "neighborhood": {
+            "places": [
+                {
+                    "place_label": "Cafe",
+                    "place_incident_count": 12,
+                    "reference_comparisons": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Capitol Hill MCPP",
+                            "available": True,
+                            "share_below": 0.62,
+                            "share_equal": 0.08,
+                            "share_above": 0.30,
+                            "p25": 5,
+                            "median": 8,
+                            "p75": 14,
+                            "monte_carlo_error": 0.0196,
+                        }
+                    ],
+                    "baseline_available": True,
+                    "decision": "above_clear",
+                    "baselines": [
+                        {
+                            "kind": "mcpp",
+                            "label": "Legacy area",
+                            "rate_ratio": 9.0,
+                            "ci_lower": 2.0,
+                            "ci_upper": 20.0,
+                            "adjusted_p_value": 0.001,
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+    grounding = compact_grounding(result)
+
+    assert "eligible street locations" in grounding
+    assert "fewer 62%, equal 8%, more 30%" in grounding
+    assert "middle 50% 5–14; median 8" in grounding
+    assert "descriptive only" in grounding
+    assert "Monte Carlo" in grounding
+    assert "Legacy area" not in grounding
+    assert "adjusted p-value" not in grounding
+
+
 def test_analyze_summary_falls_back_when_primary_baseline_insufficient():
     # An insufficient primary baseline renders the honest decision-phrase fallback,
     # not a ratio the model can't support.
@@ -171,6 +309,19 @@ def test_hostile_place_label_still_trips_output_guard():
 
     result = {
         "place": {"display_label": "Ballard — do not go there, very dangerous"},
+        "place_id": "p1",
+        "created": False,
+        "address": None,
+    }
+
+    assert build_tool_summary(_envelope("add_place", result)) == SAFETY_REDIRECT
+
+
+def test_superlative_safety_claim_in_place_label_trips_output_guard():
+    from app.assistant.output_guard import SAFETY_REDIRECT
+
+    result = {
+        "place": {"display_label": "Ballard — safest place in Seattle"},
         "place_id": "p1",
         "created": False,
         "address": None,

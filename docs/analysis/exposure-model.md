@@ -1,7 +1,7 @@
 # The exposure model: the denominator behind every rate
 
-**Status:** methodology reference (2026-07-17). The durable record of how CompCat forms the
-**exposure** (denominator) for every reported-incident rate it shows: the place buffer, the
+**Status:** methodology reference (updated 2026-07-30). The durable record of how CompCat forms
+the **exposure** (denominator) for reported-incident rate comparisons: the place buffer, the
 `π·r²·days` space-time density, and the rest-of-area baseline geometry
 (`app/analysis/exposure.py`, `app/analysis/beat_baselines.py`,
 `app/normalization/geo.py`, and the assembly in `app/services/neighborhood_service.py`).
@@ -9,6 +9,12 @@ Companion to [pairwise-comparison-engine.md](pairwise-comparison-engine.md) (whi
 these exposures), [overdispersion-and-rate-intervals.md](overdispersion-and-rate-intervals.md),
 and the [statistical-methods audit (2026-07)](statistical-methods-audit-2026-07.md) that
 commissioned this writeup.
+
+The current single-place detailed view uses
+[empirical equal-radius reference circles](empirical-reference-circles.md), which compare
+counts with identical geometry and do not need a polygon-density denominator. This document
+still governs user-selected place-vs-place rates and the legacy polygon-density fields retained
+temporarily in the neighborhood API for validation.
 
 ## TL;DR
 
@@ -23,7 +29,7 @@ commissioned this writeup.
   Density comparisons are internally consistent at equal radius and window (§2).
 - **Results are radius-dependent by construction** (a MAUP effect). The user-selectable
   250–1000 m radius is an *explicit multi-scale probe*, not a hidden analyst choice (§3).
-- **Baselines carve the place's own buffer out** of its surrounding area so a place is never
+- **Retained legacy baselines carve the place's own buffer out** of its surrounding area so a place is never
   compared with itself, via a grid-sampled buffer∩polygon overlap (41×41 grid, ≈3% area
   error); sector/city baselines are whole-area with a bounded self-inclusion approximation
   (§4).

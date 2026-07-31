@@ -44,6 +44,7 @@ from app.assistant.prompts import (
 from app.assistant.schemas import (
     AssistantChatMessage,
     AssistantDashboardState,
+    AssistantResultContext,
     AssistantStreamEvent,
 )
 from app.assistant.semantic_layer import build_semantic_context
@@ -96,22 +97,30 @@ _NARRATION_TEMPERATURE = 0.4
 _NARRATION_MAX_TOKENS = 512
 _STATUS_INTERPRETING = "interpreting your request…"
 _STATUS_WRITING = "writing up…"
-_FOLLOWUP_REFERENCE_PATTERN = re.compile(
+_CLEAR_NEW_REQUEST_PATTERN = re.compile(
     r"""
     ^\s*(?:
-        (?:yes|yeah|yep|ok(?:ay)?|sure)
-        (?:\s+(?:please|do\s+(?:it|that)|anyway|then|now|go\s+ahead))*
-      | please\s+do\s+(?:it|that)
-      | do\s+(?:it|that)(?:\s+anyway)?
-      | go\s+ahead
-      | continue
-      | tell\s+me
-      | which\s+one
-      | (?:s[ií])(?:\s+(?:por\s+favor|hazlo|adelante))?
-      | hazlo
-      | adelante
-      | contin[uú]a
-    )\s*[.!?]*\s*$
+        (?:show|list|count|analy[sz]e|compare|explain|summari[sz]e|rerun|run)\b
+        [^.?!]{0,80}
+        \b(?:incident|report|arrest|call|count|categor|tim|filter|radius|date|layer)\w*
+      | (?:change|set|update|adjust|clear)\b[^.?!]{0,80}
+        \b(?:filter|radius|date|layer|offense|categor|selection)\w*
+      | (?:add|save|select|find)\b[^.?!]{0,80}
+        \b(?:place|address|pin|selection)\w*
+      | (?:what|how\s+many|when|where)\b[^.?!]{0,80}
+        \b(?:incident|report|arrest|call|count|categor|tim|filter|radius|date|layer)\w*
+      | (?:muestra|lista|cuenta|analiza|compara|explica|resume|ejecuta)\b
+        [^.?!]{0,80}
+        \b(?:incidente|reporte|arresto|llamada|conteo|categor[ií]a|hora|filtro
+           |radio|fecha|capa)s?\b
+      | (?:cambia|ajusta|actualiza|borra)\b[^.?!]{0,80}
+        \b(?:filtro|radio|fecha|capa|delito|categor[ií]a|selecci[oó]n)s?\b
+      | (?:agrega|guarda|selecciona|busca)\b[^.?!]{0,80}
+        \b(?:lugar|direcci[oó]n|marcador|selecci[oó]n)s?\b
+      | (?:qu[eé]|cu[aá]nt[oa]s?|cu[aá]ndo|d[oó]nde)\b[^.?!]{0,80}
+        \b(?:incidente|reporte|arresto|llamada|conteo|categor[ií]a|hora|filtro
+           |radio|fecha|capa)s?\b
+    )
     """,
     re.IGNORECASE | re.VERBOSE,
 )
@@ -145,13 +154,19 @@ async def run_assistant_turn(
     messages: list[AssistantChatMessage],
     dashboard_state: AssistantDashboardState,
     llm_client: AssistantLlmClient,
+    latest_result_context: AssistantResultContext | None = None,
 ) -> AsyncIterator[AssistantStreamEvent]:
     settings = get_settings()
     # run_assistant_turn iterates on the event loop; the semantic context does sync DB
     # work and execute_tool below can geocode (sync httpx + rate-gate sleep) — both must
     # run in the threadpool or one slow turn stalls every request in the process.
     context = await run_in_threadpool(
-        build_semantic_context, session, user_id_hash, dashboard_state, settings
+        build_semantic_context,
+        session,
+        user_id_hash,
+        dashboard_state,
+        settings,
+        latest_result_context,
     )
     yield AssistantStreamEvent(
         event="meta",
@@ -159,7 +174,7 @@ async def run_assistant_turn(
     )
 
     recent_user_texts = _recent_user_texts(messages)
-    guard_user_texts = _guard_user_texts(recent_user_texts)
+    guard_user_texts = _guard_user_texts(messages)
     # A refusal in the wrong language reads as a failure to understand rather than a
     # deliberate limit. The guard already covers Spanish asks, so answer them in Spanish.
     spanish = any(is_spanish(text) for text in recent_user_texts)
@@ -232,6 +247,8 @@ async def run_assistant_turn(
                     dashboard_state,
                     plan.get("arguments"),
                     recent_user_texts[-1] if recent_user_texts else "",
+                    latest_result_context=latest_result_context,
+                    use_latest_result=plan.get("context") == "latest_result",
                 ),
             )
         except AssistantClarification as exc:
@@ -328,19 +345,33 @@ def _recent_user_texts(
     return [message.content for message in messages[-limit:] if message.role == "user"]
 
 
-def _guard_user_texts(recent_user_texts: list[str]) -> list[str]:
+def _guard_user_texts(messages: list[AssistantChatMessage]) -> list[str]:
     """Scope deterministic guards to the current request.
 
-    A short referential confirmation ("ok do it anyway") inherits the immediately preceding
-    user request, so a refused safety-ranking ask cannot bypass the guard on the next turn.
-    A new substantive request starts fresh; otherwise one refused ask would poison every later
-    message still present in the eight-message planning window.
+    Once the immediately preceding assistant turn is a fixed refusal, ambiguous follow-ups
+    inherit the refused request. This is deliberately fail-closed: instead of trying to list
+    every possible "do it anyway" phrase, only a clearly new supported data/action request
+    resets the scope. Older refusals do not poison later turns.
     """
-    if not recent_user_texts:
+    user_indexes = [index for index, message in enumerate(messages[-8:]) if message.role == "user"]
+    if not user_indexes:
         return []
-    latest = recent_user_texts[-1]
-    if len(recent_user_texts) > 1 and _FOLLOWUP_REFERENCE_PATTERN.fullmatch(latest):
-        return recent_user_texts[-2:]
+    recent = messages[-8:]
+    latest_index = user_indexes[-1]
+    latest = recent[latest_index].content
+    if latest_index >= 2:
+        previous_assistant = recent[latest_index - 1]
+        previous_user = recent[latest_index - 2]
+        if (
+            previous_assistant.role == "assistant"
+            and previous_user.role == "user"
+            and (
+                contains_safety_ranking(previous_user.content)
+                or claims_user_presence(previous_user.content)
+            )
+            and _CLEAR_NEW_REQUEST_PATTERN.search(latest) is None
+        ):
+            return [previous_user.content, latest]
     return [latest]
 
 
@@ -413,6 +444,9 @@ def _tool_arguments(
     dashboard_state: AssistantDashboardState,
     model_arguments: Any,
     user_text: str = "",
+    *,
+    latest_result_context: AssistantResultContext | None = None,
+    use_latest_result: bool = False,
 ) -> dict[str, Any]:
     """Backfill selection-tool arguments from the dashboard state.
 
@@ -422,6 +456,19 @@ def _tool_arguments(
     explicit relative window ("last 12 months"), which is arithmetic the agent
     does itself (see _relative_window).
     """
+    if tool_name == "explain_result":
+        if latest_result_context is None:
+            raise AssistantClarification(
+                "Run an analysis first, then ask me about the result."
+            )
+        return _latest_result_arguments(latest_result_context)
+    if use_latest_result:
+        if latest_result_context is None:
+            raise AssistantClarification(
+                "I don't have a previous result to rerun yet."
+            )
+        dashboard_state = _latest_result_dashboard_state(latest_result_context)
+
     raw_arguments = model_arguments if isinstance(model_arguments, dict) else {}
     arguments = {
         key: value
@@ -459,6 +506,35 @@ def _tool_arguments(
     merged = {key: value for key, value in defaults.items() if value not in (None, "", [])}
     merged.update(arguments)
     return _with_relative_window(tool_name, dashboard_state, merged, user_text)
+
+
+def _latest_result_arguments(context: AssistantResultContext) -> dict[str, Any]:
+    return {
+        "kind": context.kind,
+        "place_ids": list(context.place_ids),
+        "analysis_start_date": context.analysis_start_date.isoformat(),
+        "analysis_end_date": context.analysis_end_date.isoformat(),
+        "radius_m": context.radius_m,
+        "offense_category": context.offense_category,
+        "offense_subcategory": context.offense_subcategory,
+        "nibrs_group": context.nibrs_group,
+        "layer": context.layer,
+    }
+
+
+def _latest_result_dashboard_state(
+    context: AssistantResultContext,
+) -> AssistantDashboardState:
+    return AssistantDashboardState(
+        selected_place_ids=list(context.place_ids),
+        analysis_start_date=context.analysis_start_date,
+        analysis_end_date=context.analysis_end_date,
+        radii_m=[context.radius_m],
+        offense_category=context.offense_category,
+        offense_subcategory=context.offense_subcategory,
+        nibrs_group=context.nibrs_group,
+        layer=context.layer,
+    )
 
 
 # Tools that take an analysis window. update_filters is not a selection tool but still

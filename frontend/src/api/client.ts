@@ -1,6 +1,7 @@
 import type {
   AssistantDashboardState,
   AssistantMessage,
+  AssistantResultContext,
   AssistantStreamEvent,
   BeatFeatureCollection,
   DashboardFreshness,
@@ -205,7 +206,7 @@ export function getInputModes(): Promise<{ modes: { id: string }[] }> {
 
 export function analyzePlaces(
   payload: AnalyzePlacesPayload,
-): Promise<{ summary_count: number }> {
+): Promise<{ summary_count: number; analysis_run_id?: string | null }> {
   return request("/dashboard/analyze", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -306,6 +307,7 @@ export function streamAssistantChat(
   payload: {
     messages: AssistantMessage[];
     dashboard_state: AssistantDashboardState;
+    latest_result_context?: AssistantResultContext | null;
   },
   handlers: AssistantHandlers,
   signal?: AbortSignal,

@@ -12,7 +12,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest run --environment jsdom",
     "lint": "tsc -b --pretty false",
-    "ios:sync": "npm run build && cap sync ios",
+    "ios:assets": "node ../scripts/render_ios_icon.mjs",
+    "ios:sync": "npm run ios:assets && npm run build && cap sync ios",
     "ios:open": "cap open ios"
   },
   "dependencies": {
@@ -25,7 +26,6 @@
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.6.8",
     "@capacitor/core": "^7.6.8",
     "@capacitor/ios": "^7.6.8",

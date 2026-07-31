@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
   "alembic>=1.13",
   "anthropic>=0.40",
+  "defusedxml>=0.7",
   "fastapi>=0.115",
   # SQLAlchemy declares greenlet only on selected machine architectures. Keep it explicit so
   # a lock generated on Apple Silicon still contains the dependency required by Linux images.
@@ -36,7 +37,7 @@ dev = [
 include = ["app*"]
 
 [tool.setuptools.package-data]
-"app.data" = ["*.csv", "*.geojson"]
+"app.data" = ["*.csv", "*.geojson", "*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,12 @@
+{
+  "center_count": 23793,
+  "center_definition": "half-length point of each eligible street segment",
+  "eligibility_where": "CITYCODE=1 AND ACCESS_CODE=1 AND ST_CODE IN (0,1,2) AND SEGMENT_TYPE=1",
+  "frame_version": "seattle_snd_open_public_street_midpoints_v1",
+  "generated_at_utc": "2026-07-31T02:56:35+00:00",
+  "layer_url": "https://services.arcgis.com/ZOyb2t4B0UYuYNYH/arcgis/rest/services/Street_Network_Database_SND/FeatureServer/0",
+  "service_item_id": "783fd63545304bdf9d3c5f2065751614",
+  "sha256": "bba23dc0817630abf3fa791e6b4900353e5f7481c6e6584d556f65ee35921b38",
+  "source": "City of Seattle Street Network Database (SND)",
+  "source_data_last_edit_epoch_ms": 1785170860787
+}

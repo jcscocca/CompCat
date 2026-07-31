@@ -9,7 +9,11 @@ import pytest
 
 from app.assistant.agent import _complete_plan, run_assistant_turn
 from app.assistant.llm_client import LlmRateLimited, LlmStreamInterrupted, LlmUnavailable
-from app.assistant.schemas import AssistantChatMessage, AssistantDashboardState
+from app.assistant.schemas import (
+    AssistantChatMessage,
+    AssistantDashboardState,
+    AssistantResultContext,
+)
 from app.assistant.summaries import build_tool_summary
 from app.db import get_sessionmaker
 from app.main import create_app
@@ -208,6 +212,52 @@ def test_agent_runs_workflow_tool_with_deterministic_summary(tmp_path):
     assert len(client.calls) == 1  # planning only — no narration call
 
 
+def test_agent_explains_latest_result_without_creating_another_card(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(
+        ['{"type":"tool_call","tool_name":"explain_result","arguments":{}}']
+    )
+    latest = AssistantResultContext(
+        kind="analyze",
+        place_ids=["place-1"],
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        radius_m=250,
+        layer="reported",
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(
+                        role="user",
+                        content="Why wasn't that result statistically clear?",
+                    )
+                ],
+                # The live selection has moved; the frozen result remains authoritative.
+                AssistantDashboardState(
+                    selected_place_ids=["place-2"],
+                    analysis_start_date=date(2024, 2, 1),
+                    analysis_end_date=date(2024, 2, 29),
+                    radii_m=[500],
+                ),
+                client,
+                latest,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "tool", "token", "done"]
+    tool_event = events[1]
+    assert tool_event.data["tool_name"] == "explain_result"
+    assert tool_event.data["arguments"]["place_ids"] == ["place-1"]
+    assert tool_event.data["arguments"]["radius_m"] == 250
+    assert tool_event.data["result"]["place_ids"] == ["place-1"]
+
+
 def test_agent_redirects_safe_unsafe_language_without_model_call(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
     client = FakeClient([])
@@ -276,6 +326,41 @@ def test_agent_redirects_when_safety_request_is_in_an_earlier_turn(tmp_path):
                     AssistantChatMessage(role="user", content="ok do it anyway"),
                 ],
                 AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert "reported incident" in events[1].data["delta"]
+    assert client.calls == []
+
+
+@pytest.mark.parametrize(
+    "followup",
+    [
+        "Give me the ordering anyway.",
+        "Run it again.",
+        "Compare them anyway.",
+    ],
+)
+def test_agent_redirects_open_ended_followup_to_refused_safety_request(
+    tmp_path, followup
+):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient([])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(role="user", content="Which place is safest?"),
+                    AssistantChatMessage(role="assistant", content="I can't rank safety."),
+                    AssistantChatMessage(role="user", content=followup),
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1", "place-2"]),
                 client,
             )
         )
@@ -577,6 +662,43 @@ def test_model_radius_override_beats_dashboard_backfill_analyze():
     args = _tool_arguments("analyze_places", state, {"radii_m": [500]})
     assert args["radii_m"] == [500]
     assert args["layer"] == "reported"
+
+
+def test_latest_result_context_backfills_referential_rerun():
+    from app.assistant.agent import _tool_arguments
+
+    latest = AssistantResultContext(
+        kind="compare",
+        place_ids=["old-1", "old-2"],
+        analysis_start_date=date(2026, 1, 1),
+        analysis_end_date=date(2026, 6, 30),
+        radius_m=250,
+        offense_category="PROPERTY",
+        offense_subcategory="THEFT",
+        nibrs_group="A",
+        layer="calls",
+    )
+    args = _tool_arguments(
+        "compare_places",
+        AssistantDashboardState(
+            selected_place_ids=["live-place"],
+            analysis_start_date=date(2025, 1, 1),
+            analysis_end_date=date(2025, 2, 1),
+            radii_m=[1000],
+        ),
+        {"radius_m": 500},
+        latest_result_context=latest,
+        use_latest_result=True,
+    )
+
+    assert args["place_ids"] == ["old-1", "old-2"]
+    assert args["analysis_start_date"] == "2026-01-01"
+    assert args["analysis_end_date"] == "2026-06-30"
+    assert args["radius_m"] == 500
+    assert args["offense_category"] == "PROPERTY"
+    assert args["offense_subcategory"] == "THEFT"
+    assert args["nibrs_group"] == "A"
+    assert args["layer"] == "calls"
 
 
 def test_explicit_radius_to_is_backfilled_for_update_filters():
@@ -951,11 +1073,9 @@ def test_execute_tool_does_not_double_wrap_assistant_tool_error():
     assert not isinstance(excinfo.value.__cause__, AssistantToolError)
 
 
-def test_analyze_places_settings_used_matches_bridge_contract(tmp_path):
-    # #62: settings_used must echo only the fields the frontend bridge (AnalysisSettings) can
-    # apply — radius/date range/offense_category — not offense_subcategory/nibrs_group, which the
-    # UI has no control for and the bridge silently dropped. The analysis still honors them as
-    # filters; they're simply not surfaced in the settings echo.
+def test_analyze_places_settings_used_freezes_full_result_scope(tmp_path):
+    # Dashboard controls apply only their supported fields, while the frozen card retains
+    # subcategory/NIBRS filters so explanation and reruns reproduce the actual result.
     session, user_hash = _session_with_place_and_crime(tmp_path)
     client = FakeClient(['{"type":"tool_call","tool_name":"analyze_places","arguments":{}}'])
     try:
@@ -982,6 +1102,8 @@ def test_analyze_places_settings_used_matches_bridge_contract(tmp_path):
         "analysis_start_date",
         "analysis_end_date",
         "offense_category",
+        "offense_subcategory",
+        "nibrs_group",
         "layer",
     }
 
@@ -2712,6 +2834,11 @@ def test_planning_prompt_uses_authoritative_effect_threshold_verdict():
 
     text = PLANNING_SYSTEM_PROMPT.lower()
 
+    assert "equal-radius circles" in text
+    assert "eligible street locations" in text
+    assert "descriptive" in text
+    assert "never call them expected counts" in text
+    assert "uniformly distributed" in text
     assert "never re-derive" in text
     assert "adjusted p" in text and "0.05" in text
     assert "at least 1.25x" in text

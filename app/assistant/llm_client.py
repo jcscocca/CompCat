@@ -656,6 +656,7 @@ class FailoverLlmClient:
     ) -> str:
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
+        saw_rate_limit = False
         for index, client in enumerate(self.clients):
             try:
                 return await client.complete(
@@ -665,6 +666,7 @@ class FailoverLlmClient:
                     max_tokens=max_tokens,
                 )
             except LlmUnavailable as exc:
+                saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -678,9 +680,7 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise LlmUnavailable(
-            "All LLM endpoints failed: " + "; ".join(failures)
-        ) from last_exc
+        raise _failover_error(failures, saw_rate_limit) from last_exc
 
     async def complete_structured(
         self,
@@ -694,6 +694,7 @@ class FailoverLlmClient:
         """Preserve structured planning on capable endpoints while retaining failover."""
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
+        saw_rate_limit = False
         for index, client in enumerate(self.clients):
             try:
                 structured_complete = getattr(client, "complete_structured", None)
@@ -712,6 +713,7 @@ class FailoverLlmClient:
                     max_tokens=max_tokens,
                 )
             except LlmUnavailable as exc:
+                saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -725,9 +727,7 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise LlmUnavailable(
-            "All LLM endpoints failed: " + "; ".join(failures)
-        ) from last_exc
+        raise _failover_error(failures, saw_rate_limit) from last_exc
 
     async def stream(
         self,
@@ -742,6 +742,7 @@ class FailoverLlmClient:
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
         yielded = False
+        saw_rate_limit = False
         for index, client in enumerate(self.clients):
             try:
                 async with contextlib.aclosing(
@@ -762,6 +763,7 @@ class FailoverLlmClient:
                     # would repeat text, so re-raise and let the caller replace the
                     # partial answer instead.
                     raise
+                saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -775,6 +777,9 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise LlmUnavailable(
-            "All LLM endpoints failed: " + "; ".join(failures)
-        ) from last_exc
+        raise _failover_error(failures, saw_rate_limit) from last_exc
+
+
+def _failover_error(failures: list[str], saw_rate_limit: bool) -> LlmUnavailable:
+    error_type = LlmRateLimited if saw_rate_limit else LlmUnavailable
+    return error_type("All LLM endpoints failed: " + "; ".join(failures))

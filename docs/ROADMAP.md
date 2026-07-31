@@ -36,7 +36,7 @@ soak run, and the explicitly deferred performance/methodology follow-ups below.
 
 | State | What's here |
 |---|---|
-| **Production** | Analytical engine + neighborhood stats (overdispersion, BH correction, point-in-polygon beat assignment), places CRUD/bulk/geocoding (Seattle-region-locked), dashboard analyze/compare/incidents, Tableau place-summary export, sessions/tiers, config/secrets validators (salt/secret/admin-token all gated in prod boot), CI (SQLite + Postgres lanes), migrations |
+| **Production** | Analytical engine + neighborhood stats (overdispersion, BH correction, point-in-polygon beat assignment), places CRUD/bulk/geocoding (Seattle-region-locked), dashboard analyze/compare/incidents, run-scoped analytical CSV + session-wide Tableau place-summary export, sessions/tiers, config/secrets validators (salt/secret/admin-token all gated in prod boot), CI (SQLite + Postgres lanes), migrations |
 | **Beta-ready** | Assistant (decision-tree router, streaming SSE, friendly offline state + Retry, markdown), single-host ThinkPad deploy stack, Socrata incremental backfill + data-freshness endpoint, sensitivity-class UI (place creation + exports), personal-upload (enabled on single-host trial, flag-gated elsewhere), seed dataset |
 | **Half-baked** | Real-data query perf still has residual full-table paths outside the main summarize path; Postgres-in-prod (CI-proven; soak harness now available — H2, `docs/soak-testing.md` — but the multi-hour run itself is still pending) |
 | **Open — invariant risk** | Safety-refusal guard hardened (object-first regex gap fixed #59; output-side guard + broadened ranking/determiner detection #63; English colloquial lexicon + Spanish arm added, H4; H4 follow-up: context-scoped into unambiguous + ambiguous + place-context patterns — closes proper-noun colloquial false-positives, Spanish colloquials, `mal barrio` both word orders, avoid/evitar, rank-verb punctuation, `centro`/`esquina` EN/ES parity). Residual: languages beyond English/Spanish (non-Latin scripts need script-aware matching); accepted fail-safe over-refusal on Spanish "estoy seguro de X + place" (regex can't separate epistemic from physical *seguro*) — deferred/accepted |
@@ -260,6 +260,12 @@ spec → plan → PR.*
   adjust radius / dates / category / layer conversationally ("increase radius to 500")
   and re-run; changes sync the dashboard controls so they stick across turns. Spec:
   `docs/superpowers/specs/2026-07-10-analyst-knob-control-design.md`.
+- [x] **Follow-up — Result-aware Analyst:** the newest frozen analysis card now contributes a
+  compact typed scope to chat (kind, place IDs, settings — never cached evidence). Questions
+  about that result use a read-only server tool that recomputes authoritative evidence, while
+  referential reruns can retain the frozen scope even if the live dashboard has moved. The
+  slice also closed multi-turn refusal, hostile-label, named-place fallback, and provider
+  rate-limit propagation gaps with transcript-style regressions.
 - [x] **Follow-up — Analyst persona, now Tabby:** the original Copper chrome shipped first;
   Tabby-central renamed the case-desk persona to Tabby, a fictional records cat (no SPD
   insignia, never claims official status). The avatar header, in-voice status, greeting,
@@ -317,6 +323,13 @@ independently-shippable slices. Spec:
   hover pulse, identity-colored lettered pins. Pure frontend. (2026-07-12)
 - [x] Sector/city baselines via month-grouped SQL COUNT(*) (calls layer materializes ~700k
   rows/yr per citywide request today — do before demoing the calls layer) (2026-07-12)
+- [x] **Empirical reference-circle replacement for single-place context:** fixed observed
+  incidents; versioned Seattle SND street-segment midpoint frame; equal-radius MCPP/sector/city
+  distributions with overlap-weighted mixtures, deterministic exact/Monte Carlo computation,
+  adequacy fallback, accessible plot/details, assistant grounding, and run-scoped CSV parity.
+  The former polygon-density fields remain in the API during validation, but the current
+  single-place UI/export no longer uses them. Method:
+  `docs/analysis/empirical-reference-circles.md`. (2026-07-30)
 
 ## Volume-over-time trend section (2026-07-16)
 *First slice of the public-release feature push: descriptive monthly trends on the analyze
@@ -353,8 +366,8 @@ parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md
   reassess the older optional Compare backlog against the card-first interaction before building it.
 
 ## Phase 8 — Durable public instance (2026-07-27)
-*The "for-real launch" that `docs/DEMO.md` deferred: CompCat always-on from a small VPS at a
-registered domain — still session-based, still not an operated multi-user service. Umbrella
+*CompCat always-on at a registered domain — still session-based, still not an operated
+multi-user service. Umbrella
 spec: `docs/superpowers/specs/2026-07-27-public-instance-design.md`; four slices, each with
 its own spec (same date prefix), worked one at a time, code-first (1→4). Decisions: VPS
 (provider open), Groq wired for setup with Anthropic as the prod Analyst posture, compcat.app

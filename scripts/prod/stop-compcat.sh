@@ -6,6 +6,7 @@ cd "$(dirname "$0")/../.."  # repo root — the compose -f paths are repo-relati
 
 ENV_FILE="${ENV_FILE:-.env.prod}"
 
+echo "== Stopping CompCat PUBLIC VPS instance =="
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
     --profile ops --env-file "${ENV_FILE}" down
 

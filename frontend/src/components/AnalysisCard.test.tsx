@@ -11,6 +11,7 @@ import type {
   IncidentDetailsResponse,
   NeighborhoodAnalysis,
   NeighborhoodPlace,
+  ReferenceCircleComparison,
   SiteComparison,
   SiteComparisonOption,
   SiteDecisionClass,
@@ -51,8 +52,32 @@ function comparison(overall: SiteDecisionClass, options: SiteComparisonOption[],
 function mcppBaseline(label: string): BaselineEntry {
   return { kind: "mcpp", label, area_km2: 2.1, baseline_incident_count: 500, baseline_rate: 0.2, rate_ratio: 1.0, ci_lower: 0.8, ci_upper: 1.3, adjusted_p_value: 0.5, method: "quasi_poisson", relation: "similar" };
 }
+function reference(kind: ReferenceCircleComparison["kind"], label: string): ReferenceCircleComparison {
+  return {
+    kind, label, available: true, adequacy_status: "met",
+    sampling_frame: "street_segment_midpoints", sampling_frame_version: "test-v1",
+    computation: kind === "mcpp" ? "exact" : "monte_carlo",
+    geography_components: [{ id: label, label, weight: 1, center_count: 300 }],
+    reference_center_count: 300, reference_draw_count: kind === "mcpp" ? 300 : 2500,
+    monte_carlo_error: kind === "mcpp" ? null : 0.0196,
+    covered_area_share: 1, effective_geographies: 1, target_count: 3,
+    p10: 1, p25: 2, median: 3, p75: 5, p90: 7,
+    share_below: 0.68, share_equal: 0.07, share_above: 0.25,
+    midrank_percentile: 0.715, warnings: [],
+  };
+}
 function placeWithMcpp(id: string, label: string): NeighborhoodPlace {
-  return { place_id: id, place_label: id, beat: "M2", radius_m: 250, baseline_available: true, decision: "not_clear", place_incident_count: 3, baselines: [mcppBaseline(label)], category_breakdown: [] };
+  return {
+    place_id: id, place_label: id, beat: "M2", radius_m: 250,
+    baseline_available: true, decision: "not_clear", place_incident_count: 3,
+    baselines: [mcppBaseline(label)],
+    reference_comparisons: [
+      reference("mcpp", `${label} MCPP`),
+      reference("sector", "Sector M"),
+      reference("city", "Citywide"),
+    ],
+    category_breakdown: [],
+  };
 }
 function neighborhood(...labels: string[]): NeighborhoodAnalysis {
   return { radius_m: 250, analysis_start_date: "2021-07-01", analysis_end_date: "2026-06-30", offense_category: null, pairwise: [], places: labels.map((l, i) => placeWithMcpp(`n${i}`, l)) };
@@ -106,7 +131,7 @@ function compareCard(over: Partial<AnalysisCardData> = {}): AnalysisCardData {
   };
 }
 
-const EXPORT_BASE = "/exports/tableau/place-summary.csv";
+const EXPORT_BASE = "/exports/analysis.csv";
 
 beforeEach(() => {
   getTrends.mockReset().mockResolvedValue(trends());
@@ -149,6 +174,7 @@ describe("AnalysisCard", () => {
     expect(screen.queryByText(/2021-07-01/)).not.toBeInTheDocument();
     expect(screen.queryByText(/250 m/)).not.toBeInTheDocument();
     expect(screen.queryByText(/reported incident rate is/)).not.toBeInTheDocument();
+    expect(screen.getByText(/68% had fewer reported incidents/)).toBeInTheDocument();
     // compact: no trend/incident sections (methods + caveat stay — see below)
     expect(screen.queryByTestId("trend-section")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/near selected places/)).not.toBeInTheDocument();
@@ -172,7 +198,7 @@ describe("AnalysisCard", () => {
       />,
     );
     expect(screen.getAllByText("Pike").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/reported incident rate (?:sits|shows)/)).toHaveLength(2);
+    expect(screen.getAllByText(/Among eligible street-centered circles/)).toHaveLength(2);
     expect(await screen.findByTestId("trend-chart")).toBeInTheDocument();
     expect(screen.getByLabelText(/near selected places/)).toBeInTheDocument();
   });

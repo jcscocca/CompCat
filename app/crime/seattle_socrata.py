@@ -8,7 +8,7 @@ from datetime import date
 from io import StringIO
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from app.crime.nibrs_crosswalk import classify_nibrs
@@ -36,6 +36,21 @@ def _safe_soql_timestamp(value: str) -> str:
     if not _SOQL_TIMESTAMP_RE.match(value):
         raise ValueError(f"Unsafe SoQL timestamp literal: {value!r}")
     return value
+
+
+def _safe_socrata_base_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("Socrata base URL must be an HTTPS origin/path without credentials")
+    return value.rstrip("/")
+
 
 # The SPD Call Data set is ~24x the size of the reported-crime set (10.9M rows back to 2009),
 # so it gets a rolling, much-later floor instead of the full history. Lower CALLS_WINDOW_MONTHS
@@ -77,7 +92,7 @@ class SeattleSocrataClient:
         date_field: str = "offense_date",
         data_floor: date = CRIME_DATA_FLOOR,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _safe_socrata_base_url(base_url)
         self.dataset_id = dataset_id
         self.app_token = app_token
         self.mapper = mapper or crime_incident_from_mapping
@@ -89,7 +104,8 @@ class SeattleSocrataClient:
         request = Request(f"{self.base_url}/{self.dataset_id}.json?{query}")
         if self.app_token:
             request.add_header("X-App-Token", self.app_token)
-        with urlopen(request, timeout=30) as response:
+        # The constructor restricts the request target to an HTTPS host/path.
+        with urlopen(request, timeout=30) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8"))
 
     def fetch_page(

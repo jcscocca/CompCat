@@ -67,7 +67,10 @@ def test_dashboard_analyze_selected_places(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"summary_count": 2}
+    payload = response.json()
+    assert payload["summary_count"] == 2
+    assert isinstance(payload["analysis_run_id"], str)
+    assert payload["analysis_run_id"]
     dashboard = client.get("/dashboard/summary").json()
     assert dashboard["totals"]["incident_count"] == 2
 

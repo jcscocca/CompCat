@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 from app.db import get_sessionmaker
@@ -18,6 +19,7 @@ def test_latest_returns_most_recent_run(tmp_path):
         offense_category=None,
         offense_subcategory=None,
         nibrs_group=None,
+        place_ids=["place-b", "place-a", "place-b"],
     )
     second = create_analysis_run(
         session,
@@ -32,6 +34,7 @@ def test_latest_returns_most_recent_run(tmp_path):
 
     assert first.id != second.id
     assert latest_analysis_run_id(session, "u1") == second.id
+    assert json.loads(first.place_ids_json) == ["place-b", "place-a"]
 
     session.close()
 

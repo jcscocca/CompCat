@@ -28,7 +28,7 @@ uses Swift Package Manager.
 
     cd frontend
     export MCA_IOS_SERVER_URL="https://<hostname>.<tailnet>.ts.net"
-    npm run ios:sync     # vite build + cap sync (bakes the URL into the app)
+    npm run ios:sync     # regenerate branding + vite build + cap sync
     npm run ios:open     # opens Xcode
 
 In Xcode: select the App target → Signing & Capabilities → choose your team
@@ -41,7 +41,9 @@ The tailnet URL is baked at sync time and is deliberately NOT committed — the 
 `ios/App/App/capacitor.config.json` is gitignored, so a personal hostname physically
 cannot land in the repo. Fresh clones: `npm run ios:sync` regenerates every
 gitignored piece (`capacitor.config.json`, `config.xml`, `public/`,
-`capacitor-cordova-ios-plugins/`).
+`capacitor-cordova-ios-plugins/`) and installs the generated icon/splash PNGs directly
+into the committed Xcode asset catalog. `npm run ios:assets` regenerates only those
+branding files.
 
 ## On-device verification checklist
 

@@ -73,8 +73,25 @@ def test_neighborhood_endpoint_returns_place_block(neighborhood_client):
     assert response.status_code == 200
     body = response.json()
     assert body["radius_m"] == 250
-    assert body["places"][0]["place_id"] == place_id
-    assert "decision" in body["places"][0]
+    place = body["places"][0]
+    assert place["place_id"] == place_id
+    assert "decision" in place
+
+    references = place["reference_comparisons"]
+    assert [entry["kind"] for entry in references] == ["mcpp", "sector", "city"]
+    city = references[-1]
+    assert city["available"] is True
+    assert city["adequacy_status"] == "met"
+    assert city["sampling_frame"] == "street_segment_midpoints"
+    assert city["sampling_frame_version"]
+    assert city["target_count"] == place["place_incident_count"] == 5
+    assert city["reference_center_count"] > 20_000
+    assert city["reference_draw_count"] == 2_500
+    assert city["computation"] == "monte_carlo"
+    assert city["share_below"] + city["share_equal"] + city["share_above"] == pytest.approx(1)
+    assert city["p10"] <= city["p25"] <= city["median"] <= city["p75"] <= city["p90"]
+    assert "p_value" not in city
+    assert "rate_ratio" not in city
 
 
 def test_neighborhood_endpoint_requires_public_session(tmp_path):

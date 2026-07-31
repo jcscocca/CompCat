@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.assistant.output_guard import output_guard_redirect
+from app.assistant.output_guard import SAFETY_REDIRECT, output_guard_redirect
 
 DECISION_PHRASES = {
     "above_clear": "above its surrounding-area baseline, statistically clear",
@@ -47,6 +47,7 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
         "select_places": _select_places_summary,
         "analyze_places": _analyze_places_summary,
         "compare_places": _compare_places_summary,
+        "explain_result": _explain_result_summary,
         "get_dashboard_summary": _dashboard_summary,
         "suggest_followups": _suggest_followups_summary,
         "update_filters": _update_filters_summary,
@@ -59,7 +60,10 @@ def build_tool_summary(tool_result: dict[str, Any]) -> str:
 _HOSTILE_LABEL_PROSE = re.compile(
     r"\b(?:do\s+not|don't|never|ignore|disregard|avoid|stay\s+away|go\s+there"
     r"|recommend(?:ed|ing)?|very\s+(?:dangerous|unsafe|risky)"
-    r"|(?:is|are)\s+(?:safe|unsafe|dangerous|risky))\b",
+    r"|safe(?:r|st)?|unsafe|dangerous|risky"
+    r"|(?:is|are)\s+(?:safe|unsafe|dangerous|risky))\b"
+    r"|\b(?:best|worst|number\s+one)\b[^.?!]{0,24}\bsafety\b"
+    r"|\bsafety\b[^.?!]{0,24}\b(?:score|rank|rating|best|worst)\b",
     re.IGNORECASE,
 )
 
@@ -74,8 +78,8 @@ def _guard_summary_with_labels(summary: str, result: dict[str, Any]) -> str:
     labels = sorted(_interpolated_labels(result), key=len, reverse=True)
     for label in labels:
         redirect = output_guard_redirect(label)
-        if redirect is not None and _HOSTILE_LABEL_PROSE.search(label):
-            return redirect
+        if _HOSTILE_LABEL_PROSE.search(label):
+            return redirect or SAFETY_REDIRECT
 
     masked = summary
     replacements: list[tuple[str, str]] = []
@@ -119,6 +123,10 @@ def _interpolated_labels(result: dict[str, Any]) -> set[str]:
         add(query)
     for place_entry in (result.get("neighborhood") or {}).get("places") or []:
         add(place_entry.get("place_label"))
+        for reference in place_entry.get("reference_comparisons") or []:
+            add(reference.get("label"))
+            for component in reference.get("geography_components") or []:
+                add(component.get("label"))
         for baseline in place_entry.get("baselines") or []:
             add(baseline.get("label"))
     comparison = result.get("comparison") or {}
@@ -163,6 +171,34 @@ def _primary_baseline(place: dict[str, Any]) -> dict[str, Any] | None:
     return by_kind.get("mcpp") or by_kind.get("beat") or by_kind.get("city")
 
 
+def _primary_reference(place: dict[str, Any]) -> dict[str, Any] | None:
+    by_kind = {
+        entry.get("kind"): entry
+        for entry in place.get("reference_comparisons") or []
+        if entry.get("available")
+    }
+    return by_kind.get("mcpp") or by_kind.get("sector") or by_kind.get("city")
+
+
+def _reference_summary(
+    *,
+    label: str,
+    count: int,
+    noun: str,
+    radius: Any,
+    entry: dict[str, Any],
+) -> str:
+    fewer = round(float(entry.get("share_below") or 0) * 100)
+    equal = round(float(entry.get("share_equal") or 0) * 100)
+    more = round(float(entry.get("share_above") or 0) * 100)
+    reference_label = entry.get("label") or "the reference area"
+    return (
+        f"{label}: {count} {noun} within {radius} m. Among eligible street locations "
+        f"in {reference_label}, {fewer}% had fewer, {equal}% matched, and {more}% had "
+        "more in equal-radius circles."
+    )
+
+
 # Decisions that mean "no comparison was actually made". A baseline entry can still carry a
 # ratio in these cases (each entry is tested independently, and a wide-area citywide entry
 # will happily return 88.9× off two incidents), but the place-level verdict is authoritative:
@@ -187,6 +223,25 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
     for place in places:
         label = place.get("place_label") or "The place"
         count = place.get("place_incident_count") or 0
+        reference_comparisons = place.get("reference_comparisons")
+        if isinstance(reference_comparisons, list):
+            reference = _primary_reference(place)
+            if reference is not None:
+                sentences.append(
+                    _reference_summary(
+                        label=label,
+                        count=count,
+                        noun=noun,
+                        radius=radius,
+                        entry=reference,
+                    )
+                )
+            else:
+                sentences.append(
+                    f"{label}: {count} {noun} within {radius} m "
+                    "(no adequate reference-circle comparison)."
+                )
+            continue
         entry = _primary_baseline(place) if rate_ratio_is_reportable(place) else None
         relation = (entry or {}).get("relation")
         if entry and relation in _RELATION_PHRASES and entry.get("rate_ratio") is not None:
@@ -233,6 +288,12 @@ def _compare_places_summary(result: dict[str, Any]) -> str:
     parts.extend(_untested_pair_sentences(result))
     summary = (lead_in + " ".join(parts)) if parts else "Compared the selected places."
     return _with_provenance(summary, result)
+
+
+def _explain_result_summary(result: dict[str, Any]) -> str:
+    if result.get("kind") == "compare":
+        return _compare_places_summary(result)
+    return _analyze_places_summary(result)
 
 
 # app/analysis/comparison.py fills an untested pair's rate_ratio/CI/p with 1.0 placeholders so

@@ -15,9 +15,8 @@ accounts, no sign-in), reports **reported Seattle SPD incident context**, and ke
 location-history uploads switched off. Design:
 [`superpowers/specs/2026-07-27-public-instance-slice4-vps-bringup-design.md`](superpowers/specs/2026-07-27-public-instance-slice4-vps-bringup-design.md).
 
-For the single-host ThinkPad trial over plain HTTP, see [`DEPLOY.md`](DEPLOY.md). For the
-two-minute shareable demo over a Cloudflare quick tunnel, see [`DEMO.md`](DEMO.md). Both keep
-working unchanged; this is a third, independent deployment.
+For the private ThinkPad instance over plain HTTP, see [`DEPLOY.md`](DEPLOY.md). The VPS is a
+separate public deployment with its own database and secrets.
 
 ## The shape of it
 

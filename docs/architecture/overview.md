@@ -32,6 +32,7 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 | `app/input_modes.py` | Pure-Python descriptor for the three supported entry modes (`manual_places`, `bulk_places`, `personal_timeline`) |
 | `app/request_limits.py` | Pre-routing request-body cap; default 1 MiB, with the larger upload cap available only when public uploads are enabled |
 | `app/ratelimit.py` | Per-IP token buckets for API burst traffic plus dedicated finite tile and health-probe families |
+| `app/response_security.py` | Global browser security policy plus `no-store` on session-private response families |
 | `app/time_contract.py` | Serializes SPD's stored Seattle wall clocks with their real DST-aware local offset |
 
 **Database strategy:** `app/db.py` `init_db()` runs `Base.metadata.create_all` only when the backend is SQLite (dev/test). Postgres schema is owned by Alembic (`make migrate` = `alembic upgrade head`). Mixing both paths on Postgres would leave `alembic_version` unstamped and mask migration drift.
@@ -50,7 +51,8 @@ using Python 3.11, then build the image.
 - `PlaceCluster` — the canonical saved-place record; carries display coordinates, visit statistics, sensitivity class
 - `SessionActivity` — one-way user hash plus last create/resume time, used to preserve returning read-only identities during retention
 - `CrimeIncident` — SPD reported-incident rows ingested from Seattle Socrata
-- `PlaceCrimeSummary`, `AnalysisRun` — per-place crime tallies and the run metadata that groups them
+- `PlaceCrimeSummary`, `AnalysisRun` — per-place crime tallies and the run metadata that groups
+  them; each new saved-place run records its ordered selection for run-owned exports
 - `StatisticalComparison`, `StatisticalComparisonOption`, `StatisticalPairwiseResult` — persisted statistical comparison results
 - `GeocodeCache` — TTL-bounded cache keyed by `(provider, query_normalized)`
 
@@ -60,7 +62,7 @@ using Python 3.11, then build the image.
 
 See `./api.md` for full endpoint-by-endpoint detail. Summary:
 
-**Public** — in OpenAPI schema; require a real session token validated by `required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/uploads` (additionally gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`; responds 404 when the flag is off).
+**Public** — in OpenAPI schema; require a real session token validated by `required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/uploads` (additionally gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`; responds 404 when the flag is off).
 
 `POST /sessions` slides the signed 24-hour window while preserving the original `issued_at`;
 `MCA_SESSION_ABSOLUTE_MAX_DAYS` (30 by default) caps the identity lifetime. `DELETE /sessions`
@@ -80,10 +82,10 @@ clears the cookie.
 |---|---|---|
 | Assistant | `app/assistant/agent.py` + `app/api/routes_assistant.py` | Guarded decision-tree chat plus deterministic no-LLM commands; both stream the same event vocabulary into the Tabby rail |
 | LLM client | `app/assistant/llm_client.py` | Backend selected by `MCA_LLM_PROVIDER` — OpenAI-compatible endpoint, OpenAI SDK, or Claude SDK; `FailoverLlmClient` wraps two for automatic failover |
-| Statistical analysis | `app/analysis/comparison.py` | Exposure-adjusted rate tests (Poisson / quasi-Poisson), Benjamini-Hochberg correction, `DecisionClass` output |
+| Statistical analysis | `app/analysis/reference_circles.py` + `app/analysis/comparison.py` | Empirical equal-radius reference distributions for one-place context; separate exposure-adjusted quasi-Poisson/BH tests for user-selected place-to-place comparison |
 | Crime ingestion | `app/crime/` | `seattle_socrata.py` fetches from Socrata; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
 | Upload pipeline | `app/parsers/` + `app/normalization/` | Parsers (`google_timeline`, `gpx_points`, `csv_points`, `geojson_points`, `recurring_places`) normalize raw uploads into `StagingLocationObservation` rows |
-| Exports | `app/exports/` | `tableau.py` produces Tableau-ready CSV from stored `PlaceCrimeSummary` data |
+| Exports | `app/exports/` | `tableau.py` produces the legacy session-wide Tableau place summary; `analysis.py` flattens the current analytical detail view into a run-owned CSV with target counts, reference-circle distributions, adequacy, and method metadata |
 | Geocoding | `app/geocoding/providers.py` | `NominatimProvider` calls Nominatim; region-locked to the Seattle-metro viewbox (`MCA_GEOCODER_VIEWBOX`, bounded by default) |
 | Places | `app/places/schemas.py` + `app/services/manual_place_service.py` | Manual and bulk place creation/update/delete; `PlaceCluster` is the canonical record |
 | Services | `app/services/` | All business logic: `dashboard_analysis_service.py`, `analysis_service.py`, `crime_service.py`, `geocoding_service.py`, `export_service.py`, `import_service.py`, `normalization_service.py`, and others |
@@ -106,11 +108,17 @@ This is the primary analysis endpoint that runs incident counts for a user's sel
 
    d. Calls `app/crime/summaries.py` `summarize_place_crime` to compute per-cluster, per-radius incident counts and `PlaceCrimeSummaryData` objects.
 
-   e. Creates an `AnalysisRun` record via `app/services/analysis_runs.py` `create_analysis_run`, stamps each `PlaceCrimeSummary` model with the run ID, and bulk-inserts them.
+   e. Creates an `AnalysisRun` record via `app/services/analysis_runs.py`
+   `create_analysis_run`, recording the ordered selected place IDs even when a place has zero
+   matching incidents. It stamps each `PlaceCrimeSummary` model with the run ID and bulk-inserts
+   them.
 
-   f. Commits the session and returns `{"summary_count": N}`.
+   f. Commits the session and returns
+   `{"summary_count": N, "analysis_run_id": "<exact saved-place run>"}`. Ad-hoc
+   point-backed requests are not persisted and return a null run ID.
 
-3. **Response**: the router passes the dict directly to FastAPI; the declared return type `dict[str, int]` drives JSON serialization.
+3. **Response**: the router exposes the count plus the ID from this exact invocation, letting
+   the frontend attach a run-scoped CSV link without racing a separate "latest run" lookup.
 
 Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) → `sessions` (token verification) → `config` (salt) → `db` (session) → `dashboard_analysis_service` → `analysis_runs` → `crime/summaries` → `models` (`PlaceCluster`, `CrimeIncident`, `PlaceCrimeSummary`, `AnalysisRun`) → `schemas` (`PlaceClusterData`, `CrimeIncidentData`).
 
@@ -118,7 +126,14 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 
 ## 6. Backend ↔ frontend
 
-`frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/tableau/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
+`frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
+
+Analysis cards use `GET /exports/analysis.csv?run_id=...`, which verifies run ownership,
+recomputes the same reference-circle payload from the frozen run parameters and selected
+places, and exports one row per place/reference geography using the same values displayed in
+the card. The retained polygon-density baseline fields are not part of this analytical export.
+The Manage Places footer retains the separate session-wide Tableau place-summary download.
+Both paths honor the per-place export privacy class.
 
 The Tabby rail's **Show me the data** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an expanded `AnalysisCard` in the same rail. The rail keeps one live client-generated quick-report card, so another direct run replaces that card instead of stacking a duplicate “previous analysis”; assistant-produced cards remain part of the conversation.
 
@@ -139,6 +154,12 @@ both light and dark modes. See `../accessibility.md` for the maintained verifica
 
 - **Built mode** (production / `make run`): `app/main.py` `mount_dashboard()` serves `app/static/dashboard/index.html` at `/` and `app/static/dashboard/assets/` at `/assets/` using FastAPI's `StaticFiles`. The `MCA_STATIC_DASHBOARD_DIR` setting controls the path; mounting is silently skipped if `index.html` does not exist.
 - **Vite dev mode**: `npm run dev` in `frontend/` starts Vite on its own port; the browser talks to the FastAPI backend (typically `:8000`) directly, with the session cookie shared by same-origin or proxy configuration.
+
+`ResponseSecurityMiddleware` wraps the complete ASGI surface without buffering SSE. It
+enforces the dashboard's CSP and browser hardening headers on every response, and writes
+`Cache-Control: no-store` for session tokens, saved places, session-owned dashboard analysis,
+assistant, upload, export, internal, and admin routes. Public beat/MCPP reference geometry keeps
+its explicit one-hour cache policy; static assets and health/freshness metadata are unaffected.
 
 The self-hosted PMTiles artifact is mounted at `/tiles`, but `.pmtiles` requests must carry
 `Range`; a range-less request receives 416 instead of downloading the complete ~100 MiB file.
@@ -179,7 +200,7 @@ flowchart TD
         PL["routes_places\n/places (read)"]
         PA["routes_assistant\n/assistant/chat + /assistant/commands"]
         PU["routes_uploads\n/uploads"]
-        PE["routes_exports\n/exports/tableau/*"]
+        PE["routes_exports\n/exports/*"]
         PS["routes_sessions\n/sessions"]
     end
 

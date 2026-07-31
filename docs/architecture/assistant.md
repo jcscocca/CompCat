@@ -41,15 +41,22 @@ single-planning-call reliability story below still holds end to end.
 
 **Phase 1 — safety-refusal gate (no LLM)**
 
-Before the LLM is consulted, `run_assistant_turn` in `app/assistant/agent.py` checks the latest
-user request with `_asks_for_safety_score`. A short referential continuation also carries the
-immediately preceding request into the check. If the regex `_SAFETY_SCORE_PATTERN` matches, the
-turn is short-circuited: a pre-written refusal is streamed as `token` events and a `done` event
-is emitted. The LLM is never contacted.
+Before the LLM is consulted, `run_assistant_turn` in `app/assistant/agent.py` checks the current
+user request with the deterministic safety-ranking and personal-presence guards. When the
+immediately preceding user turn was refused, an ambiguous continuation carries that request
+forward; only a clearly new supported incident, place, or filter request resets the scope. This
+fail-closed boundary covers open-ended continuations such as “give me the ordering,” “run it
+again,” and “compare them anyway” without letting an old refusal poison a later explicit data
+request. On a hit the turn is short-circuited: a pre-written refusal is streamed as a `token`
+event followed by `done`. The LLM is never contacted.
 
 **Phase 2 — single classify-only LLM call**
 
-`build_planning_messages` (`app/assistant/prompts.py`) assembles a system prompt, a `SemanticContextPacket` payload (the user's dashboard state, saved-place metadata, active filters, available tools, and policy caveats), and up to the last eight conversation turns. The LLM is instructed to respond with exactly one JSON object in one of two shapes:
+`build_planning_messages` (`app/assistant/prompts.py`) assembles a system prompt, a
+`SemanticContextPacket` payload (the user's live dashboard state, saved-place metadata, active
+filters, available tools, policy caveats, and the compact scope of the newest frozen result
+when one exists), and up to the last eight conversation turns. The LLM is instructed to respond
+with exactly one JSON object in one of two shapes:
 
 ```
 {"type": "final",    "message": "..."}
@@ -192,7 +199,8 @@ given deployment.
 
 ## 3. Toolbox
 
-The seven tools advertised to the LLM via `AVAILABLE_TOOLS` in `app/assistant/semantic_layer.py` are:
+The eight tools advertised to the LLM via `AVAILABLE_TOOLS` in
+`app/assistant/semantic_layer.py` are:
 
 | Tool name | Purpose |
 |---|---|
@@ -200,6 +208,7 @@ The seven tools advertised to the LLM via `AVAILABLE_TOOLS` in `app/assistant/se
 | `select_places` | Resolve one or more place names to saved places (creating missing ones) and set the dashboard selection; supports `replace`, `add`, `clear` modes |
 | `analyze_places` | Resolve names (or use the current selection), run the reported-incident analysis, and return neighborhood-vs-beat verdicts plus incident details |
 | `compare_places` | Resolve two or more names (or use the selection), run the analysis, and return a side-by-side comparison |
+| `explain_result` | Recompute the authoritative evidence for the newest frozen analysis or comparison so the Analyst can answer a result-specific follow-up without creating another card |
 | `update_filters` | Validate and return a client-owned radius/date/category/layer patch; never persists dashboard state |
 | `get_dashboard_summary` | Read current dashboard totals and the list of saved places (read-only) |
 | `suggest_followups` | Return a fixed list of deterministic follow-up suggestions |
@@ -217,8 +226,18 @@ Small local models frequently emit a `tool_call` with empty or partial `argument
 Two deterministic language backstops run before validation. Explicit meter asks (`radius to
 500`, `radius = 500`, `750 m`, `750 meters`) fill an omitted radius for selection tools and
 `update_filters`; relative date asks continue to resolve against the active window's end date.
-If the model supplies place-name queries but none resolve, analysis/compare falls back to the
-active, backfilled place IDs instead of discarding a usable dashboard selection.
+If the model supplies a deictic query such as “this place” or “the selected places” and it does
+not resolve as a saved label, analysis/compare falls back to the active, backfilled place IDs.
+An explicit named query that fails resolution does **not** silently analyze the current
+selection; the tool asks for clarification instead.
+
+`explain_result` never takes model-authored scope. `_tool_arguments` injects the typed
+`latest_result_context` supplied by the frontend (kind, place IDs, dates, radius, all offense
+filters, and layer), and the tool recomputes the corresponding read-only analysis from server
+data. A
+referential rerun can opt into that same scope with plan context `latest_result`; explicit
+arguments such as a newly requested radius still override it. No raw result rows or incident
+details are copied into the planning prompt.
 
 **Incident cap**
 
@@ -237,7 +256,8 @@ The agent influences the Tabby rail and map by emitting `tool` SSE events. The f
 - **`add_place`** → appends the new place ID to the selection (`mode: "add"`) and sets `refetchSummary: true`.
 - **`select_places`** → updates the selection with the mode returned by the tool (`replace`, `add`, or `clear`).
 - **`update_filters`** → applies the validated patch through the same client-owned settings reducer used by the context strip and appends a deterministic receipt.
-- **`get_dashboard_summary`, `suggest_followups`, and unknown tools** → return `null` (no pane change).
+- **`explain_result`, `get_dashboard_summary`, `suggest_followups`, and unknown tools** → return
+  `null` (no pane change).
 
 `useAssistantTurn` serializes chat and command streams with newest-intent-wins abort semantics.
 `AssistantPanel.tsx` renders the typed thread, while `MapWorkspace.tsx` applies
@@ -250,7 +270,22 @@ connects badge taps back to the newest matching card.
 
 **`app/assistant/semantic_layer.py`**
 
-`build_semantic_context` assembles a `SemanticContextPacket` from live database state before the planning call. It includes: explicitly selected dashboard totals (saved place count, incident count, available radii), metadata for the currently selected places (label, coordinates, inferred type, sensitivity class), the most recent incident-count `PlaceCrimeSummary` fields for those places, the user's active filters, the `AVAILABLE_TOOLS` list, and `POLICY_CAVEATS` (invariant statements injected directly into the model's context, e.g. "Do not label places as safe or unsafe."). Visit counts, dwell fields, and their derived incident-rate fields are deliberately excluded from both this packet and every assistant tool result; a recursive tool-boundary scrub prevents a composed result from reintroducing them. A `missing_context` list flags gaps (no saved places, no selection, no date range, no radius) that the model is expected to mention or work around.
+`build_semantic_context` assembles a `SemanticContextPacket` from live database state before the
+planning call. It includes: explicitly selected dashboard totals (saved place count, incident
+count, available radii), metadata for the currently selected places (label, coordinates,
+inferred type, sensitivity class), the most recent incident-count `PlaceCrimeSummary` fields for
+those places, the user's active filters, the `AVAILABLE_TOOLS` list, and `POLICY_CAVEATS`
+(invariant statements injected directly into the model's context, e.g. "Do not label places as
+safe or unsafe."). When the thread contains a frozen analysis card, it also includes only that
+card's typed `latest_result_context` scope. The browser derives the scope from the newest card,
+not from the current map selection, so questions about “that result” remain anchored even after
+the user changes the live dashboard. The server never trusts cached result evidence: the
+`explain_result` tool recomputes it.
+
+Visit counts, dwell fields, and their derived incident-rate fields are deliberately excluded
+from both this packet and every assistant tool result; a recursive tool-boundary scrub prevents
+a composed result from reintroducing them. A `missing_context` list flags gaps (no saved places,
+no selection, no date range, no radius) that the model is expected to mention or work around.
 
 `missing_context` also distinguishes an active layer with no loaded source rows from a real
 zero-result analysis. In that state it explicitly says the layer is **not loaded** and forbids
@@ -260,20 +295,35 @@ The active **layer** flows through the assistant the same way the other dashboar
 
 **`app/assistant/summaries.py`**
 
-`build_tool_summary` maps a tool result to a neutral one-liner entirely from result fields — no LLM. For `analyze_places` it reads `neighborhood.places` entries and formats rate-ratio phrases via `_DECISION_PHRASES` (e.g. `"above its beat baseline, statistically clear"`). For `compare_places` it lists per-place incident counts and the `overview.summary_text`. Both are layer-aware (`_layer_terms`, keyed on `settings_used.layer`): the summary is prefixed with "From the reports: ", "From the arrest records: ", or "From the call logs: " and phrases the count noun to match ("reported incidents", "arrests", or "911 calls"), so an arrests or calls turn is never phrased as reported incidents. All handlers avoid safety/danger/risk language by design.
+`build_tool_summary` maps a tool result to a neutral one-liner entirely from result fields — no
+LLM. For `analyze_places` it reads `neighborhood.places[].reference_comparisons`, prefers the
+first adequate MCPP → sector → city rung, and reports the target count plus the tie-aware shares
+of eligible equal-radius street locations with fewer, equal, or more records. It does not call
+that empirical position expected or statistically significant. The retained polygon-density
+summary path is used only for older payloads that lack `reference_comparisons`. For
+`compare_places` it lists per-place incident counts and the `overview.summary_text`;
+`explain_result` reuses the matching analysis or comparison summary after its server-side
+recomputation. These paths are layer-aware (`_layer_terms`, keyed on `settings_used.layer`): the
+summary is prefixed with "From the reports: ", "From the arrest records: ", or "From the call
+logs: " and phrases the count noun to match ("reported incidents", "arrests", or "911 calls"),
+so an arrests or calls turn is never phrased as reported incidents. All handlers avoid
+safety/danger/risk language by design.
 
-The output guard checks generated summary prose with interpolated labels replaced by inert
+The output guard checks generated summary prose with interpolated place, reference, and
+component labels replaced by inert
 tokens, then restores benign proper names (for example, “Public Safety Building”). A label
 containing sentence-like hostile instructions or safety-ranking prose still redirects. The
-`similar` baseline relation is phrased as “no statistically clear difference from,” never as
-equivalence, with the ratio/interval shown only after that verdict.
+legacy `similar` baseline relation is phrased as “no statistically clear difference from,”
+never as equivalence, with the ratio/interval shown only after that verdict.
 
 Narrator grounding humanizes raw layer/category enums and NIBRS labels, identifies changed
-filter fields while listing untouched knobs, and adds two precision qualifiers: counts below 10
-and confidence intervals spanning more than 10x. Busiest-hour lines state that they use reported
-offense **START** times and that range-reported offenses are assigned to the window opening,
-which can bias the apparent peak. The narration prompt requires all of these qualifiers to
-survive the rewrite.
+filter fields while listing untouched knobs. Current analyze grounding includes all adequate
+reference rows, quantiles, fewer/equal/more shares, inadequacy reasons, and a Monte Carlo
+precision qualifier when applicable; it explicitly identifies the result as descriptive.
+Legacy payloads retain the former small-count and wide-confidence-interval qualifiers.
+Busiest-hour lines state that they use reported offense **START** times and that range-reported
+offenses are assigned to the window opening, which can bias the apparent peak. The narration
+prompt requires all of these qualifiers to survive the rewrite.
 
 **`app/assistant/place_resolution.py`**
 
@@ -377,12 +427,11 @@ cooperating compiled patterns rather than one:
 - `_PLACE_CONTEXT_PATTERN` — deictics + place nouns in English and Spanish — also matches the
   same message.
 
-`_asks_for_safety_score` runs `_contains_safety_ranking` against the latest user request.
-A short referential confirmation such as “ok do it anyway” also inherits the immediately
-preceding user request, preventing a one-turn bypass without letting an old refused question
-poison unrelated later turns. On a hit the turn is short-circuited before the LLM is called and
-a pre-written redirect (`_SAFETY_REDIRECT`) is streamed, telling the user to reframe as
-reported-incident counts or statistically tested geographic comparisons.
+The input gate runs `_contains_safety_ranking` against the current request. If the immediately
+preceding user request was refused, an ambiguous follow-up inherits it; only an explicit,
+supported incident/place/filter request starts a new scope. On a hit the turn is short-circuited
+before the LLM is called and a pre-written redirect (`_SAFETY_REDIRECT`) is streamed, telling
+the user to reframe as reported-incident counts or statistically tested geographic comparisons.
 
 **Output-side guard.** The same `_contains_safety_ranking` predicate is applied to the model's
 final answer before it is emitted. If a generated answer trips it, the answer is suppressed and

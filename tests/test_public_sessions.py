@@ -123,6 +123,7 @@ def test_public_read_routes_reject_demo_header_without_session(tmp_path):
         "/places",
         "/dashboard/summary",
         "/exports/tableau/place-summary.csv",
+        "/exports/analysis.csv?run_id=not-a-real-run",
     ):
         response = client.get(path, headers=headers)
 

@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Bring up the public CompCat instance (https://compcat.app) and refresh SPD data if it is
-# stale. Idempotent: re-running is the normal way to deploy a new commit.
+# Bring up the public CompCat VPS instance (https://compcat.app) and refresh SPD data if
+# it is stale. This is the LINUX/VPS launcher, not a ThinkPad script. Idempotent:
+# re-running is the normal way to deploy a new commit.
+#
+#   compose files  docker-compose.yml + docker-compose.prod.yml
+#   env file       .env.prod
+#   ingress        Caddy on host :80/:443
+#   data           VPS-local Postgres + nightly backup volume
+#   updates        current checkout; run git pull separately
 #
 #   scripts/prod/start-compcat.sh
 #
-# Runbook: docs/DEPLOY-VPS.md. Mirrors scripts/demo/start-demo.ps1, minus the tunnel — here
-# the Caddy service is the ingress and it comes up with the stack.
+# Runbook: docs/DEPLOY-VPS.md. Caddy is the ingress and comes up with the stack.
 set -euo pipefail
 
 # Resolve everything against the repo root no matter where this is invoked from (the
@@ -26,6 +32,9 @@ compose() {
         --profile ops --env-file "${ENV_FILE}" "$@"
 }
 
+echo "== CompCat PUBLIC VPS instance =="
+echo "Exposure: https://compcat.app via Caddy :80/:443 | personal uploads OFF"
+echo "Source: current checkout (this script does not pull)"
 echo "Starting the production stack (db, api, caddy, ops sidecar)..."
 compose up -d --build
 

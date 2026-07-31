@@ -7,7 +7,7 @@ import {
   streamAssistantCommand,
   type AssistantCommandName,
 } from "../api/client";
-import { toApiMessages, type ThreadItem } from "./threadItems";
+import { latestResultContext, toApiMessages, type ThreadItem } from "./threadItems";
 import type { AssistantDashboardState, AssistantStreamEvent } from "../types";
 
 export const OFFLINE_MESSAGE =
@@ -144,7 +144,15 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
         append({ kind: "user_text", text });
       }
       return runTurn("chat", (onEvent, signal) =>
-        streamAssistantChat({ messages: apiMessages, dashboard_state: dashboardState }, { onEvent }, signal),
+        streamAssistantChat(
+          {
+            messages: apiMessages,
+            dashboard_state: dashboardState,
+            latest_result_context: latestResultContext(items),
+          },
+          { onEvent },
+          signal,
+        ),
       );
     },
     [items, append, dashboardState, runTurn],
