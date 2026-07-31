@@ -36,7 +36,7 @@ soak run, and the explicitly deferred performance/methodology follow-ups below.
 
 | State | What's here |
 |---|---|
-| **Production** | Analytical engine + neighborhood stats (overdispersion, BH correction, point-in-polygon beat assignment), places CRUD/bulk/geocoding (Seattle-region-locked), dashboard analyze/compare/incidents, Tableau place-summary export, sessions/tiers, config/secrets validators (salt/secret/admin-token all gated in prod boot), CI (SQLite + Postgres lanes), migrations |
+| **Production** | Analytical engine + neighborhood stats (overdispersion, BH correction, point-in-polygon beat assignment), places CRUD/bulk/geocoding (Seattle-region-locked), dashboard analyze/compare/incidents, run-scoped analytical CSV + session-wide Tableau place-summary export, sessions/tiers, config/secrets validators (salt/secret/admin-token all gated in prod boot), CI (SQLite + Postgres lanes), migrations |
 | **Beta-ready** | Assistant (decision-tree router, streaming SSE, friendly offline state + Retry, markdown), single-host ThinkPad deploy stack, Socrata incremental backfill + data-freshness endpoint, sensitivity-class UI (place creation + exports), personal-upload (enabled on single-host trial, flag-gated elsewhere), seed dataset |
 | **Half-baked** | Real-data query perf still has residual full-table paths outside the main summarize path; Postgres-in-prod (CI-proven; soak harness now available — H2, `docs/soak-testing.md` — but the multi-hour run itself is still pending) |
 | **Open — invariant risk** | Safety-refusal guard hardened (object-first regex gap fixed #59; output-side guard + broadened ranking/determiner detection #63; English colloquial lexicon + Spanish arm added, H4; H4 follow-up: context-scoped into unambiguous + ambiguous + place-context patterns — closes proper-noun colloquial false-positives, Spanish colloquials, `mal barrio` both word orders, avoid/evitar, rank-verb punctuation, `centro`/`esquina` EN/ES parity). Residual: languages beyond English/Spanish (non-Latin scripts need script-aware matching); accepted fail-safe over-refusal on Spanish "estoy seguro de X + place" (regex can't separate epistemic from physical *seguro*) — deferred/accepted |
@@ -323,6 +323,13 @@ independently-shippable slices. Spec:
   hover pulse, identity-colored lettered pins. Pure frontend. (2026-07-12)
 - [x] Sector/city baselines via month-grouped SQL COUNT(*) (calls layer materializes ~700k
   rows/yr per citywide request today — do before demoing the calls layer) (2026-07-12)
+- [x] **Empirical reference-circle replacement for single-place context:** fixed observed
+  incidents; versioned Seattle SND street-segment midpoint frame; equal-radius MCPP/sector/city
+  distributions with overlap-weighted mixtures, deterministic exact/Monte Carlo computation,
+  adequacy fallback, accessible plot/details, assistant grounding, and run-scoped CSV parity.
+  The former polygon-density fields remain in the API during validation, but the current
+  single-place UI/export no longer uses them. Method:
+  `docs/analysis/empirical-reference-circles.md`. (2026-07-30)
 
 ## Volume-over-time trend section (2026-07-16)
 *First slice of the public-release feature push: descriptive monthly trends on the analyze

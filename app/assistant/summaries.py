@@ -123,6 +123,10 @@ def _interpolated_labels(result: dict[str, Any]) -> set[str]:
         add(query)
     for place_entry in (result.get("neighborhood") or {}).get("places") or []:
         add(place_entry.get("place_label"))
+        for reference in place_entry.get("reference_comparisons") or []:
+            add(reference.get("label"))
+            for component in reference.get("geography_components") or []:
+                add(component.get("label"))
         for baseline in place_entry.get("baselines") or []:
             add(baseline.get("label"))
     comparison = result.get("comparison") or {}
@@ -167,6 +171,34 @@ def _primary_baseline(place: dict[str, Any]) -> dict[str, Any] | None:
     return by_kind.get("mcpp") or by_kind.get("beat") or by_kind.get("city")
 
 
+def _primary_reference(place: dict[str, Any]) -> dict[str, Any] | None:
+    by_kind = {
+        entry.get("kind"): entry
+        for entry in place.get("reference_comparisons") or []
+        if entry.get("available")
+    }
+    return by_kind.get("mcpp") or by_kind.get("sector") or by_kind.get("city")
+
+
+def _reference_summary(
+    *,
+    label: str,
+    count: int,
+    noun: str,
+    radius: Any,
+    entry: dict[str, Any],
+) -> str:
+    fewer = round(float(entry.get("share_below") or 0) * 100)
+    equal = round(float(entry.get("share_equal") or 0) * 100)
+    more = round(float(entry.get("share_above") or 0) * 100)
+    reference_label = entry.get("label") or "the reference area"
+    return (
+        f"{label}: {count} {noun} within {radius} m. Among eligible street locations "
+        f"in {reference_label}, {fewer}% had fewer, {equal}% matched, and {more}% had "
+        "more in equal-radius circles."
+    )
+
+
 # Decisions that mean "no comparison was actually made". A baseline entry can still carry a
 # ratio in these cases (each entry is tested independently, and a wide-area citywide entry
 # will happily return 88.9× off two incidents), but the place-level verdict is authoritative:
@@ -191,6 +223,25 @@ def _analyze_places_summary(result: dict[str, Any]) -> str:
     for place in places:
         label = place.get("place_label") or "The place"
         count = place.get("place_incident_count") or 0
+        reference_comparisons = place.get("reference_comparisons")
+        if isinstance(reference_comparisons, list):
+            reference = _primary_reference(place)
+            if reference is not None:
+                sentences.append(
+                    _reference_summary(
+                        label=label,
+                        count=count,
+                        noun=noun,
+                        radius=radius,
+                        entry=reference,
+                    )
+                )
+            else:
+                sentences.append(
+                    f"{label}: {count} {noun} within {radius} m "
+                    "(no adequate reference-circle comparison)."
+                )
+            continue
         entry = _primary_baseline(place) if rate_ratio_is_reportable(place) else None
         relation = (entry or {}).get("relation")
         if entry and relation in _RELATION_PHRASES and entry.get("rate_ratio") is not None:

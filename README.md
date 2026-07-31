@@ -66,10 +66,12 @@ Analyze/Compare tabs.
 - **Context strip** — the active dates, radius, offense category, and data layer stay visible
   above Tabby's composer. Open it for exact controls, run the current selection, or copy a
   generalized-coordinate share link.
-- **Inline analysis cards** — one selected place produces neighborhood/baseline context; two or
-  more produce the statistical comparison as well. Expanding a card reveals the frozen baseline
-  detail, monthly trend, category breakdown, incident rows, methods, and a run-scoped CSV link.
-  Neutral presence badges connect analyzed map pins back to their latest card.
+- **Inline analysis cards** — one selected place compares its count with empirical
+  equal-radius circles centered on eligible Seattle street segments; two or more also produce
+  the separate place-to-place statistical comparison. Expanding a card reveals MCPP, sector,
+  and city reference distributions, adequacy/method details, monthly trend, category
+  breakdown, incident rows, and a run-scoped CSV link. Neutral presence badges connect
+  analyzed map pins back to their latest card.
 - **Exports** — card links export that exact stored run. The manage-places dialog also exposes the
   current-session Tableau CSV and per-place privacy toggles.
 
@@ -118,12 +120,17 @@ canonical product objects are stop visits, recurring place clusters, and context
 
 ## Statistical comparison
 
-Statistical comparison compares place buffers using exposure-adjusted reported-incident rates,
-with an `Overview` mode (public summary, decision class, rates, short caveat) and an
-`Analytical` mode (counts, exposure, rate ratio, confidence interval, p-values, method,
-overdispersion and minimum-data status, and full caveats). Product language may say "lower
-reported-incident rate"; it must never call a place safe, unsafe, dangerous, or
-crime-preventing.
+Single-place analysis is descriptive: it keeps incident locations fixed, counts the same
+radius around eligible street-segment midpoints, and shows MCPP, sector, and city reference
+distributions as quantiles plus shares with fewer, equal, or more reports. It does not assume
+incidents are uniform inside a polygon and does not attach a p-value to the selected
+location's empirical position.
+
+The separate multi-place comparison uses exposure-adjusted reported-incident rates, with an
+`Overview` mode (public summary, decision class, rates, short caveat) and an `Analytical` mode
+(counts, exposure, rate ratio, confidence interval, p-values, method, overdispersion and
+minimum-data status, and full caveats). Product language may say "lower reported-incident
+rate"; it must never call a place safe, unsafe, dangerous, or crime-preventing.
 
 ## Privacy posture
 

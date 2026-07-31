@@ -1,9 +1,11 @@
 # The pairwise / verdict comparison engine
 
-**Status:** methodology reference (2026-07-17). The durable, end-to-end record of the live
-place-comparison engine (`app/analysis/comparison.py`, `app/analysis/rate_tests.py`,
-`app/analysis/beat_baselines.py`, and the neighborhood assembly in
-`app/services/neighborhood_service.py`). Replaces the removed
+**Status:** methodology reference (updated 2026-07-30). The durable, end-to-end record of the
+live user-selected place-to-place comparison engine (`app/analysis/comparison.py` and
+`app/analysis/rate_tests.py`) plus the legacy polygon-density neighborhood relations retained
+temporarily in `app/services/neighborhood_service.py` for validation. The current single-place
+detailed view instead uses
+[empirical reference circles](empirical-reference-circles.md). Replaces the removed
 `docs/analysis/statistical-route-place-comparison.md` (the routes feature was retired
 2026-07; see the superseded design spec
 `docs/superpowers/specs/2026-06-23-statistical-route-place-comparison-design.md`). Companion
@@ -14,9 +16,10 @@ this writeup.
 
 ## TL;DR
 
-The engine answers one question — **does one place have a statistically lower reported-incident
-rate than another (or than its surrounding area), for the selected filters?** — and it answers
-conservatively.
+The active user-facing engine answers one question — **does one user-selected place have a
+statistically lower reported-incident rate than another, for the selected filters?** — and it
+answers conservatively. Sections about surrounding-area baselines document the retained legacy
+payload, not the current single-place visualization.
 
 - **One variance model everywhere.** Every verdict, every per-address interval, and every
   neighborhood-baseline relation rides a single **quasi-Poisson Wald** standard error on the

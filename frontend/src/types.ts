@@ -106,6 +106,8 @@ export type DashboardSummary = {
   };
   exports: {
     tableau_place_summary_csv: string;
+    /** Run-scoped analytical detail export. Optional for older servers/fixtures. */
+    analysis_csv?: string;
   };
 };
 
@@ -283,6 +285,45 @@ export type BaselineEntry = {
   relation: "above" | "similar" | "below" | "insufficient";
 };
 
+export type ReferenceGeographyComponent = {
+  id: string;
+  label: string;
+  weight: number;
+  center_count: number;
+};
+
+export type ReferenceCircleComparison = {
+  kind: "mcpp" | "sector" | "city";
+  label: string;
+  available: boolean;
+  adequacy_status:
+    | "met"
+    | "no_reference_geography"
+    | "missing_reference_centers"
+    | "insufficient_reference_centers"
+    | "insufficient_polygon_coverage";
+  sampling_frame: "street_segment_midpoints";
+  sampling_frame_version: string;
+  computation: "exact" | "monte_carlo" | null;
+  geography_components: ReferenceGeographyComponent[];
+  reference_center_count: number;
+  reference_draw_count: number;
+  monte_carlo_error: number | null;
+  covered_area_share: number;
+  effective_geographies: number;
+  target_count: number;
+  p10: number | null;
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+  p90: number | null;
+  share_below: number | null;
+  share_equal: number | null;
+  share_above: number | null;
+  midrank_percentile: number | null;
+  warnings: string[];
+};
+
 export type NeighborhoodPlace = {
   place_id: string;
   place_label: string;
@@ -299,6 +340,8 @@ export type NeighborhoodPlace = {
   category_breakdown: CategoryShare[];
   temporal?: TemporalProfile | null;
   baselines: BaselineEntry[];
+  /** Empirical equal-radius context. Optional while older frozen cards remain readable. */
+  reference_comparisons?: ReferenceCircleComparison[];
   place_rate_ci_lower?: number;
   place_rate_ci_upper?: number;
   coordinate_coverage?: {

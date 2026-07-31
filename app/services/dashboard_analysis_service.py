@@ -75,6 +75,7 @@ def analyze_selected_places(
             offense_category=offense_category,
             offense_subcategory=offense_subcategory,
             nibrs_group=nibrs_group,
+            place_ids=place_ids,
             layer=layer,
         )
         run_id = run.id

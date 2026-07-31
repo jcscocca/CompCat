@@ -19,6 +19,7 @@ def create_analysis_run(
     offense_category: str | None,
     offense_subcategory: str | None,
     nibrs_group: str | None,
+    place_ids: list[str] | None = None,
     layer: str | None = None,
 ) -> AnalysisRun:
     run = AnalysisRun(
@@ -26,6 +27,9 @@ def create_analysis_run(
         analysis_start_date=analysis_start_date,
         analysis_end_date=analysis_end_date,
         radii_m_json=json.dumps(sorted(radii_m)),
+        place_ids_json=json.dumps(list(dict.fromkeys(place_ids)))
+        if place_ids is not None
+        else None,
         offense_category=offense_category,
         offense_subcategory=offense_subcategory,
         nibrs_group=nibrs_group,

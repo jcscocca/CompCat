@@ -74,6 +74,19 @@ describe("cardFromCompareResults", () => {
     expect(card!.incidents).not.toBeNull();
   });
 
+  it("carries a saved-place analysis run into the card export scope", () => {
+    const card = cardFromCompareResults({
+      comparison: null,
+      neighborhood: makeNeighborhood(),
+      incidents: makeIncidents(),
+      analysis,
+      placeIds: ["p1"],
+      runId: "run-1",
+    });
+
+    expect(card!.runId).toBe("run-1");
+  });
+
   it("returns null when neither pane has results", () => {
     expect(
       cardFromCompareResults({ comparison: null, neighborhood: null, incidents: null, analysis, placeIds: [] }),

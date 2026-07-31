@@ -30,20 +30,26 @@ confirmed crimes.
 Do not label places safe, unsafe, dangerous, or risky.
 Do not rank, score, or rate places, blocks, routes, or areas by safety, danger, or risk.
 Do not produce personal safety or risk scores.
-If asked to do any of these, redirect to layer-appropriate counts or statistically tested
-geographic comparisons instead.
+If asked to do any of these, redirect to layer-appropriate counts or geographic context
+instead.
 Say when data is missing, stale, filtered, or insufficient.
 If missing_context says the active layer is not loaded, say that layer is not
 loaded; never turn missing layer data into a zero count.
-Statistical verdicts in tool results are authoritative: never re-derive or override
-them from the raw ratio, confidence interval, or adjusted p-value. The engine calls a
-difference statistically clear only when adjusted p < 0.05 AND the rate ratio is past
-the practical-effect threshold (at least 1.25x or at most 0.80x). A small low-p difference inside
-those thresholds is still not statistically clear. Say "statistically clear", never
-"statistically significant". Explain supplied confidence intervals in plain language
-and preserve caveats (small counts, wide intervals, overdispersion, insufficient data).
-Never present a point estimate as meaningful when the supplied verdict says the
-difference is not statistically clear or the data are insufficient.
+The analyze_places tool compares the selected place with equal-radius circles centered
+on eligible street locations. Its fewer/equal/more shares and quantiles are descriptive:
+never call them expected counts, significance tests, safety measures, or evidence that
+incidents are uniformly distributed within a neighborhood. Preserve adequacy and
+Monte Carlo qualifiers, and say when no adequate reference comparison is available.
+Pairwise statistical verdicts from compare_places remain authoritative: never re-derive
+or override them from the raw ratio, confidence interval, or adjusted p-value. The
+pairwise engine calls a difference statistically clear only when adjusted p < 0.05 AND
+the rate ratio is past the practical-effect threshold (at least 1.25x or at most 0.80x).
+A small low-p difference inside those thresholds is still not statistically clear. Say
+"statistically clear", never "statistically significant". Explain supplied confidence
+intervals in plain language and preserve caveats (small counts, wide intervals,
+overdispersion, insufficient data). Never present a point estimate as meaningful when
+the supplied verdict says the difference is not statistically clear or the data are
+insufficient.
 When the user names places or addresses, pass them as a "queries" list to the
 workflow tool (add_place, select_places, analyze_places, compare_places); do not
 ask the user to select them first. After a tool resolves or creates places, state
@@ -137,6 +143,9 @@ Non-negotiable rules:
   are requests for service (not confirmed incidents).
 - If the grounding says data is missing, insufficient, or not statistically clear,
   say so plainly — do not soften or upgrade the verdict.
+- Reference-circle shares and quantiles are descriptive. Do not call them expected
+  counts or significance tests, and do not imply incidents are uniformly distributed
+  within a neighborhood.
 - For a filter update, state only values explicitly marked changed in the grounding
   and say the other knobs were untouched. Never invent current values for untouched
   knobs or claim that they changed.
@@ -223,12 +232,38 @@ def _analyze_lines(result: dict[str, Any]) -> list[str]:
         label = place.get("place_label") or "The place"
         count = place.get("place_incident_count") or 0
         lines.append(f"{label}: {count} {noun} in the buffer.")
-        lines.extend(_baseline_lines(place))
+        if isinstance(place.get("reference_comparisons"), list):
+            lines.extend(_reference_lines(place))
+        else:
+            lines.extend(_baseline_lines(place))
         lines.extend(_quality_caveat_lines(place))
         lines.extend(_category_line(place))
         lines.extend(_temporal_line(place))
     if len(places) > _MAX_PLACES:
         lines.append(f"{len(places) - _MAX_PLACES} further places omitted for length.")
+    return lines
+
+
+def _reference_lines(place: dict[str, Any]) -> list[str]:
+    references = place.get("reference_comparisons") or []
+    lines = [
+        "  reference method: equal-radius circles at eligible street locations; "
+        "descriptive only, not an expected-count or significance model."
+    ]
+    for entry in references:
+        label = entry.get("label") or _humanize_enum(entry.get("kind") or "reference")
+        if not entry.get("available"):
+            status = _humanize_enum(entry.get("adequacy_status") or "unavailable").lower()
+            lines.append(f"  {label}: unavailable ({status}).")
+            continue
+        fewer = round(float(entry.get("share_below") or 0) * 100)
+        equal = round(float(entry.get("share_equal") or 0) * 100)
+        more = round(float(entry.get("share_above") or 0) * 100)
+        lines.append(
+            f"  {label}: eligible locations with fewer {fewer}%, equal {equal}%, "
+            f"more {more}%; middle 50% {entry.get('p25')}–{entry.get('p75')}; "
+            f"median {entry.get('median')}."
+        )
     return lines
 
 
@@ -361,6 +396,18 @@ def _quality_caveat_lines(place: dict[str, Any]) -> list[str]:
     count = place.get("place_incident_count")
     if isinstance(count, int | float) and count < 10:
         caveats.append("small count (fewer than 10 observations)")
+    if isinstance(place.get("reference_comparisons"), list):
+        for entry in place.get("reference_comparisons") or []:
+            if not entry.get("available"):
+                continue
+            error = entry.get("monte_carlo_error")
+            if isinstance(error, int | float):
+                caveats.append(
+                    f"Monte Carlo reference-share margin about {round(error * 100)} "
+                    "percentage points"
+                )
+                break
+        return [f"  caveat: {'; '.join(caveats)}."] if caveats else []
     for entry in place.get("baselines") or []:
         lower, upper = entry.get("ci_lower"), entry.get("ci_upper")
         if not isinstance(lower, int | float) or not isinstance(upper, int | float):

@@ -1714,7 +1714,10 @@ describe("MapWorkspace", () => {
   it("the card export link carries the run-scoped run_id", async () => {
     await renderWithAnalyzeCard(analyzeCardResult({ analysis_run_id: "run-xyz" }));
     const link = screen.getByRole("link", { name: "Export CSV" });
-    expect(link.getAttribute("href")).toContain("run_id=run-xyz");
+    expect(link).toHaveAttribute(
+      "href",
+      "/exports/analysis.csv?run_id=run-xyz",
+    );
   });
 
   // --- Slice 4 Task 4: presence badges → focus-card + fit-on-analysis ---

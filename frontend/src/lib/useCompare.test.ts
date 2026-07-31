@@ -6,7 +6,7 @@ import { useCompare } from "./useCompare";
 
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
-  analyzePlaces: vi.fn().mockResolvedValue({ summary_count: 1 }),
+  analyzePlaces: vi.fn().mockResolvedValue({ summary_count: 1, analysis_run_id: "run-1" }),
   comparePlaces: vi.fn().mockResolvedValue({ id: "cmp" } as unknown),
   getIncidentDetails: vi.fn().mockResolvedValue({ incidents: [], total_count: 0, returned_count: 0, radius_m: 250 } as unknown),
   getNeighborhoodAnalysis: vi.fn().mockResolvedValue({ places: [] } as unknown),
@@ -16,6 +16,7 @@ import { analyzePlaces, comparePlaces, getIncidentDetails, getNeighborhoodAnalys
 const analysis = { startDate: "2024-01-01", endDate: "2024-01-31", radiusM: 250, offenseCategory: "", layer: "reported" as const };
 const A = { latitude: 47.61, longitude: -122.34, label: "A" };
 const B = { latitude: 47.62, longitude: -122.33, label: "B", savedPlaceId: "p2" };
+const SAVED_A = { ...A, savedPlaceId: "p1" };
 
 function mock(fn: unknown) {
   return fn as ReturnType<typeof vi.fn>;
@@ -52,6 +53,24 @@ describe("useCompare unified run", () => {
     expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({ place_ids: ["p2"] }));
     expect(mock(analyzePlaces).mock.calls[0][0].points).toBeUndefined();
     expect(onSummariesRefreshed).toHaveBeenCalled();
+  });
+
+  it("keeps the export run only when every analyzed entry is a saved place", async () => {
+    const saved = renderHook(() => useCompare({
+      entries: [SAVED_A, B],
+      analysis,
+      setError: vi.fn(),
+    }));
+    await act(async () => { await saved.result.current.run(); });
+    expect(saved.result.current.analysisRunId).toBe("run-1");
+
+    const mixed = renderHook(() => useCompare({
+      entries: [A, B],
+      analysis,
+      setError: vi.fn(),
+    }));
+    await act(async () => { await mixed.result.current.run(); });
+    expect(mixed.result.current.analysisRunId).toBeNull();
   });
 
   it("skips the place_ids refresh when the list is all ad-hoc", async () => {
@@ -128,6 +147,7 @@ describe("useCompare unified run", () => {
     expect(result.current.comparison).toBeNull();
     expect(result.current.neighborhood).toBeNull();
     expect(result.current.incidents).toBeNull();
+    expect(result.current.analysisRunId).toBeNull();
     expect(result.current.runPoints).toBeNull();
   });
 
@@ -137,6 +157,7 @@ describe("useCompare unified run", () => {
     act(() => { result.current.applyAssistant({ comparison: { id: "c9" } as never }); });
     expect(result.current.comparison).toEqual({ id: "c9" });
     expect(result.current.neighborhood).toBeNull();
+    expect(result.current.analysisRunId).toBeNull();
     expect(result.current.runPoints).toBeNull();
   });
 

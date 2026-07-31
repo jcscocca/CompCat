@@ -210,6 +210,9 @@ class AnalysisRun(Base):
     analysis_start_date: Mapped[date] = mapped_column(Date)
     analysis_end_date: Mapped[date] = mapped_column(Date)
     radii_m_json: Mapped[str] = mapped_column(Text)
+    # Ordered selected saved-place ids for run-owned artifacts. Nullable so pre-migration
+    # runs remain readable through their attached PlaceCrimeSummary rows.
+    place_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     offense_category: Mapped[str | None] = mapped_column(Text, nullable=True)
     offense_subcategory: Mapped[str | None] = mapped_column(Text, nullable=True)
     nibrs_group: Mapped[str | None] = mapped_column(Text, nullable=True)

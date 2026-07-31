@@ -296,8 +296,11 @@ The active **layer** flows through the assistant the same way the other dashboar
 **`app/assistant/summaries.py`**
 
 `build_tool_summary` maps a tool result to a neutral one-liner entirely from result fields — no
-LLM. For `analyze_places` it reads `neighborhood.places` entries and formats rate-ratio phrases
-via `_DECISION_PHRASES` (e.g. `"above its beat baseline, statistically clear"`). For
+LLM. For `analyze_places` it reads `neighborhood.places[].reference_comparisons`, prefers the
+first adequate MCPP → sector → city rung, and reports the target count plus the tie-aware shares
+of eligible equal-radius street locations with fewer, equal, or more records. It does not call
+that empirical position expected or statistically significant. The retained polygon-density
+summary path is used only for older payloads that lack `reference_comparisons`. For
 `compare_places` it lists per-place incident counts and the `overview.summary_text`;
 `explain_result` reuses the matching analysis or comparison summary after its server-side
 recomputation. These paths are layer-aware (`_layer_terms`, keyed on `settings_used.layer`): the
@@ -306,18 +309,21 @@ logs: " and phrases the count noun to match ("reported incidents", "arrests", or
 so an arrests or calls turn is never phrased as reported incidents. All handlers avoid
 safety/danger/risk language by design.
 
-The output guard checks generated summary prose with interpolated labels replaced by inert
+The output guard checks generated summary prose with interpolated place, reference, and
+component labels replaced by inert
 tokens, then restores benign proper names (for example, “Public Safety Building”). A label
 containing sentence-like hostile instructions or safety-ranking prose still redirects. The
-`similar` baseline relation is phrased as “no statistically clear difference from,” never as
-equivalence, with the ratio/interval shown only after that verdict.
+legacy `similar` baseline relation is phrased as “no statistically clear difference from,”
+never as equivalence, with the ratio/interval shown only after that verdict.
 
 Narrator grounding humanizes raw layer/category enums and NIBRS labels, identifies changed
-filter fields while listing untouched knobs, and adds two precision qualifiers: counts below 10
-and confidence intervals spanning more than 10x. Busiest-hour lines state that they use reported
-offense **START** times and that range-reported offenses are assigned to the window opening,
-which can bias the apparent peak. The narration prompt requires all of these qualifiers to
-survive the rewrite.
+filter fields while listing untouched knobs. Current analyze grounding includes all adequate
+reference rows, quantiles, fewer/equal/more shares, inadequacy reasons, and a Monte Carlo
+precision qualifier when applicable; it explicitly identifies the result as descriptive.
+Legacy payloads retain the former small-count and wide-confidence-interval qualifiers.
+Busiest-hour lines state that they use reported offense **START** times and that range-reported
+offenses are assigned to the window opening, which can bias the apparent peak. The narration
+prompt requires all of these qualifiers to survive the rewrite.
 
 **`app/assistant/place_resolution.py`**
 

@@ -73,6 +73,7 @@ def test_analysis_run_migration_creates_table_and_column(tmp_path, monkeypatch):
         "analysis_start_date",
         "analysis_end_date",
         "radii_m_json",
+        "place_ids_json",
         "offense_category",
         "offense_subcategory",
         "nibrs_group",

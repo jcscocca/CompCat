@@ -206,7 +206,7 @@ export function getInputModes(): Promise<{ modes: { id: string }[] }> {
 
 export function analyzePlaces(
   payload: AnalyzePlacesPayload,
-): Promise<{ summary_count: number }> {
+): Promise<{ summary_count: number; analysis_run_id?: string | null }> {
   return request("/dashboard/analyze", {
     method: "POST",
     body: JSON.stringify(payload),

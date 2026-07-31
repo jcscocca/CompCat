@@ -51,7 +51,7 @@ function setup(overrides: Partial<PanelProps> = {}) {
     onFollowupChip,
     expandedCard: null,
     onCardExpandChange,
-    exportHrefBase: "/exports/tableau/place-summary.csv",
+    exportHrefBase: "/exports/analysis.csv",
     hasPlaces: true,
     onAction,
     ...overrides,

@@ -1,10 +1,11 @@
 # Counting Without Keeping Score
 
-CompCat answers one narrow question: how does the volume of *reported* SPD incidents around
-one address compare with the volume around another address, or with the area surrounding it,
-under the filters the reader picked. It is not a safety score and must never become one. Every
-statistical choice below exists to keep those comparisons honest — and most of them exist
-because the simpler choice would have been dishonest.
+CompCat answers two narrow questions under the filters the reader picked: how does the volume
+of *reported* SPD incidents around one address sit among equal-radius circles at other eligible
+street locations, and how does one user-selected address compare with another. It is not a
+safety score and must never become one. The first question is descriptive and empirical; the
+second uses an inferential rate model. Every statistical choice below exists to keep that
+distinction honest.
 
 ## Why can't you just count incidents?
 
@@ -52,38 +53,36 @@ Full detail: [the exposure model](../analysis/exposure-model.md).
 
 ## Compared to what?
 
-A density on its own means nothing. The comparison is the product, and there are two kinds:
-the other addresses a reader entered, and the area surrounding a single address.
+A count or density on its own means nothing. CompCat now uses two deliberately different
+comparators.
 
-For the second kind the right local comparator is the **rest of the beat**. The place's beat
-comes from a ray-casting point-in-polygon test of its display point against the vendored SPD
-beat polygons (the published "Seattle Police Beats 2018-Present" layer) — real geography, not a
-nearest-name guess. Then the place's own buffer is carved out of it, on both sides of the
-fraction:
+For a **single selected location**, the detailed Analyze view keeps the incident map fixed and
+places the same-radius circle at each eligible Seattle street-segment midpoint. MCPP, sector,
+and city polygons choose the populations of centers; they never supply an expected count by
+area. When the target circle crosses an MCPP or sector boundary, a deterministic 41×41 overlap
+grid supplies mixture weights. Every sampled circle still counts every qualifying observed
+incident within its radius, even across that circle's polygon boundary.
 
-- **Incidents:** take the beat's incidents, keep only those *outside* the buffer.
-- **Area:** subtract the buffer∩polygon overlap from the beat's polygon area.
+The output is the observed distribution: 10th/25th/50th/75th/90th percentiles and the shares
+of reference circles with fewer, equal, or more reports than the target. Ties stay explicit.
+Small reference populations or insufficient polygon coverage make a local rung unavailable,
+at which point sector and then city provide broader context. Large populations use a
+deterministic 2,500-draw Monte Carlo approximation with its computational margin disclosed;
+the center draw does not change when only an incident filter changes.
 
-Without the carve-out a place is partly compared against itself, which understates the "rest"
-and biases the place's rate ratio low — precisely the direction that would flatter a place.
+This empirical position is not a p-value. The selected location is not established as an
+exchangeable random draw, nearby circles overlap, and users can explore many filters and
+radii. Calling the share-below value a probability of an anomaly would manufacture inference
+the design does not support.
 
-Computing that overlap exactly would mean real polygon clipping. Instead the estimate samples a
-deterministic 41×41 grid over the buffer's bounding box and multiplies `π·r²` by the fraction
-of in-disk samples falling inside the polygon. About 1,300 in-disk samples give roughly 3% area
-error, against the up-to-100% error of the naive alternative (assuming the whole disk sits
-inside the polygon). The grid is fixed rather than random, so a given place always yields the
-same overlap. When a buffer straddles several beats, the per-beat overlaps are summed:
-`rest_area = Σ(beat areas) − Σ(overlaps)`.
+For **two or more user-selected locations**, CompCat still compares equal-radius
+space-time-density rates with the quasi-Poisson/BH model described below. The old
+rest-of-MCPP/beat and whole-sector/city density baselines remain in the API temporarily for
+validation and backward compatibility, but the current single-place UI, assistant summary,
+and analytical CSV do not use them.
 
-That is the first rung of a four-rung ladder — MCPP, beat, sector, citywide. The MCPP and beat
-rungs carve the buffer out as above. The sector and citywide rungs are whole-area: the place's
-own incidents appear in both halves. I took that approximation deliberately, because the bound
-is obvious — a 250–1000 m buffer is a negligible share of a sector's or the city's area and
-count, so the self-inclusion cannot move a verdict. Where a comparison genuinely can't be
-formed — an empty rest, or a non-positive rest area — the entry is omitted rather than
-reported as a failed comparison.
-
-Geometry detail: [exposure model §4](../analysis/exposure-model.md).
+Full single-place detail: [empirical reference circles](../analysis/empirical-reference-circles.md).
+Legacy denominator detail: [exposure model §4](../analysis/exposure-model.md).
 
 ## Is Poisson enough?
 
