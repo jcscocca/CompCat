@@ -87,9 +87,8 @@ def test_overlay_documents_its_own_three_file_invocation_and_the_project_name() 
     text = _TUNNEL.read_text(encoding="utf-8")
     assert "-f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.tunnel.yml" in text
     # The project name is the isolation mechanism (own volumes, own network) against the
-    # personal instance and the demo — it must be documented where the file is read.
+    # personal instance — it must be documented where the file is read.
     assert "-p compcat-public" in text
-    assert "compcat-demo" in text
     assert ":-" not in text  # no dev fallback defaults in a production edge overlay
 
 
@@ -171,10 +170,9 @@ def test_rendered_tunnel_stack_caps_log_growth_on_cloudflared_too() -> None:
     assert rendered.count('max-file: "5"') == 4
 
 
-def test_public_instance_volumes_never_collide_with_the_personal_or_demo_projects() -> None:
+def test_public_instance_volumes_never_collide_with_the_personal_project() -> None:
     # The personal instance (project `compcat`) has real saved places and personal uploads
-    # enabled; the demo is `compcat-demo`. The -p prefix is what keeps this stack's database
-    # and backups separate from both.
+    # enabled. The -p prefix is what keeps this stack's database and backups separate.
     if not _compose_available():
         pytest.skip("docker compose plugin not available")
     result = _render(
@@ -186,7 +184,6 @@ def test_public_instance_volumes_never_collide_with_the_personal_or_demo_project
     assert "name: compcat-public_mca-postgres" in rendered
     assert "name: compcat-public_backups" in rendered
     assert "name: compcat_mca-postgres" not in rendered
-    assert "name: compcat-demo_mca-postgres" not in rendered
 
 
 def test_canonical_origin_reaches_the_frontend_build_through_the_tunnel_overlay() -> None:
@@ -253,10 +250,9 @@ def test_start_script_uses_the_isolated_project_and_all_three_overlays() -> None
     assert "https://compcat.app" in text
 
 
-def test_start_script_states_the_isolation_from_the_personal_and_demo_instances() -> None:
+def test_start_script_states_the_isolation_from_the_personal_instance() -> None:
     text = _START.read_text(encoding="utf-8")
     assert "compcat-public_mca-postgres" in text
-    assert "compcat-demo" in text
     assert "MUST NEVER BE EXPOSED" in text
 
 
@@ -295,10 +291,8 @@ def test_runbook_carries_the_user_steps_and_the_honest_trade_offs() -> None:
 
 def test_deploy_docs_cross_link_the_two_public_runbooks() -> None:
     vps = (_ROOT / "docs" / "DEPLOY-VPS.md").read_text(encoding="utf-8")
-    demo = (_ROOT / "docs" / "DEMO.md").read_text(encoding="utf-8")
     deploy = (_ROOT / "docs" / "DEPLOY.md").read_text(encoding="utf-8")
     index = (_ROOT / "docs" / "README.md").read_text(encoding="utf-8")
     assert "DEPLOY-TUNNEL.md" in vps
-    assert "DEPLOY-TUNNEL.md" in demo
     assert "DEPLOY-TUNNEL.md" in deploy
     assert "DEPLOY-TUNNEL.md" in index

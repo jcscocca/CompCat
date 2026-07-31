@@ -180,6 +180,17 @@ of the box. Load the bundled sample crime data so analysis returns results:
 curl -X POST http://127.0.0.1:8000/internal/crime/ingest/sample
 ```
 
+### ThinkPad and deployment launchers
+
+The normal private ThinkPad startup is:
+
+```powershell
+pwsh -File .\scripts\start-compcat.ps1
+```
+
+The `public`, `prod`, and Mac-development launchers use different databases and exposure models.
+See [CompCat run modes](docs/RUN-MODES.md) before using any other startup script.
+
 ### Running the dashboard
 
 You can serve the dashboard two ways:

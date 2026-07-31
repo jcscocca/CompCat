@@ -366,8 +366,8 @@ parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md
   reassess the older optional Compare backlog against the card-first interaction before building it.
 
 ## Phase 8 — Durable public instance (2026-07-27)
-*The "for-real launch" that `docs/DEMO.md` deferred: CompCat always-on from a small VPS at a
-registered domain — still session-based, still not an operated multi-user service. Umbrella
+*CompCat always-on at a registered domain — still session-based, still not an operated
+multi-user service. Umbrella
 spec: `docs/superpowers/specs/2026-07-27-public-instance-design.md`; four slices, each with
 its own spec (same date prefix), worked one at a time, code-first (1→4). Decisions: VPS
 (provider open), Groq wired for setup with Anthropic as the prod Analyst posture, compcat.app
