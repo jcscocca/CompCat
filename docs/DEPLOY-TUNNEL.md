@@ -18,9 +18,8 @@ What this is *not*: an operated multi-user service. CompCat stays anonymous-sess
 accounts, no sign-in), reports **reported Seattle SPD incident context**, and keeps personal
 location-history uploads switched off.
 
-For the single-host ThinkPad trial over plain HTTP on the LAN, see [`DEPLOY.md`](DEPLOY.md). For
-the two-minute shareable demo over an ephemeral quick tunnel, see [`DEMO.md`](DEMO.md). Both keep
-working unchanged; this is a third, independent deployment on the same machine.
+For the private ThinkPad instance over plain HTTP on the LAN, see [`DEPLOY.md`](DEPLOY.md). The
+public site is a separate deployment on the same machine, with its own database and secrets.
 
 ## The shape of it
 
@@ -36,15 +35,14 @@ Four containers under one `docker compose` project, **zero open ports on the hos
 `caddy` is defined by the production overlay but parked on a profile nothing activates, so it
 never starts here and 80/443 are never bound. `docker-compose.tunnel.yml` explains the mechanic.
 
-### Three instances, one laptop
+### Two instances, one laptop
 
-The ThinkPad now runs up to three CompCat stacks. **They must stay isolated**, and the compose
+The ThinkPad runs two CompCat stacks. **They must stay isolated**, and the Compose
 project name is what does it:
 
 | Project | Env file | Exposure | Personal uploads |
 |---|---|---|---|
 | `compcat` | `.env.deploy` | host `:8000`, LAN only | **ON** — real personal data. Never expose this one. |
-| `compcat-demo` | `.env.demo` | host `:8001` + ephemeral quick tunnel | off |
 | `compcat-public` | `.env.tunnel` | named tunnel only, no host port | off |
 
 Each project gets its own prefixed volumes (`compcat-public_mca-postgres`,
@@ -410,13 +408,13 @@ Every item has an observable pass condition. Work through it before advertising 
    port belongs to the *personal* instance if anything answers, which is exactly why the public
    project publishes nothing.
 
-3. **Isolation from the other two projects.**
+3. **Isolation from the personal project.**
    ```powershell
    docker volume ls | Select-String compcat
    ```
    Pass: `compcat-public_mca-postgres` and `compcat-public_backups` exist and are **distinct**
-   from `compcat_mca-postgres` / `compcat-demo_mca-postgres`. Then confirm the public site has no
-   upload UI and `https://compcat.app/uploads` 404s (personal uploads are off).
+   from `compcat_mca-postgres`. Then confirm the public site has no upload UI and
+   `https://compcat.app/uploads` 404s (personal uploads are off).
 
 4. **Boot-guard negative test.** Prove the spend rail is armed on this machine, not just in CI:
    ```powershell
@@ -573,8 +571,7 @@ are preserved through the `session_activity` record. It never touches SPD incide
 
 **After a reboot:** Docker Desktop starts at login and `restart: unless-stopped` brings `db`,
 `api`, `cloudflared` and the sidecar back; the tunnel re-registers on its own and the hostname
-keeps working — that durability is the whole difference from the quick tunnel in
-[`DEMO.md`](DEMO.md). If the machine was down long enough for data to age, the next
+keeps working. If the machine was down long enough for data to age, the next
 `start-public.ps1` (or the next 03:10 cron) catches it up.
 
 **Where things live:**

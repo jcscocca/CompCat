@@ -18,11 +18,10 @@
 #     `ops` sidecar (03:10 ingest / 03:40 backup / 03:50 retention) and the 10 MB x 5 log cap —
 #     is inherited from the production overlay unchanged.
 #
-# ALWAYS run this with `-p compcat-public`. It is a THIRD compose project on the ThinkPad,
-# isolated from the personal instance (`compcat`, real places + personal uploads ENABLED, must
-# never be exposed) and from the demo (`compcat-demo`). The project prefix gives it its own
-# named volumes — compcat-public_mca-postgres, compcat-public_backups — so no database, no
-# backup archive and no network is ever shared with the other two.
+# ALWAYS run this with `-p compcat-public`. It is isolated from the personal instance
+# (`compcat`, real places + personal uploads ENABLED, must never be exposed). The project prefix
+# gives it its own named volumes — compcat-public_mca-postgres, compcat-public_backups — so no
+# database, backup archive or network is shared with the personal project.
 services:
   caddy:
     # Compose has no "delete a service an earlier file defined", so park it on a profile that

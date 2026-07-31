@@ -1,10 +1,13 @@
-# Deploying CompCat for a small internal trial (~5 testers)
+# Private ThinkPad instance and small trusted-LAN trial
 
 > **Public instance?** This document is the single-host trial (ThinkPad, HTTP, ~5 testers).
 > For the always-on public instance at compcat.app — TLS, nightly ingest and backups — there are
 > two runbooks with the same posture and different edges:
 > [`DEPLOY-TUNNEL.md`](DEPLOY-TUNNEL.md) (zero cost: this same ThinkPad, published through a named
 > Cloudflare tunnel) and [`DEPLOY-VPS.md`](DEPLOY-VPS.md) (a rented box, hardened, TLS via Caddy).
+>
+> **Choosing a launcher?** Start with [`RUN-MODES.md`](RUN-MODES.md). The normal private ThinkPad
+> command is `pwsh -File scripts\start-compcat.ps1`.
 
 This runs the whole app — FastAPI API **and** the built React UI — in one container,
 with Postgres alongside, via `docker compose`. Each tester's browser gets its own
@@ -27,14 +30,16 @@ MCA_LLM_BASE_URL=http://host.docker.internal:8080/v1
 MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 ```
 
-Bring-up order on the ThinkPad (PowerShell). The analyst (llama-swap) is already running, so
-there is nothing to start there:
+Normal bring-up on the ThinkPad (PowerShell):
 
 ```powershell
 cp .env.deploy.example .env.deploy        # fill in secrets (next section) + the wiring above
-docker compose --env-file .env.deploy up -d --build   # CompCat on :8000
-# then load crime data (step 3 below) and open http://localhost:8000
+pwsh -File scripts\start-compcat.ps1
 ```
+
+The launcher pulls the current branch, builds the personal `compcat` Compose project, starts
+Docker Desktop and `llama-swap` when needed, fetches missing basemap assets, and refreshes stale
+SPD layers. Open `http://localhost:8000` when it finishes.
 
 If `host.docker.internal` ever fails to resolve, substitute the ThinkPad's LAN IP
 (e.g. `http://<llm-host-lan-ip>:8080/...`). Detailed steps for each piece (secrets, crime data,
@@ -57,13 +62,17 @@ cp .env.deploy.example .env.deploy
 
 ## 2. Bring it up
 
-```bash
-docker compose --env-file .env.deploy up -d --build
+```powershell
+pwsh -File scripts\start-compcat.ps1
 ```
 
 - API + UI on **http://<host>:8000** (the UI is served at `/`).
 - `alembic upgrade head` runs on start (creates the schema, incl. `analysis_runs`).
-- Postgres data persists in the `mca-postgres` Docker volume across restarts.
+- Postgres data persists in the `compcat_mca-postgres` Docker volume across restarts.
+- The Compose project is explicitly `compcat`, keeping it separate from `compcat-public`.
+
+For a deliberate offline/local-checkout start, use `-SkipPull`. The launcher builds by default;
+`-SkipBuild` intentionally reuses the existing image.
 
 ## 3. Load 2018+ crime data
 
@@ -227,9 +236,17 @@ completely unaffected.
 
 ## Stop / reset
 
-```bash
-docker compose down            # stop; keeps the Postgres volume (data survives)
-docker compose down -v         # stop AND wipe the database volume
+Normal stop:
+
+```powershell
+pwsh -File scripts\stop-compcat.ps1
+pwsh -File scripts\stop-compcat.ps1 -StopAnalyst  # also close llama-swap
+```
+
+The database survives. For the deliberate destructive reset:
+
+```powershell
+docker compose -p compcat -f docker-compose.yml down -v
 ```
 
 ## Backup / restore

@@ -1,6 +1,6 @@
 # Bring up the PUBLIC CompCat instance on the ThinkPad and publish it at https://compcat.app
 # through the named Cloudflare tunnel. Idempotent: re-running is the normal way to deploy a
-# new commit (git pull first).
+# new commit (git pull first — this script builds the current checkout but does not pull).
 #
 #   pwsh -File scripts\public\start-public.ps1
 #
@@ -8,20 +8,18 @@
 # fetch, per-layer freshness backfill) and scripts/prod/start-compcat.sh (health probed from
 # INSIDE the api container, because this stack publishes no host port at all).
 #
-# ISOLATION — the load-bearing property of this script. This is the THIRD compose project on
-# this machine and it must stay walled off from the other two:
+# ISOLATION — the load-bearing property of this script. This project must stay walled off from
+# the personal instance:
 #
 #   compcat         personal instance   .env.deploy   host :8000, real saved places,
 #                                                     MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true
 #                                                     -> MUST NEVER BE EXPOSED
-#   compcat-demo    demo-on-demand      .env.demo     host :8001, ephemeral quick tunnel
 #   compcat-public  THIS ONE            .env.tunnel   no host port, named tunnel, uploads off
 #
 # The `-p compcat-public` project name is what enforces it: Compose prefixes every named
 # volume and network with it, so this instance gets compcat-public_mca-postgres and
-# compcat-public_backups — distinct from the personal compcat_mca-postgres and the demo's
-# compcat-demo_mca-postgres. Never drop -p, and never point .env.tunnel's MCA_DATABASE_URL at
-# anything but this project's own db service.
+# compcat-public_backups — distinct from the personal compcat_mca-postgres. Never drop -p, and
+# never point .env.tunnel's MCA_DATABASE_URL at anything but this project's own db service.
 param(
     [switch]$SkipIngest,
     [int]$FreshnessMaxAgeDays = 14,
@@ -51,6 +49,8 @@ function Wait-Docker([int]$timeoutSec = 120) {
 }
 
 Write-Host '== CompCat public instance (compcat-public) =='
+Write-Host 'Exposure: https://compcat.app via named tunnel | no host ports | personal uploads OFF'
+Write-Host 'Source: current checkout (this script does not pull)'
 
 if (-not (Test-Path '.env.tunnel')) {
     Write-Error 'Missing .env.tunnel — copy .env.tunnel.example and fill in real values (see docs/DEPLOY-TUNNEL.md).'

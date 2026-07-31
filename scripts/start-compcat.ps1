@@ -1,28 +1,51 @@
-# Bring up the full CompCat stack on the ThinkPad, on demand.
+# Bring up the PERSONAL CompCat stack on the ThinkPad, on demand.
 #
-# Run this when you want CompCat; nothing here auto-starts on its own (containers
-# use restart: "no"). It's idempotent: anything already running is left alone.
+# THIS is the normal private/LAN launcher. It uses:
+#   compose project  compcat
+#   env file         .env.deploy
+#   app              http://<thinkpad>:8000
+#   database         compcat_mca-postgres
+#   analyst          host-side llama-swap on :8080
 #
-# It ALWAYS pulls the latest from origin first (this checkout is pull-only - do dev on
-# the Mac), and rebuilds only if HEAD actually moved. If the tree is dirty or origin is
+# Personal uploads are enabled by the shipped .env.deploy posture, so this project MUST
+# NEVER be exposed through Cloudflare. The isolated public deployment is:
+#   scripts\public\start-public.ps1   persistent compcat.app named tunnel
+#
+# Run this when you want the private instance; nothing here auto-starts on its own
+# (containers use restart: "no"). Re-running it is safe.
+#
+# It pulls the current branch from its configured upstream unless -SkipPull is supplied.
+# This checkout is normally pull-only and on main; the script prints the branch so an
+# accidental feature-branch deploy is visible. If the tree is dirty or origin is
 # unreachable it warns and starts the current checkout rather than failing to come up.
+#
+# The api image is rebuilt by default. Docker's layer cache makes an unchanged rebuild
+# cheap, and this guarantees that local merges and checked-out commits cannot leave an
+# older image running. Use -SkipBuild only when you intentionally want the existing image.
+#
 # Once the api is healthy it also refreshes any stale data layer (reported / arrests /
-# 911 calls) via the watermarked backfill — same as the demo and VPS start scripts —
+# 911 calls) via the watermarked backfill — same policy as the public/VPS paths —
 # so there is no separate ingest step. Skip that with -SkipIngest.
 #
-#   pwsh -File scripts\start-compcat.ps1     # pull latest, rebuild if it changed, then start
+#   pwsh -File scripts\start-compcat.ps1
 #
-# To stop everything when you're done: `docker compose stop`,
-# and close llama-swap from Task Manager (or just reboot — nothing comes back).
+# To stop it: pwsh -File scripts\stop-compcat.ps1
 param(
     [switch]$Update,  # accepted for backwards compatibility; pulling is now always on
+    [switch]$SkipPull,
+    [switch]$SkipBuild,
     [switch]$SkipIngest,
     [int]$FreshnessMaxAgeDays = 14
 )
 $ErrorActionPreference = 'Stop'
 $repo    = Split-Path -Parent $PSScriptRoot
 $envFile = Join-Path $repo '.env.deploy'
-$doBuild = $false
+$composeArgs = @(
+    'compose', '-p', 'compcat',
+    '-f', 'docker-compose.yml',
+    '--env-file', $envFile
+)
+function Compose { docker @composeArgs @args }
 
 function Test-Docker { docker info *> $null; return ($LASTEXITCODE -eq 0) }
 function Wait-Docker([int]$timeoutSec = 120) {
@@ -31,32 +54,37 @@ function Wait-Docker([int]$timeoutSec = 120) {
     return $false
 }
 
-Write-Host '== CompCat bring-up =='
+Set-Location $repo
 
-# 0. Always pull latest from origin, and rebuild only if HEAD actually moved. This checkout is
-#    pull-only (do dev on the Mac). If the tree is dirty or origin is unreachable, warn and start
-#    the current checkout rather than blocking the app from coming up.
-Push-Location $repo
-try {
+if (-not (Test-Path $envFile)) {
+    throw 'Missing .env.deploy — copy .env.deploy.example to .env.deploy and fill in its values.'
+}
+
+$branch = (git branch --show-current).Trim()
+$revision = (git rev-parse --short HEAD).Trim()
+Write-Host '== CompCat PERSONAL instance =='
+Write-Host ("Project: compcat | branch: {0} | revision: {1}" -f $branch, $revision)
+Write-Host 'Exposure: private/LAN :8000 | personal uploads may be enabled | never tunnel this project'
+
+# 0. Pull the current branch unless explicitly skipped. This checkout is normally pull-only
+#    and on main. If the tree is dirty or origin is unreachable, warn and start the current
+#    checkout rather than blocking the app from coming up.
+if ($SkipPull) {
+    Write-Host 'Git update: skipped (-SkipPull)'
+} else {
     if (git status --porcelain --untracked-files=no) {
         Write-Host 'WARNING: working tree has local changes; skipping pull, starting the current checkout.'
     } else {
-        $before = (git rev-parse HEAD).Trim()
-        Write-Host 'Pulling latest from origin...'
+        Write-Host ("Pulling branch '{0}' from its configured upstream..." -f $branch)
         git pull --ff-only
         if ($LASTEXITCODE -ne 0) {
             Write-Host 'WARNING: git pull --ff-only failed (diverged or offline?); starting the current checkout.'
         } else {
-            $after = (git rev-parse HEAD).Trim()
-            if ($before -ne $after) {
-                Write-Host ('Updated {0} -> {1}; will rebuild.' -f $before.Substring(0,7), $after.Substring(0,7))
-                $doBuild = $true
-            } else {
-                Write-Host 'Already up to date; no rebuild needed.'
-            }
+            $revision = (git rev-parse --short HEAD).Trim()
+            Write-Host ("Git update complete; starting revision {0}." -f $revision)
         }
     }
-} finally { Pop-Location }
+}
 
 # 0.5 Self-hosted basemap tiles: fetch once if missing (kept out of git; ~100 MB).
 #     Gates on both artifacts: the docker build bakes basemaps-assets (fonts/sprites) into
@@ -69,10 +97,6 @@ if (-not (Test-Path $tiles) -or -not (Test-Path (Join-Path $repo 'frontend\publi
     python (Join-Path $repo 'scripts\fetch_tiles.py')
     if ($LASTEXITCODE -ne 0) {
         Write-Host 'WARNING: tile fetch failed; map will use the fallback background.'
-    } else {
-        # The image bakes basemaps-assets at build time, so a fresh fetch must force a
-        # rebuild even when HEAD did not move (first run after the map-overhaul merge).
-        $doBuild = $true
     }
 }
 
@@ -85,13 +109,17 @@ if (-not (Test-Docker)) {
 if (-not (Wait-Docker)) { throw 'Docker engine did not become ready within 120s.' }
 Write-Host 'Docker: ready'
 
-# 2. App + Postgres on :8000 (api runs migrations on boot). Rebuild only if the pull moved HEAD.
-Push-Location $repo
-try {
-    if ($doBuild) { docker compose --env-file $envFile up -d --build | Out-Null }
-    else          { docker compose --env-file $envFile up -d         | Out-Null }
-} finally { Pop-Location }
-if ($doBuild) { Write-Host 'App + db: up on :8000 (rebuilt)' } else { Write-Host 'App + db: up on :8000' }
+# 2. App + Postgres on :8000 (api runs migrations on boot). Build by default so the running
+#    image always matches the checked-out revision, including after a local fast-forward.
+if ($SkipBuild) {
+    Compose up -d | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Personal compose start failed.' }
+    Write-Host 'App + db: up on :8000 (existing image; -SkipBuild)'
+} else {
+    Compose up -d --build | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Personal compose build/start failed.' }
+    Write-Host 'App + db: up on :8000 (image verified/rebuilt)'
+}
 
 # 3. Analyst gateway (llama-swap) on :8080 - launch hidden if not already serving.
 if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue) {
@@ -109,8 +137,8 @@ if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCont
     Write-Host 'Analyst: launched on :8080 (loads the model on first request)'
 }
 
-# 3.5 Data freshness: refresh any stale layer on start (mirrors start-demo.ps1 and the
-#     VPS start script). mode=backfill resolves each layer's start date from its stored
+# 3.5 Data freshness: refresh any stale layer on start (mirrors the public and VPS paths).
+#     mode=backfill resolves each layer's start date from its stored
 #     watermark and pages through Socrata internally, so re-runs advance or no-op. The
 #     first 911-calls backfill is the long one (rolling 24-month window). Non-fatal by
 #     design: an offline Socrata must not block the app from coming up.
