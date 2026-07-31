@@ -5,7 +5,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.assistant.schemas import AssistantDashboardState, SemanticContextPacket
+from app.assistant.schemas import (
+    AssistantDashboardState,
+    AssistantResultContext,
+    SemanticContextPacket,
+)
 from app.config import Settings
 from app.models import PlaceCluster, PlaceCrimeSummary
 from app.services.analysis_runs import latest_analysis_run_id
@@ -67,6 +71,14 @@ AVAILABLE_TOOLS = [
         "description": "Read current dashboard totals and saved places.",
     },
     {
+        "name": "explain_result",
+        "description": (
+            "Re-read the newest frozen analysis card without changing filters, selection, "
+            "or creating another card. Use for why/how/what-does-this-mean questions about "
+            "the latest result; its scope is injected by the application."
+        ),
+    },
+    {
         "name": "suggest_followups",
         "description": "Suggest deterministic follow-up questions.",
     },
@@ -87,6 +99,7 @@ def build_semantic_context(
     user_id_hash: str,
     state: AssistantDashboardState,
     settings: Settings,
+    latest_result_context: AssistantResultContext | None = None,
 ) -> SemanticContextPacket:
     summary = dashboard_summary(session, user_id_hash, settings)
     layer_freshness = dashboard_freshness_by_layer(session).get(state.layer) or {}
@@ -121,6 +134,11 @@ def build_semantic_context(
         policy_caveats=POLICY_CAVEATS,
         missing_context=_missing_context(
             summary, selected_ids, selected_places, state, layer_loaded
+        ),
+        latest_result_context=(
+            latest_result_context.model_dump(mode="json")
+            if latest_result_context is not None
+            else None
         ),
     )
 

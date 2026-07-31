@@ -122,10 +122,57 @@ def test_assistant_chat_rejects_oversized_dashboard_state(tmp_path, monkeypatch)
         assert response.status_code == 422, state
 
 
+def test_assistant_chat_rejects_invalid_latest_result_context(tmp_path, monkeypatch):
+    from app.api import routes_assistant
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("invalid result context must never reach the LLM client")
+
+    monkeypatch.setattr(routes_assistant, "build_assistant_llm_client", _boom)
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    client = TestClient(app)
+    client.post("/sessions")
+    base = {
+        "kind": "compare",
+        "place_ids": ["a", "b"],
+        "analysis_start_date": "2024-01-01",
+        "analysis_end_date": "2024-06-30",
+        "radius_m": 250,
+        "layer": "reported",
+    }
+
+    for context in (
+        {**base, "place_ids": ["only-one"]},
+        {**base, "place_ids": ["x" * 500, "b"]},
+        {**base, "radius_m": 100_000},
+        {
+            **base,
+            "analysis_start_date": "2024-07-01",
+            "analysis_end_date": "2024-01-01",
+        },
+    ):
+        response = client.post(
+            "/assistant/chat",
+            json={
+                "messages": [{"role": "user", "content": "explain that result"}],
+                "dashboard_state": {},
+                "latest_result_context": context,
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json() == {
+            "detail": "That request didn't validate — check the values and try again."
+        }
+
+
 def test_assistant_chat_streams_agent_events(monkeypatch, tmp_path):
     from app.api import routes_assistant
 
+    captured = {}
+
     async def fake_run_assistant_turn(*args, **kwargs):
+        captured["latest_result_context"] = args[5]
         yield AssistantStreamEvent(event="meta", data={"role": "compcat_analyst"})
         yield AssistantStreamEvent(event="token", data={"delta": "hello"})
         yield AssistantStreamEvent(event="done", data={})
@@ -140,6 +187,14 @@ def test_assistant_chat_streams_agent_events(monkeypatch, tmp_path):
         json={
             "messages": [{"role": "user", "content": "Summarize this."}],
             "dashboard_state": {"selected_place_ids": []},
+            "latest_result_context": {
+                "kind": "analyze",
+                "place_ids": ["place-1"],
+                "analysis_start_date": "2024-01-01",
+                "analysis_end_date": "2024-06-30",
+                "radius_m": 250,
+                "layer": "reported",
+            },
         },
     )
 
@@ -149,6 +204,7 @@ def test_assistant_chat_streams_agent_events(monkeypatch, tmp_path):
     assert "event: token" in response.text
     assert '"delta": "hello"' in response.text
     assert "event: done" in response.text
+    assert captured["latest_result_context"].place_ids == ["place-1"]
 
 
 def test_assistant_chat_serializes_status_and_replace_events(monkeypatch, tmp_path):

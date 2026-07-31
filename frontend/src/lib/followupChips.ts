@@ -87,11 +87,8 @@ export function followupChipsFor(
  * the target command expects, offense_category only when the card had one, then the chip's
  * argsPatch merged on top. Null/undefined entries are stripped last so "omitted means all
  * reported" fields don't hard-fail arg validation (e.g. the "All categories" chip's null).
- *
- * Known limitation: re-runs reset to offense-CATEGORY granularity. SettingsUsed cannot carry
- * offense_subcategory / nibrs_group — the backend deliberately omits those from `_settings_used`
- * (no UI control echoes them). If they ever become settable, cards must freeze the raw filter
- * first, or a narrowed re-run would silently widen back to the category. */
+ * Narrower subcategory/NIBRS filters remain frozen even though the dashboard has no controls
+ * for them, so a result-aware rerun does not silently widen its evidence. */
 export function buildRerunArgs(card: AnalysisCardData, chip: FollowupChip): Record<string, unknown> {
   const s = card.settings;
   const radius = s.radius_m ?? null;
@@ -104,6 +101,8 @@ export function buildRerunArgs(card: AnalysisCardData, chip: FollowupChip): Reco
       ? { radii_m: radius !== null ? [radius] : null }
       : { radius_m: radius }),
     ...(s.offense_category ? { offense_category: s.offense_category } : {}),
+    ...(s.offense_subcategory ? { offense_subcategory: s.offense_subcategory } : {}),
+    ...(s.nibrs_group ? { nibrs_group: s.nibrs_group } : {}),
   };
   const args = { ...base, ...chip.argsPatch };
   for (const key of Object.keys(args)) if (args[key] == null) delete args[key];

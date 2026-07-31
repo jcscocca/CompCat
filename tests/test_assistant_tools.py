@@ -215,7 +215,7 @@ def test_get_neighborhood_analysis_exposes_beat_baseline_stats(tmp_path):
         assert field in by_kind["beat"]
 
 
-def test_advertised_menu_is_the_seven_poc_tools():
+def test_advertised_menu_includes_result_explanation():
     from app.assistant.semantic_layer import AVAILABLE_TOOLS
 
     names = {tool["name"] for tool in AVAILABLE_TOOLS}
@@ -224,6 +224,7 @@ def test_advertised_menu_is_the_seven_poc_tools():
         "select_places",
         "analyze_places",
         "compare_places",
+        "explain_result",
         "get_dashboard_summary",
         "suggest_followups",
         "update_filters",
@@ -276,7 +277,36 @@ def test_update_filters_rejects_bad_values():
         )
 
 
-def test_resolve_or_select_falls_back_to_active_ids_when_queries_miss(monkeypatch):
+@pytest.mark.parametrize(
+    "query",
+    [
+        "this place",
+        "the selected places",
+        "current selection",
+        "these pins",
+        "los lugares seleccionados",
+    ],
+)
+def test_resolve_or_select_uses_active_ids_for_deictic_queries(monkeypatch, query):
+    from app.assistant.tools import _resolve_or_select
+
+    monkeypatch.setattr(
+        "app.assistant.tools.resolve_place_queries",
+        lambda *args: pytest.fail("deictic references must not reach the geocoder"),
+    )
+
+    resolved = _resolve_or_select(
+        session=object(),
+        user_id_hash="user-hash",
+        queries=[query],
+        place_ids=["active-place"],
+    )
+
+    assert resolved.place_ids == ["active-place"]
+    assert resolved.unresolved == []
+
+
+def test_resolve_or_select_does_not_replace_failed_named_query_with_selection(monkeypatch):
     from app.assistant.place_resolution import ResolvedPlaces
     from app.assistant.tools import _resolve_or_select
 
@@ -291,12 +321,42 @@ def test_resolve_or_select_falls_back_to_active_ids_when_queries_miss(monkeypatc
     resolved = _resolve_or_select(
         session=object(),
         user_id_hash="user-hash",
-        queries=["model hallucination"],
+        queries=["No Such Place"],
         place_ids=["active-place"],
     )
 
-    assert resolved.place_ids == ["active-place"]
-    assert resolved.unresolved == ["model hallucination"]
+    assert resolved.place_ids == []
+    assert resolved.unresolved == ["No Such Place"]
+
+
+def test_explain_result_recomputes_without_persisting_a_run(tmp_path):
+    from app.models import AnalysisRun
+
+    session, user_hash, place_id = session_with_places_and_beat_crime(tmp_path)
+    before = session.query(AnalysisRun).count()
+    try:
+        result = execute_tool(
+            session,
+            user_hash,
+            "explain_result",
+            {
+                "kind": "analyze",
+                "place_ids": [place_id],
+                "analysis_start_date": "2026-01-01",
+                "analysis_end_date": "2026-06-30",
+                "radius_m": 250,
+                "offense_category": "PROPERTY",
+                "layer": "reported",
+            },
+        )
+        after = session.query(AnalysisRun).count()
+    finally:
+        session.close()
+
+    assert result["tool_name"] == "explain_result"
+    assert result["result"]["neighborhood"]["places"][0]["place_id"] == place_id
+    assert result["result"]["comparison"] is None
+    assert after == before
 
 
 def test_planning_prompt_requests_statistical_interpretation():

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cardFromCompareResults } from "./localCard";
+import { cardFromCompareResults, cardWithSavedPlaceIds } from "./localCard";
 import type { AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
 
 const analysis: AnalysisSettings = {
@@ -106,5 +106,21 @@ describe("cardFromCompareResults", () => {
       placeIds: ["p1"],
     });
     expect(card!.settings.offense_category).toBeNull();
+  });
+
+  it("promotes a point-backed card only after every analyzed point is saved", () => {
+    const card = cardFromCompareResults({
+      comparison: makeComparison(),
+      neighborhood: makeNeighborhood(),
+      incidents: null,
+      analysis,
+      placeIds: [],
+    })!;
+
+    expect(cardWithSavedPlaceIds(card, ["p1", undefined])).toBe(card);
+    expect(cardWithSavedPlaceIds(card, ["p1", "p2"])).toEqual({
+      ...card,
+      placeIds: ["p1", "p2"],
+    });
   });
 });

@@ -17,7 +17,7 @@ During planning you have not run any tool yet. Never claim that data was retriev
 an action succeeded, a place was saved or selected, filters changed, or an analysis ran
 in a final answer. Requests to read current dashboard data or perform an action MUST use
 the matching tool: get_dashboard_summary, add_place/select_places, update_filters,
-analyze_places/compare_places, or suggest_followups.
+analyze_places/compare_places, explain_result, or suggest_followups.
 The active data layer is active_filters.layer. The three layers, exactly:
   reported = SPD crime reports — incidents reported to police.
   arrests  = SPD arrest records — enforcement activity, logged where the arrest was made
@@ -56,6 +56,14 @@ queries or geocode them. Instead call the workflow tool with an empty "queries"
 list, which automatically operates on the currently selected places (see
 selected_places in the semantic context). If selected_places is empty, ask the
 user to select or name a place instead of calling a tool.
+latest_result_context is the scope of the newest frozen analysis card, or null when no
+saved-place card is available. For a question about what the latest result means — "why
+wasn't that clear", "what drove that result", "explain the interval", "which categories
+stood out" — call explain_result with empty arguments. The application injects the frozen
+scope and the tool recomputes the evidence read-only; never answer from conversational memory.
+For "same result but..." / "rerun that at..." requests, call analyze_places or compare_places
+to match latest_result_context.kind and set "context":"latest_result" on the plan. Pass only
+the changed arguments. For new named places or the live selection, use "context":"dashboard".
 When the user asks to compare — "compare", "versus", "vs", "which has fewer" —
 with two or more places selected or named, call compare_places, which produces
 the side-by-side verdict; not analyze_places.
@@ -83,7 +91,7 @@ During planning, respond with ONE JSON object and NOTHING else: no prose,
 no markdown fences, no reasoning or commentary before or after the JSON.
 Use exactly one of these shapes:
 {"type":"final","message":"..."}
-{"type":"tool_call","tool_name":"...","arguments":{...}}"""
+{"type":"tool_call","tool_name":"...","context":"dashboard|latest_result","arguments":{...}}"""
 
 # Groq's GPT-OSS models can guarantee syntactically valid JSON in object mode. Keep semantic
 # validation in the agent: best-effort JSON Schema mode can return a provider-side 400 when a

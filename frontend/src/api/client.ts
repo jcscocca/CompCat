@@ -1,6 +1,7 @@
 import type {
   AssistantDashboardState,
   AssistantMessage,
+  AssistantResultContext,
   AssistantStreamEvent,
   BeatFeatureCollection,
   DashboardFreshness,
@@ -306,6 +307,7 @@ export function streamAssistantChat(
   payload: {
     messages: AssistantMessage[];
     dashboard_state: AssistantDashboardState;
+    latest_result_context?: AssistantResultContext | null;
   },
   handlers: AssistantHandlers,
   signal?: AbortSignal,

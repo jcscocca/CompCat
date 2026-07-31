@@ -4,7 +4,7 @@ import logging
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,35 @@ class AssistantDashboardState(BaseModel):
         return "reported"
 
 
+class AssistantResultContext(BaseModel):
+    """Compact scope for the newest frozen analysis card.
+
+    The client deliberately sends only the identifiers and analysis settings needed to
+    reproduce the result. Raw incident rows and client-authored statistical claims never
+    become planning context; ``explain_result`` recomputes the authoritative data server-side.
+    """
+
+    kind: Literal["analyze", "compare"]
+    place_ids: list[Annotated[str, Field(max_length=MAX_PLACE_ID_CHARS)]] = Field(
+        min_length=1, max_length=MAX_SELECTED_PLACES
+    )
+    analysis_start_date: date
+    analysis_end_date: date
+    radius_m: int = Field(gt=0, le=5000)
+    offense_category: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
+    offense_subcategory: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
+    nibrs_group: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
+    layer: Literal["reported", "arrests", "calls"] = "reported"
+
+    @model_validator(mode="after")
+    def _valid_scope(self) -> AssistantResultContext:
+        if self.analysis_end_date < self.analysis_start_date:
+            raise ValueError("analysis_end_date must be on or after analysis_start_date")
+        if self.kind == "compare" and len(set(self.place_ids)) < 2:
+            raise ValueError("compare result context requires at least two places")
+        return self
+
+
 class SemanticContextPacket(BaseModel):
     dashboard_totals: dict[str, Any]
     selected_places: list[dict[str, Any]]
@@ -74,6 +103,7 @@ class SemanticContextPacket(BaseModel):
     available_tools: list[dict[str, Any]]
     policy_caveats: list[str]
     missing_context: list[str]
+    latest_result_context: dict[str, Any] | None = None
 
 
 class AssistantChatRequest(BaseModel):
@@ -81,6 +111,7 @@ class AssistantChatRequest(BaseModel):
         min_length=1, max_length=MAX_MESSAGES_PER_REQUEST
     )
     dashboard_state: AssistantDashboardState = Field(default_factory=AssistantDashboardState)
+    latest_result_context: AssistantResultContext | None = None
 
 
 class AssistantCommandRequest(BaseModel):

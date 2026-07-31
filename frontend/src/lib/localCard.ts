@@ -31,3 +31,16 @@ export function cardFromCompareResults(input: {
     incidents,
   };
 }
+
+/** Promote a point-backed local card to a server-recomputable saved-place card once every
+ * analyzed entry has been saved. Partial promotion would change a multi-point result's scope,
+ * so keep the original card until all ids are present. */
+export function cardWithSavedPlaceIds(
+  card: AnalysisCardData,
+  placeIds: Array<string | undefined>,
+): AnalysisCardData {
+  if (placeIds.length === 0 || placeIds.some((id) => !id)) return card;
+  const savedIds = Array.from(new Set(placeIds as string[]));
+  if (savedIds.length === 0) return card;
+  return { ...card, placeIds: savedIds };
+}

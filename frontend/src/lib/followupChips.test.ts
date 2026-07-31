@@ -87,6 +87,19 @@ describe("buildRerunArgs", () => {
     expect(args.offense_category).toBe("PROPERTY");
   });
 
+  it("preserves narrower frozen filters that have no dashboard controls", () => {
+    const card = cardFrom("analyze", {
+      offense_category: "PROPERTY",
+      offense_subcategory: "THEFT",
+      nibrs_group: "A",
+    });
+    const chips = followupChipsFor(card.kind, card.settings, [250, 500, 1000]);
+    const radiusChip = chips.find((c) => c.label.startsWith("Widen"));
+    const args = buildRerunArgs(card, radiusChip!);
+    expect(args.offense_subcategory).toBe("THEFT");
+    expect(args.nibrs_group).toBe("A");
+  });
+
   it("overrides the frozen radius in the analyze arg shape (radii_m list)", () => {
     const card = cardFrom("analyze");
     const chips = followupChipsFor(card.kind, card.settings, [250, 500, 1000]);

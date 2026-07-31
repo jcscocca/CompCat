@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from functools import lru_cache
 from hashlib import sha256
@@ -182,6 +183,15 @@ class ComparePlacesByNameArgs(_BoundedWindowArgs):
     layer: str = "reported"
 
 
+class ExplainResultArgs(_BoundedWindowArgs):
+    kind: Literal["analyze", "compare"]
+    place_ids: list[str] = Field(
+        min_length=1, max_length=_MAX_TOOL_ITEMS
+    )
+    radius_m: int = Field(gt=0, le=5000)
+    layer: Literal["reported", "arrests", "calls"] = "reported"
+
+
 class UpdateFiltersArgs(_BoundedWindowArgs):
     radius_m: int | None = Field(default=None, ge=50, le=5000)
     # "" or "ALL" clears to all-reported (echoed as None, matching _settings_used).
@@ -278,31 +288,39 @@ def _resolve_or_select(
     queries: list[str],
     place_ids: list[str],
 ) -> ResolvedPlaces:
-    """Prefer model-named queries; fall back to the backfilled selection ids."""
-    if queries:
+    """Resolve real place names; use selection only for explicit deictic references."""
+    concrete_queries = [
+        query for query in queries if _DEICTIC_PLACE_QUERY_PATTERN.fullmatch(query) is None
+    ]
+    if concrete_queries:
         provider = build_provider(get_settings())
-        resolved = resolve_place_queries(session, user_id_hash, queries, provider)
-        if resolved.place_ids:
-            return resolved
-        # A model can mistake a deictic ("this place") for a geocodable query even
-        # though the authoritative dashboard selection was backfilled beside it. A
-        # no-hit query must not erase that usable selection.
-        resolved.place_ids = list(place_ids)
-        return resolved
+        return resolve_place_queries(session, user_id_hash, concrete_queries, provider)
     return ResolvedPlaces(place_ids=list(place_ids))
+
+
+_DEICTIC_PLACE_QUERY_PATTERN = re.compile(
+    r"^\s*(?:(?:this|that|these|those|the|current|my)?\s*"
+    r"(?:places?|pins?|selection|selected\s+places?)"
+    r"|(?:here|there|my\s+selection)"
+    r"|(?:este|esta|estos|estas|ese|esa|esos|esas|el|la|los|las|mi|mis)?\s*"
+    r"(?:lugar(?:es)?|pin(?:es)?|selecci[oó]n|lugar(?:es)?\s+seleccionad[oa]s?)"
+    r"|(?:aqu[ií]|all[ií]|mi\s+selecci[oó]n))\s*$",
+    re.IGNORECASE,
+)
 
 
 def _settings_used(
     args: AnalyzePlacesArgs | ComparePlacesByNameArgs, radius_m: int
 ) -> dict[str, Any]:
-    # Echo only the fields the frontend bridge (AnalysisSettings) can apply. The analysis still
-    # honors offense_subcategory / nibrs_group as filters; they're omitted here because the UI
-    # has no control for them, keeping settings_used 1:1 with what the bridge consumes.
+    # Freeze every analysis filter in the card scope. The bridge applies only fields represented
+    # by dashboard controls, but result explanation and reruns need the narrower filters too.
     return {
         "radius_m": radius_m,
         "analysis_start_date": args.analysis_start_date.isoformat(),
         "analysis_end_date": args.analysis_end_date.isoformat(),
         "offense_category": args.offense_category,
+        "offense_subcategory": args.offense_subcategory,
+        "nibrs_group": args.nibrs_group,
         "layer": args.layer,
     }
 
@@ -480,6 +498,69 @@ def _compare_places(
     }
 
 
+def _explain_result(
+    session: Session,
+    user_id_hash: str,
+    args: ExplainResultArgs,
+) -> dict[str, Any]:
+    """Recompute a frozen card's evidence without persisting a new run or changing the UI."""
+    _require_analysis_window(
+        args.analysis_start_date,
+        args.analysis_end_date,
+        args.radius_m,
+    )
+    place_ids = list(dict.fromkeys(args.place_ids))
+    if args.kind == "compare" and len(place_ids) < 2:
+        raise AssistantClarification("The result no longer has two places to compare.")
+    sources = sources_for_layer(args.layer)
+    neighborhood = neighborhood_analysis_for_places(
+        session=session,
+        user_id_hash=user_id_hash,
+        place_ids=place_ids,
+        radius_m=args.radius_m,
+        analysis_start_date=args.analysis_start_date,
+        analysis_end_date=args.analysis_end_date,
+        offense_category=args.offense_category,
+        offense_subcategory=args.offense_subcategory,
+        nibrs_group=args.nibrs_group,
+        area_lookup=_beat_areas(),
+        beat_polygons=_beat_polygons(),
+        mcpp_area_lookup=_mcpp_areas(),
+        mcpp_polygons=_mcpp_polygons(),
+        sources=sources,
+    )
+    comparison = None
+    if args.kind == "compare":
+        comparison = compare_selected_places(
+            session=session,
+            user_id_hash=user_id_hash,
+            place_ids=place_ids,
+            radius_m=args.radius_m,
+            analysis_start_date=args.analysis_start_date,
+            analysis_end_date=args.analysis_end_date,
+            offense_category=args.offense_category,
+            offense_subcategory=args.offense_subcategory,
+            nibrs_group=args.nibrs_group,
+            sources=sources,
+            persist=False,
+        )
+    return {
+        "kind": args.kind,
+        "place_ids": place_ids,
+        "settings_used": {
+            "radius_m": args.radius_m,
+            "analysis_start_date": args.analysis_start_date.isoformat(),
+            "analysis_end_date": args.analysis_end_date.isoformat(),
+            "offense_category": args.offense_category,
+            "offense_subcategory": args.offense_subcategory,
+            "nibrs_group": args.nibrs_group,
+            "layer": args.layer,
+        },
+        "neighborhood": neighborhood,
+        "comparison": comparison,
+    }
+
+
 def _update_filters(args: UpdateFiltersArgs) -> dict[str, Any]:
     patch: dict[str, Any] = {}
     if args.radius_m is not None:
@@ -509,7 +590,7 @@ def execute_tool(
     tool_name: str,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    # The agent-advertised menu (semantic_layer.AVAILABLE_TOOLS) is the seven PoC tools.
+    # The agent-advertised menu (semantic_layer.AVAILABLE_TOOLS) is the eight PoC tools.
     # The run_place_analysis / get_neighborhood_analysis / get_incident_details branches below
     # are intentionally retained-but-unadvertised: analyze_places folds them in for the agent,
     # while the granular branches stay callable for existing tests and non-agent paths.
@@ -592,6 +673,10 @@ def execute_tool(
         elif tool_name == "analyze_places":
             args = AnalyzePlacesArgs.model_validate(arguments)
             result = _analyze_places(session, user_id_hash, args)
+            validated_arguments = args.model_dump(mode="json")
+        elif tool_name == "explain_result":
+            args = ExplainResultArgs.model_validate(arguments)
+            result = _explain_result(session, user_id_hash, args)
             validated_arguments = args.model_dump(mode="json")
         elif tool_name == "update_filters":
             args = UpdateFiltersArgs.model_validate(arguments)
