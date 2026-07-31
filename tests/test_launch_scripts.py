@@ -66,6 +66,22 @@ def test_personal_start_rebuilds_by_default_and_supports_intentional_skips() -> 
     assert "image always matches the checked-out revision" in text
 
 
+def test_gpt_oss_installer_is_resumable_verified_and_scoped_to_personal_mode() -> None:
+    text = _read("install-gpt-oss-120b.ps1")
+
+    assert r"AI Models\Library\OpenAI\gpt-oss-120b" in text
+    assert "gpt-oss-120b-MXFP4.gguf" in text
+    assert "63387346208" in text
+    assert "582bd40f6886200101f4c4ed9f25f3fe80cc14c86e9e2b37746cd8904a0c622d" in text
+    assert "Get-FileHash" in text
+    assert "--continue-at" in text
+    assert 'Copy-Item -LiteralPath $ConfigPath -Destination $backupPath' in text
+    assert "openai/gpt-oss-120b" in text
+    assert "--n-cpu-moe 34" in text
+    assert "[switch]$ActivateForCompCat" in text
+    assert "scripts\\start-compcat.ps1" in text
+
+
 def test_personal_stop_is_scoped_and_keeps_the_database() -> None:
     text = _read("stop-compcat.ps1")
 
@@ -125,6 +141,8 @@ def test_run_mode_chooser_covers_every_launcher_and_is_linked() -> None:
         "scripts/dev.sh",
     ):
         assert launcher in run_modes
+
+    assert r"scripts\install-gpt-oss-120b.ps1" in run_modes
 
     for project in ("compcat_mca-postgres", "compcat-public"):
         assert project in run_modes

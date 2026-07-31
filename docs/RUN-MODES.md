@@ -60,6 +60,30 @@ The launcher:
 - starts host-side `llama-swap` on `8080` when it is not already running; and
 - refreshes stale reported-incident, arrest, and 911-call layers.
 
+### Optional local GPT-OSS 120B model
+
+The personal ThinkPad normally uses the local Gemma model named in `.env.deploy`. To install the
+same OpenAI GPT-OSS 120B model used by the Groq-backed public configuration, run this one-time
+installer from the repository root:
+
+```powershell
+pwsh -File .\scripts\install-gpt-oss-120b.ps1 -PlanOnly
+pwsh -File .\scripts\install-gpt-oss-120b.ps1 -ActivateForCompCat
+```
+
+The installer downloads the llama.cpp MXFP4 GGUF into
+`C:\Users\jacob\AI Models\Library\OpenAI\gpt-oss-120b`, resumes interrupted downloads, verifies
+the pinned SHA-256, backs up and updates `C:\Users\jacob\llama-swap.yaml`, and optionally changes
+the private `.env.deploy` model selection before restarting the personal stack. It does not change
+the public ThinkPad or VPS configurations.
+
+The file is about 59 GiB. The ThinkPad's 64 GB RAM and 12 GB RTX 3500 Ada GPU require hybrid
+CPU/GPU inference, so the installed profile uses one 8K context slot and keeps 34 of the model's 36
+mixture-of-experts layers on the CPU. Expect substantially slower startup and generation than the
+Groq-hosted model. The llama.cpp maintainers caution that Windows can spill excess GPU allocation
+into shared memory and become extremely slow; check Task Manager's dedicated GPU memory during the
+first live test.
+
 Useful switches:
 
 ```powershell
