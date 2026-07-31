@@ -1,5 +1,5 @@
 # Take the PUBLIC CompCat instance offline. Stopping cloudflared is what unpublishes
-# compcat.app — the hostname keeps pointing at this tunnel and starts serving again the
+# compcat.app - the hostname keeps pointing at this tunnel and starts serving again the
 # moment start-public.ps1 runs.
 #
 # Keeps every named volume (database, nightly backups). See docs/DEPLOY-TUNNEL.md for the
@@ -10,7 +10,7 @@
 # Only touches the compcat-public project: the personal instance (compcat) is untouched,
 # including its volume.
 $ErrorActionPreference = 'Stop'
-Set-Location (Join-Path $PSScriptRoot '..\..')  # repo root — the compose -f paths are repo-relative
+Set-Location (Join-Path $PSScriptRoot '..\..')  # repo root - the compose -f paths are repo-relative
 
 Write-Host '== Stopping CompCat PUBLIC instance (project: compcat-public) =='
 docker compose -p compcat-public `

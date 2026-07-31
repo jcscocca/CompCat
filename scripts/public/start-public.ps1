@@ -1,6 +1,6 @@
 # Bring up the PUBLIC CompCat instance on the ThinkPad and publish it at https://compcat.app
 # through the named Cloudflare tunnel. Idempotent: re-running is the normal way to deploy a
-# new commit (git pull first — this script builds the current checkout but does not pull).
+# new commit (git pull first - this script builds the current checkout but does not pull).
 #
 #   pwsh -File scripts\public\start-public.ps1
 #
@@ -8,7 +8,7 @@
 # fetch, per-layer freshness backfill) and scripts/prod/start-compcat.sh (health probed from
 # INSIDE the api container, because this stack publishes no host port at all).
 #
-# ISOLATION — the load-bearing property of this script. This project must stay walled off from
+# ISOLATION - the load-bearing property of this script. This project must stay walled off from
 # the personal instance:
 #
 #   compcat         personal instance   .env.deploy   host :8000, real saved places,
@@ -18,7 +18,7 @@
 #
 # The `-p compcat-public` project name is what enforces it: Compose prefixes every named
 # volume and network with it, so this instance gets compcat-public_mca-postgres and
-# compcat-public_backups — distinct from the personal compcat_mca-postgres. Never drop -p, and
+# compcat-public_backups - distinct from the personal compcat_mca-postgres. Never drop -p, and
 # never point .env.tunnel's MCA_DATABASE_URL at anything but this project's own db service.
 param(
     [switch]$SkipIngest,
@@ -53,7 +53,7 @@ Write-Host 'Exposure: https://compcat.app via named tunnel | no host ports | per
 Write-Host 'Source: current checkout (this script does not pull)'
 
 if (-not (Test-Path '.env.tunnel')) {
-    Write-Error 'Missing .env.tunnel — copy .env.tunnel.example and fill in real values (see docs/DEPLOY-TUNNEL.md).'
+    Write-Error 'Missing .env.tunnel - copy .env.tunnel.example and fill in real values (see docs/DEPLOY-TUNNEL.md).'
 }
 
 # 1. Docker engine. Docker Desktop starts at login, but the engine takes a moment.
@@ -65,7 +65,7 @@ if (-not (Wait-Docker)) { throw 'Docker engine did not become ready within 120s.
 Write-Host 'Docker: ready'
 
 # 2. Self-hosted basemap tiles: fetch once if missing (kept out of git; ~100 MB). Gates on
-#    both artifacts — the image build bakes basemaps-assets (fonts/sprites) in, so a missing
+#    both artifacts - the image build bakes basemaps-assets (fonts/sprites) in, so a missing
 #    assets dir would ship a glyphless map. Non-fatal: the app runs with a flat-background
 #    fallback. Shared with the personal instance; usually already present.
 if (-not (Test-Path 'app\data\tiles\seattle.pmtiles') -or -not (Test-Path 'frontend\public\basemaps-assets')) {
@@ -76,13 +76,13 @@ if (-not (Test-Path 'app\data\tiles\seattle.pmtiles') -or -not (Test-Path 'front
 
 # 3. Build and start: db, api, the ops sidecar (03:10 ingest / 03:40 backup / 03:50 retention)
 #    and cloudflared. No caddy (parked on a dead profile by the tunnel overlay) and no
-#    published port — cloudflared dials out to Cloudflare and reaches the app at api:8000 over
+#    published port - cloudflared dials out to Cloudflare and reaches the app at api:8000 over
 #    the compose network.
 Write-Host 'Starting the public stack (db, api, ops sidecar, cloudflared)...'
 Compose up -d --build
 if ($LASTEXITCODE -ne 0) { throw 'compose up failed.' }
 
-# 4. Wait for /health from INSIDE the api container — there is no host port to probe.
+# 4. Wait for /health from INSIDE the api container - there is no host port to probe.
 Write-Host 'Waiting for /health (inside the api container)...'
 $deadline = (Get-Date).AddMinutes($HealthTimeoutMinutes)
 while ($true) {
@@ -90,7 +90,7 @@ while ($true) {
         Compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" *> $null
         if ($LASTEXITCODE -eq 0) { break }
     } catch { }
-    if ((Get-Date) -gt $deadline) { throw "API did not become healthy in $HealthTimeoutMinutes minutes — check: docker compose -p compcat-public ... logs api" }
+    if ((Get-Date) -gt $deadline) { throw "API did not become healthy in $HealthTimeoutMinutes minutes - check: docker compose -p compcat-public ... logs api" }
     Start-Sleep -Seconds 5
 }
 Write-Host 'API: healthy'
@@ -127,9 +127,9 @@ print(json.dumps({name: (values or {}).get("data_through") for name, values in l
             # maximally stale so the first run ingests.
             $dataThrough = $freshness.$layer
             if (-not $dataThrough -or ([datetime]$dataThrough -lt (Get-Date).AddDays(-$FreshnessMaxAgeDays))) {
-                Write-Host ("{0}: data through [{1}] — backfilling {2} (the first calls run takes a while)..." -f $layer, $dataThrough, $layers[$layer])
+                Write-Host ("{0}: data through [{1}] - backfilling {2} (the first calls run takes a while)..." -f $layer, $dataThrough, $layers[$layer])
                 # Fired from the ops sidecar, which already holds MCA_ADMIN_INGEST_TOKEN in
-                # its environment and reaches the api over the compose network — the admin
+                # its environment and reaches the api over the compose network - the admin
                 # token never has to be read out of .env.tunnel here.
                 $url = 'http://api:8000/admin/crime/ingest/socrata?source={0}&mode=backfill&limit=5000' -f $layers[$layer]
                 # Single quotes around the URL (its & would background the command in sh) and a
@@ -144,7 +144,7 @@ print(json.dumps({name: (values or {}).get("data_through") for name, values in l
                     Write-Host ("{0}: done" -f $layer)
                 }
             } else {
-                Write-Host ("{0}: data through {1} — fresh enough." -f $layer, $dataThrough)
+                Write-Host ("{0}: data through {1} - fresh enough." -f $layer, $dataThrough)
             }
         }
     } catch {
@@ -158,13 +158,13 @@ Write-Host ''
 Compose ps
 Write-Host ''
 # cloudflared logs to stderr, hence 2>&1; it opens one connection per Cloudflare edge colo
-# (normally four). Zero means the site is not actually published — usually a bad token.
+# (normally four). Zero means the site is not actually published - usually a bad token.
 try {
     $tunnelLog = Compose logs --tail 60 cloudflared 2>&1 | ForEach-Object { "$_" }
     $registered = @($tunnelLog | Select-String -SimpleMatch 'Registered tunnel connection').Count
     Write-Host ("Tunnel: {0} registered connection(s) to Cloudflare." -f $registered)
     if ($registered -eq 0) {
-        Write-Host 'WARNING: no registered connections yet — check CLOUDFLARE_TUNNEL_TOKEN and the cloudflared logs.'
+        Write-Host 'WARNING: no registered connections yet - check CLOUDFLARE_TUNNEL_TOKEN and the cloudflared logs.'
     }
 } catch { Write-Host "WARNING: could not read the cloudflared logs ($_)." }
 Write-Host ''
@@ -174,7 +174,7 @@ Write-Host ''
 Write-Host 'CompCat is public at:'
 Write-Host '  https://compcat.app/             the site'
 Write-Host '  https://compcat.app/health       readiness probe'
-Write-Host '  https://compcat.app/health/data  data-recency probe — point the uptime monitor here'
+Write-Host '  https://compcat.app/health/data  data-recency probe - point the uptime monitor here'
 Write-Host ''
 Write-Host '  logs: docker compose -p compcat-public -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.tunnel.yml --profile ops --env-file .env.tunnel logs -f'
 Write-Host '  stop: pwsh -File scripts\public\stop-public.ps1'
