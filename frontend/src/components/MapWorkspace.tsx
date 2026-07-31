@@ -843,6 +843,18 @@ export function MapWorkspace() {
     />
   );
 
+  const draftEditor = pinDraft.draft ? (
+    <PinDraftPopover
+      draft={pinDraft.draft}
+      saving={pinDraft.draftSaving}
+      error={pinDraft.draftError}
+      autoFocus={!isMobile}
+      onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
+      onSave={pinDraft.saveDraft}
+      onCancel={() => pinDraft.setDraft(null)}
+    />
+  ) : null;
+
   return (
     <div className="mc-scope">
       <div
@@ -908,6 +920,12 @@ export function MapWorkspace() {
             onBadgeClick={handleBadgeClick}
             interactionDisabled={isMobile && drawer.snap === "full"}
           />
+
+          {/* Keep the next step with the map action on desktop. In focus mode the map is
+              only a locator strip, so the editor falls back to the roomy Tabby pane. */}
+          {draftEditor && !isMobile && !isFocus ? (
+            <div className="mc-draft-overlay">{draftEditor}</div>
+          ) : null}
 
           {isMobile ? (
             <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
@@ -997,15 +1015,8 @@ export function MapWorkspace() {
           peekHeader={isMobile ? layerControls : undefined}
         >
           <div className="mc-rail-wrap">
-            {pinDraft.draft ? (
-              <PinDraftPopover
-                draft={pinDraft.draft}
-                saving={pinDraft.draftSaving}
-                error={pinDraft.draftError}
-                onChange={(patch) => pinDraft.setDraft((current) => (current ? { ...current, ...patch } : current))}
-                onSave={pinDraft.saveDraft}
-                onCancel={() => pinDraft.setDraft(null)}
-              />
+            {draftEditor && (isMobile || isFocus) ? (
+              <div className="mc-draft-inline">{draftEditor}</div>
             ) : null}
             <AssistantPanel
               items={thread.items}

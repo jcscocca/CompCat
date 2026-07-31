@@ -11,13 +11,22 @@ const draft: DraftPin = { latitude: 47.6097, longitude: -122.3331, display_label
 afterEach(cleanup);
 
 describe("PinDraftPopover", () => {
+  it("makes the naming step explicit and can focus the desktop field", () => {
+    render(<PinDraftPopover draft={draft} saving={false} autoFocus onChange={vi.fn()} onSave={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByRole("form", { name: "Name this pin" })).toBeInTheDocument();
+    expect(screen.getByText(/dropped on the map/i)).toHaveTextContent("47.6097, -122.3331");
+    expect(screen.getByText(/rename this place later/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/pin label/i)).toHaveFocus();
+  });
+
   it("lets blank-label pins save and still emits optional label changes", () => {
     const onChange = vi.fn();
     render(<PinDraftPopover draft={draft} saving={false} onChange={onChange} onSave={vi.fn()} onCancel={vi.fn()} />);
 
     expect(screen.queryByLabelText(/visits per week/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save pin/i })).toBeEnabled();
-    fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "Home" } });
+    fireEvent.change(screen.getByLabelText(/pin label/i), { target: { value: "Home" } });
     expect(onChange).toHaveBeenCalledWith({ display_label: "Home" });
   });
 

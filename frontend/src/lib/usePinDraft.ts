@@ -74,7 +74,8 @@ export function usePinDraft({
   }
 
   // Sets the draft pin + flies the map to a searched address. handleSearchSelect and the
-  // single-address lookup both reuse this; the draft's save popover renders on the rail.
+  // single-address lookup both reuse this; the editor renders over the desktop map and in
+  // the mobile sheet (or the wide pane when the map has collapsed to a focus strip).
   function previewSearch(result: GeocodeResult) {
     setDraft({
       latitude: result.latitude,
