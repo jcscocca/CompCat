@@ -35,6 +35,7 @@ param(
     [switch]$SkipPull,
     [switch]$SkipBuild,
     [switch]$SkipIngest,
+    [switch]$SkipLlmPrewarm,
     [int]$FreshnessMaxAgeDays = 14
 )
 $ErrorActionPreference = 'Stop'
@@ -135,6 +136,38 @@ if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCont
         -RedirectStandardOutput (Join-Path $logDir 'llama-swap.out.log') `
         -RedirectStandardError  (Join-Path $logDir 'llama-swap.err.log') -WindowStyle Hidden
     Write-Host 'Analyst: launched on :8080 (loads the model on first request)'
+}
+
+# GPT-OSS 120B needs materially longer to load than the smaller personal model. Warm it here so
+# the startup cost happens once, before the first Tabby turn, and never affects public launchers.
+$configuredLlmModel = ((Get-Content $envFile | Where-Object { $_ -match '^MCA_LLM_MODEL=' }) -split '=', 2)[1].Trim()
+if ($configuredLlmModel -eq 'openai/gpt-oss-120b' -and -not $SkipLlmPrewarm) {
+    try {
+        Write-Host 'Analyst: prewarming GPT-OSS 120B (first load can take several minutes)...'
+        $gatewayDeadline = (Get-Date).AddSeconds(60)
+        while ($true) {
+            try {
+                $null = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/models' -TimeoutSec 2
+                break
+            } catch {
+                if ((Get-Date) -gt $gatewayDeadline) { throw 'llama-swap did not become ready within 60 seconds.' }
+                Start-Sleep -Seconds 2
+            }
+        }
+        $prewarmBody = @{
+            model = $configuredLlmModel
+            messages = @(@{ role = 'user'; content = 'Reply OK.' })
+            max_tokens = 1
+            stream = $false
+        } | ConvertTo-Json -Depth 4
+        $null = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/chat/completions' -Method Post `
+            -ContentType 'application/json' -Body $prewarmBody -TimeoutSec 600
+        Write-Host 'Analyst: GPT-OSS 120B is warm.'
+    } catch {
+        Write-Host "WARNING: GPT-OSS prewarm failed ($_); CompCat will retry on the first Tabby request."
+    }
+} elseif ($configuredLlmModel -eq 'openai/gpt-oss-120b') {
+    Write-Host 'Analyst: GPT-OSS prewarm skipped (-SkipLlmPrewarm)'
 }
 
 # 3.5 Data freshness: refresh any stale layer on start (mirrors the public and VPS paths).

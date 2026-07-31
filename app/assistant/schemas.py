@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.api.dashboard_schemas import AnalysisPoint
+
 logger = logging.getLogger(__name__)
 
 # Abuse ceilings on the assistant request. The endpoint is session-gated, but sessions are
@@ -36,6 +38,12 @@ class AssistantDashboardState(BaseModel):
     selected_place_ids: list[Annotated[str, Field(max_length=MAX_PLACE_ID_CHARS)]] = Field(
         default_factory=list, max_length=MAX_SELECTED_PLACES
     )
+    # Shared links and search pins are intentionally not persisted. When any current pin is
+    # ad-hoc, the frontend sends the whole selection as bounded inline points so ordering and
+    # comparison scope remain exact without silently saving locations.
+    selected_points: list[AnalysisPoint] = Field(
+        default_factory=list, max_length=MAX_SELECTED_PLACES
+    )
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None
     radii_m: list[Annotated[int, Field(gt=0, le=5000)]] = Field(
@@ -47,6 +55,12 @@ class AssistantDashboardState(BaseModel):
     # Active analysis layer ("reported" = SPD crime reports, "arrests" = SPD arrest
     # records (enforcement activity), "calls" = 911 calls for service).
     layer: Literal["reported", "arrests", "calls"] = "reported"
+
+    @model_validator(mode="after")
+    def _one_selection_source(self) -> AssistantDashboardState:
+        if self.selected_place_ids and self.selected_points:
+            raise ValueError("provide selected_place_ids or selected_points, not both")
+        return self
 
     @field_validator("layer", mode="before")
     @classmethod
@@ -76,7 +90,10 @@ class AssistantResultContext(BaseModel):
 
     kind: Literal["analyze", "compare"]
     place_ids: list[Annotated[str, Field(max_length=MAX_PLACE_ID_CHARS)]] = Field(
-        min_length=1, max_length=MAX_SELECTED_PLACES
+        default_factory=list, max_length=MAX_SELECTED_PLACES
+    )
+    points: list[AnalysisPoint] = Field(
+        default_factory=list, max_length=MAX_SELECTED_PLACES
     )
     analysis_start_date: date
     analysis_end_date: date
@@ -90,7 +107,10 @@ class AssistantResultContext(BaseModel):
     def _valid_scope(self) -> AssistantResultContext:
         if self.analysis_end_date < self.analysis_start_date:
             raise ValueError("analysis_end_date must be on or after analysis_start_date")
-        if self.kind == "compare" and len(set(self.place_ids)) < 2:
+        if bool(self.place_ids) == bool(self.points):
+            raise ValueError("result context requires exactly one of place_ids or points")
+        selection_count = len(set(self.place_ids)) if self.place_ids else len(self.points)
+        if self.kind == "compare" and selection_count < 2:
             raise ValueError("compare result context requires at least two places")
         return self
 

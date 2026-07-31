@@ -69,6 +69,32 @@ describe("interpretToolResult", () => {
     });
   });
 
+  it("keeps point-backed compare results transient without clearing the address list", () => {
+    const points = [
+      { latitude: 47.61, longitude: -122.33, label: "Downtown" },
+      { latitude: 47.62, longitude: -122.34, label: "Capitol Hill" },
+    ];
+    const effect = interpretToolResult({
+      tool_name: "compare_places",
+      result: {
+        place_ids: [],
+        points,
+        settings_used: {
+          radius_m: 250,
+          analysis_start_date: "2024-01-01",
+          analysis_end_date: "2024-12-31",
+          layer: "reported",
+        },
+        comparison: { overview: {} },
+      },
+    });
+
+    expect(effect).not.toHaveProperty("selection");
+    expect(effect?.refetchSummary).toBe(false);
+    expect(effect?.card?.points).toEqual(points);
+    expect(effect?.card?.placeIds).toEqual([]);
+  });
+
   it("carries a string analysis_run_id through as card.runId", () => {
     const effect = interpretToolResult({
       tool_name: "analyze_places",

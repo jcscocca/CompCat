@@ -23,6 +23,7 @@ def _settings(**overrides):
         "llm_fallback_provider": "openai",
         "llm_base_url": "http://primary:8080/v1",
         "llm_model": "gemma",
+        "llm_timeout_s": 120.0,
         "llm_disable_thinking": False,
         "llm_fallback_base_url": "",
         "llm_fallback_model": "",
@@ -48,6 +49,19 @@ def test_no_fallback_returns_bare_primary() -> None:
     client = build_assistant_llm_client(_settings())
     assert isinstance(client, OpenAiLlmClient)
     assert client.base_url == "http://primary:8080/v1"
+    assert client.timeout_s == 120.0
+
+
+def test_timeout_threads_into_primary_and_fallback() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_timeout_s=240.0,
+            llm_fallback_base_url="http://fb:8080/v1",
+            llm_fallback_model="qwen",
+        )
+    )
+    assert isinstance(client, FailoverLlmClient)
+    assert [c.timeout_s for c in client.clients] == [240.0, 240.0]
 
 
 def test_both_fallback_values_enable_failover() -> None:
@@ -240,3 +254,13 @@ def test_invalid_provider_is_rejected() -> None:
 
     with pytest.raises(ValidationError):
         Settings(llm_provider="claude")
+
+
+def test_openai_compatible_timeout_default_and_validation() -> None:
+    from pydantic import ValidationError
+
+    from app.config import Settings
+
+    assert Settings(_env_file=None).llm_timeout_s == 120.0
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, llm_timeout_s=0)

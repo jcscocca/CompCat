@@ -1,5 +1,6 @@
 import type {
   AssistantDashboardState,
+  AnalysisPointPayload,
   AssistantMessage,
   AssistantResultContext,
   AssistantStreamEvent,
@@ -15,8 +16,6 @@ import type {
   SiteComparison,
   TrendsResponse,
 } from "../types";
-
-type AnalysisPointPayload = { latitude: number; longitude: number; label: string };
 
 type AnalyzePlacesPayload = {
   place_ids?: string[];

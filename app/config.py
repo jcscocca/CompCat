@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     assistant_narration_enabled: bool = True
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k"
+    # Read timeout for OpenAI-compatible calls. Hosted providers normally finish far below
+    # the 120s default; slower local models can raise this without changing public deploys.
+    # Streamed narration retains its separate 300s overall wall-clock ceiling.
+    llm_timeout_s: float = Field(default=120.0, gt=0)
     # Disable chain-of-thought for thinking models (e.g. Qwen) so the answer
     # lands in `content` rather than consuming the budget on reasoning_content.
     llm_disable_thinking: bool = False

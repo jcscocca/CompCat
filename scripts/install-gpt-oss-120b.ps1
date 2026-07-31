@@ -35,6 +35,8 @@ $expectedBytes = [int64]63387346208
 $expectedSha256 = '582bd40f6886200101f4c4ed9f25f3fe80cc14c86e9e2b37746cd8904a0c622d'
 $minimumRamBytes = [int64](60GB)
 $diskHeadroomBytes = [int64](5GB)
+$modelTtlSeconds = 3600
+$healthCheckTimeoutSeconds = 300
 $modelPath = Join-Path $ModelDirectory $modelFileName
 $partialPath = "$modelPath.partial"
 
@@ -142,7 +144,7 @@ function New-LlamaSwapModelBlock([string]$NewLine) {
         '  "openai/gpt-oss-120b":',
         '    name: "OpenAI GPT-OSS 120B (local MXFP4, 8K)"',
         '    description: "Local OpenAI GPT-OSS 120B tuned for the ThinkPad 64 GB RAM / 12 GB VRAM profile"',
-        '    ttl: 600',
+        ('    ttl: {0}' -f $modelTtlSeconds),
         '    cmd: >',
         ('      llama-server --host 127.0.0.1 --port {0}' -f '${PORT}'),
         ('      --model "{0}" --alias "openai/gpt-oss-120b"' -f $modelPath),
@@ -157,6 +159,36 @@ function New-LlamaSwapModelBlock([string]$NewLine) {
     return ($blockLines -join $NewLine) + $NewLine
 }
 
+function Set-LlamaSwapHealthCheckTimeout {
+    $config = [System.IO.File]::ReadAllText($ConfigPath)
+    # llama-swap accepts this setting only at the document root. Refuse duplicate root
+    # entries instead of guessing which one the YAML parser will honor.
+    $pattern = '(?m)^healthCheckTimeout:[ \t]*\d+[ \t]*(?=\r?$)'
+    $matches = [regex]::Matches($config, $pattern)
+    if ($matches.Count -gt 1) {
+        throw "Multiple root-level healthCheckTimeout entries found in $ConfigPath"
+    }
+    $assignment = "healthCheckTimeout: $healthCheckTimeoutSeconds"
+    if ($matches.Count -eq 1) {
+        $updated = [regex]::Replace($config, $pattern, $assignment, 1)
+    } else {
+        $newLine = "`n"
+        if ($config.Contains("`r`n")) { $newLine = "`r`n" }
+        $updated = $assignment + $newLine + $config
+    }
+    if ($updated -eq $config) {
+        Write-Host "llama-swap healthCheckTimeout already set to $healthCheckTimeoutSeconds seconds."
+        return $null
+    }
+
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $backupPath = "$ConfigPath.backup-$stamp-health"
+    Copy-Item -LiteralPath $ConfigPath -Destination $backupPath
+    Write-Utf8NoBom $ConfigPath $updated
+    Write-Host "llama-swap healthCheckTimeout updated to $healthCheckTimeoutSeconds seconds; backup: $backupPath"
+    return $backupPath
+}
+
 function Add-LlamaSwapModel {
     if (-not (Test-Path -LiteralPath $ConfigPath)) {
         throw "llama-swap config does not exist: $ConfigPath"
@@ -167,8 +199,34 @@ function Add-LlamaSwapModel {
         '(?m)^\s{2,}["'']?openai/gpt-oss-120b["'']?:\s*$'
     )
     if ($existingModel.Success) {
-        Write-Host 'llama-swap model entry already exists: openai/gpt-oss-120b'
-        return $null
+        $blockStart = $existingModel.Index
+        $following = $config.Substring($blockStart + $existingModel.Length)
+        $nextEntry = [regex]::Match($following, '(?m)^(?:  \S.*:\s*(?:#.*)?|\S.*)$')
+        $blockLength = $existingModel.Length
+        if ($nextEntry.Success) {
+            $blockLength += $nextEntry.Index
+        } else {
+            $blockLength = $config.Length - $blockStart
+        }
+        $block = $config.Substring($blockStart, $blockLength)
+        # Match spaces/tabs but not the line ending, so replacing a CRLF file cannot
+        # accidentally turn this one line into LF and leave mixed newlines behind.
+        $ttlPattern = '(?m)^    ttl:[ \t]*\d+[ \t]*(?=\r?$)'
+        if (-not [regex]::IsMatch($block, $ttlPattern)) {
+            throw 'Existing GPT-OSS llama-swap entry has no four-space-indented ttl field; update it manually.'
+        }
+        $updatedBlock = [regex]::Replace($block, $ttlPattern, "    ttl: $modelTtlSeconds", 1)
+        if ($updatedBlock -eq $block) {
+            Write-Host "llama-swap model entry already exists with ttl $modelTtlSeconds seconds."
+            return $null
+        }
+        $updated = $config.Substring(0, $blockStart) + $updatedBlock + $config.Substring($blockStart + $blockLength)
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $backupPath = "$ConfigPath.backup-$stamp"
+        Copy-Item -LiteralPath $ConfigPath -Destination $backupPath
+        Write-Utf8NoBom $ConfigPath $updated
+        Write-Host "llama-swap GPT-OSS ttl updated to $modelTtlSeconds seconds; backup: $backupPath"
+        return $backupPath
     }
 
     $modelsLine = [regex]::Match($config, '(?m)^models:\s*(?:#.*)?$')
@@ -274,7 +332,9 @@ function Activate-ForCompCat {
     if ($envContent.Contains("`r`n")) { $newLine = "`r`n" }
     $envContent = Set-EnvValue $envContent 'MCA_LLM_PROVIDER' 'openai' $newLine
     $envContent = Set-EnvValue $envContent 'MCA_LLM_MODEL' $modelId $newLine
+    $envContent = Set-EnvValue $envContent 'MCA_LLM_TIMEOUT_S' '300' $newLine
     $envContent = Set-EnvValue $envContent 'MCA_LLM_DISABLE_THINKING' 'false' $newLine
+    $envContent = Set-EnvValue $envContent 'MCA_ASSISTANT_NARRATION_ENABLED' 'true' $newLine
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $backupPath = "$CompCatEnvPath.backup-$stamp"
@@ -289,7 +349,7 @@ function Activate-ForCompCat {
     }
     $startScript = Join-Path $repo 'scripts\start-compcat.ps1'
     try {
-        & $startScript -SkipPull -SkipBuild -SkipIngest
+        & $startScript -SkipPull -SkipIngest
     } catch {
         Copy-Item -LiteralPath $backupPath -Destination $CompCatEnvPath -Force
         Write-Host 'Restored the previous CompCat env after restart failed.'
@@ -301,7 +361,7 @@ Write-Host '== CompCat local GPT-OSS 120B installer =='
 Write-Host "Model:  $modelId"
 Write-Host "File:   $modelPath"
 Write-Host "Config: $ConfigPath"
-Write-Host 'Profile: 8K context, one parallel slot, 34 of 36 MoE layers on CPU'
+Write-Host "Profile: 8K context, one parallel slot, 34 of 36 MoE layers on CPU, $modelTtlSeconds-second ttl, $healthCheckTimeoutSeconds-second health timeout"
 
 if (-not (Test-Path -LiteralPath $ConfigPath)) {
     throw "llama-swap config does not exist: $ConfigPath"
@@ -317,7 +377,9 @@ if ($PlanOnly) {
 
 if (-not $PSCmdlet.ShouldProcess($modelPath, 'Download and install GPT-OSS 120B')) { exit 0 }
 Install-ModelFile
-$configBackup = Add-LlamaSwapModel
+$healthBackup = Set-LlamaSwapHealthCheckTimeout
+$modelBackup = Add-LlamaSwapModel
+$configBackup = if ($healthBackup) { $healthBackup } else { $modelBackup }
 Test-LlamaSwapConfig $llamaSwapPath $configBackup
 
 if ($ActivateForCompCat) {

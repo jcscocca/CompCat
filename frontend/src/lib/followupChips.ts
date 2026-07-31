@@ -93,7 +93,9 @@ export function buildRerunArgs(card: AnalysisCardData, chip: FollowupChip): Reco
   const s = card.settings;
   const radius = s.radius_m ?? null;
   const base: Record<string, unknown> = {
-    place_ids: card.placeIds,
+    ...(card.points && card.points.length > 0
+      ? { points: card.points }
+      : { place_ids: card.placeIds }),
     analysis_start_date: s.analysis_start_date ?? null,
     analysis_end_date: s.analysis_end_date ?? null,
     layer: s.layer,

@@ -232,9 +232,10 @@ An explicit named query that fails resolution does **not** silently analyze the 
 selection; the tool asks for clarification instead.
 
 `explain_result` never takes model-authored scope. `_tool_arguments` injects the typed
-`latest_result_context` supplied by the frontend (kind, place IDs, dates, radius, all offense
-filters, and layer), and the tool recomputes the corresponding read-only analysis from server
-data. A
+`latest_result_context` supplied by the frontend (kind, saved place IDs or bounded transient
+points, dates, radius, all offense filters, and layer), and the tool recomputes the corresponding
+read-only analysis from server data. Transient points are used for shared links and unsaved pins;
+they are never persisted as places or analysis runs. A
 referential rerun can opt into that same scope with plan context `latest_result`; explicit
 arguments such as a newly requested radius still override it. No raw result rows or incident
 details are copied into the planning prompt.
@@ -281,6 +282,11 @@ card's typed `latest_result_context` scope. The browser derives the scope from t
 not from the current map selection, so questions about “that result” remain anchored even after
 the user changes the live dashboard. The server never trusts cached result evidence: the
 `explain_result` tool recomputes it.
+
+When any live selection entry is unsaved, the browser sends the complete selection as bounded
+inline points rather than dropping those entries or persisting them. Analysis and comparison
+tools use the existing stateless points path, so Tabby sees the same pins as the quick-report
+card while saved-only selections retain their owned-ID/export behavior.
 
 Visit counts, dwell fields, and their derived incident-rate fields are deliberately excluded
 from both this packet and every assistant tool result; a recursive tool-boundary scrub prevents
@@ -381,6 +387,7 @@ prompt requires all of these qualifiers to survive the rewrite.
 | `MCA_LLM_FALLBACK_PROVIDER` | `openai` | Backend for the optional failover slot (chosen independently) |
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Primary endpoint (provider `openai`) |
 | `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent in each request (provider `openai`) |
+| `MCA_LLM_TIMEOUT_S` | `120` | OpenAI-compatible read timeout; streamed calls still have a separate 300-second overall ceiling |
 | `MCA_LLM_DISABLE_THINKING` | `false` | Suppress chain-of-thought on thinking models |
 | `MCA_LLM_FALLBACK_BASE_URL` | `""` | Second endpoint; the `openai` fallback activates only when this and `MCA_LLM_FALLBACK_MODEL` are both set |
 | `MCA_LLM_FALLBACK_MODEL` | `""` | Model for the fallback endpoint |
@@ -396,8 +403,12 @@ on each request, which selects the primary and fallback backends from `MCA_LLM_P
 skipped on the fallback).
 
 > ⚠ Invariant: when the LLM endpoint is offline or returns no content during the **planning**
-> call, `LlmUnavailable` is raised, the agent emits an `error` SSE event with a user-readable
-> message, and returns. Provider HTTP 429s instead emit `llm_rate_limited`, which does not
+> call, `LlmUnavailable` causes an `error` SSE event with a user-readable message. One narrow
+> path skips planning entirely: a clearly result-referential follow-up with a typed newest-card
+> scope runs `explain_result` directly, because the model cannot author or change that scope. The
+> normal narration pass still writes in Tabby's voice, and its deterministic summary remains
+> available if narration fails. Provider HTTP
+> 429s instead emit `llm_rate_limited`, which does not
 > latch the composer offline. A failure of the **narration** call (§2) does *not* emit `error` — it
 > degrades to a `replace` event carrying the already-computed deterministic text, since the plan
 > already succeeded by the time narration runs. Either way, the rest of the CompCat app

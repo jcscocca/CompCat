@@ -12,6 +12,13 @@ export type Place = {
   sensitivity_class: string;
 };
 
+/** Bounded, transient selection used by shared links and unsaved map pins. */
+export type AnalysisPointPayload = {
+  latitude: number;
+  longitude: number;
+  label: string;
+};
+
 export type CrimeSummary = {
   place_cluster_id: string;
   radius_m: number;
@@ -197,6 +204,8 @@ export type AnalysisCardData = {
   runId: string | null;
   kind: "analyze" | "compare";
   placeIds: string[];
+  /** Present for a stateless point-backed run; never implies that the pins were saved. */
+  points?: AnalysisPointPayload[];
   settings: SettingsUsed;
   comparison: SiteComparison | null;
   neighborhood: NeighborhoodAnalysis | null;
@@ -230,6 +239,7 @@ export type AssistantMessage = {
 
 export type AssistantDashboardState = {
   selected_place_ids: string[];
+  selected_points?: AnalysisPointPayload[];
   analysis_start_date: string | null;
   analysis_end_date: string | null;
   radii_m: number[];
@@ -243,6 +253,7 @@ export type AssistantDashboardState = {
 export type AssistantResultContext = {
   kind: "analyze" | "compare";
   place_ids: string[];
+  points?: AnalysisPointPayload[];
   analysis_start_date: string;
   analysis_end_date: string;
   radius_m: number;

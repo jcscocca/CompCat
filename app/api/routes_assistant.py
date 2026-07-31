@@ -138,6 +138,7 @@ def _build_primary(settings: Settings) -> AssistantLlmClient:
     return OpenAiLlmClient(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
+        timeout_s=settings.llm_timeout_s,
         extra_body=extra_body,
         api_key=settings.llm_api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,
@@ -179,6 +180,7 @@ def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
     return OpenAiLlmClient(
         base_url=base_url,
         model=model,
+        timeout_s=settings.llm_timeout_s,
         extra_body=extra_body,
         api_key=settings.effective_llm_fallback_api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,

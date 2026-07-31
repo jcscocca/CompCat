@@ -1,4 +1,4 @@
-import type { AnalysisCardData, AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
+import type { AnalysisCardData, AnalysisPointPayload, AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
 
 /** Card synthesized from a client-run analysis (share links, lookups, restored
  * sessions run through useCompare). A fully saved-place run can carry the owned
@@ -10,14 +10,16 @@ export function cardFromCompareResults(input: {
   incidents: IncidentDetailsResponse | null;
   analysis: AnalysisSettings;
   placeIds: string[];
+  points?: AnalysisPointPayload[];
   runId?: string | null;
 }): AnalysisCardData | null {
-  const { comparison, neighborhood, incidents, analysis, placeIds, runId = null } = input;
+  const { comparison, neighborhood, incidents, analysis, placeIds, points, runId = null } = input;
   if (!comparison && !neighborhood) return null;
   return {
     runId,
     kind: comparison ? "compare" : "analyze",
     placeIds,
+    ...(points && points.length > 0 ? { points } : {}),
     settings: {
       radius_m: analysis.radiusM,
       analysis_start_date: analysis.startDate,
@@ -44,5 +46,5 @@ export function cardWithSavedPlaceIds(
   if (placeIds.length === 0 || placeIds.some((id) => !id)) return card;
   const savedIds = Array.from(new Set(placeIds as string[]));
   if (savedIds.length === 0) return card;
-  return { ...card, placeIds: savedIds };
+  return { ...card, placeIds: savedIds, points: undefined };
 }

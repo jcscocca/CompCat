@@ -64,6 +64,10 @@ def test_personal_start_rebuilds_by_default_and_supports_intentional_skips() -> 
     assert "git pull --ff-only" in text
     assert "Compose up -d --build" in text
     assert "image always matches the checked-out revision" in text
+    assert "[switch]$SkipLlmPrewarm" in text
+    assert "openai/gpt-oss-120b" in text
+    assert "http://127.0.0.1:8080/v1/chat/completions" in text
+    assert "-TimeoutSec 600" in text
 
 
 def test_gpt_oss_installer_is_resumable_verified_and_scoped_to_personal_mode() -> None:
@@ -78,6 +82,11 @@ def test_gpt_oss_installer_is_resumable_verified_and_scoped_to_personal_mode() -
     assert 'Copy-Item -LiteralPath $ConfigPath -Destination $backupPath' in text
     assert "openai/gpt-oss-120b" in text
     assert "--n-cpu-moe 34" in text
+    assert "$modelTtlSeconds = 3600" in text
+    assert "$healthCheckTimeoutSeconds = 300" in text
+    assert "^healthCheckTimeout:" in text
+    assert "MCA_LLM_TIMEOUT_S' '300'" in text
+    assert "MCA_ASSISTANT_NARRATION_ENABLED' 'true'" in text
     assert "[switch]$ActivateForCompCat" in text
     assert "scripts\\start-compcat.ps1" in text
 
