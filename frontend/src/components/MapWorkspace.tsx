@@ -258,10 +258,9 @@ export function MapWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restored, list.entries.length, data.freshnessLoaded]);
 
-  // An armed auto-run (share link / lookup / restored session) lands its result as a LOCAL,
-  // runId-null card on the rail — cards, not the legacy Compare view (no export link, no
-  // server badges: client runs can't route raw points through the assistant tools). Armed
-  // here; the completion effect below fires it once when the results land.
+  // An armed auto-run (share link / lookup / restored session) lands its result as a local
+  // card on the rail. Fully saved-place lists carry the AnalysisRun id from the parallel
+  // summary refresh and can export; ad-hoc or mixed point lists remain runId-null.
   const pendingCardRef = useRef(false);
   const pendingCardExpandRef = useRef(false);
   useEffect(() => {
@@ -295,6 +294,7 @@ export function MapWorkspace() {
       incidents: compare.incidents,
       analysis,
       placeIds: list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id)),
+      runId: compare.analysisRunId,
     });
     if (!card) return;
     const shouldExpand = pendingCardExpandRef.current;
@@ -305,7 +305,7 @@ export function MapWorkspace() {
     setCurrentCard(card);
     if (shouldExpand) expandCard(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compare.comparison, compare.neighborhood]);
+  }, [compare.comparison, compare.neighborhood, compare.analysisRunId]);
 
   function invalidateAnalysisContext() {
     // Any context invalidation cancels a pending auto-run card: if the armed run failed
@@ -782,8 +782,9 @@ export function MapWorkspace() {
     [expandCard, isMobile, onSnap, onDrawerResize],
   );
 
-  // The run-scoped export param is appended per-card; strip any query the summary path carries.
-  const exportHrefBase = data.exportHref.split("?")[0];
+  // Analysis cards export the current detail-view schema. The Manage Places footer keeps the
+  // separate session-wide Tableau summary download.
+  const exportHrefBase = data.analysisExportHref.split("?")[0];
 
   // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
   const layerControls = (

@@ -67,7 +67,7 @@ def analyze_dashboard_places(
     request: DashboardAnalyzeRequest,
     user_id_hash: Annotated[str, Depends(required_public_user_hash)],
     session: Annotated[Session, Depends(get_session)],
-) -> dict[str, int]:
+) -> dict[str, int | str | None]:
     try:
         result = analyze_selected_places(
             session=session,
@@ -83,9 +83,13 @@ def analyze_dashboard_places(
             sources=sources_for_layer(request.layer),
             layer=request.layer,
         )
-        # Keep the public analyze response stable. The service also returns its exact
-        # run id for internal callers that create run-scoped cards/exports.
-        return {"summary_count": int(result["summary_count"])}
+        # Return the id from this exact invocation so a saved-place result card can export
+        # the same frozen run it displays. Point-backed analyses do not persist a run and
+        # therefore return null.
+        return {
+            "summary_count": int(result["summary_count"]),
+            "analysis_run_id": result["analysis_run_id"],
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

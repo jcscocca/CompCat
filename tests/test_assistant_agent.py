@@ -2834,6 +2834,11 @@ def test_planning_prompt_uses_authoritative_effect_threshold_verdict():
 
     text = PLANNING_SYSTEM_PROMPT.lower()
 
+    assert "equal-radius circles" in text
+    assert "eligible street locations" in text
+    assert "descriptive" in text
+    assert "never call them expected counts" in text
+    assert "uniformly distributed" in text
     assert "never re-derive" in text
     assert "adjusted p" in text and "0.05" in text
     assert "at least 1.25x" in text

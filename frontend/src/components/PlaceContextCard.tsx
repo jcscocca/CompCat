@@ -7,6 +7,7 @@ import { aggregateHeadline } from "../lib/verdictCopy";
 import { placeIdentity } from "../lib/placeIdentity";
 import { annualIncidentsWithin, formatPerYear } from "../lib/rateFormat";
 import { BaselineIntervalPlot } from "./BaselineIntervalPlot";
+import { ReferenceCirclePlot, referenceSummary } from "./ReferenceCirclePlot";
 import {
   clampInt,
   DAYSET_DAYS,
@@ -210,7 +211,13 @@ export function PlaceContextCard({
   onHoverPlace,
 }: PlaceContextCardProps) {
   const identity = placeIdentity(index);
-  const headline = aggregateHeadline(place, noun);
+  const hasReferenceComparisons = (place.reference_comparisons?.length ?? 0) > 0;
+  const headline = hasReferenceComparisons
+    ? (
+      referenceSummary(place, noun)
+      ?? `Reference-circle context is unavailable for ${place.place_label || "this place"}.`
+    )
+    : aggregateHeadline(place, noun);
   return (
     <section
       className="mc-verdict"
@@ -224,7 +231,22 @@ export function PlaceContextCard({
         <span className={`mc-idbadge id-${identity.slot}`} aria-hidden="true">{identity.letter}</span>
         <p className="mc-verdict-headline">{headline}</p>
       </div>
-      {place.baseline_available ? (
+      {hasReferenceComparisons ? (
+        <>
+          <p className="mc-verdict-sub">
+            {place.place_incident_count} {countNoun(noun, place.place_incident_count)} within {place.radius_m} m · {windowLabel}
+          </p>
+          <ReferenceCirclePlot place={place} noun={noun} />
+          {place.monthly_counts?.length ? (
+            <div className="mc-spark" aria-hidden="true">
+              {place.monthly_counts.map((n, i) => (
+                <span key={i} style={{ height: `${barHeight(n, place.monthly_counts!)}%` }} />
+              ))}
+            </div>
+          ) : null}
+          <CategoryBreakdown rows={place.category_breakdown} />
+        </>
+      ) : place.baseline_available ? (
         <>
           <p className="mc-verdict-sub">
             {place.place_incident_count} {countNoun(noun, place.place_incident_count)} within {place.radius_m} m · {windowLabel}

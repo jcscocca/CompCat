@@ -22,7 +22,7 @@ SENSITIVE_CLASSES = {
 _FORMULA_PREFIXES = ("=", "+", "@", "\t", "\r")
 
 
-def _escape_formula(value: object) -> object:
+def escape_formula_cell(value: object) -> object:
     if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
         return f"'{value}"
     return value
@@ -72,7 +72,7 @@ def build_place_summary_csv(
         cluster_summaries = summaries_by_cluster.get(cluster.id) or [None]
         for summary in cluster_summaries:
             row = _row_for_cluster(cluster, summary)
-            writer.writerow({key: _escape_formula(value) for key, value in row.items()})
+            writer.writerow({key: escape_formula_cell(value) for key, value in row.items()})
     return output.getvalue()
 
 

@@ -50,7 +50,10 @@ def dashboard_summary(
         "places": [_place_payload(cluster) for cluster in clusters],
         "crime_summaries": [_summary_payload(summary) for summary in summaries],
         "analysis": {"available_radii_m": settings.crime_radii_m},
-        "exports": {"tableau_place_summary_csv": "/exports/tableau/place-summary.csv"},
+        "exports": {
+            "tableau_place_summary_csv": "/exports/tableau/place-summary.csv",
+            "analysis_csv": "/exports/analysis.csv",
+        },
     }
 
 

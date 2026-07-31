@@ -10,6 +10,7 @@ import { CompareVerdict } from "./CompareVerdict";
 import { IncidentDetailsSection } from "./IncidentDetailsSection";
 import { MethodsAppendix } from "./MethodsAppendix";
 import { PlaceContextCard } from "./PlaceContextCard";
+import { referenceSummary } from "./ReferenceCirclePlot";
 import { TrendSection } from "./TrendSection";
 
 type Props = {
@@ -68,6 +69,9 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
 
   const showCategory = layer !== "calls";
   const subcategoryHeader = layer === "calls" ? "Call type" : layer === "arrests" ? "Charge" : "Subcategory";
+  const compactReferenceSummary = card.kind === "analyze" && neighborhood?.places.length === 1
+    ? referenceSummary(neighborhood.places[0], noun)
+    : null;
 
   return (
     <article className={`mc-result-card${expanded ? " is-expanded" : ""}${historical ? " is-historical" : ""}`}>
@@ -98,6 +102,9 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
           ) : null}
 
           {verdict ? <CompareVerdict callout={verdict.callout} noun={noun} /> : null}
+          {compactReferenceSummary ? (
+            <p className="mc-result-reference-summary">{compactReferenceSummary}</p>
+          ) : null}
 
           {cats.length ? (
             <div className="mc-result-minibars">

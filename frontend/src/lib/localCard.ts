@@ -1,19 +1,21 @@
 import type { AnalysisCardData, AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
 
 /** Card synthesized from a client-run analysis (share links, lookups, restored
- * sessions run through useCompare — the assistant tools can't take raw points).
- * runId stays null: no run-scoped export, no server badges. */
+ * sessions run through useCompare). A fully saved-place run can carry the owned
+ * AnalysisRun id created by the parallel summary refresh; ad-hoc/mixed point runs
+ * remain non-exportable. */
 export function cardFromCompareResults(input: {
   comparison: SiteComparison | null;
   neighborhood: NeighborhoodAnalysis | null;
   incidents: IncidentDetailsResponse | null;
   analysis: AnalysisSettings;
   placeIds: string[];
+  runId?: string | null;
 }): AnalysisCardData | null {
-  const { comparison, neighborhood, incidents, analysis, placeIds } = input;
+  const { comparison, neighborhood, incidents, analysis, placeIds, runId = null } = input;
   if (!comparison && !neighborhood) return null;
   return {
-    runId: null,
+    runId,
     kind: comparison ? "compare" : "analyze",
     placeIds,
     settings: {

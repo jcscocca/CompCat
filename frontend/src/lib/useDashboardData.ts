@@ -10,6 +10,7 @@ import {
 import type { DashboardFreshness, DashboardSummary, Place } from "../types";
 
 const DEFAULT_EXPORT = "/exports/tableau/place-summary.csv";
+const DEFAULT_ANALYSIS_EXPORT = "/exports/analysis.csv";
 
 export interface DashboardData {
   sessionReady: boolean;
@@ -27,6 +28,7 @@ export interface DashboardData {
   places: Place[];
   availableRadii: number[];
   exportHref: string;
+  analysisExportHref: string;
 }
 
 /**
@@ -118,6 +120,7 @@ export function useDashboardData(): DashboardData {
   const places: Place[] = useMemo(() => summary?.places ?? [], [summary]);
   const availableRadii = summary?.analysis.available_radii_m ?? [];
   const exportHref = summary?.exports.tableau_place_summary_csv || DEFAULT_EXPORT;
+  const analysisExportHref = summary?.exports.analysis_csv || DEFAULT_ANALYSIS_EXPORT;
 
   return {
     sessionReady,
@@ -134,5 +137,6 @@ export function useDashboardData(): DashboardData {
     places,
     availableRadii,
     exportHref,
+    analysisExportHref,
   };
 }

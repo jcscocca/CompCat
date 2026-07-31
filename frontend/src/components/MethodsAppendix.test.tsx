@@ -41,17 +41,15 @@ describe("methods definitions match the engine", () => {
     expect(rate.formula).toBe("per-year = incidents ÷ days × 365.25");
   });
 
-  it("describes all four baselines and which of them exclude your radius", () => {
-    const baseline = byId.get("beatBaselineRate")!;
-    for (const term of ["neighborhood", "beat", "sector", "city"]) {
-      expect(baseline.plain.toLowerCase()).toContain(term);
-    }
-    expect(baseline.plain).toMatch(/EXCLUDE the area inside your radius/);
-    expect(baseline.plain).toMatch(/every neighborhood.*police beat.*circle touches/i);
-    expect(baseline.plain).toMatch(/pooled/i);
-    expect(baseline.plain).toMatch(/negligible/);
-    // The window is user-selected; the baseline is not fixed to 2018-present.
-    expect(baseline.plain).not.toMatch(/2018/);
+  it("defines a fixed-map, equal-radius street reference without uniformity claims", () => {
+    const circles = byId.get("referenceCircles")!;
+    const frame = byId.get("referenceFrame")!;
+    expect(circles.plain).toMatch(/same radius, dates, layer, and filters/i);
+    expect(circles.plain).toMatch(/Incidents stay at their observed coordinates/i);
+    expect(circles.plain).toMatch(/never spreads reports evenly/i);
+    expect(frame.plain).toMatch(/versioned midpoint/i);
+    expect(frame.plain).toMatch(/open public Seattle street segment/i);
+    expect(frame.plain).toMatch(/boundary circles mix/i);
   });
 
   it("says dispersion always widens and uses a Student-t multiplier", () => {
@@ -61,14 +59,15 @@ describe("methods definitions match the engine", () => {
     expect(dispersion.plain).toMatch(/Student-t multiplier/);
   });
 
-  it("lists the 3-incident place floor alongside the other withhold reasons", () => {
+  it("lists the separate direct-compare and reference-circle adequacy floors", () => {
     const floors = byId.get("minimumDataStatus")!;
     expect(floors.plain).toMatch(/at least 30 days/);
     expect(floors.plain).toMatch(/at least 3 incidents/);
     expect(floors.plain).toMatch(/at least 10/);
-    expect(floors.plain).toMatch(/baseline area is too small/);
-    expect(floors.plain).toMatch(/non-positive exposure/);
-    expect(floors.plain).toMatch(/too few months to fit/);
+    expect(floors.plain).toMatch(/positive exposure/);
+    expect(floors.plain).toMatch(/enough months to fit dispersion/);
+    expect(floors.plain).toMatch(/at least 100 eligible centers/);
+    expect(floors.plain).toMatch(/80% mapped-circle coverage/);
   });
 
   it("distinguishes the absolute-rate interval from the rate-ratio interval", () => {
@@ -90,11 +89,12 @@ describe("methods definitions match the engine", () => {
     expect(interval.howToRead).toMatch(/not adjusted for multiple comparisons/i);
   });
 
-  it("scopes BH to each run's families and separates baseline and across-place adjustments", () => {
+  it("scopes BH to a direct-compare run and keeps references descriptive", () => {
     const bh = byId.get("adjustedPValue")!;
-    expect(bh.plain).toMatch(/within each run/i);
-    expect(bh.plain).toMatch(/up to four baselines/i);
-    expect(bh.plain).toMatch(/separate adjustment across several places/i);
+    expect(bh.plain).toMatch(/within each.*run/i);
+    expect(bh.plain).toMatch(/direct place-to-place Compare/i);
+    expect(bh.plain).toMatch(/reference circles are descriptive/i);
+    expect(bh.plain).toMatch(/candidate-vs-other tests/i);
     expect(bh.plain).toMatch(/separate runs/i);
   });
 
@@ -102,7 +102,7 @@ describe("methods definitions match the engine", () => {
   // any response, so documenting it described a number no reader could ever see.
   it("does not document the exact p-value, which never ships in a payload", () => {
     expect(byId.has("exactPValue")).toBe(false);
-    expect(METHODS_DEFINITIONS.some((d) => /exact/i.test(d.term))).toBe(false);
+    expect(METHODS_DEFINITIONS.some((d) => /exact.*p-value/i.test(d.term))).toBe(false);
   });
 
   it("warns that results are radius-dependent and that many looks inflate surprises", () => {

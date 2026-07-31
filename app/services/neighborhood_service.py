@@ -24,6 +24,12 @@ from app.analysis.rate_tests import (
     dispersion_status,
     rate_confidence_interval,
 )
+from app.analysis.reference_circles import (
+    IncidentGrid,
+    ReferenceFrame,
+    load_reference_frame,
+    reference_distributions_for_place,
+)
 from app.analysis.temporal import build_temporal_profile
 from app.api.dashboard_schemas import AnalysisPoint
 from app.crime.sources import SOURCE_SPD_CRIME
@@ -215,6 +221,40 @@ def _coordinate_coverage(
         stmt = stmt.where(CrimeIncident.nibrs_group == nibrs_group)
     total, with_coords = session.execute(stmt).one()
     return int(total), int(with_coords)
+
+
+def _reference_incident_coordinates(
+    session: Session,
+    start: date,
+    end: date,
+    offense_category,
+    offense_subcategory,
+    nibrs_group,
+    sources: Sequence[str] | None = None,
+) -> list[tuple[float, float]]:
+    """Citywide observed coordinates under the exact active analysis filters.
+
+    Reference circles need the fixed incident surface, not polygon-average counts. Selecting
+    only the two coordinates avoids materializing full ORM rows for the citywide frame.
+    """
+    effective_sources = tuple(sources) if sources is not None else (SOURCE_SPD_CRIME,)
+    start_at, end_at = _analysis_datetime_bounds(start, end)
+    observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
+    stmt = (
+        select(CrimeIncident.latitude, CrimeIncident.longitude)
+        .where(CrimeIncident.source_dataset.in_(effective_sources))
+        .where(observed >= start_at)
+        .where(observed <= end_at)
+        .where(CrimeIncident.latitude.is_not(None))
+        .where(CrimeIncident.longitude.is_not(None))
+    )
+    if offense_category is not None:
+        stmt = stmt.where(CrimeIncident.offense_category == offense_category)
+    if offense_subcategory is not None:
+        stmt = stmt.where(CrimeIncident.offense_subcategory == offense_subcategory)
+    if nibrs_group is not None:
+        stmt = stmt.where(CrimeIncident.nibrs_group == nibrs_group)
+    return [(float(lat), float(lon)) for lat, lon in session.execute(stmt).all()]
 
 
 def _beat_incidents(
@@ -541,6 +581,7 @@ def neighborhood_analysis_for_places(
     beat_polygons: BeatPolygons,
     mcpp_area_lookup: dict[str, float] | None = None,
     mcpp_polygons: BeatPolygons | None = None,
+    reference_frame: ReferenceFrame | None = None,
     sources: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     validate_date_range(analysis_start_date, analysis_end_date)
@@ -676,6 +717,18 @@ def neighborhood_analysis_for_places(
         p_values.append(place_test.p_value)
 
     adjusted = benjamini_hochberg(p_values) if p_values else []
+    active_reference_frame = reference_frame or load_reference_frame()
+    incident_grid = IncidentGrid(
+        _reference_incident_coordinates(
+            session,
+            analysis_start_date,
+            analysis_end_date,
+            offense_category,
+            offense_subcategory,
+            nibrs_group,
+            sources=sources,
+        )
+    )
 
     places = []
     # Sector/city baselines are place-independent; compute each once per request.
@@ -720,6 +773,20 @@ def neighborhood_analysis_for_places(
                 query_cache=baseline_query_cache,
             )
         )
+        reference_comparisons = (
+            []
+            if cluster.display_latitude is None or cluster.display_longitude is None
+            else reference_distributions_for_place(
+                frame=active_reference_frame,
+                incident_grid=incident_grid,
+                latitude=cluster.display_latitude,
+                longitude=cluster.display_longitude,
+                radius_m=radius_m,
+                target_count=len(entry.get("place_incidents", [])),
+                mcpp_polygons=mcpp_polygons,
+                beat_polygons=beat_polygons,
+            )
+        )
         base = {
             "place_id": cluster.id,
             "place_label": cluster.display_label or "Selected place",
@@ -729,6 +796,10 @@ def neighborhood_analysis_for_places(
             "baseline_beats": entry.get("baseline_beats"),
             "radius_m": radius_m,
             "baselines": baselines,
+            # New empirical fixed-map context. Legacy polygon-density ``baselines`` stay in
+            # the payload during validation, but the detailed UI and analytical export read
+            # this structure when present.
+            "reference_comparisons": reference_comparisons,
             **place_stats,
         }
         # Geocoding-completeness disclosure over the place's assigned beat (the primary

@@ -35,11 +35,11 @@ to a person.
 That lexicon is pinned by tests rather than by good intentions. `tests/test_statistical_comparison_service.py`
 asserts that the comparison engine's summary text contains none of *safe*, *unsafe*, *safety*,
 *danger*, *dangerous*, *risk*, or *risky* — including on a comparison where one address
-"wins". The same discipline shows up in small places: the Tableau export computes an
-`incidents_per_visit` column for legacy compatibility, while the public UI and the assistant's
-prompts, semantic packet, and tool results exclude visit, dwell, and derived exposure-rate
-fields. A number that could be misread as a personal exposure rate is not handed to the language
-model at all.
+"wins". The same discipline shows up in small places: the session-wide Tableau export retains
+an `incidents_per_visit` column for legacy compatibility, while the analytical card's CSV, the
+public UI, and the assistant's prompts, semantic packet, and tool results exclude visit, dwell,
+and derived exposure-rate fields. A number that could be misread as a personal exposure rate is
+not handed to the language model or presented as a current analysis result.
 
 ## How do you make a language model refuse reliably?
 

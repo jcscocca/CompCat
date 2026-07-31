@@ -7,9 +7,28 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_hash, required_public_user_hash
 from app.db import get_session
-from app.services.export_service import tableau_place_summary_csv
+from app.services.export_service import analysis_run_csv, tableau_place_summary_csv
 
 router = APIRouter()
+
+
+@router.get("/exports/analysis.csv")
+def export_analysis(
+    user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+    run_id: Annotated[str, Query(min_length=1)],
+) -> Response:
+    try:
+        content = analysis_run_csv(session, user_id_hash, run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Analysis run not found.") from exc
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="compcat-analysis.csv"'
+        },
+    )
 
 
 @router.get("/exports/tableau/place-summary.csv")

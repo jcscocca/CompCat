@@ -4,7 +4,7 @@ This document covers the auth model, tier contracts, enforcement invariant, and 
 notes for the CompCat API. The live `/openapi.json` (and Swagger UI at `/docs`) is the
 field-level source of truth; this document covers rules and tier structure only.
 
-> Verified against `367b1fc` (2026-07-28).
+> Updated 2026-07-30 for the run-scoped analytical CSV export.
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
@@ -83,7 +83,7 @@ which are unauthenticated or session-creating.
 | `/places/{place_id}` | PATCH | `app/api/routes_public_places.py` | `ManualPlaceUpdate` | `ManualPlaceResponse` |
 | `/places/{place_id}` | DELETE | `app/api/routes_public_places.py` | — | 204 No Content |
 | `/dashboard/summary` | GET | `app/api/routes_dashboard.py` | — | `dict` |
-| `/dashboard/analyze` | POST | `app/api/routes_public_dashboard.py` | `DashboardAnalyzeRequest` (`app/api/dashboard_schemas.py`) | `dict[str, int]` |
+| `/dashboard/analyze` | POST | `app/api/routes_public_dashboard.py` | `DashboardAnalyzeRequest` (`app/api/dashboard_schemas.py`) | `{"summary_count": int, "analysis_run_id": str \| null}` |
 | `/dashboard/incidents` | POST | `app/api/routes_public_dashboard.py` | `DashboardIncidentDetailsRequest` | `dict` |
 | `/dashboard/compare` | POST | `app/api/routes_public_dashboard.py` | `DashboardCompareRequest` | `dict` |
 | `/dashboard/neighborhood` | POST | `app/api/routes_public_dashboard.py` | `DashboardAnalyzeRequest` | `dict` |
@@ -96,6 +96,7 @@ which are unauthenticated or session-creating.
 | `/assistant/commands` | POST | `app/api/routes_assistant.py` | `AssistantCommandRequest` (fixed command enum) | SSE stream (no LLM; see §4) |
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
 | `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (gated — see §4) |
+| `/exports/analysis.csv` | GET | `app/api/routes_exports.py` | required `?run_id=` | Current analytical detail CSV for an owned run; unknown/foreign run is 404 |
 | `/exports/tableau/place-summary.csv` | GET | `app/api/routes_exports.py` | optional `?run_id=` | CSV attachment for the requested user-owned run, or the latest run when omitted |
 
 The `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, and
@@ -108,20 +109,36 @@ The layers are mutually exclusive and disjoint — arrests are a separate layer,
 into `"reported"` (on the public redacted data an arrest can't be linked back to its crime
 report, so counting both would double-count), and a 911 call is never counted with the report
 it produced. `/dashboard/analyze` records the layer on the `AnalysisRun` and the
-`PlaceCrimeSummary` rows it persists, so `/dashboard/summary` echoes a `layer` field.
+`PlaceCrimeSummary` rows it persists, returns that exact run ID for a saved-place request
+(`null` for an ad-hoc points request), and `/dashboard/summary` echoes a `layer` field.
 `/dashboard/freshness` returns coverage keyed by layer (`{"reported": {...}, "calls": {...}}`)
 so the UI pill reflects the active layer.
 
-`/dashboard/neighborhood` response payload. Each place additionally carries `baselines: [{kind:
-"mcpp"|"beat"|"sector"|"city", label, area_km2, baseline_incident_count, baseline_rate,
-rate_ratio, ci_lower, ci_upper, adjusted_p_value (BH within place), method, relation:
-"above"|"similar"|"below"|"insufficient"}]`. MCPP/beat entries are rest-of-area (place buffer
-carved out); sector/city are whole-area. Unresolvable geographies are omitted. Each place also
-carries its own quasi-Poisson rate interval (place_rate, place_rate_ci_lower/upper — same variance
-model as the Compare tab's per-address interval). The former top-level single-beat pair fields
-(beat_rate, rate_ratio, ci_*, adjusted_p_value, method, overdispersion_status) were removed in
-slice 2; per-baseline statistics live in baselines[]. Also new: `GET /dashboard/mcpp` —
-slimmed MCPP polygon GeoJSON, session-gated, gzip-negotiated (sibling of `GET /dashboard/beats`).
+`/dashboard/neighborhood` response payload. Each place carries
+`reference_comparisons`, ordered MCPP → sector → city. Every entry has:
+
+```text
+kind, label, available, adequacy_status,
+sampling_frame, sampling_frame_version, computation,
+geography_components[{id,label,weight,center_count}],
+reference_center_count, reference_draw_count, monte_carlo_error,
+covered_area_share, effective_geographies, target_count,
+p10, p25, median, p75, p90,
+share_below, share_equal, share_above, midrank_percentile, warnings[]
+```
+
+MCPP and sector components are weighted by their share of the selected place circle's polygon
+overlap. Every reference center receives the same radius and incident filters as the target;
+incident locations remain fixed. `available: false` entries retain their method/adequacy
+metadata but set distribution fields to null. The detailed UI, assistant explanation, and
+run-scoped analytical CSV use this structure and make no significance claim.
+
+The previous `baselines[]` polygon-density structure and place-level rate/verdict fields remain
+in the payload during method validation for backward compatibility. MCPP/beat legacy entries
+are rest-of-area; sector/city are whole-area. New consumers must not use them for the
+single-place detailed comparison. The separate `/dashboard/compare` endpoint continues to use
+the inferential rate model for user-selected place-vs-place comparisons. `GET /dashboard/mcpp`
+returns slimmed MCPP polygon GeoJSON, session-gated and gzip-negotiated.
 
 **Decision vocabularies.** The two surfaces use distinct decision-class enumerations; the
 methodology record is [`docs/analysis/pairwise-comparison-engine.md`](../analysis/pairwise-comparison-engine.md).
@@ -294,9 +311,19 @@ offline. Unadvertised internal tool handlers are rejected by request validation.
 `app/api/routes_exports.py` defines **both** public and internal export endpoints in the
 same router file:
 
-- **Public** (`required_public_user_hash`, in schema): `GET /exports/tableau/place-summary.csv`.
-  Supplying `run_id` scopes the CSV to that exact run after verifying the run belongs to the
-  session; unknown or foreign ids return 404. Omitting it preserves latest-run behavior.
+- **Public analytical card export** (`required_public_user_hash`, in schema):
+  `GET /exports/analysis.csv?run_id=...`. The required run id is ownership-checked; unknown or
+  foreign ids return 404. New `AnalysisRun` rows persist the ordered saved-place selection so
+  zero-count places remain part of the export. The service recomputes the same neighborhood
+  detail payload from the frozen run dates, radius, layer, and filters, then writes one row per
+  place/reference-geography pair: target count, reference frame/version, component weights,
+  exact/Monte Carlo method and precision, adequacy/coverage, quantiles, and tie-aware
+  fewer/equal/more shares. Polygon-density ratios, p-values, visit/dwell, and derived per-visit
+  fields are deliberately absent. Export-suppressed places are omitted.
+- **Public session/Tableau export** (`required_public_user_hash`, in schema):
+  `GET /exports/tableau/place-summary.csv`. Supplying `run_id` scopes the legacy place-summary
+  schema to that exact owned run; omitting it preserves latest-run behavior. This remains the
+  Manage Places download and retains its compatibility-oriented visit/dwell columns.
 - **Internal** (`current_user_hash`, `include_in_schema=False`): `GET /internal/exports/tableau/place-summary.csv`.
 
 ---

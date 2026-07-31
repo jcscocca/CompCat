@@ -125,6 +125,7 @@ def test_analyze_and_compare_via_points_http(tmp_path):
         "points": pts[:1], "analysis_start_date": "2024-01-01",
         "analysis_end_date": "2024-01-31", "radii_m": [250], "offense_category": "PROPERTY"})
     assert a.status_code == 200 and a.json()["summary_count"] == 1
+    assert a.json()["analysis_run_id"] is None
 
     c = client.post("/dashboard/compare", json={
         "points": pts, "analysis_start_date": "2024-01-01",

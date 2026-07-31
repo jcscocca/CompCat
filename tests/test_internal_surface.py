@@ -16,6 +16,7 @@ PUBLIC_PATHS = {
     "/assistant/chat",
     "/assistant/commands",
     "/exports/tableau/place-summary.csv",
+    "/exports/analysis.csv",
     "/places/{place_id}",
 }
 

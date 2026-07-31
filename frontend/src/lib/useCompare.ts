@@ -12,6 +12,8 @@ export interface CompareController {
   neighborhood: NeighborhoodAnalysis | null;
   /** Combined incident disclosure rows for the whole list; null when unavailable. */
   incidents: IncidentDetailsResponse | null;
+  /** Owned saved-place run backing an export. Null for ad-hoc or mixed point lists. */
+  analysisRunId: string | null;
   /** Snapshot of the points the last run was computed from (expansion coords, letters).
    * Set after every run — even a fully failed one — so consumers must gate result
    * regions on the data slices (comparison/neighborhood), not on runPoints. */
@@ -52,6 +54,7 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
   const [comparison, setComparison] = useState<SiteComparison | null>(null);
   const [neighborhood, setNeighborhood] = useState<NeighborhoodAnalysis | null>(null);
   const [incidents, setIncidents] = useState<IncidentDetailsResponse | null>(null);
+  const [analysisRunId, setAnalysisRunId] = useState<string | null>(null);
   const [runPoints, setRunPoints] = useState<AddressEntry[] | null>(null);
   const versionRef = useRef(0);
 
@@ -60,6 +63,7 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
     setComparison(null);
     setNeighborhood(null);
     setIncidents(null);
+    setAnalysisRunId(null);
     setRunPoints(null);
     setRunning(false);
   }
@@ -97,6 +101,13 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
       setNeighborhood(neighborhoodResult.status === "fulfilled" ? neighborhoodResult.value : null);
       setIncidents(incidentsResult.status === "fulfilled" ? incidentsResult.value : null);
       setComparison(compareResult.status === "fulfilled" ? compareResult.value : null);
+      setAnalysisRunId(
+        summariesResult.status === "fulfilled"
+        && savedIds.length === snapshot.length
+        && typeof summariesResult.value?.analysis_run_id === "string"
+          ? summariesResult.value.analysis_run_id
+          : null,
+      );
       setRunPoints(snapshot);
       const primary = wantCompare ? compareResult : neighborhoodResult;
       // An expired session / rate limit says something the generic run error can't.
@@ -123,8 +134,19 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
       if (next.incidents !== undefined) setIncidents(next.incidents);
     }
     setRunPoints(null);
+    setAnalysisRunId(null);
     setRunning(false);
   }
 
-  return { running, comparison, neighborhood, incidents, runPoints, run, invalidate, applyAssistant };
+  return {
+    running,
+    comparison,
+    neighborhood,
+    incidents,
+    analysisRunId,
+    runPoints,
+    run,
+    invalidate,
+    applyAssistant,
+  };
 }

@@ -226,6 +226,7 @@ def summarize_for_user(
         offense_category=None,
         offense_subcategory=None,
         nibrs_group=None,
+        place_ids=[cluster.id for cluster in clusters],
     )
     models = [_summary_model(summary) for summary in summaries]
     for model in models:
