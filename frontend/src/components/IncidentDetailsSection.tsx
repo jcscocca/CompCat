@@ -92,7 +92,7 @@ function IncidentDetailsTable({ details, noun, showCategory, subcategoryHeader }
   return (
     <section className="mc-incident-details" aria-label={`${noun.pluralCap} near selected places`}>
       <div className="mc-breakdown-head">
-        <h5>{noun.pluralCap} near selected places</h5>
+        <h4>{noun.pluralCap} near selected places</h4>
         <span>{details.radius_m} m</span>
       </div>
       {details.incidents.length === 0 ? (
@@ -146,7 +146,7 @@ function IncidentDetailsCards({ details, noun, showCategory }: { details: Incide
   return (
     <section className="mc-incident-details" aria-label={`${noun.pluralCap} near selected places`}>
       <div className="mc-breakdown-head">
-        <h5>{noun.pluralCap} near selected places</h5>
+        <h4>{noun.pluralCap} near selected places</h4>
         <span>{details.radius_m} m</span>
       </div>
       {details.incidents.length === 0 ? (

@@ -88,20 +88,35 @@ describe("PlaceSearch", () => {
     expect(screen.queryByRole("list", { name: "Recent searches" })).not.toBeInTheDocument();
   });
 
-  it("clicking a recent result calls rememberPlace and onSelectResult", () => {
+  it("activating a recent result calls rememberPlace and onSelectResult", () => {
     const pike = { label: "Pike Place Market, Seattle", latitude: 47.6097, longitude: -122.3331, source: "nominatim" };
     localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     const onSelectResult = vi.fn();
     render(<PlaceSearch provider={providerReturning()} onSelectResult={onSelectResult} />);
 
     fireEvent.focus(screen.getByLabelText("Search an address or place"));
-    // Recent items use onMouseDown (fires before the input's blur), so drive mousedown here.
-    fireEvent.mouseDown(screen.getByText("Pike Place Market, Seattle"));
+    const recent = screen.getByRole("button", { name: /Pike Place Market/ });
+    fireEvent.click(recent);
 
     expect(onSelectResult).toHaveBeenCalledWith(expect.objectContaining({ label: "Pike Place Market, Seattle" }));
     // also persists: the recent list in localStorage still contains the entry
     const stored = JSON.parse(localStorage.getItem("compcat.search.recent") ?? "[]");
     expect(stored[0].label).toBe("Pike Place Market, Seattle");
+  });
+
+  it("lets keyboard users activate a recent result with Enter", () => {
+    const pike = { label: "Pike Place Market, Seattle", latitude: 47.6097, longitude: -122.3331, source: "nominatim" };
+    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
+    const onSelectResult = vi.fn();
+    render(<PlaceSearch provider={providerReturning()} onSelectResult={onSelectResult} />);
+
+    fireEvent.focus(screen.getByLabelText("Search an address or place"));
+    const recent = screen.getByRole("button", { name: /Pike Place Market/ });
+    recent.focus();
+    fireEvent.keyDown(recent, { key: "Enter" });
+    fireEvent.click(recent);
+
+    expect(onSelectResult).toHaveBeenCalledTimes(1);
   });
 
   it("does not show the recent list when there are no recent places", () => {

@@ -4,9 +4,10 @@
   background:#EEF2F5;
   font-family:'Archivo','Helvetica Neue',system-ui,sans-serif;
   font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;
-  --id-a:#534AB7;--id-b:#4CAF3F;--id-c:#C2410C;--id-d:#2E7DD1;--id-x:#74858E;
+  /* Identity fills hold 3:1 against both themes and 4.5:1 against their white letters. */
+  --id-a:#6E64D9;--id-b:#368139;--id-c:#BE4C16;--id-d:#2673B5;--id-x:#647580;
 }
-[data-theme="dark"]{color-scheme:dark;color:#E8EDF2;background:#12181F;--id-a:#6E64D9;}
+[data-theme="dark"]{color-scheme:dark;color:#E8EDF2;background:#12181F;}
 
 /*
  * Base resets + the Places modal forms (PlaceForm / BulkPlaceEntry) and Notice. The
@@ -81,7 +82,8 @@ button:disabled {
   color: var(--accent-deep);
 }
 
-.panel h2 {
+.panel h2,
+.panel h3 {
   margin: 0;
   line-height: 1.15;
   letter-spacing: 0;
@@ -127,7 +129,7 @@ select {
   padding: 10px 12px;
   color: var(--text-strong);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border, var(--border-strong));
   border-radius: 8px;
   font: inherit;
 }

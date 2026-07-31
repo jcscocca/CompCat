@@ -60,8 +60,11 @@ export function DataFreshness({
     .filter(Boolean)
     .join(" ");
   return (
-    <div className="mc-status mc-freshness" title={detail}>
-      Data through {formatDate(entry.data_through)}
-    </div>
+    <details className="mc-freshness-details">
+      <summary className="mc-status mc-freshness">
+        Data through {formatDate(entry.data_through)}
+      </summary>
+      <p className="mc-freshness-detail">{detail}</p>
+    </details>
   );
 }

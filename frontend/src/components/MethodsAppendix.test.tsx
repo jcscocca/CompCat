@@ -10,7 +10,11 @@ afterEach(cleanup);
 describe("MethodsAppendix", () => {
   it("opens from the Methods button and lists every definition", () => {
     render(<MethodsAppendix />);
-    fireEvent.click(screen.getByRole("button", { name: /methods/i }));
+    const trigger = screen.getByRole("button", { name: /methods/i });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("region", { name: "Methods & definitions" })).toBeInTheDocument();
     for (const def of METHODS_DEFINITIONS) {
       expect(screen.getByText(def.term)).toBeInTheDocument();
     }

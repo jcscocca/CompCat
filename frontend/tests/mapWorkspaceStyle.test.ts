@@ -10,7 +10,7 @@ describe("map workspace styles", () => {
     expect(css).toMatch(/\.mc-incident-table th,\.mc-incident-table td\{[^}]*color:var\(--text-strong\);/);
     expect(css).toMatch(/\.mc-incident-table th\{[^}]*font-size:11px;[^}]*color:var\(--text-strong\);[^}]*background:var\(--surface-sunken\);/);
     expect(css).toMatch(/\.mc-incident-count\{[^}]*color:var\(--text\);/);
-    expect(css).toMatch(/\.mc-breakdown-head h5\{[^}]*color:var\(--text-strong\);/);
+    expect(css).toMatch(/\.mc-breakdown-head h4\{[^}]*color:var\(--text-strong\);/);
   });
 });
 

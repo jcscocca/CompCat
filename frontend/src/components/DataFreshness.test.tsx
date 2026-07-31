@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DataFreshness } from "./DataFreshness";
@@ -39,7 +39,8 @@ describe("DataFreshness", () => {
   it("reflects the calls layer when selected", () => {
     render(<DataFreshness freshness={loaded} layer="calls" />);
     expect(screen.getByText("Data through Jun 21, 2026")).toBeInTheDocument();
-    expect(screen.getByTitle(/911 calls/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Data through Jun 21, 2026"));
+    expect(screen.getByText(/678 911 calls/)).toBeInTheDocument();
   });
 
   it("renders nothing before the data has loaded", () => {
@@ -52,14 +53,13 @@ describe("DataFreshness", () => {
     expect(screen.getByText("No reported SPD incidents data loaded")).toBeInTheDocument();
   });
 
-  it("spells out SPD on first use in the freshness tooltip", () => {
-    const { container } = render(<DataFreshness freshness={loaded} layer="reported" />);
-    expect(container.querySelector(".mc-freshness")).toHaveAttribute(
-      "title",
-      expect.stringContaining("reported Seattle Police Department (SPD) incidents"),
-    );
+  it("makes the full freshness detail keyboard-operable and spells out SPD", () => {
+    render(<DataFreshness freshness={loaded} layer="reported" />);
+    const summary = screen.getByText("Data through Jun 22, 2026");
+    fireEvent.click(summary);
+    expect(screen.getByText(/reported Seattle Police Department \(SPD\) incidents/)).toBeInTheDocument();
     // The visible pill stays short.
-    expect(screen.getByText("Data through Jun 22, 2026")).toBeInTheDocument();
+    expect(summary).toBeInTheDocument();
   });
 
   it("distinguishes an availability request failure from an empty layer", () => {

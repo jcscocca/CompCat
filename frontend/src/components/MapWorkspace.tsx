@@ -835,32 +835,11 @@ export function MapWorkspace() {
   return (
     <div className="mc-scope">
       <div
-        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}${isFocus ? " is-focus" : ""}`}
+        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}${isFocus ? " is-focus" : ""}${isMobile ? ` is-sheet-${drawer.snap}` : ""}`}
         style={{ "--panel-width": `${drawer.collapsed ? DRAWER_RAIL : drawer.widthPx}px` } as CSSProperties}
       >
-        <MapCanvas
-          places={mapPlaces}
-          selectedIds={pinIdSet}
-          draft={pinDraft.draft}
-          addPinMode={pinDraft.addPinMode}
-          summary={data.summary}
-          radiusM={analysis.radiusM}
-          flyTo={chipFlyTo ?? pinDraft.flyTo}
-          beats={beats}
-          highlightBeats={highlightBeats}
-          incidentPoints={incidentLayer.geojson}
-          theme={theme}
-          identityByPlaceId={identityByPlaceId}
-          pulsePlaceId={hoveredPlaceId}
-          badgedPlaceIds={badgedPlaceIds}
-          fitTo={fitTo}
-          onViewportChange={setViewport}
-          onMapClick={pinDraft.handleMapClick}
-          onMarkerClick={handleToggleSelect}
-          onBadgeClick={handleBadgeClick}
-        />
-
-        <header className="mc-topbar">
+        <main aria-label="Map and reported incident context">
+          <header className="mc-topbar">
           {/* The wordmark is a styled span, so the page had no h1 for screen readers or
               document outline. */}
           <h1 className="mc-sr">CompCat — reported Seattle incident context around addresses</h1>
@@ -884,46 +863,69 @@ export function MapWorkspace() {
             </button>
             <ThemeToggle theme={theme} onChange={setTheme} />
           </div>
-        </header>
+          </header>
 
-        <SearchPill
+          <SearchPill
           search={(query, signal) => geocodingProvider.search(query, signal)}
           onSelect={handleLookup}
           addPinMode={pinDraft.addPinMode}
           onToggleAddPin={() => (pinDraft.addPinMode ? pinDraft.setAddPinMode(false) : pinDraft.startAddPin())}
-        />
-        {pinDraft.addPinMode ? (
-          <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
-        ) : null}
+          />
+          {pinDraft.addPinMode ? (
+            <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
+          ) : null}
 
-        {isMobile ? (
-          <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
-            <button
-              type="button"
-              ref={mapKeyToggleRef}
-              className="mc-mapkey-toggle"
-              aria-label="Map key"
-              title="Map key"
-              aria-expanded={mapKeyOpen}
-              aria-controls="mc-map-legend"
-              onClick={() => setMapKeyOpen((open) => !open)}
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 7h.01M5 12h.01M5 17h.01M10 7h9M10 12h9M10 17h9" /></svg>
-            </button>
-            <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
-          </div>
-        ) : (
-          <MapLegend layer={analysis.layer} id="mc-map-legend" />
-        )}
-        <IncidentDisclosure
+          <MapCanvas
+            places={mapPlaces}
+            selectedIds={pinIdSet}
+            draft={pinDraft.draft}
+            addPinMode={pinDraft.addPinMode}
+            summary={data.summary}
+            radiusM={analysis.radiusM}
+            flyTo={chipFlyTo ?? pinDraft.flyTo}
+            beats={beats}
+            highlightBeats={highlightBeats}
+            incidentPoints={incidentLayer.geojson}
+            theme={theme}
+            identityByPlaceId={identityByPlaceId}
+            pulsePlaceId={hoveredPlaceId}
+            badgedPlaceIds={badgedPlaceIds}
+            fitTo={fitTo}
+            onViewportChange={setViewport}
+            onMapClick={pinDraft.handleMapClick}
+            onMarkerClick={handleToggleSelect}
+            onBadgeClick={handleBadgeClick}
+            interactionDisabled={isMobile && drawer.snap === "full"}
+          />
+
+          {isMobile ? (
+            <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
+              <button
+                type="button"
+                ref={mapKeyToggleRef}
+                className="mc-mapkey-toggle"
+                aria-label="Map key"
+                title="Map key"
+                aria-expanded={mapKeyOpen}
+                aria-controls="mc-map-legend"
+                onClick={() => setMapKeyOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 7h.01M5 12h.01M5 17h.01M10 7h9M10 12h9M10 17h9" /></svg>
+              </button>
+              <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
+            </div>
+          ) : (
+            <MapLegend layer={analysis.layer} id="mc-map-legend" />
+          )}
+          <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}
           unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
           limit={incidentLayer.limit}
           itemLabel={incidentNoun(analysis.layer).plural}
-        />
+          />
 
-        {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (
+          {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (
           <p className="mc-error" role="alert">
             {data.error}{" "}
             {/* A dead session cannot be retried in place — only a reload mints a new one. */}
@@ -935,18 +937,18 @@ export function MapWorkspace() {
               )
             ) : null}
           </p>
-        ) : null}
+          ) : null}
 
         {/* The dot layer failed silently before: the map just showed no incidents, which
             reads as "nothing happened here" rather than "this did not load". */}
-        {incidentLayer.error && dismissedIncidentError !== incidentLayer.error ? (
+          {incidentLayer.error && dismissedIncidentError !== incidentLayer.error ? (
           <div className="mc-banner mc-banner-warn" role="alert">
             {incidentLayer.error}{" "}
             <button type="button" onClick={() => setDismissedIncidentError(incidentLayer.error ?? "")}>Dismiss</button>
           </div>
-        ) : null}
+          ) : null}
 
-        {sharedBanner ? (
+          {sharedBanner ? (
           <div className="mc-banner" role="status">
             Shared view · reported incident context.{" "}
             <button
@@ -964,13 +966,14 @@ export function MapWorkspace() {
               Exit
             </button>
           </div>
-        ) : null}
-        {showBadLink ? (
+          ) : null}
+          {showBadLink ? (
           <div className="mc-banner mc-banner-warn" role="alert">
             That shared link couldn't be opened.{" "}
             <button type="button" onClick={() => setShowBadLink(false)}>Dismiss</button>
           </div>
-        ) : null}
+          ) : null}
+        </main>
 
         <BottomSheet
           collapsed={drawer.collapsed}

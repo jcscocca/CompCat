@@ -47,7 +47,7 @@ export function AboutModal({
     const focusable = () =>
       Array.from(
         modalRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       ).filter((el) => el.offsetParent !== null);
 
@@ -87,21 +87,21 @@ export function AboutModal({
       className="mc-modal-scrim"
       role="dialog"
       aria-modal="true"
-      aria-label="About CompCat"
+      aria-labelledby="about-compcat-title"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <div className="mc-modal mc-about" ref={modalRef}>
         <div className="mc-modal-head">
-          <h3>About CompCat</h3>
+          <h2 id="about-compcat-title">About CompCat</h2>
           <button type="button" className="mc-iconbtn" aria-label="Close" onClick={onClose}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
 
         <section className="mc-about-section">
-          <h4>What this is</h4>
+          <h3>What this is</h3>
           <p>
             CompCat is a privacy-first tool for exploring reported Seattle Police Department
             (SPD) incident context around specific addresses. You give it places; it reports
@@ -116,7 +116,7 @@ export function AboutModal({
         </section>
 
         <section className="mc-about-section">
-          <h4>Scope</h4>
+          <h3>Scope</h3>
           <p>
             Seattle only. The incident data, the police-beat and neighborhood baselines, and
             the map itself all come from the City of Seattle, so the app stays locked to the
@@ -131,7 +131,7 @@ export function AboutModal({
         </section>
 
         <section className="mc-about-section">
-          <h4>Data sources</h4>
+          <h3>Data sources</h3>
           <p>
             Seattle Police Department (SPD) datasets published through the City of Seattle open
             data portal, used under the portal's public-domain terms.
@@ -148,7 +148,7 @@ export function AboutModal({
         </section>
 
         <section className="mc-about-section">
-          <h4>What's stored</h4>
+          <h3>What's stored</h3>
           <ul>
             <li>
               An anonymous session cookie lasts about 24 hours at a time and is renewed while
@@ -185,7 +185,7 @@ export function AboutModal({
         </section>
 
         <section className="mc-about-section">
-          <h4>Honest limits</h4>
+          <h3>Honest limits</h3>
           <p>{ABOUT_DATA_CAVEAT}</p>
           <p>
             The rate is a density per square kilometre per day, estimated over the selected
@@ -213,7 +213,7 @@ export function AboutModal({
         </section>
 
         <section className="mc-about-section">
-          <h4>License</h4>
+          <h3>License</h3>
           <p>
             <a href={LICENSE_URL} target="_blank" rel="noreferrer">MIT License</a> · © 2026 Jacob Scocca
           </p>

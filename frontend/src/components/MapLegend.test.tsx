@@ -10,7 +10,8 @@ afterEach(cleanup);
 describe("MapLegend", () => {
   it("documents every marker state", () => {
     render(<MapLegend layer="reported" />);
-    expect(screen.getByText("Map key")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Map key" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Map key", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("Saved place")).toBeInTheDocument();
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getByText(/Analyzed radius/i)).toBeInTheDocument();

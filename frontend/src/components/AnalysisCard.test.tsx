@@ -280,7 +280,7 @@ describe("AnalysisCard", () => {
     const onExpandChange = vi.fn();
     render(<AnalysisCard card={analyzeCard()} expanded={false} onExpandChange={onExpandChange} exportHrefBase={EXPORT_BASE} />);
     fireEvent.click(screen.getByRole("button", { name: /Methods/ }));
-    expect(screen.getByRole("dialog", { name: /Methods and definitions/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /Methods & definitions/i })).toBeInTheDocument();
     expect(onExpandChange).not.toHaveBeenCalled();
   });
 

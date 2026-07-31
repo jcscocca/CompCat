@@ -46,13 +46,17 @@ export function PlaceSearch({ provider, onSelectResult }: Props) {
         <p className="mc-search-msg" role="alert">{SEARCH_ERROR_MSG}</p>
       ) : null}
       {status === "empty" ? (
-        <p className="mc-search-msg">{SEARCH_EMPTY_MSG}</p>
+        <p className="mc-search-msg" role="status">{SEARCH_EMPTY_MSG}</p>
       ) : null}
       {showRecent ? (
         <ul className="mc-results mc-recent" aria-label="Recent searches">
           {recent.map((r) => (
             <li key={`${r.latitude},${r.longitude}`}>
-              <button type="button" onMouseDown={() => handleSelect(r)}>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => handleSelect(r)}
+              >
                 <span className="mc-result-label">{r.label}</span>
                 <span className="mc-result-coord">{r.latitude.toFixed(4)}, {r.longitude.toFixed(4)}</span>
               </button>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PlaceContextCard } from "./PlaceContextCard";
@@ -69,6 +69,20 @@ describe("PlaceContextCard", () => {
     renderCard();
     expect(screen.getByText(/When reported incidents occurred/i)).toBeInTheDocument();
     expect(screen.getByText(/of the 40 reported incidents with a recorded time/)).toBeInTheDocument();
+  });
+
+  it("provides exact hour and day values through keyboard-operable tables", () => {
+    renderCard();
+
+    fireEvent.click(screen.getByText("View hourly values"));
+    const hourly = screen.getByRole("table", { name: "Reported incidents by hour of day" });
+    expect(within(hourly).getByRole("row", { name: "2:00 20" })).toBeInTheDocument();
+    expect(within(hourly).getByRole("row", { name: "17:00 20" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("View daily values"));
+    const daily = screen.getByRole("table", { name: "Reported incidents by day of week" });
+    expect(within(daily).getByRole("row", { name: "Sat 20" })).toBeInTheDocument();
+    expect(within(daily).getByRole("row", { name: "Sun 0" })).toBeInTheDocument();
   });
 
   it("discloses the offense-start point-stamping convention", () => {
