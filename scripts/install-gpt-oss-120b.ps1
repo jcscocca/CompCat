@@ -36,6 +36,7 @@ $expectedSha256 = '582bd40f6886200101f4c4ed9f25f3fe80cc14c86e9e2b37746cd8904a0c6
 $minimumRamBytes = [int64](60GB)
 $diskHeadroomBytes = [int64](5GB)
 $modelTtlSeconds = 3600
+$healthCheckTimeoutSeconds = 300
 $modelPath = Join-Path $ModelDirectory $modelFileName
 $partialPath = "$modelPath.partial"
 
@@ -156,6 +157,36 @@ function New-LlamaSwapModelBlock([string]$NewLine) {
         '          reasoning_effort: low'
     )
     return ($blockLines -join $NewLine) + $NewLine
+}
+
+function Set-LlamaSwapHealthCheckTimeout {
+    $config = [System.IO.File]::ReadAllText($ConfigPath)
+    # llama-swap accepts this setting only at the document root. Refuse duplicate root
+    # entries instead of guessing which one the YAML parser will honor.
+    $pattern = '(?m)^healthCheckTimeout:[ \t]*\d+[ \t]*(?=\r?$)'
+    $matches = [regex]::Matches($config, $pattern)
+    if ($matches.Count -gt 1) {
+        throw "Multiple root-level healthCheckTimeout entries found in $ConfigPath"
+    }
+    $assignment = "healthCheckTimeout: $healthCheckTimeoutSeconds"
+    if ($matches.Count -eq 1) {
+        $updated = [regex]::Replace($config, $pattern, $assignment, 1)
+    } else {
+        $newLine = "`n"
+        if ($config.Contains("`r`n")) { $newLine = "`r`n" }
+        $updated = $assignment + $newLine + $config
+    }
+    if ($updated -eq $config) {
+        Write-Host "llama-swap healthCheckTimeout already set to $healthCheckTimeoutSeconds seconds."
+        return $null
+    }
+
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $backupPath = "$ConfigPath.backup-$stamp-health"
+    Copy-Item -LiteralPath $ConfigPath -Destination $backupPath
+    Write-Utf8NoBom $ConfigPath $updated
+    Write-Host "llama-swap healthCheckTimeout updated to $healthCheckTimeoutSeconds seconds; backup: $backupPath"
+    return $backupPath
 }
 
 function Add-LlamaSwapModel {
@@ -301,7 +332,7 @@ function Activate-ForCompCat {
     if ($envContent.Contains("`r`n")) { $newLine = "`r`n" }
     $envContent = Set-EnvValue $envContent 'MCA_LLM_PROVIDER' 'openai' $newLine
     $envContent = Set-EnvValue $envContent 'MCA_LLM_MODEL' $modelId $newLine
-    $envContent = Set-EnvValue $envContent 'MCA_LLM_TIMEOUT_S' '240' $newLine
+    $envContent = Set-EnvValue $envContent 'MCA_LLM_TIMEOUT_S' '300' $newLine
     $envContent = Set-EnvValue $envContent 'MCA_LLM_DISABLE_THINKING' 'false' $newLine
     $envContent = Set-EnvValue $envContent 'MCA_ASSISTANT_NARRATION_ENABLED' 'true' $newLine
 
@@ -330,7 +361,7 @@ Write-Host '== CompCat local GPT-OSS 120B installer =='
 Write-Host "Model:  $modelId"
 Write-Host "File:   $modelPath"
 Write-Host "Config: $ConfigPath"
-Write-Host "Profile: 8K context, one parallel slot, 34 of 36 MoE layers on CPU, $modelTtlSeconds-second ttl"
+Write-Host "Profile: 8K context, one parallel slot, 34 of 36 MoE layers on CPU, $modelTtlSeconds-second ttl, $healthCheckTimeoutSeconds-second health timeout"
 
 if (-not (Test-Path -LiteralPath $ConfigPath)) {
     throw "llama-swap config does not exist: $ConfigPath"
@@ -346,7 +377,9 @@ if ($PlanOnly) {
 
 if (-not $PSCmdlet.ShouldProcess($modelPath, 'Download and install GPT-OSS 120B')) { exit 0 }
 Install-ModelFile
-$configBackup = Add-LlamaSwapModel
+$healthBackup = Set-LlamaSwapHealthCheckTimeout
+$modelBackup = Add-LlamaSwapModel
+$configBackup = if ($healthBackup) { $healthBackup } else { $modelBackup }
 Test-LlamaSwapConfig $llamaSwapPath $configBackup
 
 if ($ActivateForCompCat) {

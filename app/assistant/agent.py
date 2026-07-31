@@ -125,6 +125,22 @@ _CLEAR_NEW_REQUEST_PATTERN = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+# A clearly result-referential follow-up can skip planning without guessing scope:
+# explain_result accepts no model-authored scope and recomputes the newest typed card context
+# server-side. This is deliberately narrower than a general intent classifier so an unrelated
+# request never gets silently turned into an explanation of an older card.
+_RESULT_FOLLOWUP_PATTERN = re.compile(
+    r"\b(?:this|that|current|latest|previous|last)\s+"
+    r"(?:result|comparison|analysis|card|finding|verdict)\b"
+    r"|\bwhat\s+does\s+(?:this|that|it)\s+mean\b"
+    r"|\b(?:explain|summari[sz]e)\s+(?:this|that|the\s+)?"
+    r"(?:result|comparison|analysis|finding|verdict)\b"
+    r"|\b(?:which|what)\s+(?:offen[cs]e\s+)?categor(?:y|ies)\b"
+    r"[^.?!]{0,80}\b(?:difference|comparison|result)\b"
+    r"|\baccount(?:s|ed|ing)?\s+for\b[^.?!]{0,60}\b(?:difference|result)\b",
+    re.IGNORECASE,
+)
+
 # Shared daily LLM token budget exhausted. Fixed copy, invariant-safe: it speaks only about the
 # request budget — never about places, addresses, or safety.
 _BUDGET_EXHAUSTED_MESSAGE = (
@@ -212,27 +228,43 @@ async def run_assistant_turn(
     # narration-await rollbacks further down.
     session.rollback()
 
-    try:
-        raw_plan = await _complete_plan(
-            llm_client,
-            build_planning_messages(messages, context),
-            settings.assistant_role,
-        )
-        plan = _parse_model_json(raw_plan)
-    except LlmRateLimited:
-        yield AssistantStreamEvent(
-            event="error",
-            data={"message": _RATE_LIMITED_MESSAGE, "code": "llm_rate_limited"},
-        )
-        return
-    except LlmUnavailable:
-        yield AssistantStreamEvent(
-            event="error", data={"message": _UNREACHABLE_MESSAGE, "code": "llm_unreachable"}
-        )
-        return
-    except ValueError as exc:
-        yield AssistantStreamEvent(event="error", data={"message": str(exc), "code": "internal"})
-        return
+    newest_user_text = recent_user_texts[-1] if recent_user_texts else ""
+    if latest_result_context is not None and _RESULT_FOLLOWUP_PATTERN.search(newest_user_text):
+        # This scope is entirely application-authored, so a clearly referential follow-up
+        # needs no model judgement. Skipping local planning removes its slowest/frailiest call;
+        # the normal narrated tool path below still supplies Tabby's voice, with the verified
+        # deterministic summary as its fallback.
+        plan: dict[str, Any] = {
+            "type": "tool_call",
+            "tool_name": "explain_result",
+            "arguments": {},
+            "context": "latest_result",
+        }
+    else:
+        try:
+            raw_plan = await _complete_plan(
+                llm_client,
+                build_planning_messages(messages, context),
+                settings.assistant_role,
+            )
+            plan = _parse_model_json(raw_plan)
+        except LlmRateLimited:
+            yield AssistantStreamEvent(
+                event="error",
+                data={"message": _RATE_LIMITED_MESSAGE, "code": "llm_rate_limited"},
+            )
+            return
+        except LlmUnavailable:
+            yield AssistantStreamEvent(
+                event="error",
+                data={"message": _UNREACHABLE_MESSAGE, "code": "llm_unreachable"},
+            )
+            return
+        except ValueError as exc:
+            yield AssistantStreamEvent(
+                event="error", data={"message": str(exc), "code": "internal"}
+            )
+            return
 
     if plan.get("type") == "tool_call":
         tool_name = str(plan.get("tool_name"))
@@ -473,14 +505,14 @@ def _tool_arguments(
     arguments = {
         key: value
         for key, value in raw_arguments.items()
-        if value not in (None, "", [])
+        # Coordinates are application-owned context, never model-authored arguments.
+        if key != "points" and value not in (None, "", [])
     }
     arguments = _with_explicit_radius(tool_name, arguments, user_text)
     if tool_name not in SELECTION_TOOLS:
         return _with_relative_window(tool_name, dashboard_state, arguments, user_text)
 
     defaults: dict[str, Any] = {
-        "place_ids": list(dashboard_state.selected_place_ids),
         "analysis_start_date": (
             dashboard_state.analysis_start_date.isoformat()
             if dashboard_state.analysis_start_date
@@ -496,6 +528,15 @@ def _tool_arguments(
         "nibrs_group": dashboard_state.nibrs_group,
         "layer": dashboard_state.layer,
     }
+    if dashboard_state.selected_points:
+        defaults["points"] = [
+            point.model_dump(mode="json") for point in dashboard_state.selected_points
+        ]
+        # A local model may echo stale ids from the prompt. Inline points are the complete,
+        # authoritative mixed/ad-hoc selection, so never send both selection forms.
+        arguments.pop("place_ids", None)
+    else:
+        defaults["place_ids"] = list(dashboard_state.selected_place_ids)
     if tool_name == "compare_places":
         defaults["radius_m"] = dashboard_state.radii_m[0] if dashboard_state.radii_m else None
     else:
@@ -509,9 +550,8 @@ def _tool_arguments(
 
 
 def _latest_result_arguments(context: AssistantResultContext) -> dict[str, Any]:
-    return {
+    arguments = {
         "kind": context.kind,
-        "place_ids": list(context.place_ids),
         "analysis_start_date": context.analysis_start_date.isoformat(),
         "analysis_end_date": context.analysis_end_date.isoformat(),
         "radius_m": context.radius_m,
@@ -520,6 +560,11 @@ def _latest_result_arguments(context: AssistantResultContext) -> dict[str, Any]:
         "nibrs_group": context.nibrs_group,
         "layer": context.layer,
     }
+    if context.points:
+        arguments["points"] = [point.model_dump(mode="json") for point in context.points]
+    else:
+        arguments["place_ids"] = list(context.place_ids)
+    return arguments
 
 
 def _latest_result_dashboard_state(
@@ -527,6 +572,7 @@ def _latest_result_dashboard_state(
 ) -> AssistantDashboardState:
     return AssistantDashboardState(
         selected_place_ids=list(context.place_ids),
+        selected_points=list(context.points),
         analysis_start_date=context.analysis_start_date,
         analysis_end_date=context.analysis_end_date,
         radii_m=[context.radius_m],

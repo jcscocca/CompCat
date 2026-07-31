@@ -2060,6 +2060,45 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
+  it("sends unsaved shared pins to Tabby as transient selection and result context", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(comparePlaces).mockResolvedValue(makeSiteComparison("Downtown", "Capitol Hill"));
+    vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
+    vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
+    vi.mocked(streamAssistantChat).mockResolvedValue(undefined);
+    const points = [
+      { latitude: 47.606, longitude: -122.332, label: "Downtown" },
+      { latitude: 47.612, longitude: -122.319, label: "Capitol Hill" },
+    ];
+    const view = encodeView({
+      points,
+      radiusM: 250,
+      startDate: "2024-01-01",
+      endDate: "2025-12-31",
+      layer: "reported",
+      offenseCategory: "",
+    });
+    window.history.replaceState({}, "", `/?view=${view}`);
+    render(<MapWorkspace />);
+
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Analyst message"), {
+      target: { value: "Compare the current pins." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(streamAssistantChat).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(streamAssistantChat).mock.calls[0][0];
+    expect(payload.dashboard_state.selected_place_ids).toEqual([]);
+    expect(payload.dashboard_state.selected_points).toEqual(points);
+    expect(payload.latest_result_context).toEqual(expect.objectContaining({
+      kind: "compare",
+      place_ids: [],
+      points,
+    }));
+  });
+
   it("promotes a point-backed result to result-aware context after its place is saved", async () => {
     const saved: Place = {
       ...home,

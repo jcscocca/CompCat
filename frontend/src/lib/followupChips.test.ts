@@ -139,4 +139,18 @@ describe("buildRerunArgs", () => {
     expect(args.analysis_end_date).toBe("2025-09-09");
     expect(args.layer).toBe("calls");
   });
+
+  it("reruns a transient card with points instead of an empty saved-id selection", () => {
+    const points = [
+      { latitude: 47.61, longitude: -122.33, label: "Downtown" },
+      { latitude: 47.62, longitude: -122.34, label: "Capitol Hill" },
+    ];
+    const card = { ...cardFrom("compare"), runId: null, placeIds: [], points };
+    const widen = followupChipsFor(card.kind, card.settings, [250, 500])
+      .find((chip) => chip.label === "Widen to 500 m")!;
+
+    const args = buildRerunArgs(card, widen);
+    expect(args.points).toEqual(points);
+    expect(args).not.toHaveProperty("place_ids");
+  });
 });

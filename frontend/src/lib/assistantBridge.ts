@@ -1,5 +1,6 @@
 import type {
   AnalysisCardData,
+  AnalysisPointPayload,
   AnalysisSettings,
   AssistantToolEffect,
   BadgeDescriptor,
@@ -55,6 +56,17 @@ function asSettingsUsed(value: unknown): SettingsUsed | undefined {
   return isRecord(value) ? (value as SettingsUsed) : undefined;
 }
 
+function asPoints(value: unknown): AnalysisPointPayload[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (point): point is AnalysisPointPayload =>
+      isRecord(point)
+      && typeof point.latitude === "number"
+      && typeof point.longitude === "number"
+      && typeof point.label === "string",
+  );
+}
+
 function settingsFrom(used: SettingsUsed | undefined): Partial<AnalysisSettings> {
   if (!used) return {};
   const patch: Partial<AnalysisSettings> = {};
@@ -76,22 +88,24 @@ export function interpretToolResult(data: {
   switch (data.tool_name) {
     case "compare_places": {
       const placeIds = Array.isArray(result.place_ids) ? (result.place_ids as string[]) : [];
+      const points = asPoints(result.points);
       const comparison = asComparison(result.comparison);
       const neighborhood = asNeighborhood(result.neighborhood);
       const incidents = asIncidents(result.incidents);
       const badges = asBadges(result.badges);
       return {
-        selection: { mode: "replace", ids: placeIds },
+        ...(points.length === 0 ? { selection: { mode: "replace" as const, ids: placeIds } } : {}),
         settings: settingsFrom(asSettingsUsed(result.settings_used)),
         comparison,
         neighborhood,
         incidents,
-        refetchSummary: true,
+        refetchSummary: points.length === 0,
         ...(badges ? { badges } : {}),
         card: {
           runId: typeof result.analysis_run_id === "string" ? result.analysis_run_id : null,
           kind: "compare",
           placeIds,
+          ...(points.length > 0 ? { points } : {}),
           settings: asSettingsUsed(result.settings_used) ?? {},
           comparison,
           neighborhood,
@@ -101,20 +115,22 @@ export function interpretToolResult(data: {
     }
     case "analyze_places": {
       const placeIds = Array.isArray(result.place_ids) ? (result.place_ids as string[]) : [];
+      const points = asPoints(result.points);
       const neighborhood = asNeighborhood(result.neighborhood);
       const incidents = asIncidents(result.incidents);
       const badges = asBadges(result.badges);
       return {
-        selection: { mode: "replace", ids: placeIds },
+        ...(points.length === 0 ? { selection: { mode: "replace" as const, ids: placeIds } } : {}),
         settings: settingsFrom(asSettingsUsed(result.settings_used)),
         neighborhood,
         incidents,
-        refetchSummary: true,
+        refetchSummary: points.length === 0,
         ...(badges ? { badges } : {}),
         card: {
           runId: typeof result.analysis_run_id === "string" ? result.analysis_run_id : null,
           kind: "analyze",
           placeIds,
+          ...(points.length > 0 ? { points } : {}),
           settings: asSettingsUsed(result.settings_used) ?? {},
           comparison: null,
           neighborhood,

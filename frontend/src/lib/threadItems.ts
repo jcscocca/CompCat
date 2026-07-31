@@ -20,20 +20,23 @@ export function toApiMessages(items: ThreadItem[]): AssistantMessage[] {
   return messages;
 }
 
-/** The newest saved-place card's reproducible scope; raw result rows remain client-local. */
+/** The newest card's reproducible saved-id or transient-point scope; raw result rows remain
+ * client-local. Point-backed scope is sent only for stateless server recomputation. */
 export function latestResultContext(items: ThreadItem[]): AssistantResultContext | null {
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index];
     if (item.kind !== "analysis_card") continue;
     const { card } = item;
     const placeIds = Array.from(new Set(card.placeIds));
+    const points = card.points ?? [];
+    const selectionCount = points.length > 0 ? points.length : placeIds.length;
     const start = card.settings.analysis_start_date;
     const end = card.settings.analysis_end_date;
     const radius = card.settings.radius_m;
     const layer = card.settings.layer;
     if (
-      placeIds.length === 0 ||
-      (card.kind === "compare" && placeIds.length < 2) ||
+      selectionCount === 0 ||
+      (card.kind === "compare" && selectionCount < 2) ||
       typeof start !== "string" ||
       typeof end !== "string" ||
       typeof radius !== "number" ||
@@ -43,7 +46,8 @@ export function latestResultContext(items: ThreadItem[]): AssistantResultContext
     }
     return {
       kind: card.kind,
-      place_ids: placeIds,
+      place_ids: points.length > 0 ? [] : placeIds,
+      ...(points.length > 0 ? { points } : {}),
       analysis_start_date: start,
       analysis_end_date: end,
       radius_m: radius,

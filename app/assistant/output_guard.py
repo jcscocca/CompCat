@@ -123,7 +123,16 @@ PRESENCE_CLAIM_PATTERN = re.compile(
     r"\b(?:near|nearby|close\s+to|around|(?:there|present)\s+(?:when|during))\b"
     r"[^.?!]{0,40}?"
     r"\b(?:incident|crime|offen[sc]e|robbery|assault|burglary|shooting|homicide"
-    r"|attack|mugging|event)s?\b",
+    r"|attack|mugging|event)s?\b"
+    # Temporal-presence arm: "incidents happened while I was at Downtown" states the
+    # user's presence first and names the incidents earlier in the sentence, so it is the
+    # inverse word order of the arms above. Keep the first-person subject explicit so the
+    # ordinary product question "what happened while Downtown was busy?" still passes.
+    r"|\b(?:incident|crime|offen[sc]e|robbery|assault|burglary|shooting|homicide"
+    r"|attack|mugging|event)s?\b"
+    r"[^.?!]{0,60}?\bwhile\s+(?:i|you|we)\s+"
+    r"(?:was|were|am|are|have\s+been|had\s+been)\b"
+    r"[^.?!]{0,30}?\b(?:at|in|near|around|visiting)\b",
     re.IGNORECASE,
 )
 

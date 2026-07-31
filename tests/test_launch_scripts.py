@@ -83,7 +83,9 @@ def test_gpt_oss_installer_is_resumable_verified_and_scoped_to_personal_mode() -
     assert "openai/gpt-oss-120b" in text
     assert "--n-cpu-moe 34" in text
     assert "$modelTtlSeconds = 3600" in text
-    assert "MCA_LLM_TIMEOUT_S' '240'" in text
+    assert "$healthCheckTimeoutSeconds = 300" in text
+    assert "^healthCheckTimeout:" in text
+    assert "MCA_LLM_TIMEOUT_S' '300'" in text
     assert "MCA_ASSISTANT_NARRATION_ENABLED' 'true'" in text
     assert "[switch]$ActivateForCompCat" in text
     assert "scripts\\start-compcat.ps1" in text

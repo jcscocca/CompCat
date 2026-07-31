@@ -131,4 +131,35 @@ describe("latestResultContext", () => {
 
     expect(latestResultContext(items)).toBeNull();
   });
+
+  it("returns bounded transient scope for a point-backed card", () => {
+    const points = [
+      { latitude: 47.61, longitude: -122.33, label: "Downtown" },
+      { latitude: 47.62, longitude: -122.34, label: "Capitol Hill" },
+    ];
+    const items: ThreadItem[] = [{
+      kind: "analysis_card",
+      card: {
+        runId: null,
+        kind: "compare",
+        placeIds: [],
+        points,
+        settings: {
+          radius_m: 250,
+          analysis_start_date: "2024-01-01",
+          analysis_end_date: "2024-12-31",
+          layer: "reported",
+        },
+        comparison: null,
+        neighborhood: null,
+        incidents: null,
+      },
+    }];
+
+    expect(latestResultContext(items)).toEqual(expect.objectContaining({
+      kind: "compare",
+      place_ids: [],
+      points,
+    }));
+  });
 });

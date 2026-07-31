@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.dashboard_schemas import AnalysisPoint
 from app.assistant.schemas import (
     AssistantDashboardState,
     AssistantResultContext,
@@ -105,18 +106,30 @@ def build_semantic_context(
     layer_freshness = dashboard_freshness_by_layer(session).get(state.layer) or {}
     layer_loaded = bool(layer_freshness.get("incident_count"))
     selected_ids = list(dict.fromkeys(state.selected_place_ids))
-    selected_places = _selected_places(session, user_id_hash, selected_ids)
-    crime_summaries = _crime_summaries(session, user_id_hash, selected_ids)
+    selected_points = list(state.selected_points)
+    selected_places = (
+        _selected_places(session, user_id_hash, selected_ids) if not selected_points else []
+    )
+    crime_summaries = (
+        _crime_summaries(session, user_id_hash, selected_ids) if not selected_points else []
+    )
     return SemanticContextPacket(
         dashboard_totals={
             "place_count": summary["totals"]["place_count"],
             "incident_count": summary["totals"]["incident_count"],
             "available_radii_m": settings.crime_radii_m,
         },
-        selected_places=[_place_payload(place) for place in selected_places],
+        selected_places=(
+            [_point_payload(point, index) for index, point in enumerate(selected_points)]
+            if selected_points
+            else [_place_payload(place) for place in selected_places]
+        ),
         crime_summaries=[_summary_payload(row) for row in crime_summaries],
         active_filters={
             "selected_place_ids": selected_ids,
+            # Full transient point metadata already appears once in selected_places. A count
+            # here makes the active selection explicit without duplicating prompt tokens.
+            "selected_point_count": len(selected_points),
             "analysis_start_date": (
                 state.analysis_start_date.isoformat() if state.analysis_start_date else None
             ),
@@ -133,10 +146,20 @@ def build_semantic_context(
         available_tools=AVAILABLE_TOOLS,
         policy_caveats=POLICY_CAVEATS,
         missing_context=_missing_context(
-            summary, selected_ids, selected_places, state, layer_loaded
+            summary,
+            selected_ids,
+            selected_points,
+            selected_places,
+            state,
+            layer_loaded,
         ),
         latest_result_context=(
-            latest_result_context.model_dump(mode="json")
+            latest_result_context.model_dump(
+                mode="json",
+                exclude=(
+                    {"place_ids"} if latest_result_context.points else {"points"}
+                ),
+            )
             if latest_result_context is not None
             else None
         ),
@@ -186,6 +209,17 @@ def _place_payload(place: PlaceCluster) -> dict[str, Any]:
     }
 
 
+def _point_payload(point: AnalysisPoint, index: int) -> dict[str, Any]:
+    return {
+        "id": f"shared-point-{index + 1}",
+        "display_label": point.label,
+        "latitude": point.latitude,
+        "longitude": point.longitude,
+        "inferred_place_type": "shared_view_point",
+        "sensitivity_class": "transient",
+    }
+
+
 def _summary_payload(summary: PlaceCrimeSummary) -> dict[str, Any]:
     return {
         "place_cluster_id": summary.place_cluster_id,
@@ -207,16 +241,17 @@ def _summary_payload(summary: PlaceCrimeSummary) -> dict[str, Any]:
 def _missing_context(
     summary: dict[str, Any],
     selected_ids: list[str],
+    selected_points: list[Any],
     selected_places: list[PlaceCluster],
     state: AssistantDashboardState,
     layer_loaded: bool,
 ) -> list[str]:
     missing: list[str] = []
-    if summary["totals"]["place_count"] == 0:
+    if summary["totals"]["place_count"] == 0 and not selected_points:
         missing.append("No saved places are available.")
-    if not selected_ids:
+    if not selected_ids and not selected_points:
         missing.append("No places are selected.")
-    elif len(selected_places) != len(selected_ids):
+    elif selected_ids and len(selected_places) != len(selected_ids):
         missing.append("One or more selected places are unavailable in this public session.")
     if state.analysis_start_date is None or state.analysis_end_date is None:
         missing.append("No complete analysis date range is selected.")

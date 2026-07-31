@@ -294,6 +294,9 @@ export function MapWorkspace() {
       incidents: compare.incidents,
       analysis,
       placeIds: list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id)),
+      points: list.entries.some((entry) => !entry.savedPlaceId)
+        ? list.entries.map(({ latitude, longitude, label }) => ({ latitude, longitude, label }))
+        : undefined,
       runId: compare.analysisRunId,
     });
     if (!card) return;
@@ -637,16 +640,24 @@ export function MapWorkspace() {
     }
   }
 
-  const assistantState: AssistantDashboardState = useMemo(() => ({
-    selected_place_ids: Array.from(savedIdSet),
-    analysis_start_date: analysis.startDate || null,
-    analysis_end_date: analysis.endDate || null,
-    radii_m: [analysis.radiusM],
-    offense_category: analysis.offenseCategory || null,
-    offense_subcategory: null,
-    nibrs_group: null,
-    layer: analysis.layer,
-  }), [analysis, savedIdSet]);
+  const assistantState: AssistantDashboardState = useMemo(() => {
+    const hasAdhocEntry = list.entries.some((entry) => !entry.savedPlaceId);
+    return {
+      // A mixed list must use one selection source. Inline points preserve every pin in
+      // order and remain transient; all-saved lists keep the owned-id path and its exports.
+      selected_place_ids: hasAdhocEntry ? [] : Array.from(savedIdSet),
+      selected_points: hasAdhocEntry
+        ? list.entries.map(({ latitude, longitude, label }) => ({ latitude, longitude, label }))
+        : [],
+      analysis_start_date: analysis.startDate || null,
+      analysis_end_date: analysis.endDate || null,
+      radii_m: [analysis.radiusM],
+      offense_category: analysis.offenseCategory || null,
+      offense_subcategory: null,
+      nibrs_group: null,
+      layer: analysis.layer,
+    };
+  }, [analysis, list.entries, savedIdSet]);
 
   // Turn machinery lives here, not in AssistantPanel: the shared busy/draft/offline state
   // must survive the panel unmounting.
@@ -734,9 +745,9 @@ export function MapWorkspace() {
     return null;
   }, [thread.items]);
   const followupChips = useMemo(
-    // Point-only local cards (share links) have no place ids to re-run against.
+    // Saved-id and transient-point cards both carry a complete frozen rerun scope.
     () =>
-      latestCard && latestCard.placeIds.length > 0
+      latestCard && (latestCard.placeIds.length > 0 || (latestCard.points?.length ?? 0) > 0)
         ? followupChipsFor(latestCard.kind, latestCard.settings, data.availableRadii)
         : [],
     [latestCard, data.availableRadii],

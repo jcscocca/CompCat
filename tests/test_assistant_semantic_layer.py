@@ -145,6 +145,64 @@ def test_semantic_context_carries_only_latest_result_scope(tmp_path):
     assert "comparison" not in serialized
 
 
+def test_semantic_context_uses_transient_points_without_claiming_no_selection(tmp_path):
+    create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    packet = build_semantic_context(
+        session,
+        "user-1",
+        AssistantDashboardState(
+            selected_points=[
+                {"latitude": 47.61, "longitude": -122.33, "label": "Shared Downtown"},
+                {"latitude": 47.62, "longitude": -122.34, "label": "Shared Capitol Hill"},
+            ],
+            analysis_start_date=date(2024, 1, 1),
+            analysis_end_date=date(2024, 1, 31),
+            radii_m=[250],
+        ),
+        get_settings(),
+    )
+    session.close()
+
+    assert [place["display_label"] for place in packet.selected_places] == [
+        "Shared Downtown",
+        "Shared Capitol Hill",
+    ]
+    assert packet.active_filters["selected_place_ids"] == []
+    assert packet.active_filters["selected_point_count"] == 2
+    assert "No places are selected." not in packet.missing_context
+    assert "No saved places are available." not in packet.missing_context
+
+
+def test_tool_arguments_use_only_application_owned_transient_points():
+    from app.assistant.agent import _tool_arguments
+
+    points = [
+        {"latitude": 47.61, "longitude": -122.33, "label": "Downtown"},
+        {"latitude": 47.62, "longitude": -122.34, "label": "Capitol Hill"},
+    ]
+    state = AssistantDashboardState(
+        selected_points=points,
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 12, 31),
+        radii_m=[250],
+    )
+
+    arguments = _tool_arguments(
+        "compare_places",
+        state,
+        {
+            "place_ids": ["stale-model-id"],
+            "points": [
+                {"latitude": 0, "longitude": 0, "label": "hallucinated coordinate"}
+            ],
+        },
+    )
+
+    assert arguments["points"] == points
+    assert "place_ids" not in arguments
+
+
 def test_crime_summaries_scopes_to_latest_run_not_all_runs(tmp_path):
     """_crime_summaries must return only the latest run's rows, not all rows."""
     create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")

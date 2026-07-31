@@ -114,6 +114,17 @@ def test_assistant_chat_rejects_oversized_dashboard_state(tmp_path, monkeypatch)
         {"selected_place_ids": ["x" * 5_000]},
         {"radii_m": [10**9]},
         {"offense_category": "x" * 5_000},
+        {
+            "selected_place_ids": ["saved"],
+            "selected_points": [
+                {"latitude": 47.61, "longitude": -122.33, "label": "point"}
+            ],
+        },
+        {
+            "selected_points": [
+                {"latitude": 0, "longitude": 0, "label": "outside Seattle"}
+            ]
+        },
     ):
         response = client.post(
             "/assistant/chat",
@@ -143,6 +154,12 @@ def test_assistant_chat_rejects_invalid_latest_result_context(tmp_path, monkeypa
 
     for context in (
         {**base, "place_ids": ["only-one"]},
+        {
+            **base,
+            "points": [
+                {"latitude": 47.61, "longitude": -122.33, "label": "also a point"}
+            ],
+        },
         {**base, "place_ids": ["x" * 500, "b"]},
         {**base, "radius_m": 100_000},
         {

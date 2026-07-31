@@ -785,6 +785,92 @@ def test_agent_reports_unreachable_classifier(tmp_path):
     assert events[-1].data["code"] == "llm_unreachable"
 
 
+def test_agent_recomputes_clear_result_followup_without_calling_planner(tmp_path):
+    class RaisingClient:
+        calls = 0
+
+        async def complete(self, messages, *, role, temperature=None, max_tokens=None):
+            self.calls += 1
+            raise LlmUnavailable("local planner timed out")
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    latest = AssistantResultContext(
+        kind="compare",
+        points=[
+            {"latitude": 47.61, "longitude": -122.33, "label": "Downtown"},
+            {"latitude": 47.62, "longitude": -122.34, "label": "Capitol Hill"},
+        ],
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        radius_m=250,
+        layer="reported",
+    )
+    client = RaisingClient()
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(
+                        role="user",
+                        content=(
+                            "Which offense categories account for most of the difference "
+                            "in this comparison?"
+                        ),
+                    )
+                ],
+                AssistantDashboardState(),
+                client,
+                latest,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "tool", "token", "done"]
+    assert events[1].data["tool_name"] == "explain_result"
+    assert [point["label"] for point in events[1].data["arguments"]["points"]] == [
+        "Downtown",
+        "Capitol Hill",
+    ]
+    assert events[1].data["result"]["place_ids"] == []
+    assert "llm_unreachable" not in {event.data.get("code") for event in events}
+    assert client.calls == 0
+
+
+def test_agent_does_not_repurpose_unrelated_request_when_planner_is_unreachable(tmp_path):
+    class RaisingClient:
+        async def complete(self, messages, *, role, temperature=None, max_tokens=None):
+            raise LlmUnavailable("local planner timed out")
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    latest = AssistantResultContext(
+        kind="analyze",
+        place_ids=["place-1"],
+        analysis_start_date=date(2024, 1, 1),
+        analysis_end_date=date(2024, 1, 31),
+        radius_m=250,
+        layer="reported",
+    )
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Compare Ballard and Fremont.")],
+                AssistantDashboardState(),
+                RaisingClient(),
+                latest,
+            )
+        )
+    finally:
+        session.close()
+
+    assert events[-1].event == "error"
+    assert events[-1].data["code"] == "llm_unreachable"
+
+
 def test_agent_reports_provider_rate_limit_without_marking_unreachable(tmp_path):
     class RateLimitedClient:
         async def complete(self, messages, *, role, temperature=None, max_tokens=None):
@@ -2975,6 +3061,8 @@ def test_presence_guard_covers_proximity_phrasings(tmp_path):
         "Was I close to the assault on the 10th",
         "was I around during any of these crimes",
         "Have I been near the shooting",
+        "Tell me which reported incidents happened while I was at Downtown.",
+        "Which crimes happened while we were visiting Capitol Hill?",
     ]
     try:
         for question in questions:
@@ -3003,6 +3091,7 @@ def test_presence_proximity_arm_needs_a_first_person_subject(tmp_path):
         "show the crimes near this pin",
         "how many incidents happened around Capitol Hill during January?",
         "which incidents are closest to the library?",
+        "which incidents happened while Downtown was hosting the festival?",
     ]
     try:
         for text in inputs:

@@ -75,8 +75,9 @@ The installer downloads the llama.cpp MXFP4 GGUF into
 `C:\Users\jacob\AI Models\Library\OpenAI\gpt-oss-120b`, resumes interrupted downloads, verifies
 the pinned SHA-256, backs up and updates `C:\Users\jacob\llama-swap.yaml`, and optionally changes
 the private `.env.deploy` model selection before restarting the personal stack. Activation keeps
-Tabby narration enabled, raises only the private OpenAI-compatible timeout to 240 seconds, warms the
-model before the first chat, and keeps it resident for one hour after use. It does not change the
+Tabby narration enabled, raises only the private OpenAI-compatible timeout to 300 seconds, sets
+llama-swap's root health-check timeout to 300 seconds, warms the model before the first chat, and
+keeps it resident for one hour after use. It does not change the
 public ThinkPad or VPS configurations; hosted calls retain the 120-second default.
 
 The file is about 59 GiB. The ThinkPad's 64 GB RAM and 12 GB RTX 3500 Ada GPU require hybrid

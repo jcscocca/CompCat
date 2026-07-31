@@ -20,6 +20,7 @@ from app.analysis.beat_baselines import (
 from app.api.dashboard_schemas import (
     MAX_ANALYSIS_SPAN_DAYS,
     MIN_ANALYSIS_DATE,
+    AnalysisPoint,
     DashboardAnalyzeRequest,
     DashboardIncidentDetailsRequest,
     _max_analysis_date,
@@ -164,6 +165,7 @@ class SelectPlacesArgs(BaseModel):
 class AnalyzePlacesArgs(_BoundedWindowArgs):
     queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
+    points: list[AnalysisPoint] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     # Dates/filters inherit _BoundedWindowArgs (optional dates -> clarification path).
     # Bounded per item and in length, mirroring ComparePlacesByNameArgs.radius_m: this is
     # reachable straight from POST /assistant/commands with arbitrary arguments, where a
@@ -174,22 +176,40 @@ class AnalyzePlacesArgs(_BoundedWindowArgs):
     )
     layer: str = "reported"
 
+    @model_validator(mode="after")
+    def _one_selection_source(self) -> AnalyzePlacesArgs:
+        if self.place_ids and self.points:
+            raise ValueError("provide place_ids or points, not both")
+        return self
+
 
 class ComparePlacesByNameArgs(_BoundedWindowArgs):
     queries: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
+    points: list[AnalysisPoint] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     # Dates/filters inherit _BoundedWindowArgs (optional window -> clarification path).
     radius_m: int | None = Field(default=None, gt=0, le=5000)
     layer: str = "reported"
 
+    @model_validator(mode="after")
+    def _one_selection_source(self) -> ComparePlacesByNameArgs:
+        if self.place_ids and self.points:
+            raise ValueError("provide place_ids or points, not both")
+        return self
+
 
 class ExplainResultArgs(_BoundedWindowArgs):
     kind: Literal["analyze", "compare"]
-    place_ids: list[str] = Field(
-        min_length=1, max_length=_MAX_TOOL_ITEMS
-    )
+    place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
+    points: list[AnalysisPoint] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     radius_m: int = Field(gt=0, le=5000)
     layer: Literal["reported", "arrests", "calls"] = "reported"
+
+    @model_validator(mode="after")
+    def _one_selection_source(self) -> ExplainResultArgs:
+        if bool(self.place_ids) == bool(self.points):
+            raise ValueError("provide exactly one of place_ids or points")
+        return self
 
 
 class UpdateFiltersArgs(_BoundedWindowArgs):
@@ -298,6 +318,22 @@ def _resolve_or_select(
     return ResolvedPlaces(place_ids=list(place_ids))
 
 
+def _resolve_selection(
+    session: Session,
+    user_id_hash: str,
+    queries: list[str],
+    place_ids: list[str],
+    points: list[AnalysisPoint],
+) -> tuple[ResolvedPlaces, list[AnalysisPoint] | None]:
+    """Resolve named queries, otherwise preserve the authoritative transient selection."""
+    concrete_queries = [
+        query for query in queries if _DEICTIC_PLACE_QUERY_PATTERN.fullmatch(query) is None
+    ]
+    if points and not concrete_queries:
+        return ResolvedPlaces(place_ids=[]), list(points)
+    return _resolve_or_select(session, user_id_hash, queries, place_ids), None
+
+
 _DEICTIC_PLACE_QUERY_PATTERN = re.compile(
     r"^\s*(?:(?:this|that|these|those|the|current|my)?\s*"
     r"(?:places?|pins?|selection|selected\s+places?)"
@@ -350,8 +386,10 @@ def _badge_descriptors(
 
 
 def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs) -> dict[str, Any]:
-    resolved = _resolve_or_select(session, user_id_hash, args.queries, args.place_ids)
-    if not resolved.place_ids:
+    resolved, points = _resolve_selection(
+        session, user_id_hash, args.queries, args.place_ids, args.points
+    )
+    if not resolved.place_ids and not points:
         raise AssistantClarification("Name a place to analyze, or select one on the dashboard.")
     _require_analysis_window(args.analysis_start_date, args.analysis_end_date, args.radii_m)
     radii = list(dict.fromkeys(args.radii_m))
@@ -360,7 +398,8 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
     analysis = analyze_selected_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radii_m=radii,
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -374,7 +413,8 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
     neighborhood = neighborhood_analysis_for_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radius_m=radius_m,
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -390,7 +430,8 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
     incidents = incident_details_for_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radii_m=[radius_m],
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -403,6 +444,7 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
     settings_used = _settings_used(args, radius_m)
     return {
         "place_ids": resolved.place_ids,
+        "points": [point.model_dump(mode="json") for point in points] if points else [],
         "settings_used": settings_used,
         "analysis": analysis,
         "neighborhood": neighborhood,
@@ -411,15 +453,21 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
         "created": resolved.created,
         "unresolved": resolved.unresolved,
         "analysis_run_id": run_id,
-        "badges": _badge_descriptors(session, resolved.place_ids, run_id, settings_used),
+        "badges": (
+            _badge_descriptors(session, resolved.place_ids, run_id, settings_used)
+            if resolved.place_ids
+            else []
+        ),
     }
 
 
 def _compare_places(
     session: Session, user_id_hash: str, args: ComparePlacesByNameArgs
 ) -> dict[str, Any]:
-    resolved = _resolve_or_select(session, user_id_hash, args.queries, args.place_ids)
-    if len(resolved.place_ids) < 2:
+    resolved, points = _resolve_selection(
+        session, user_id_hash, args.queries, args.place_ids, args.points
+    )
+    if len(points or resolved.place_ids) < 2:
         raise AssistantClarification(
             "Name at least two places to compare, or select them on the dashboard."
         )
@@ -429,7 +477,8 @@ def _compare_places(
     analysis = analyze_selected_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radii_m=[args.radius_m],
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -445,7 +494,8 @@ def _compare_places(
     comparison = compare_selected_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radius_m=args.radius_m,
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -457,7 +507,8 @@ def _compare_places(
     neighborhood = neighborhood_analysis_for_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radius_m=args.radius_m,
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -473,7 +524,8 @@ def _compare_places(
     incidents = incident_details_for_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=resolved.place_ids,
+        place_ids=resolved.place_ids or None,
+        points=points,
         radii_m=[args.radius_m],
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -486,6 +538,7 @@ def _compare_places(
     settings_used = _settings_used(args, args.radius_m)
     return {
         "place_ids": resolved.place_ids,
+        "points": [point.model_dump(mode="json") for point in points] if points else [],
         "settings_used": settings_used,
         "comparison": comparison,
         "neighborhood": neighborhood,
@@ -494,7 +547,11 @@ def _compare_places(
         "created": resolved.created,
         "unresolved": resolved.unresolved,
         "analysis_run_id": run_id,
-        "badges": _badge_descriptors(session, resolved.place_ids, run_id, settings_used),
+        "badges": (
+            _badge_descriptors(session, resolved.place_ids, run_id, settings_used)
+            if resolved.place_ids
+            else []
+        ),
     }
 
 
@@ -510,13 +567,15 @@ def _explain_result(
         args.radius_m,
     )
     place_ids = list(dict.fromkeys(args.place_ids))
-    if args.kind == "compare" and len(place_ids) < 2:
+    points = list(args.points) or None
+    if args.kind == "compare" and len(points or place_ids) < 2:
         raise AssistantClarification("The result no longer has two places to compare.")
     sources = sources_for_layer(args.layer)
     neighborhood = neighborhood_analysis_for_places(
         session=session,
         user_id_hash=user_id_hash,
-        place_ids=place_ids,
+        place_ids=place_ids or None,
+        points=points,
         radius_m=args.radius_m,
         analysis_start_date=args.analysis_start_date,
         analysis_end_date=args.analysis_end_date,
@@ -534,7 +593,8 @@ def _explain_result(
         comparison = compare_selected_places(
             session=session,
             user_id_hash=user_id_hash,
-            place_ids=place_ids,
+            place_ids=place_ids or None,
+            points=points,
             radius_m=args.radius_m,
             analysis_start_date=args.analysis_start_date,
             analysis_end_date=args.analysis_end_date,
@@ -547,6 +607,7 @@ def _explain_result(
     return {
         "kind": args.kind,
         "place_ids": place_ids,
+        "points": [point.model_dump(mode="json") for point in points] if points else [],
         "settings_used": {
             "radius_m": args.radius_m,
             "analysis_start_date": args.analysis_start_date.isoformat(),
