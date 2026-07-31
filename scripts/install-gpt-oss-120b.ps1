@@ -178,7 +178,9 @@ function Add-LlamaSwapModel {
             $blockLength = $config.Length - $blockStart
         }
         $block = $config.Substring($blockStart, $blockLength)
-        $ttlPattern = '(?m)^    ttl:\s*\d+\s*$'
+        # Match spaces/tabs but not the line ending, so replacing a CRLF file cannot
+        # accidentally turn this one line into LF and leave mixed newlines behind.
+        $ttlPattern = '(?m)^    ttl:[ \t]*\d+[ \t]*(?=\r?$)'
         if (-not [regex]::IsMatch($block, $ttlPattern)) {
             throw 'Existing GPT-OSS llama-swap entry has no four-space-indented ttl field; update it manually.'
         }
