@@ -1,0 +1,4 @@
+# Versioned reference-frame metadata hashes canonical LF bytes. Keep these generated
+# assets stable across Windows, macOS, and Linux checkouts.
+app/data/seattle_street_segment_midpoints_v1.csv text eol=lf
+app/data/seattle_street_segment_midpoints_v1.json text eol=lf

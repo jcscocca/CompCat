@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from app.analysis import reference_circles
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import CrimeIncident
+from app.services import neighborhood_service
 
 
 def _client_with_beat_crime(tmp_path) -> tuple[TestClient, str]:
@@ -92,6 +94,38 @@ def test_neighborhood_endpoint_returns_place_block(neighborhood_client):
     assert city["p10"] <= city["p25"] <= city["median"] <= city["p75"] <= city["p90"]
     assert "p_value" not in city
     assert "rate_ratio" not in city
+
+
+def test_neighborhood_endpoint_accepts_windows_crlf_reference_asset(tmp_path, monkeypatch):
+    """The production route must accept an otherwise-identical Windows checkout."""
+    crlf_centers = tmp_path / "seattle_street_segment_midpoints_v1.csv"
+    canonical_bytes = reference_circles.DEFAULT_REFERENCE_CENTERS.read_bytes()
+    crlf_centers.write_bytes(canonical_bytes.replace(b"\n", b"\r\n"))
+
+    monkeypatch.setattr(
+        neighborhood_service,
+        "load_reference_frame",
+        lambda: reference_circles.load_reference_frame(
+            crlf_centers,
+            reference_circles.DEFAULT_REFERENCE_METADATA,
+        ),
+    )
+
+    client, place_id = _client_with_beat_crime(tmp_path)
+    response = client.post(
+        "/dashboard/neighborhood",
+        json={
+            "place_ids": [place_id],
+            "analysis_start_date": "2026-01-01",
+            "analysis_end_date": "2026-06-30",
+            "radii_m": [250],
+            "offense_category": None,
+        },
+    )
+
+    assert response.status_code == 200
+    references = response.json()["places"][0]["reference_comparisons"]
+    assert [entry["kind"] for entry in references] == ["mcpp", "sector", "city"]
 
 
 def test_neighborhood_endpoint_requires_public_session(tmp_path):

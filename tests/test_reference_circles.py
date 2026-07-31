@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
+import pytest
+
 from app.analysis.reference_circles import (
     IncidentGrid,
     ReferenceCenter,
@@ -45,6 +50,66 @@ def test_checked_in_reference_frame_is_versioned_and_geographically_indexed():
     assert sum(center.sector is not None for center in frame.centers) == 23_720
     assert "DOWNTOWN COMMERCIAL" in frame.by_mcpp
     assert "M" in frame.by_sector
+
+
+def test_reference_frame_accepts_windows_crlf_checkout(tmp_path):
+    lf_bytes = (
+        b"center_id,latitude,longitude,street_name,mcpps,sector\n"
+        b"c-1,47.6,-122.33,Test Street,TEST,T\n"
+    )
+    centers_path = tmp_path / "centers.csv"
+    centers_path.write_bytes(lf_bytes.replace(b"\n", b"\r\n"))
+    metadata_path = tmp_path / "centers.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "frame_version": "test-v1",
+                "center_count": 1,
+                "sha256": hashlib.sha256(lf_bytes).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    frame = load_reference_frame(centers_path, metadata_path)
+
+    assert frame.version == "test-v1"
+    assert frame.centers == (
+        ReferenceCenter(
+            center_id="c-1",
+            latitude=47.6,
+            longitude=-122.33,
+            street_name="Test Street",
+            mcpps=("TEST",),
+            sector="T",
+        ),
+    )
+
+
+def test_reference_frame_still_rejects_changed_content(tmp_path):
+    centers_path = tmp_path / "centers.csv"
+    centers_path.write_text(
+        "center_id,latitude,longitude,street_name,mcpps,sector\n"
+        "c-1,47.6,-122.33,Changed Street,TEST,T\n",
+        encoding="utf-8",
+    )
+    metadata_path = tmp_path / "centers.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "frame_version": "test-v1",
+                "center_count": 1,
+                "sha256": hashlib.sha256(b"different content\n").hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="reference-center asset does not match its version metadata",
+    ):
+        load_reference_frame(centers_path, metadata_path)
 
 
 def test_downtown_sector_mixture_tolerates_a_centerless_harbor_sliver():
