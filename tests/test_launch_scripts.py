@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPTS = _ROOT / "scripts"
@@ -9,6 +13,36 @@ _RUN_MODES = _ROOT / "docs" / "RUN-MODES.md"
 
 def _read(relative_path: str) -> str:
     return (_SCRIPTS / relative_path).read_text(encoding="utf-8")
+
+
+def test_powershell_launchers_are_ascii_safe_for_windows_powershell() -> None:
+    """Windows PowerShell 5.1 misdecodes BOM-less UTF-8 punctuation as ANSI."""
+    for path in sorted(_SCRIPTS.rglob("*.ps1")):
+        try:
+            path.read_bytes().decode("ascii")
+        except UnicodeDecodeError as exc:
+            relative_path = path.relative_to(_ROOT)
+            raise AssertionError(f"{relative_path} contains non-ASCII text") from exc
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell is not installed")
+def test_powershell_launchers_parse() -> None:
+    for path in sorted(_SCRIPTS.rglob("*.ps1")):
+        escaped_path = path.as_posix().replace("'", "''")
+        command = (
+            "$tokens = $null; $errors = $null; "
+            f"[System.Management.Automation.Language.Parser]::ParseFile('{escaped_path}', "
+            "[ref]$tokens, [ref]$errors) > $null; "
+            "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }"
+        )
+        result = subprocess.run(
+            ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        relative_path = path.relative_to(_ROOT)
+        assert result.returncode == 0, f"{relative_path}: {result.stderr or result.stdout}"
 
 
 def test_personal_start_uses_an_explicit_isolated_project() -> None:

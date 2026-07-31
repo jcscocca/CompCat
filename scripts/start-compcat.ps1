@@ -24,7 +24,7 @@
 # older image running. Use -SkipBuild only when you intentionally want the existing image.
 #
 # Once the api is healthy it also refreshes any stale data layer (reported / arrests /
-# 911 calls) via the watermarked backfill — same policy as the public/VPS paths —
+# 911 calls) via the watermarked backfill - same policy as the public/VPS paths -
 # so there is no separate ingest step. Skip that with -SkipIngest.
 #
 #   pwsh -File scripts\start-compcat.ps1
@@ -57,7 +57,7 @@ function Wait-Docker([int]$timeoutSec = 120) {
 Set-Location $repo
 
 if (-not (Test-Path $envFile)) {
-    throw 'Missing .env.deploy — copy .env.deploy.example to .env.deploy and fill in its values.'
+    throw 'Missing .env.deploy - copy .env.deploy.example to .env.deploy and fill in its values.'
 }
 
 $branch = (git branch --show-current).Trim()
@@ -90,7 +90,7 @@ if ($SkipPull) {
 #     Gates on both artifacts: the docker build bakes basemaps-assets (fonts/sprites) into
 #     the image, so a missing assets dir would ship a glyphless map on the next rebuild.
 #     fetch_tiles.py skips whatever already exists, so re-running is idempotent.
-#     A failure here is non-fatal — the app runs with a flat-background map fallback.
+#     A failure here is non-fatal - the app runs with a flat-background map fallback.
 $tiles = Join-Path $repo 'app\data\tiles\seattle.pmtiles'
 if (-not (Test-Path $tiles) -or -not (Test-Path (Join-Path $repo 'frontend\public\basemaps-assets'))) {
     Write-Host 'Basemap artifacts missing; fetching (one-time, ~100 MB)...'
@@ -163,12 +163,12 @@ if ($SkipIngest) {
             # as maximally stale so the first run ingests.
             $dataThrough = $freshness.$layer.data_through
             if (-not $dataThrough -or ([datetime]$dataThrough -lt (Get-Date).AddDays(-$FreshnessMaxAgeDays))) {
-                Write-Host ("{0}: data through [{1}] — backfilling {2} (the first calls run takes a while)..." -f $layer, $dataThrough, $layers[$layer])
+                Write-Host ("{0}: data through [{1}] - backfilling {2} (the first calls run takes a while)..." -f $layer, $dataThrough, $layers[$layer])
                 $null = Invoke-RestMethod -Method Post -Headers @{ 'X-Admin-Token' = $token } -TimeoutSec 3600 `
                     -Uri ("http://localhost:8000/admin/crime/ingest/socrata?source={0}&mode=backfill&limit=5000" -f $layers[$layer])
                 Write-Host ("{0}: done" -f $layer)
             } else {
-                Write-Host ("{0}: data through {1} — fresh enough." -f $layer, $dataThrough)
+                Write-Host ("{0}: data through {1} - fresh enough." -f $layer, $dataThrough)
             }
         }
     } catch {
