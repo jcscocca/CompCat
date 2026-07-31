@@ -156,6 +156,8 @@ Non-negotiable rules:
   tools or datasets. The reader wants the finding, not the machinery.
 - Every number you write must come only from the grounding — never round a missing value
   into existence, and never compute a new one.
+- Category labels are records labels, not definitions. Preserve their supplied meaning;
+  in particular, never expand numeric category code 999 into "calls" or another event type.
 - When the grounding gives a confidence interval, state it in plain language: "the
   plausible range is X to Y times", not "CI 1.1–1.8".
 - State significance plainly — "statistically clear", or
@@ -293,10 +295,59 @@ def _category_line(place: dict[str, Any]) -> list[str]:
         return []
     top = rows[:_MAX_CATEGORIES]
     parts = [
-        f"{_humanize_enum(row.get('label'))} {round((row.get('place_share') or 0) * 100)}%"
+        f"{_category_label(row.get('label'))} "
+        f"{round((row.get('place_share') or 0) * 100)}%"
         for row in top
     ]
     return [f"  top categories: {'; '.join(parts)}."]
+
+
+def _category_label(value: Any) -> str:
+    rendered = str(value or "Unknown")
+    if rendered.isdigit():
+        return f"Category code {rendered}"
+    return _humanize_enum(rendered)
+
+
+def _category_gap_line(result: dict[str, Any]) -> list[str]:
+    """State the largest comparable category-share gap instead of making the LLM
+    infer it from two independent top-category lists.
+
+    Only labels explicitly shown for both places are comparable: a category omitted
+    into either place's ``Other`` bucket has an unknown individual share.
+    """
+    places = (result.get("neighborhood") or {}).get("places") or []
+    if len(places) != 2:
+        return []
+
+    def shares(place: dict[str, Any]) -> dict[str, float]:
+        return {
+            str(row.get("label")): float(row.get("place_share") or 0)
+            for row in place.get("category_breakdown") or []
+            if row.get("label") and row.get("label") != "Other"
+        }
+
+    left, right = places
+    left_shares, right_shares = shares(left), shares(right)
+    common = left_shares.keys() & right_shares.keys()
+    if not common:
+        return []
+    category = max(
+        common,
+        key=lambda label: abs(left_shares[label] - right_shares[label]),
+    )
+    left_pct = round(left_shares[category] * 100)
+    right_pct = round(right_shares[category] * 100)
+    gap_pct = round(abs(left_shares[category] - right_shares[category]) * 100)
+    left_label = left.get("place_label") or "First place"
+    right_label = right.get("place_label") or "Second place"
+    return [
+        "Largest displayed category-share gap: "
+        f"{_category_label(category)} — {left_label} {left_pct}%, "
+        f"{right_label} {right_pct}% ({gap_pct} percentage points). "
+        "This compares shares among categories displayed for both places; it does not "
+        "identify a cause."
+    ]
 
 
 def _temporal_line(place: dict[str, Any]) -> list[str]:
@@ -321,6 +372,8 @@ def _temporal_line(place: dict[str, Any]) -> list[str]:
 
 def _compare_lines(result: dict[str, Any]) -> list[str]:
     comparison = result.get("comparison") or {}
+    if not comparison:
+        return []
     overview = comparison.get("overview") or {}
     options = overview.get("options") or []
     noun = layer_noun((result.get("settings_used") or {}).get("layer"))
@@ -336,6 +389,7 @@ def _compare_lines(result: dict[str, Any]) -> list[str]:
         lines.append(f"Overview: {overview['summary_text']}")
     if overview.get("caveat_text"):
         lines.append(f"Caveat: {overview['caveat_text']}")
+    lines.extend(_category_gap_line(result))
     pairwise = (comparison.get("analytical") or {}).get("pairwise_results") or []
     for entry in pairwise[:_MAX_PAIRS]:
         lines.append(_pairwise_line(entry))
