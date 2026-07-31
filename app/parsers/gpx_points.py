@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
 from typing import Any
 
-from app.parsers.base import SourceParser, parse_datetime, stable_record_hash
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import ParseError, fromstring, tostring
+
+from app.parsers.base import (
+    SourceParser,
+    UnsupportedFormatError,
+    parse_datetime,
+    stable_record_hash,
+)
 from app.schemas import LocationObservation, ParseResult
 
 
@@ -14,7 +21,10 @@ class GpxPointsParser(SourceParser):
         return filename.lower().endswith(".gpx") or b"<gpx" in payload[:500].lower()
 
     def parse_bytes(self, payload: bytes, filename: str) -> ParseResult:
-        root = ET.fromstring(payload.decode("utf-8"))
+        try:
+            root = fromstring(payload.decode("utf-8"))
+        except (DefusedXmlException, ParseError, UnicodeDecodeError) as exc:
+            raise UnsupportedFormatError("Invalid or unsafe GPX document.") from exc
         observations = []
         for point in root.iter():
             if not point.tag.endswith("trkpt"):
@@ -30,7 +40,7 @@ class GpxPointsParser(SourceParser):
                 LocationObservation(
                     source_type=self.source_type,
                     source_record_type="trkpt",
-                    source_record_hash=stable_record_hash(ET.tostring(point, encoding="unicode")),
+                    source_record_hash=stable_record_hash(tostring(point, encoding="unicode")),
                     observed_at_utc=observed_at,
                     latitude=latitude,
                     longitude=longitude,

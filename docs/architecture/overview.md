@@ -31,6 +31,7 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 | `app/input_modes.py` | Pure-Python descriptor for the three supported entry modes (`manual_places`, `bulk_places`, `personal_timeline`) |
 | `app/request_limits.py` | Pre-routing request-body cap; default 1 MiB, with the larger upload cap available only when public uploads are enabled |
 | `app/ratelimit.py` | Per-IP token buckets for API burst traffic plus dedicated finite tile and health-probe families |
+| `app/response_security.py` | Global browser security policy plus `no-store` on session-private response families |
 | `app/time_contract.py` | Serializes SPD's stored Seattle wall clocks with their real DST-aware local offset |
 
 **Database strategy:** `app/db.py` `init_db()` runs `Base.metadata.create_all` only when the backend is SQLite (dev/test). Postgres schema is owned by Alembic (`make migrate` = `alembic upgrade head`). Mixing both paths on Postgres would leave `alembic_version` unstamped and mask migration drift.
@@ -129,6 +130,12 @@ The dashboard freshness response also drives the initial analysis context. Untou
 
 - **Built mode** (production / `make run`): `app/main.py` `mount_dashboard()` serves `app/static/dashboard/index.html` at `/` and `app/static/dashboard/assets/` at `/assets/` using FastAPI's `StaticFiles`. The `MCA_STATIC_DASHBOARD_DIR` setting controls the path; mounting is silently skipped if `index.html` does not exist.
 - **Vite dev mode**: `npm run dev` in `frontend/` starts Vite on its own port; the browser talks to the FastAPI backend (typically `:8000`) directly, with the session cookie shared by same-origin or proxy configuration.
+
+`ResponseSecurityMiddleware` wraps the complete ASGI surface without buffering SSE. It
+enforces the dashboard's CSP and browser hardening headers on every response, and writes
+`Cache-Control: no-store` for session tokens, saved places, session-owned dashboard analysis,
+assistant, upload, export, internal, and admin routes. Public beat/MCPP reference geometry keeps
+its explicit one-hour cache policy; static assets and health/freshness metadata are unaffected.
 
 The self-hosted PMTiles artifact is mounted at `/tiles`, but `.pmtiles` requests must carry
 `Range`; a range-less request receives 416 instead of downloading the complete ~100 MiB file.

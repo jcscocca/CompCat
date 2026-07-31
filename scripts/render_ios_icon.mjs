@@ -1,6 +1,7 @@
 // Renders the iOS app icon + splash from the approved Tabby bust art
-// (frontend/src/components/TabbyAvatar.tsx) onto the night-mode surface.
-// Usage: node scripts/render_ios_icon.mjs
+// (frontend/src/components/TabbyAvatar.tsx) onto the night-mode surface, then installs
+// the same pixels directly into the committed Xcode asset catalog.
+// Usage: cd frontend && npm run ios:assets
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -57,17 +58,33 @@ function composite(canvas, art) {
   </svg>`;
 }
 
-function render(svg, path) {
-  const png = new Resvg(svg).render().asPng();
+function write(png, path) {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, png);
   console.log(`wrote ${path} (${png.length} bytes)`);
 }
 
+function renderTo(svg, paths) {
+  const png = new Resvg(svg).render().asPng();
+  for (const path of paths) write(png, path);
+}
+
 const out = join(frontendDir, "assets");
 mkdirSync(out, { recursive: true });
+const xcodeAssets = join(frontendDir, "ios", "App", "App", "Assets.xcassets");
 
-render(composite(1024, 800), join(out, "icon-only.png"));
+renderTo(composite(1024, 800), [
+  join(out, "icon-only.png"),
+  join(xcodeAssets, "AppIcon.appiconset", "AppIcon-512@2x.png"),
+]);
 // splash and splash-dark are deliberately identical — the shell has one dark
 // surface (#1A222B), not separate light/dark splash treatments.
-render(composite(2732, 800), join(out, "splash.png"));
-render(composite(2732, 800), join(out, "splash-dark.png"));
+const splashPaths = [
+  join(out, "splash.png"),
+  join(out, "splash-dark.png"),
+  ...["1x", "2x", "3x"].flatMap((scale) => [
+    join(xcodeAssets, "Splash.imageset", `Default@${scale}~universal~anyany.png`),
+    join(xcodeAssets, "Splash.imageset", `Default@${scale}~universal~anyany-dark.png`),
+  ]),
+];
+renderTo(composite(2732, 800), splashPaths);

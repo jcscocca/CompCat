@@ -38,3 +38,17 @@ def test_client_rejects_unsafe_date_field_at_construction():
             dataset_id="tazs-3rd5",
             date_field="offense_date' --",
         )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    (
+        "http://data.seattle.gov/resource",
+        "file:///etc/passwd",
+        "https://user:secret@data.seattle.gov/resource",
+        "https://data.seattle.gov/resource?redirect=file:///etc/passwd",
+    ),
+)
+def test_client_rejects_unsafe_base_url(base_url: str):
+    with pytest.raises(ValueError, match="Socrata base URL must be an HTTPS"):
+        SeattleSocrataClient(base_url=base_url, dataset_id="tazs-3rd5")

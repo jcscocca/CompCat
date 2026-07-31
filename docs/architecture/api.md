@@ -250,6 +250,12 @@ XFF fallback remains off unless the separately reviewed
 leaves XFF off; the Caddy deployment strips CF, pins XFF to `{client_ip}`, and opts into
 the XFF gate.
 
+`ResponseSecurityMiddleware` adds CSP, anti-framing, MIME-sniffing, referrer, and permissions
+headers without buffering streaming responses. Session tokens, saved places, session-owned
+dashboard analysis, assistant streams, uploads, exports, and internal/admin responses receive
+`Cache-Control: no-store`. The public beat and MCPP reference-geometry responses retain their
+explicit `public, max-age=3600` policy.
+
 ### Incident timestamp serialization
 
 SPD source timestamps are Seattle local wall-clock values despite legacy database field
