@@ -107,7 +107,11 @@ class IncidentGrid:
 
 
 def _asset_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    # Git for Windows may check a text CSV out with CRLF even though the committed asset
+    # and its version metadata use LF. CSV parsing treats the two forms identically, so hash
+    # canonical LF bytes and keep the integrity check independent of the deployment host.
+    canonical_bytes = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(canonical_bytes).hexdigest()
 
 
 @lru_cache(maxsize=4)
