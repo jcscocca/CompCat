@@ -107,7 +107,7 @@ _CLEAR_NEW_REQUEST_PATTERN = re.compile(
         \b(?:filter|radius|date|layer|offense|categor|selection)\w*
       | (?:add|save|select|find)\b[^.?!]{0,80}
         \b(?:place|address|pin|selection)\w*
-      | (?:what|how\s+many|when|where)\b[^.?!]{0,80}
+      | (?:what|which|did|how\s+many|when|where)\b[^.?!]{0,80}
         \b(?:incident|report|arrest|call|count|categor|tim|filter|radius|date|layer)\w*
       | (?:muestra|lista|cuenta|analiza|compara|explica|resume|ejecuta)\b
         [^.?!]{0,80}
@@ -391,6 +391,11 @@ def _guard_user_texts(messages: list[AssistantChatMessage]) -> list[str]:
     recent = messages[-8:]
     latest_index = user_indexes[-1]
     latest = recent[latest_index].content
+    # A new explicit guard request supersedes the previous refusal's category. Without
+    # this, a presence question immediately after a safety refusal inherits both texts and
+    # receives the safety redirect simply because that check runs first.
+    if contains_safety_ranking(latest) or claims_user_presence(latest):
+        return [latest]
     if latest_index >= 2:
         previous_assistant = recent[latest_index - 1]
         previous_user = recent[latest_index - 2]

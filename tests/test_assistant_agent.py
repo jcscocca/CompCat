@@ -400,6 +400,71 @@ def test_agent_does_not_carry_safety_refusal_into_unrelated_next_turn(tmp_path):
     assert len(client.calls) == 1
 
 
+def test_agent_does_not_carry_presence_refusal_into_supported_category_question(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"final","message":"Property differs most."}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(
+                        role="user",
+                        content="Did incidents happen while I was at Downtown?",
+                    ),
+                    AssistantChatMessage(
+                        role="assistant",
+                        content="I can't determine personal presence.",
+                    ),
+                    AssistantChatMessage(
+                        role="user",
+                        content=(
+                            "Which reported incident category most explains the "
+                            "difference between these places?"
+                        ),
+                    ),
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert events[1].data["delta"] == "Property differs most."
+    assert len(client.calls) == 1
+
+
+def test_new_presence_request_after_safety_refusal_uses_presence_redirect(tmp_path):
+    from app.assistant.agent import PRESENCE_REDIRECT
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient([])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [
+                    AssistantChatMessage(role="user", content="Which place is safest?"),
+                    AssistantChatMessage(role="assistant", content="I can't score safety."),
+                    AssistantChatMessage(
+                        role="user",
+                        content="Did incidents happen while I was at Downtown?",
+                    ),
+                ],
+                AssistantDashboardState(selected_place_ids=["place-1"]),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert events[1].data["delta"] == PRESENCE_REDIRECT
+    assert client.calls == []
+
+
 def test_agent_does_not_redirect_neutral_incident_question(tmp_path):
     # False-positive guard: neutral phrasing that merely contains "rate"/"incident" must
     # reach the model, not the safety redirect.
@@ -2885,6 +2950,45 @@ def test_grounding_humanizes_category_layer_and_nibrs_labels():
     assert "Larceny/Theft Offenses" in grounding
     assert "PROPERTY" not in grounding
     assert "LARCENY/THEFT OFFENSES" not in grounding
+
+
+def test_compare_grounding_computes_category_share_gap_and_keeps_999_opaque():
+    from app.assistant.prompts import compact_grounding
+
+    envelope = _two_place_analyze_envelope()
+    places = envelope["result"]["neighborhood"]["places"]
+    places[0]["category_breakdown"] = [
+        {"label": "LARCENY-THEFT", "place_share": 0.28},
+        {"label": "PROPERTY OFFENSES", "place_share": 0.08},
+        {"label": "999", "place_share": 0.14},
+    ]
+    places[1]["category_breakdown"] = [
+        {"label": "LARCENY-THEFT", "place_share": 0.35},
+        {"label": "PROPERTY OFFENSES", "place_share": 0.17},
+        {"label": "999", "place_share": 0.12},
+    ]
+    envelope["result"]["comparison"] = {
+        "overview": {"options": [], "summary_text": "Compared the places."},
+        "analytical": {"pairwise_results": []},
+    }
+
+    grounding = compact_grounding(envelope)
+
+    assert "Largest displayed category-share gap" in grounding
+    assert "Property Offenses" in grounding
+    assert "Library stop 8%" in grounding
+    assert "Second stop 17%" in grounding
+    assert "9 percentage points" in grounding
+    assert "Category code 999" in grounding
+    assert "999 calls" not in grounding
+
+
+def test_narration_prompt_forbids_expanding_numeric_category_codes():
+    from app.assistant.prompts import NARRATION_SYSTEM_PROMPT
+
+    text = NARRATION_SYSTEM_PROMPT.lower()
+    assert "category code 999" in text
+    assert 'never expand' in text
 
 
 def test_analyze_grounding_flags_small_counts_and_wide_intervals():
