@@ -29,6 +29,7 @@ from app.config import Settings, get_settings
 from app.db import configure_database, init_db
 from app.ratelimit import BurstLimitMiddleware
 from app.request_limits import RequestBodyLimitMiddleware
+from app.response_security import ResponseSecurityMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -147,10 +148,12 @@ def create_app(database_url: str | None = None) -> FastAPI:
         name="tiles",
     )
     mount_dashboard(app)
-    # Added in this order so the burst/internal gate is outermost, then accepted requests
-    # hit the body cap before FastAPI routing or multipart parsing.
+    # FastAPI wraps middleware in reverse registration order. Response security is outermost
+    # so even rate-limit and internal-gate responses get browser hardening; accepted requests
+    # then hit the body cap before FastAPI routing or multipart parsing.
     app.add_middleware(RequestBodyLimitMiddleware, get_settings_fn=get_settings)
     app.add_middleware(BurstLimitMiddleware, get_settings_fn=get_settings)
+    app.add_middleware(ResponseSecurityMiddleware)
     return app
 
 

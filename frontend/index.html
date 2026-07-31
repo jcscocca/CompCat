@@ -23,19 +23,7 @@
     <meta name="twitter:title" content="CompCat — reported Seattle incident context" />
     <meta name="twitter:description" content="Explore reported Seattle SPD incident context around addresses — not a safety score." />
     <meta name="twitter:image" content="/assets/og-card.png" />
-    <script>
-      // Paint the persisted theme before first paint, otherwise the app flashes the default
-      // dark shell on its way to a stored light theme. useTheme (src/lib/useTheme.ts) owns
-      // data-theme from hydration onwards; this only has to agree with its storage key and
-      // its "dark" default. Inline and dependency-free so it blocks nothing and adds no
-      // external reference.
-      try {
-        var t = localStorage.getItem("compcat.theme");
-        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      }
-    </script>
+    <script src="/assets/theme-bootstrap.js"></script>
   </head>
   <body>
     <div id="root"></div>

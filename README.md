@@ -266,7 +266,7 @@ salt/secret and forces secure cookies.
 | `MCA_RAW_UPLOAD_RETENTION` | `false` | Keep raw uploads instead of deleting them after normalization. |
 | `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. No default anywhere, including Compose: while unset the endpoint rejects every request. The formerly-shipped `local-admin-token` is still rejected at boot in production. |
 | `MCA_CRIME_RADII_M` | `[250,500,1000]` | Default analysis radii in meters. |
-| `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL. |
+| `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL; HTTPS is required and credentials/query strings are rejected. |
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
 | `SOCRATA_APP_TOKEN` | _unset_ | Optional Socrata app token for higher rate limits. |
 | `MCA_LLM_PROVIDER` | `openai` | Analyst backend: `openai` (OpenAI-compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK). `MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently. |
