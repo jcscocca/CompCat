@@ -10,7 +10,11 @@ vi.mock("maplibre-gl", () => {
     static last: MockMap | null = null;
     static lastOptions: Record<string, unknown> | null = null;
     handlers: Record<string, Array<(arg?: unknown) => void>> = {};
-    sources = new Map<string, { options?: Record<string, unknown>; setData: ReturnType<typeof vi.fn> }>();
+    sources = new Map<string, {
+      options?: Record<string, unknown>;
+      setData: ReturnType<typeof vi.fn>;
+      getClusterExpansionZoom: ReturnType<typeof vi.fn>;
+    }>();
     layers: Array<Record<string, unknown>> = [];
     layerHandlers: Record<string, Array<(arg?: unknown) => void>> = {};
     constructor(options?: Record<string, unknown>) {
@@ -37,7 +41,11 @@ vi.mock("maplibre-gl", () => {
     }
     addSource(id: string, options: Record<string, unknown>) {
       if (this.sources.has(id)) throw new Error(`Source "${id}" already exists`);
-      this.sources.set(id, { options, setData: vi.fn() });
+      this.sources.set(id, {
+        options,
+        setData: vi.fn(),
+        getClusterExpansionZoom: vi.fn().mockResolvedValue(13),
+      });
     }
     getSource(id: string) {
       return this.sources.get(id);
@@ -162,9 +170,14 @@ type MockMapInstance = {
   fireClick: (lat: number, lng: number) => void;
   fireLayerClick: (layerId: string, feature: Record<string, unknown>, lngLat?: { lng: number; lat: number }) => void;
   fireMoveEnd: () => void;
-  sources: Map<string, { options?: Record<string, unknown>; setData: ReturnType<typeof vi.fn> }>;
+  sources: Map<string, {
+    options?: Record<string, unknown>;
+    setData: ReturnType<typeof vi.fn>;
+    getClusterExpansionZoom: ReturnType<typeof vi.fn>;
+  }>;
   layers: Array<Record<string, unknown>>;
   setStyle: ReturnType<typeof vi.fn>;
+  easeTo: ReturnType<typeof vi.fn>;
   fitBounds: ReturnType<typeof vi.fn>;
 };
 const MockedMap = maplibregl.Map as unknown as {
@@ -491,10 +504,27 @@ describe("beat + incident layers", () => {
       const source = MockedMap.last!.sources.get("mc-incidents");
       expect(source!.options).toMatchObject({
         cluster: true,
-        clusterMaxZoom: 13,
+        clusterMaxZoom: 12,
+        clusterRadius: 40,
         clusterProperties: { record_count: ["+", ["get", "record_count"]] },
       });
       expect(source!.setData).toHaveBeenCalledWith(POINTS_FC);
+    });
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-cluster")).toMatchObject({
+      paint: {
+        "circle-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.42, 12, 0.6],
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["sqrt", ["min", ["get", "record_count"], 500]],
+          1, 5, 3.1622776602, 7, 10, 12, 22.360679775, 18,
+        ],
+      },
+    });
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-cluster-count")).toMatchObject({
+      minzoom: 12,
+      filter: ["all", ["has", "point_count"], [">=", ["get", "record_count"], 25]],
+      layout: { "text-padding": 4, "text-allow-overlap": false },
     });
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-dot")).toMatchObject({
       paint: {
@@ -556,6 +586,25 @@ describe("beat + incident layers", () => {
       ["!", ["has", "point_count"]],
       ["==", ["get", "id"], "__no_selected_incident__"],
     ]);
+  });
+
+  it("discloses an aggregate count while expanding a selected map cluster", async () => {
+    renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-cluster", {
+      properties: { cluster_id: 7, record_count: 125 },
+      geometry: { type: "Point", coordinates: [-122.33, 47.61] },
+    });
+    const card = document.body.querySelector(".mc-incident-card");
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent("125 matching records");
+    expect(card).toHaveTextContent("Grouped in this map view. Zooming in shows their block locations.");
+    const source = MockedMap.last!.sources.get("mc-incidents")!;
+    expect(source.getClusterExpansionZoom).toHaveBeenCalledWith(7);
+    await waitFor(() => expect(MockedMap.last!.easeTo).toHaveBeenCalledWith({
+      center: [-122.33, 47.61],
+      zoom: 13,
+    }));
   });
 
   it("emits viewport bounds on moveend and once after load", async () => {

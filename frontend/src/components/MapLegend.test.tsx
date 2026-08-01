@@ -28,6 +28,8 @@ describe("MapLegend", () => {
     render(<MapLegend layer={layer} />);
     expect(screen.getByText(singular)).toBeInTheDocument();
     const plural = layer === "reported" ? "reported incidents" : layer === "arrests" ? "arrests" : "911 calls";
+    expect(screen.getByText(`Grouped ${plural}`)).toBeInTheDocument();
+    expect(screen.getByText("larger dot = more records · select for exact count")).toBeInTheDocument();
     expect(screen.getByText(`Same-block ${plural}`)).toBeInTheDocument();
     expect(screen.getByText("select for exact count · large stacks label at close zoom")).toBeInTheDocument();
     expect(screen.getByText(radiusNote)).toBeInTheDocument();
