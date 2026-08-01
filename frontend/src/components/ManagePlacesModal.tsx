@@ -245,8 +245,12 @@ export function ManagePlacesModal({
                     const count = incidentCountForPlace(summary, place.id, radiusM);
                     const low = count === null && analyzedAtRadius && selected;
                     const confirmingRemove = confirmingRemoveId === place.id;
+                    const editingPlace = editing?.id === place.id;
                     return (
-                      <li key={place.id} className={`mc-card mc-place-card${selected ? " on" : ""}`}>
+                      <li
+                        key={place.id}
+                        className={`mc-card mc-place-card${selected ? " on" : ""}${editingPlace ? " is-editing" : ""}${confirmingRemove ? " is-confirming-remove" : ""}`}
+                      >
                       <button
                         type="button"
                         className="chk"
@@ -289,16 +293,16 @@ export function ManagePlacesModal({
                           <div className="nm">{place.display_label}</div>
                         )}
                         <div className="sub">{coords(place)}</div>
-                        <label className="mc-exp-toggle">
-                          <input
-                            type="checkbox"
-                            checked={!isSensitive(place.sensitivity_class)}
-                            aria-label={`Include ${place.display_label} in export`}
-                            onChange={(event) => onToggleExport(place.id, event.target.checked)}
-                          />
-                          <span>Include in export</span>
-                        </label>
                       </div>
+                      <label className="mc-exp-toggle">
+                        <input
+                          type="checkbox"
+                          checked={!isSensitive(place.sensitivity_class)}
+                          aria-label={`Include ${place.display_label} in export`}
+                          onChange={(event) => onToggleExport(place.id, event.target.checked)}
+                        />
+                        <span>Include in export</span>
+                      </label>
                       <div className="right">
                         {count !== null ? <span className="cnt">{count} {summary?.layer === "calls" ? "calls" : summary?.layer === "arrests" ? "arr." : "inc."}</span> : null}
                         {low ? <span className="cnt low">Low data</span> : null}
