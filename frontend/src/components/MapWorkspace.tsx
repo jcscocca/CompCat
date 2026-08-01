@@ -12,7 +12,7 @@ import { compactGeocodeLabel } from "../lib/addressLabel";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { buildRerunArgs, followupChipsFor, type FollowupChip } from "../lib/followupChips";
 import { offerForPlaces, type SavedPlaceRef } from "../lib/offers";
-import { clampWidth, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH, snapHeightPx } from "../lib/drawer";
+import { clampWidth, DRAWER_DETAIL, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH, snapHeightPx } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { cardFromCompareResults, cardWithSavedPlaceIds } from "../lib/localCard";
 import { incidentNoun } from "../lib/layerCopy";
@@ -44,6 +44,16 @@ import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
 import type { AnalysisCardData, AnalysisSettings, AssistantDashboardState, BadgeDescriptor, BeatFeatureCollection, GeocodeResult, LatLng, LayerKey, MapBounds, Place, PlaceCreate } from "../types";
+
+function pointsForCard(card: AnalysisCardData, places: Place[]): LatLng[] {
+  if (card.points?.length) {
+    return card.points.map((point) => ({ lat: point.latitude, lng: point.longitude }));
+  }
+  return card.placeIds
+    .map((id) => places.find((place) => place.id === id))
+    .filter((place): place is Place => Boolean(place && place.latitude != null && place.longitude != null))
+    .map((place) => ({ lat: place.latitude as number, lng: place.longitude as number }));
+}
 
 export function MapWorkspace() {
   const { theme, setTheme } = useTheme();
@@ -126,14 +136,35 @@ export function MapWorkspace() {
   const [currentCard, setCurrentCard] = useState<AnalysisCardData | null>(null);
   const prevWidthRef = useRef<number | null>(null);
   const localCardRef = useRef<AnalysisCardData | null>(null);
+  // Camera fits use the card's frozen scope, including ad-hoc points that do not exist in
+  // dashboard data. MapCanvas's fitBounds naturally zooms close groups in and frames spread-
+  // out groups more broadly; asymmetric padding keeps every location clear of the panel.
+  const [fitTo, setFitTo] = useState<{ points: LatLng[]; padding: { top: number; right: number; bottom: number; left: number } } | null>(null);
+  const fitCard = useCallback(
+    (card: AnalysisCardData, desktopPanelWidth = drawer.collapsed ? DRAWER_RAIL : drawer.widthPx) => {
+      const points = pointsForCard(card, data.places);
+      if (points.length === 0) return;
+      const rightInset = isMobile ? 40 : desktopPanelWidth + 40;
+      const bottomInset = isMobile
+        ? snapHeightPx(drawer.snap === "bar" ? "bar" : "half", window.innerHeight)
+        : 40;
+      setFitTo({ points, padding: { top: 90, left: 40, right: rightInset, bottom: bottomInset } });
+    },
+    [data.places, drawer.collapsed, drawer.snap, drawer.widthPx, isMobile],
+  );
   const expandCard = useCallback(
     (card: AnalysisCardData) => {
       if (prevWidthRef.current === null) prevWidthRef.current = drawer.collapsed ? null : drawer.widthPx;
       setExpandedCard(card);
-      if (!isMobile) onPreset("wide");
-      else onSnap("full");
+      if (!isMobile) {
+        const detailWidth = Math.max(drawer.widthPx, clampWidth(DRAWER_DETAIL));
+        onDrawerResize(detailWidth);
+        fitCard(card, detailWidth);
+      } else {
+        onSnap("full");
+      }
     },
-    [drawer.collapsed, drawer.widthPx, isMobile, onPreset, onSnap],
+    [drawer.collapsed, drawer.widthPx, fitCard, isMobile, onDrawerResize, onSnap],
   );
 
   // The single address list: seeded from the restored saved selection (share links replace
@@ -191,8 +222,8 @@ export function MapWorkspace() {
   );
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
   const [dismissedIncidentError, setDismissedIncidentError] = useState("");
-  // Mobile has no room for the standing legend, so it hides behind a toggle (desktop keeps
-  // the legend on screen and never renders the button).
+  // The full map key is useful reference material but noisy as standing chrome, so every
+  // viewport keeps it behind a compact toggle (focus mode hides the toggle too).
   const [mapKeyOpen, setMapKeyOpen] = useState(false);
   const mapKeyToggleRef = useRef<HTMLButtonElement>(null);
 
@@ -213,9 +244,6 @@ export function MapWorkspace() {
   // A badge tap asks the rail to scroll to that place's newest card; wrapped in a fresh
   // object per tap so re-tapping the same badge re-fires the panel's scroll effect.
   const [focusCard, setFocusCard] = useState<{ card: AnalysisCardData } | null>(null);
-  // Camera fit around the just-analyzed places (drawer-aware padding), consumed by MapCanvas.
-  const [fitTo, setFitTo] = useState<{ points: LatLng[]; padding: { top: number; right: number; bottom: number; left: number } } | null>(null);
-
   // analyzed-beat highlight from the neighborhood payload
   const highlightBeats = useMemo(
     () =>
@@ -306,7 +334,14 @@ export function MapWorkspace() {
     thread.replaceAnalysisCard(localCardRef.current, card);
     localCardRef.current = card;
     setCurrentCard(card);
-    if (shouldExpand) expandCard(card);
+    if (shouldExpand) {
+      // A full mobile sheet temporarily covers the map; fit while it is still at its current
+      // snap so the locations are framed correctly when the sheet comes back down.
+      if (isMobile) fitCard(card);
+      expandCard(card);
+    } else {
+      fitCard(card);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compare.comparison, compare.neighborhood, compare.analysisRunId]);
 
@@ -572,17 +607,7 @@ export function MapWorkspace() {
     // The frozen card lands in the thread alongside the map effects — it doesn't replace them.
     if (effect.card) {
       const card = effect.card;
-      // Fit the camera around the analyzed places, leaving room for the drawer (right inset
-      // desktop) or the raised sheet (bottom inset mobile).
-      const points = card.placeIds
-        .map((id) => data.places.find((p) => p.id === id))
-        .filter((p): p is Place => Boolean(p && p.latitude != null && p.longitude != null))
-        .map((p) => ({ lat: p.latitude as number, lng: p.longitude as number }));
-      if (points.length > 0) {
-        const rightInset = isMobile ? 40 : (drawer.collapsed ? DRAWER_RAIL : drawer.widthPx) + 40;
-        const bottomInset = isMobile ? snapHeightPx(drawer.snap === "bar" ? "bar" : "half", window.innerHeight) : 40;
-        setFitTo({ points, padding: { top: 90, left: 40, right: rightInset, bottom: bottomInset } });
-      }
+      fitCard(card);
       thread.append({ kind: "analysis_card", card });
       setCurrentCard(card);
     }
@@ -804,7 +829,7 @@ export function MapWorkspace() {
       <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
     </>
   );
-  const paneIsWide = drawer.widthPx === clampWidth(DRAWER_WIDE);
+  const paneIsWide = drawer.widthPx >= clampWidth(DRAWER_WIDE);
   const paneActions = !isMobile ? (
     <div className="mc-pane-actions">
       <button
@@ -927,25 +952,21 @@ export function MapWorkspace() {
             <div className="mc-draft-overlay">{draftEditor}</div>
           ) : null}
 
-          {isMobile ? (
-            <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
-              <button
-                type="button"
-                ref={mapKeyToggleRef}
-                className="mc-mapkey-toggle"
-                aria-label="Map key"
-                title="Map key"
-                aria-expanded={mapKeyOpen}
-                aria-controls="mc-map-legend"
-                onClick={() => setMapKeyOpen((open) => !open)}
-              >
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 7h.01M5 12h.01M5 17h.01M10 7h9M10 12h9M10 17h9" /></svg>
-              </button>
-              <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
-            </div>
-          ) : (
-            <MapLegend layer={analysis.layer} id="mc-map-legend" />
-          )}
+          <div className="mc-mapkey" style={{ "--mapkey-bottom": `calc(env(safe-area-inset-bottom) + ${mapKeyBottomPx}px)` } as CSSProperties}>
+            <button
+              type="button"
+              ref={mapKeyToggleRef}
+              className="mc-mapkey-toggle"
+              aria-label="Map key"
+              title="Map key"
+              aria-expanded={mapKeyOpen}
+              aria-controls="mc-map-legend"
+              onClick={() => setMapKeyOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 7h.01M5 12h.01M5 17h.01M10 7h9M10 12h9M10 17h9" /></svg>
+            </button>
+            <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
+          </div>
           <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}

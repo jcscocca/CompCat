@@ -100,8 +100,16 @@
 .mc-helper .cross::before{left:6px;top:0;width:2px;height:14px;}
 .mc-helper .cross::after{top:6px;left:0;height:2px;width:14px;}
 
+.mc-mapkey{position:absolute;z-index:40;right:calc(var(--panel-width) + 14px);bottom:100px;
+  display:flex;flex-direction:column-reverse;align-items:flex-end;gap:8px;}
+.mc-mapkey-toggle{display:grid;place-items:center;padding:0;width:38px;height:38px;
+  border-radius:50%;cursor:pointer;background:var(--surface);border:1px solid var(--border);
+  color:var(--text-strong);box-shadow:0 8px 20px -10px rgba(16,24,32,.35);}
+.mc-mapkey-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.mc-mapkey-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
 .mc-legend{position:absolute;right:calc(var(--panel-width) + 14px);bottom:100px;z-index:40;width:212px;padding:14px 15px;border-radius:14px;
   background:var(--surface);border:1px solid var(--border);box-shadow:0 14px 30px -16px rgba(16,24,32,.3);}
+.mc-mapkey .mc-legend{position:static;}
 .mc-legend h2{margin:0 0 11px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);}
 .mc-leg-row{display:flex;align-items:center;gap:11px;padding:5px 0;}
 .mc-leg-row .g{flex:none;width:24px;display:grid;place-items:center;}
@@ -221,7 +229,7 @@
   .mc-frame.is-focus .mc-wordmark,.mc-frame.is-focus .mc-status:not(.mc-freshness){display:none;}
   .mc-frame.is-focus .mc-topbar{flex-direction:column;align-items:flex-start;height:auto;gap:10px;padding:12px 10px;}
   .mc-frame.is-focus .mc-topbar-right{flex-wrap:wrap;row-gap:8px;}
-  .mc-frame.is-focus .mc-searchpill,.mc-frame.is-focus .mc-legend,.mc-frame.is-focus .mc-disclosure,.mc-frame.is-focus .mc-helper{display:none;}
+  .mc-frame.is-focus .mc-searchpill,.mc-frame.is-focus .mc-mapkey,.mc-frame.is-focus .mc-disclosure,.mc-frame.is-focus .mc-helper{display:none;}
   .mc-frame.is-focus .maplibregl-ctrl-bottom-right{display:none;}
   .mc-frame.is-focus .mc-attrib{right:auto;left:8px;max-width:calc(100vw - var(--panel-width) - 16px);}
 }
@@ -392,20 +400,12 @@
 @keyframes halo{0%{transform:translate(-50%,-50%) scale(.6);opacity:.55;}70%{opacity:0;}100%{transform:translate(-50%,-50%) scale(2.4);opacity:0;}}
 @keyframes panelin{0%{transform:translateX(34px);opacity:0;}100%{transform:translateX(0);opacity:1;}}
 @keyframes armpulse{0%,100%{box-shadow:0 0 0 4px var(--accent-soft);}50%{box-shadow:0 0 0 8px transparent;}}
-/* Mobile map key. The legend used to be display:none here, leaving phone users with no way
-   to read the markers; it is now a compact overlay behind a round toggle. MapWorkspace
-   renders .mc-mapkey only under MOBILE_MAX_WIDTH, sets its `bottom` from the live sheet
-   snap, and marks the legend [hidden] while closed — this block is layout only. The
-   column-reverse stack keeps the button (first in DOM, so first in tab order) at the
+/* The map key is on demand at every width. On mobile its position tracks the live sheet snap;
+   the column-reverse stack keeps the button (first in DOM, so first in tab order) at the
    bottom with the legend growing upward from it. */
 @media (max-width:760px){
-  .mc-mapkey{position:absolute;z-index:40;left:calc(env(safe-area-inset-left) + 12px);
-    bottom:var(--mapkey-bottom);display:flex;flex-direction:column-reverse;align-items:flex-start;gap:8px;}
-  .mc-mapkey-toggle{display:grid;place-items:center;padding:0;width:38px;height:38px;
-    border-radius:50%;cursor:pointer;background:var(--surface);border:1px solid var(--border);
-    color:var(--text-strong);box-shadow:0 8px 20px -10px rgba(16,24,32,.35);}
-  .mc-mapkey-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-  .mc-mapkey-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
+  .mc-mapkey{left:calc(env(safe-area-inset-left) + 12px);right:auto;
+    bottom:var(--mapkey-bottom);align-items:flex-start;}
   /* Grows upward from the toggle, scrolling rather than reaching the search pill: the 166px
      allowance is the toggle (38) + its gap (8) + topbar and pill clearance (120). */
   .mc-mapkey .mc-legend{position:static;width:min(212px,calc(100vw - 24px));overflow:auto;padding:11px 12px;

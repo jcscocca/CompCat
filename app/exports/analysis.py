@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import date
 from io import StringIO
 from typing import Any
 
@@ -54,6 +55,8 @@ def _component_json(reference: dict[str, Any]) -> str:
 def build_analysis_csv(
     analysis: dict[str, Any],
     *,
+    analysis_start_date: date | str,
+    analysis_end_date: date | str,
     layer: str,
     offense_subcategory: str | None,
     nibrs_group: str | None,
@@ -78,8 +81,10 @@ def build_analysis_csv(
                 "place_id": place.get("place_id", ""),
                 "place_label": place.get("place_label", ""),
                 "layer": layer,
-                "analysis_start_date": analysis.get("analysis_start_date", ""),
-                "analysis_end_date": analysis.get("analysis_end_date", ""),
+                # These dates belong to the immutable saved run. Keep them explicit inputs
+                # instead of trusting the recomputed detail payload to repeat both fields.
+                "analysis_start_date": analysis_start_date,
+                "analysis_end_date": analysis_end_date,
                 "radius_m": radius_m,
                 "offense_category": analysis.get("offense_category") or "",
                 "offense_subcategory": offense_subcategory or "",

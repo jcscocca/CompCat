@@ -4,9 +4,9 @@ import type { LayerKey } from "../types";
 type Props = {
   /** The active data layer, so the dot/cluster rows name what is actually plotted. */
   layer: LayerKey;
-  /** Target of the mobile "Map key" toggle's aria-controls. */
+  /** Target of the "Map key" toggle's aria-controls. */
   id?: string;
-  /** Set on mobile, where the legend is an overlay the toggle opens; never on desktop. */
+  /** The legend is an on-demand overlay; hidden while its toggle is closed. */
   hidden?: boolean;
 };
 

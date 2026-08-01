@@ -323,6 +323,8 @@ def test_analysis_export_uses_current_detail_fields_and_selected_places(tmp_path
     assert all(row["target_incident_count"] == "0" for row in rows)
     assert all(row["reference_method"] == "empirical_reference_circles" for row in rows)
     assert all(row["layer"] == "reported" for row in rows)
+    assert all(row["analysis_start_date"] == "2024-01-01" for row in rows)
+    assert all(row["analysis_end_date"] == "2024-01-31" for row in rows)
     assert all(row["offense_category"] == "PROPERTY" for row in rows)
     assert not any(
         forbidden in column

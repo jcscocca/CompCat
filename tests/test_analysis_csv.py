@@ -63,6 +63,8 @@ def _analysis() -> dict[str, object]:
 def test_analysis_csv_matches_reference_circle_detail_without_legacy_statistics():
     text = build_analysis_csv(
         _analysis(),
+        analysis_start_date="2024-01-01",
+        analysis_end_date="2024-12-31",
         layer="reported",
         offense_subcategory=None,
         nibrs_group=None,
@@ -81,6 +83,8 @@ def test_analysis_csv_matches_reference_circle_detail_without_legacy_statistics(
     assert row["place_id"] == "place-1"
     assert row["place_label"] == "Downtown stop"
     assert row["layer"] == "reported"
+    assert row["analysis_start_date"] == "2024-01-01"
+    assert row["analysis_end_date"] == "2024-12-31"
     assert row["target_incident_count"] == "12"
     assert row["reference_method"] == "empirical_reference_circles"
     assert row["reference_geography_level"] == "mcpp"
@@ -117,6 +121,8 @@ def test_analysis_csv_keeps_zero_count_places_and_blanks_unavailable_distributio
             StringIO(
                 build_analysis_csv(
                     analysis,
+                    analysis_start_date="2024-01-01",
+                    analysis_end_date="2024-12-31",
                     layer="reported",
                     offense_subcategory=None,
                     nibrs_group=None,
@@ -144,6 +150,8 @@ def test_analysis_csv_writes_one_row_per_reference_geography():
             StringIO(
                 build_analysis_csv(
                     analysis,
+                    analysis_start_date="2024-01-01",
+                    analysis_end_date="2024-12-31",
                     layer="reported",
                     offense_subcategory=None,
                     nibrs_group=None,
@@ -168,6 +176,8 @@ def test_analysis_csv_escapes_spreadsheet_formula_text():
             StringIO(
                 build_analysis_csv(
                     analysis,
+                    analysis_start_date="2024-01-01",
+                    analysis_end_date="2024-12-31",
                     layer="reported",
                     offense_subcategory=None,
                     nibrs_group=None,
