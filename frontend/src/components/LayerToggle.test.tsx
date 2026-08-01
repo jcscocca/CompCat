@@ -27,6 +27,19 @@ describe("LayerToggle", () => {
     expect(screen.getByRole("button", { name: /911 calls/i })).toBeInTheDocument();
   });
 
+  it("shows comparable current-view totals for every layer", () => {
+    render(
+      <LayerToggle
+        layer="reported"
+        onChange={vi.fn()}
+        counts={{ reported: 12340, arrests: 2800, calls: 48700 }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Reported incidents — 12,340 in current map view" })).toHaveTextContent("12.3K");
+    expect(screen.getByRole("button", { name: "Arrests — 2,800 in current map view" })).toHaveTextContent("2.8K");
+    expect(screen.getByRole("button", { name: "911 calls — 48,700 in current map view" })).toHaveTextContent("48.7K");
+  });
+
   // The badge was aria-hidden, so the disabled state had no announced explanation; and the
   // visible "No data" was absent from the accessible name (SC 2.5.3).
   it("announces the no-data state and keeps the visible text inside the accessible name", () => {

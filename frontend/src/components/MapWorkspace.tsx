@@ -800,7 +800,7 @@ export function MapWorkspace() {
   // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
   const layerControls = (
     <>
-      <LayerToggle layer={analysis.layer} availability={layerAvailability} onChange={(layer) => handleAnalysisChange({ layer, offenseCategory: "" })} />
+      <LayerToggle layer={analysis.layer} availability={layerAvailability} counts={incidentLayer.layerTotals} onChange={(layer) => handleAnalysisChange({ layer, offenseCategory: "" })} />
       <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
     </>
   );
@@ -949,6 +949,8 @@ export function MapWorkspace() {
           <IncidentDisclosure
           returnedCount={incidentLayer.returnedCount}
           totalCount={incidentLayer.totalCount}
+          returnedLocationCount={incidentLayer.returnedLocationCount}
+          totalLocationCount={incidentLayer.totalLocationCount}
           unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
           limit={incidentLayer.limit}
           itemLabel={incidentNoun(analysis.layer).plural}

@@ -24,10 +24,12 @@ describe("MapLegend", () => {
     ["reported" as const, "Reported incident", "reported incident count"],
     ["arrests" as const, "Arrest", "arrest count"],
     ["calls" as const, "911 call", "911 call count"],
-  ])("names the %s layer on the dot, cluster and radius rows", (layer, singular, radiusNote) => {
+  ])("names the %s layer on the dot, grouped-count and radius rows", (layer, singular, radiusNote) => {
     render(<MapLegend layer={layer} />);
     expect(screen.getByText(singular)).toBeInTheDocument();
-    expect(screen.getByText(`${singular} cluster`)).toBeInTheDocument();
+    const plural = layer === "reported" ? "reported incidents" : layer === "arrests" ? "arrests" : "911 calls";
+    expect(screen.getByText(`Same-block ${plural}`)).toBeInTheDocument();
+    expect(screen.getByText("number = records on this block")).toBeInTheDocument();
     expect(screen.getByText(radiusNote)).toBeInTheDocument();
   });
 });

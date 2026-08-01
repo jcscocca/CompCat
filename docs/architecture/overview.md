@@ -141,6 +141,16 @@ Tabby's conversational controls consume the assistant endpoints as Server-Sent E
 
 The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's single **Analysis filters** control owns both saved-place selection and unsaved search/share points; result cards are marked as previous analyses as soon as that context changes.
 
+The incident map deliberately distinguishes records from visible coordinates. The public
+source geography is reported at block level, so `/dashboard/incident-points` groups matching rows by
+latitude/longitude and returns a `record_count` for each block location. MapLibre sums
+that value in low-zoom clusters and retains numbered stacks after clustering ends; it never
+lets overlapping block-level coordinates masquerade as one record. The response separately
+reports total/returned records and total/returned block locations, and the 5,000-feature
+payload ceiling applies to locations ordered by their latest matching record. The same count
+query also returns current-viewport totals for all three layers, which the layer switch keeps
+visible so different source volumes cannot all appear to be “5,000.”
+
 **Accessibility contract:** the React dashboard targets WCAG 2.2 Level AA. The page exposes
 a named `main` map workspace and a named complementary Tabby region; cards, dialogs, forms,
 tables, disclosures, and modal tabs use their native or corresponding ARIA semantics. On

@@ -90,9 +90,13 @@ def test_points_filtered_by_bbox_dates_and_layer(tmp_path) -> None:
     result = incident_points(session, bounds=MapBounds(**BOUNDS), layer="reported", **DATES)
     assert result["returned_count"] == 1
     assert result["total_count"] == 1
+    assert result["returned_location_count"] == 1
+    assert result["total_location_count"] == 1
+    assert result["layer_totals"] == {"reported": 1, "arrests": 1, "calls": 0}
     assert result["unmappable_citywide_count"] == 1
     point = result["points"][0]
     assert point["id"] == "inc-1"
+    assert point["record_count"] == 1
     assert point["latitude"] == 47.610
     assert point["block_address"] == "1XX BLOCK OF PINE ST"
     # CrimeIncident timestamps store Seattle wall-clock values; public JSON must attach
@@ -123,7 +127,7 @@ def test_arrest_sentinel_never_appears_even_with_huge_bbox(tmp_path) -> None:
     session.close()
 
 
-def test_cap_returns_most_recent_and_signals_truncation(tmp_path) -> None:
+def test_shared_coordinates_return_one_persistent_location_stack(tmp_path) -> None:
     session = _session(tmp_path)
     session.add_all(
         [
@@ -132,14 +136,39 @@ def test_cap_returns_most_recent_and_signals_truncation(tmp_path) -> None:
         ]
     )
     session.commit()
+    result = incident_points(session, bounds=MapBounds(**BOUNDS), layer="reported", **DATES)
+    assert result["returned_count"] == 4
+    assert result["total_count"] == 4
+    assert result["returned_location_count"] == 1
+    assert result["total_location_count"] == 1
+    assert len(result["points"]) == 1
+    assert result["points"][0]["record_count"] == 4
+    assert result["points"][0]["id"].startswith("location:")
+    assert result["points"][0]["occurred_at"] == "2025-06-04T12:00:00-07:00"
+    session.close()
+
+
+def test_cap_applies_to_locations_and_signals_records_not_represented(tmp_path) -> None:
+    session = _session(tmp_path)
+    session.add_all(
+        [
+            _incident(1, latitude=47.601, offense_start_utc=datetime(2025, 6, 1, 12, tzinfo=UTC)),
+            _incident(2, latitude=47.601, offense_start_utc=datetime(2025, 6, 2, 12, tzinfo=UTC)),
+            _incident(3, latitude=47.602, offense_start_utc=datetime(2025, 6, 3, 12, tzinfo=UTC)),
+            _incident(4, latitude=47.603, offense_start_utc=datetime(2025, 6, 4, 12, tzinfo=UTC)),
+        ]
+    )
+    session.commit()
     result = incident_points(
         session, bounds=MapBounds(**BOUNDS), layer="reported", limit=2, **DATES
     )
     assert result["returned_count"] == 2
     assert result["total_count"] == 4
+    assert result["returned_location_count"] == 2
+    assert result["total_location_count"] == 3
     assert result["limit"] == 2
-    # Most recent first
-    assert [p["id"] for p in result["points"]] == ["inc-3", "inc-2"]
+    # Locations are ordered by their latest matching record.
+    assert [p["latitude"] for p in result["points"]] == [47.603, 47.602]
     session.close()
 
 
@@ -192,8 +221,11 @@ def test_incident_points_endpoint_returns_points_and_counts(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["returned_count"] == 1
+    assert body["returned_location_count"] == 1
+    assert body["total_location_count"] == 1
     assert body["unmappable_citywide_count"] == 1
     assert body["limit"] == 5000
+    assert body["points"][0]["record_count"] == 1
     assert body["points"][0]["block_address"] == "1XX BLOCK OF PINE ST"
 
 

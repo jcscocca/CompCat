@@ -90,6 +90,7 @@ which are unauthenticated or session-creating.
 | `/dashboard/freshness` | GET | `app/api/routes_public_dashboard.py` | — | `dict` |
 | `/dashboard/beats` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed beat-outline GeoJSON, gzip-negotiated) |
 | `/dashboard/mcpp` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed MCPP-neighborhood-polygon GeoJSON, gzip-negotiated; sibling of `/dashboard/beats`) |
+| `/dashboard/incident-points` | POST | `app/api/routes_public_dashboard.py` | `DashboardIncidentPointsRequest` | `dict` (one feature per block-level coordinate with `record_count`; all-layer active-filter totals plus returned/total block-location counts; capped at 5,000 locations) |
 | `/dashboard/geocode` | GET | `app/api/routes_public_dashboard.py` | `?q=` query param | `list[GeocodeResultSchema]` |
 | `/dashboard/trends` | GET | `app/api/routes_public_dashboard.py` | `?mcpp=` (normalized, 404 unknown), `?layer=` (400 unknown), `?category=` | `dict` (raw zero-filled monthly `area_counts`/`citywide_counts`, last complete month, TTL-cached with a shared citywide entry; math: `docs/analysis/trend-indexing-method.md`) |
 | `/assistant/chat` | POST | `app/api/routes_assistant.py` | `AssistantChatRequest` (`app/assistant/schemas.py`) | SSE stream (see §4) |

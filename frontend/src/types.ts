@@ -67,6 +67,8 @@ export type IncidentPoint = {
   id: string;
   latitude: number;
   longitude: number;
+  /** Number of matching records sharing this block-level coordinate pair. */
+  record_count: number;
   offense_category: string | null;
   offense_subcategory: string | null;
   occurred_at: string | null;
@@ -76,9 +78,15 @@ export type IncidentPoint = {
 
 export type IncidentPointsResponse = {
   points: IncidentPoint[];
+  /** Matching records represented by the returned location stacks. */
   returned_count: number;
   total_count: number;
+  returned_location_count: number;
+  total_location_count: number;
+  /** Record totals for every layer under the same viewport/date/category filters. */
+  layer_totals: Record<LayerKey, number>;
   unmappable_citywide_count: number;
+  /** Maximum number of block locations returned, not a raw-record ceiling. */
   limit: number;
 };
 

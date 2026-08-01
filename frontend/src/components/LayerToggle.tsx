@@ -15,16 +15,25 @@ export function LayerToggle({
   layer,
   onChange,
   availability,
+  counts,
 }: {
   layer: LayerKey;
   onChange: (layer: LayerKey) => void;
   /** False means the freshness endpoint confirmed that this layer has no loaded rows. */
   availability?: Partial<Record<LayerKey, boolean>>;
+  /** Active-filter record totals; all three share the same viewport/date/category scope. */
+  counts?: Partial<Record<LayerKey, number>> | null;
 }) {
   return (
     <div className="mc-layertoggle mc-chips" role="group" aria-label="Data layer">
       {LAYERS.map((option) => {
         const unavailable = availability?.[option.value] === false;
+        const count = counts?.[option.value];
+        const ariaLabel = unavailable
+          ? `${option.label} — No data loaded`
+          : count === undefined
+            ? undefined
+            : `${option.label} — ${count.toLocaleString("en-US")} in current map view`;
         return (
           <button
             key={option.value}
@@ -34,10 +43,13 @@ export function LayerToggle({
             disabled={unavailable}
             // Includes the visible "No data" text so the accessible name still contains the
             // label a speech-input user would say (SC 2.5.3).
-            aria-label={unavailable ? `${option.label} — No data loaded` : undefined}
+            aria-label={ariaLabel}
             onClick={() => onChange(option.value)}
           >
             {option.label}
+            {count !== undefined && !unavailable ? (
+              <span className="mc-layer-count">{Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(count)}</span>
+            ) : null}
             {unavailable ? <span className="mc-layer-unavailable">No data</span> : null}
           </button>
         );

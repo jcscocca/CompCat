@@ -457,7 +457,7 @@ const POINTS_FC = {
   features: [
     {
       type: "Feature" as const,
-      properties: { id: "inc-1", offense_category: "PROPERTY", offense_subcategory: "THEFT", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST" },
+      properties: { id: "inc-1", offense_category: "PROPERTY", offense_subcategory: "THEFT", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST", record_count: 1, item_label: "reported incidents" },
       geometry: { type: "Point" as const, coordinates: [-122.33, 47.61] as [number, number] },
     },
   ],
@@ -478,8 +478,15 @@ describe("beat + incident layers", () => {
     renderCanvas({ incidentPoints: POINTS_FC });
     await waitFor(() => {
       const source = MockedMap.last!.sources.get("mc-incidents");
-      expect(source!.options).toMatchObject({ cluster: true, clusterMaxZoom: 13 });
+      expect(source!.options).toMatchObject({
+        cluster: true,
+        clusterMaxZoom: 13,
+        clusterProperties: { record_count: ["+", ["get", "record_count"]] },
+      });
       expect(source!.setData).toHaveBeenCalledWith(POINTS_FC);
+    });
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-stack-count")).toMatchObject({
+      filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "record_count"], 1]],
     });
   });
 
@@ -494,6 +501,27 @@ describe("beat + incident layers", () => {
     expect(card!.textContent).toContain('<img'); // title-cased but rendered as TEXT, tag intact
     expect(card!.querySelector("img")).toBeNull(); // never parsed as HTML
     expect(card!.textContent).toContain("100 block of Pine St"); // formatted via formatIncidentAddress
+  });
+
+  it("explains a shared-coordinate stack without presenting representative offense metadata", async () => {
+    renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-dot", {
+      properties: {
+        record_count: 27,
+        item_label: "reported incidents",
+        offense_subcategory: "THEFT",
+        occurred_at: "2025-06-03T12:00:00Z",
+        block_address: "1XX BLOCK OF PINE ST",
+      },
+    });
+    const card = document.body.querySelector(".mc-incident-card");
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain("27 reported incidents");
+    expect(card!.textContent).toContain("These records are mapped to the same block.");
+    expect(card!.textContent).toContain("Latest record: 2025-06-03");
+    expect(card!.textContent).not.toContain("Theft");
+    expect(card!.textContent).not.toContain("Pine");
   });
 
   it("emits viewport bounds on moveend and once after load", async () => {

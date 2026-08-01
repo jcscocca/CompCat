@@ -78,6 +78,11 @@ export function addIncidentLayers(map: maplibregl.Map): void {
     cluster: true,
     clusterMaxZoom: CLUSTER_MAX_ZOOM,
     clusterRadius: 40,
+    // The source has one feature per block-level coordinate. Sum the records represented by
+    // those locations so a cluster label never falls back to counting visible dots.
+    clusterProperties: {
+      record_count: ["+", ["get", "record_count"]],
+    },
   });
   // One calm neutral for clusters and dots — never severity colors (product invariant).
   map.addLayer({
@@ -88,7 +93,7 @@ export function addIncidentLayers(map: maplibregl.Map): void {
     paint: {
       "circle-color": "#3A3F46",
       "circle-opacity": 0.85,
-      "circle-radius": ["step", ["get", "point_count"], 12, 25, 16, 100, 22],
+      "circle-radius": ["step", ["get", "record_count"], 12, 25, 16, 100, 22],
       "circle-stroke-color": "#FFFFFF",
       "circle-stroke-width": 1.5,
     },
@@ -99,7 +104,7 @@ export function addIncidentLayers(map: maplibregl.Map): void {
     source: INCIDENTS_SOURCE,
     filter: ["has", "point_count"],
     layout: {
-      "text-field": ["get", "point_count_abbreviated"],
+      "text-field": ["number-format", ["get", "record_count"], { locale: "en-US", "max-fraction-digits": 0 }],
       "text-font": ["Noto Sans Medium"],
       "text-size": 11,
     },
@@ -113,10 +118,22 @@ export function addIncidentLayers(map: maplibregl.Map): void {
     paint: {
       "circle-color": "#3A3F46",
       "circle-opacity": 0.85,
-      "circle-radius": 4.5,
+      "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 10, 10, 13, 100, 17],
       "circle-stroke-color": "#FFFFFF",
       "circle-stroke-width": 1,
     },
+  });
+  map.addLayer({
+    id: "mc-incident-stack-count",
+    type: "symbol",
+    source: INCIDENTS_SOURCE,
+    filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "record_count"], 1]],
+    layout: {
+      "text-field": ["number-format", ["get", "record_count"], { locale: "en-US", "max-fraction-digits": 0 }],
+      "text-font": ["Noto Sans Medium"],
+      "text-size": 10,
+    },
+    paint: { "text-color": "#FFFFFF" },
   });
 }
 
@@ -131,6 +148,19 @@ export function incidentCardElement(props: Record<string, unknown>): HTMLElement
   const card = document.createElement("div");
   card.className = "mc-incident-card";
   const title = document.createElement("strong");
+  const recordCount = Number(props.record_count ?? 1);
+  if (Number.isFinite(recordCount) && recordCount > 1) {
+    const itemLabel = typeof props.item_label === "string" ? props.item_label : "records";
+    title.textContent = `${recordCount.toLocaleString("en-US")} ${itemLabel}`;
+    const note = document.createElement("div");
+    note.textContent = "These records are mapped to the same block.";
+    const latest = document.createElement("div");
+    latest.textContent = props.occurred_at
+      ? `Latest record: ${String(props.occurred_at).slice(0, 10)}`
+      : "Dates not recorded";
+    card.append(title, note, latest);
+    return card;
+  }
   const rawTitle = props.offense_subcategory ?? props.offense_category;
   title.textContent = rawTitle ? titleCase(String(rawTitle)) : "Incident";
   const when = document.createElement("div");

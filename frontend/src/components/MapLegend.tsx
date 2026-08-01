@@ -54,7 +54,7 @@ export function MapLegend({ layer, id, hidden }: Props) {
         <span className="g">
           <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#3A3F46", border: "1.5px solid #fff", display: "grid", placeItems: "center", color: "#fff", fontSize: 10, fontWeight: 700 }}>5</span>
         </span>
-        <span>{sentenceCase(noun.singular)} cluster<small>count</small></span>
+        <span>Same-block {noun.plural}<small>number = records on this block</small></span>
       </div>
     </section>
   );

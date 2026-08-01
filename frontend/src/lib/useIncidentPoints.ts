@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { friendlyMessageOr, getIncidentPoints } from "../api/client";
-import type { AnalysisSettings, IncidentPoint, IncidentPointsResponse, MapBounds } from "../types";
+import { incidentNoun } from "./layerCopy";
+import type { AnalysisSettings, IncidentPoint, IncidentPointsResponse, LayerKey, MapBounds } from "../types";
 
 const DEBOUNCE_MS = 300;
 
@@ -15,6 +16,8 @@ export type IncidentFeatureCollection = {
       offense_subcategory: string | null;
       occurred_at: string | null;
       block_address: string | null;
+      record_count: number;
+      item_label: string;
     };
     geometry: { type: "Point"; coordinates: [number, number] };
   }>;
@@ -22,7 +25,8 @@ export type IncidentFeatureCollection = {
 
 const EMPTY: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
 
-function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
+function toGeoJSON(points: IncidentPoint[], layer: AnalysisSettings["layer"]): IncidentFeatureCollection {
+  const itemLabel = incidentNoun(layer).plural;
   return {
     type: "FeatureCollection",
     features: points.map((point) => ({
@@ -33,6 +37,8 @@ function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
         offense_subcategory: point.offense_subcategory,
         occurred_at: point.occurred_at,
         block_address: point.block_address,
+        record_count: point.record_count,
+        item_label: itemLabel,
       },
       geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
     })),
@@ -45,8 +51,9 @@ function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
  * bounds/analysis changes, an AbortController per request, and signal.aborted guards so a
  * superseded request never writes its result. bounds === null holds off the first fetch
  * until the map reports a viewport. radiusM is intentionally excluded from the dep array —
- * the dot layer does not depend on radius. Emits GeoJSON for the map plus the raw counts
- * (returned/total/unmappable-citywide/limit) for the coverage chip.
+ * the dot layer does not depend on radius. Each GeoJSON feature is one block-level coordinate
+ * with a record_count, so co-located records stay visible after client clustering ends. Emits
+ * record and location counts for the coverage chip.
  */
 export function useIncidentPoints({
   bounds,
@@ -58,7 +65,15 @@ export function useIncidentPoints({
   enabled?: boolean;
 }) {
   const [geojson, setGeojson] = useState<IncidentFeatureCollection>(EMPTY);
-  const [counts, setCounts] = useState({ returned: 0, total: 0, unmappable: 0, limit: 0 });
+  const [counts, setCounts] = useState({
+    returned: 0,
+    total: 0,
+    returnedLocations: 0,
+    totalLocations: 0,
+    layerTotals: null as Record<LayerKey, number> | null,
+    unmappable: 0,
+    limit: 0,
+  });
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,7 +85,7 @@ export function useIncidentPoints({
       if (!enabled) {
         abortRef.current?.abort();
         setGeojson(EMPTY);
-        setCounts({ returned: 0, total: 0, unmappable: 0, limit: 0 });
+        setCounts({ returned: 0, total: 0, returnedLocations: 0, totalLocations: 0, layerTotals: null, unmappable: 0, limit: 0 });
         setError(null);
       }
       return undefined;
@@ -94,10 +109,13 @@ export function useIncidentPoints({
       )
         .then((response: IncidentPointsResponse) => {
           if (controller.signal.aborted) return;
-          setGeojson(toGeoJSON(response.points));
+          setGeojson(toGeoJSON(response.points, layer));
           setCounts({
             returned: response.returned_count,
             total: response.total_count,
+            returnedLocations: response.returned_location_count,
+            totalLocations: response.total_location_count,
+            layerTotals: response.layer_totals,
             unmappable: response.unmappable_citywide_count,
             limit: response.limit,
           });
@@ -122,6 +140,9 @@ export function useIncidentPoints({
     geojson,
     returnedCount: counts.returned,
     totalCount: counts.total,
+    returnedLocationCount: counts.returnedLocations,
+    totalLocationCount: counts.totalLocations,
+    layerTotals: counts.layerTotals,
     unmappableCitywideCount: counts.unmappable,
     limit: counts.limit,
     error,
