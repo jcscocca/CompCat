@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { circlePolygonCoords } from "../lib/geodesy";
 import { incidentCountForPlace } from "../lib/incidentSummaries";
+import type { IncidentNoun } from "../lib/layerCopy";
 import {
   BEATS_SOURCE,
   EMPTY_FC,
@@ -146,6 +147,7 @@ type Props = {
   beats: BeatFeatureCollection | null;
   highlightBeats: string[];
   incidentPoints: IncidentFeatureCollection | null;
+  incidentNoun: IncidentNoun;
   theme: MapTheme;
   identityByPlaceId?: Map<string, PlaceIdentity>;
   pulsePlaceId?: string | null;
@@ -170,6 +172,7 @@ export function MapCanvas({
   beats,
   highlightBeats,
   incidentPoints,
+  incidentNoun,
   theme,
   identityByPlaceId,
   pulsePlaceId,
@@ -190,6 +193,8 @@ export function MapCanvas({
   const onMarkerClickRef = useRef(onMarkerClick);
   const onBadgeClickRef = useRef(onBadgeClick);
   const onViewportChangeRef = useRef(onViewportChange);
+  const incidentNounRef = useRef(incidentNoun);
+  const incidentPopupRef = useRef<maplibregl.Popup | null>(null);
   const themeRef = useRef(theme);
   const selectedIncidentIdRef = useRef<string | null>(null);
   const tilesMissingRef = useRef(false);
@@ -203,7 +208,19 @@ export function MapCanvas({
     onMarkerClickRef.current = onMarkerClick;
     onBadgeClickRef.current = onBadgeClick;
     onViewportChangeRef.current = onViewportChange;
+    incidentNounRef.current = incidentNoun;
   });
+
+  useEffect(() => {
+    const popup = incidentPopupRef.current;
+    incidentPopupRef.current = null;
+    popup?.remove();
+    selectedIncidentIdRef.current = null;
+    const map = mapRef.current;
+    if (map?.getLayer(INCIDENT_SELECTED_LAYER)) {
+      map.setFilter(INCIDENT_SELECTED_LAYER, incidentSelectionFilter(null));
+    }
+  }, [incidentNoun.singular, incidentNoun.plural]);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,7 +275,10 @@ export function MapCanvas({
         const incidentId = typeof feature.properties?.id === "string" ? feature.properties.id : null;
         const popup = new maplibregl.Popup({ offset: 10 })
           .setLngLat(event.lngLat)
-          .setDOMContent(incidentCardElement(feature.properties ?? {}));
+          .setDOMContent(incidentCardElement(feature.properties ?? {}, incidentNounRef.current));
+        popup.on("close", () => {
+          if (incidentPopupRef.current === popup) incidentPopupRef.current = null;
+        });
         if (incidentId) {
           popup.on("close", () => {
             if (selectedIncidentIdRef.current !== incidentId) return;
@@ -269,6 +289,7 @@ export function MapCanvas({
           });
         }
         popup.addTo(map);
+        incidentPopupRef.current = popup;
         selectedIncidentIdRef.current = incidentId;
         map.setFilter(INCIDENT_SELECTED_LAYER, incidentSelectionFilter(incidentId));
       });
@@ -277,10 +298,14 @@ export function MapCanvas({
         const clusterId = feature?.properties?.cluster_id;
         const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
         if (!feature || clusterId === undefined || !source) return;
-        new maplibregl.Popup({ offset: 18 })
+        const popup = new maplibregl.Popup({ offset: 18 })
           .setLngLat(event.lngLat)
-          .setDOMContent(incidentClusterCardElement(feature.properties ?? {}))
+          .setDOMContent(incidentClusterCardElement(feature.properties ?? {}, incidentNounRef.current))
           .addTo(map);
+        popup.on("close", () => {
+          if (incidentPopupRef.current === popup) incidentPopupRef.current = null;
+        });
+        incidentPopupRef.current = popup;
         source.getClusterExpansionZoom(clusterId).then((zoom) => {
           map.easeTo({ center: (feature!.geometry as Point).coordinates as [number, number], zoom });
         }).catch(() => {});
@@ -304,6 +329,8 @@ export function MapCanvas({
       resizeObserverRef.current = null;
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      incidentPopupRef.current?.remove();
+      incidentPopupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };

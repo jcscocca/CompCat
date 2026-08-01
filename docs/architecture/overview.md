@@ -1,7 +1,7 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Updated 2026-08-01 for neighborhood-scale incident clustering, the direct report action,
-> public-runtime hardening, and the WCAG 2.2 Level AA frontend contract.
+> Updated 2026-08-01 for layer-explicit incident-map labels, neighborhood-scale clustering,
+> the direct report action, public-runtime hardening, and the WCAG 2.2 Level AA frontend contract.
 
 ---
 
@@ -160,9 +160,11 @@ collision-aware labels; selecting any cluster discloses its exact count and expa
 toward the represented block locations. Precise block markers, their selection rings, and their
 click/tap targets begin at zoom 16, when the viewport is local enough for the block locations to
 remain legible instead of blanketing city and neighborhood views.
-The click card always exposes the exact stack count, while ambient stack labels appear only for
-counts of 10 or more at zoom 16 and above so dense views stay geographically legible. The
-response separately
+Every map popup and viewport status names the active layer: a singleton pairs its offense/call type
+with the singular layer noun, while same-block stacks, map clusters, and viewport totals use the
+count-appropriate singular or plural (`reported incident(s)`, `arrest(s)`, or `911 call(s)`).
+Ambient stack labels appear only for counts of 10 or more at zoom 16 and above so dense views stay
+geographically legible. The response separately
 reports total/returned records and total/returned block locations, and the 5,000-feature
 payload ceiling applies to locations ordered by their latest matching record. The same count
 query also returns current-viewport totals for all three layers, which the layer switch keeps

@@ -1,3 +1,5 @@
+import type { IncidentNoun } from "../lib/layerCopy";
+
 type Props = {
   returnedCount: number;
   totalCount: number;
@@ -5,10 +7,11 @@ type Props = {
   totalLocationCount: number;
   unmappableCitywideCount: number;
   limit: number;
-  itemLabel?: string;
+  itemNoun?: IncidentNoun;
 };
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+const DEFAULT_NOUN: IncidentNoun = { singular: "incident", plural: "incidents", pluralCap: "Incidents" };
 
 export function IncidentDisclosure({
   returnedCount,
@@ -17,7 +20,7 @@ export function IncidentDisclosure({
   totalLocationCount,
   unmappableCitywideCount,
   limit,
-  itemLabel = "incidents",
+  itemNoun = DEFAULT_NOUN,
 }: Props) {
   if (limit === 0) {
     return null; // nothing fetched yet
@@ -28,8 +31,8 @@ export function IncidentDisclosure({
     <div className="mc-disclosure" role="status">
       <strong>
         {totalCount === 0
-          ? `No ${itemLabel} in current map view`
-          : `${fmt(totalCount)} ${itemLabel} across ${locationLabel} in current map view`}
+          ? `No ${itemNoun.plural} in current map view`
+          : `${fmt(totalCount)} ${totalCount === 1 ? itemNoun.singular : itemNoun.plural} across ${locationLabel} in current map view`}
       </strong>
       {totalCount > 0 ? (
         <span className="mc-disclosure-detail">

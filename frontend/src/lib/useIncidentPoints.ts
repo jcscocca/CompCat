@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import { friendlyMessageOr, getIncidentPoints } from "../api/client";
-import { incidentNoun } from "./layerCopy";
 import type { AnalysisSettings, IncidentPoint, IncidentPointsResponse, LayerKey, MapBounds } from "../types";
 
 const DEBOUNCE_MS = 300;
@@ -17,7 +16,6 @@ export type IncidentFeatureCollection = {
       occurred_at: string | null;
       block_address: string | null;
       record_count: number;
-      item_label: string;
     };
     geometry: { type: "Point"; coordinates: [number, number] };
   }>;
@@ -25,8 +23,7 @@ export type IncidentFeatureCollection = {
 
 const EMPTY: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
 
-function toGeoJSON(points: IncidentPoint[], layer: AnalysisSettings["layer"]): IncidentFeatureCollection {
-  const itemLabel = incidentNoun(layer).plural;
+function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
   return {
     type: "FeatureCollection",
     features: points.map((point) => ({
@@ -38,7 +35,6 @@ function toGeoJSON(points: IncidentPoint[], layer: AnalysisSettings["layer"]): I
         occurred_at: point.occurred_at,
         block_address: point.block_address,
         record_count: point.record_count,
-        item_label: itemLabel,
       },
       geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
     })),
@@ -109,7 +105,7 @@ export function useIncidentPoints({
       )
         .then((response: IncidentPointsResponse) => {
           if (controller.signal.aborted) return;
-          setGeojson(toGeoJSON(response.points, layer));
+          setGeojson(toGeoJSON(response.points));
           setCounts({
             returned: response.returned_count,
             total: response.total_count,
