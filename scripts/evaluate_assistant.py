@@ -261,7 +261,7 @@ def run_case(
 
 
 def load_baseline(path: Path) -> dict[str, Any]:
-    baseline = json.loads(path.read_text())
+    baseline = json.loads(path.read_text(encoding="utf-8"))
     if baseline.get("schema_version") != 1 or not isinstance(baseline.get("cases"), list):
         raise EvalConfigurationError("baseline must be a schema-version 1 evaluation report")
     return baseline
@@ -290,6 +290,60 @@ def compare_baseline(
             }
         )
     return {"path": str(path), "changes": changes}
+
+
+def build_report(
+    *,
+    target: str,
+    base_url: str,
+    corpus_path: Path,
+    corpus_sha256: str,
+    started_at: datetime,
+    finished_at: datetime,
+    results: list[dict[str, Any]],
+    selected_cases: int,
+    selected_turns: int,
+    baseline: dict[str, Any] | None = None,
+    baseline_path: Path | None = None,
+) -> dict[str, Any]:
+    completed_turns = sum(len(result.get("turns", [])) for result in results)
+    report: dict[str, Any] = {
+        "schema_version": 1,
+        "target": target,
+        "base_url": base_url,
+        "corpus": str(corpus_path),
+        "corpus_sha256": corpus_sha256,
+        "started_at": started_at.isoformat(),
+        "finished_at": finished_at.isoformat(),
+        "duration_seconds": round((finished_at - started_at).total_seconds(), 3),
+        "summary": {
+            "cases": len(results),
+            "passed": sum(result["passed"] for result in results),
+            "failed": sum(not result["passed"] for result in results),
+            "turns": completed_turns,
+            "cases_selected": selected_cases,
+            "turns_selected": selected_turns,
+        },
+        "cases": results,
+    }
+    if baseline is not None and baseline_path is not None:
+        report["baseline"] = compare_baseline(report, baseline, baseline_path)
+    return report
+
+
+def write_report(path: Path, report: dict[str, Any]) -> None:
+    """Atomically persist a checkpoint using UTF-8 on every platform.
+
+    Windows otherwise inherits a legacy code page such as CP-1252, which cannot encode all
+    punctuation a model may return (for example U+202F NARROW NO-BREAK SPACE).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def resolve_base_url(args: argparse.Namespace) -> str:
@@ -344,8 +398,34 @@ def main(argv: list[str] | None = None) -> int:
         print("Groq run confirmed: these turns consume hosted request/token quota.")
 
     started_at = datetime.now(UTC)
+    output = args.output
+    if output is None:
+        stamp = started_at.strftime("%Y%m%dT%H%M%SZ")
+        output = DEFAULT_RESULTS / f"{args.target}-{stamp}.json"
     results: list[dict[str, Any]] = []
+
+    def checkpoint() -> dict[str, Any]:
+        report = build_report(
+            target=args.target,
+            base_url=base_url,
+            corpus_path=args.corpus,
+            corpus_sha256=corpus["sha256"],
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            results=results,
+            selected_cases=len(cases),
+            selected_turns=request_count,
+            baseline=baseline,
+            baseline_path=args.baseline,
+        )
+        write_report(output, report)
+        return report
+
     try:
+        # Fail early on an unwritable destination, then preserve every completed case. A full
+        # ThinkPad run can take tens of minutes and should survive Ctrl+C, a terminal closure,
+        # or a later provider failure without losing the earlier evidence.
+        report = checkpoint()
         with httpx.Client(follow_redirects=True) as client:
             session_response = client.post(f"{base_url}/sessions", timeout=30.0)
             session_response.raise_for_status()
@@ -361,37 +441,20 @@ def main(argv: list[str] | None = None) -> int:
                         for check in turn["checks"]:
                             if not check["passed"]:
                                 print(f"  - {check['name']}: {check['detail']}")
+                report = checkpoint()
     except httpx.HTTPError as exc:
         print(f"connection/session error: {exc}", file=sys.stderr)
         return 2
+    except OSError as exc:
+        print(f"report error: {exc}", file=sys.stderr)
+        return 2
 
-    finished_at = datetime.now(UTC)
-    report: dict[str, Any] = {
-        "schema_version": 1,
-        "target": args.target,
-        "base_url": base_url,
-        "corpus": str(args.corpus),
-        "corpus_sha256": corpus["sha256"],
-        "started_at": started_at.isoformat(),
-        "finished_at": finished_at.isoformat(),
-        "duration_seconds": round((finished_at - started_at).total_seconds(), 3),
-        "summary": {
-            "cases": len(results),
-            "passed": sum(result["passed"] for result in results),
-            "failed": sum(not result["passed"] for result in results),
-            "turns": request_count,
-        },
-        "cases": results,
-    }
-    if args.baseline and baseline is not None:
-        report["baseline"] = compare_baseline(report, baseline, args.baseline)
-
-    output = args.output
-    if output is None:
-        stamp = started_at.strftime("%Y%m%dT%H%M%SZ")
-        output = DEFAULT_RESULTS / f"{args.target}-{stamp}.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    # Refresh the finish time once after the final console output/checkpoint work.
+    try:
+        report = checkpoint()
+    except OSError as exc:
+        print(f"report error: {exc}", file=sys.stderr)
+        return 2
     print(
         f"\n{report['summary']['passed']}/{report['summary']['cases']} cases passed; "
         f"report: {output}"

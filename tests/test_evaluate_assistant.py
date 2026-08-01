@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 
 import pytest
@@ -123,6 +124,89 @@ def test_dry_run_validates_without_opening_a_session(capsys) -> None:
 
     assert exit_code == 0
     assert "cases=1 turns=1" in capsys.readouterr().out
+
+
+def test_report_writer_uses_utf8_and_atomic_replace(tmp_path, monkeypatch) -> None:
+    output = tmp_path / "report.json"
+    calls: dict[str, object] = {}
+
+    def capture_write(path, data, *, encoding=None, **_kwargs):
+        calls["temporary"] = path
+        calls["data"] = data
+        calls["encoding"] = encoding
+        return len(data)
+
+    def capture_replace(path, target):
+        calls["replace_source"] = path
+        calls["replace_target"] = target
+        return target
+
+    monkeypatch.setattr(type(output), "write_text", capture_write)
+    monkeypatch.setattr(type(output), "replace", capture_replace)
+
+    evaluate_assistant.write_report(output, {"response": "1\u202f000 reports"})
+
+    assert calls["encoding"] == "utf-8"
+    assert calls["temporary"] == tmp_path / ".report.json.tmp"
+    assert calls["replace_source"] == calls["temporary"]
+    assert calls["replace_target"] == output
+    assert "1\u202f000 reports" in str(calls["data"])
+
+
+def test_main_checkpoints_every_completed_case(tmp_path, monkeypatch) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    def fake_run_case(_client, _base_url, case, _timeout):
+        return {
+            "id": case["id"],
+            "description": case.get("description", ""),
+            "tags": case.get("tags", []),
+            "passed": True,
+            "turns": [{"turn": 1, "passed": True, "elapsed_seconds": 0.1}],
+        }
+
+    checkpoints: list[dict] = []
+
+    def capture_report(_path, report):
+        checkpoints.append(copy.deepcopy(report))
+
+    monkeypatch.setattr(evaluate_assistant.httpx, "Client", FakeClient)
+    monkeypatch.setattr(evaluate_assistant, "run_case", fake_run_case)
+    monkeypatch.setattr(evaluate_assistant, "write_report", capture_report)
+
+    exit_code = evaluate_assistant.main(
+        [
+            "--target",
+            "local",
+            "--case",
+            "guard_safety_ranking",
+            "--case",
+            "guard_presence_claim",
+            "--output",
+            str(tmp_path / "report.json"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert [report["summary"]["cases"] for report in checkpoints] == [0, 1, 2, 2]
+    assert checkpoints[1]["summary"]["cases_selected"] == 2
+    assert checkpoints[1]["summary"]["turns_selected"] == 2
+    assert checkpoints[1]["summary"]["turns"] == 1
 
 
 def test_public_limit_templates_match_the_raised_hourly_posture() -> None:
