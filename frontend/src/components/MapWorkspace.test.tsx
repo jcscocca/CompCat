@@ -405,9 +405,9 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(await screen.findByText("500 Pine St"));
 
-    // The scrim would hide the draft popover, so the handoff must close the modal first.
+    // The scrim would hide the draft editor, so the handoff must close the modal first.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    // The draft's save popover renders on the rail (drawer top slot), not a legacy panel.
+    // The searched point hands off to the same desktop map editor as a dropped pin.
     expect(await screen.findByRole("button", { name: /save pin/i })).toBeInTheDocument();
   });
 
@@ -486,7 +486,10 @@ describe("MapWorkspace", () => {
 
     expect(container.querySelector(".mc-frame")).not.toHaveClass("is-placing-pin");
     expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-open");
-    expect(screen.getByLabelText(/label/i)).toBeInTheDocument();
+    const editor = screen.getByRole("form", { name: "Name this pin" });
+    expect(editor.closest(".mc-draft-overlay")).not.toBeNull();
+    expect(editor.closest(".mc-workspace-panel")).toBeNull();
+    expect(screen.getByLabelText(/pin label/i)).toHaveFocus();
   });
 
   it("narrow viewport: arming add-pin drops the sheet to bar, and a map click raises it to half", async () => {
@@ -503,6 +506,10 @@ describe("MapWorkspace", () => {
 
     fireEvent.click(screen.getByTestId("fire-map-click"));
     expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-half");
+    const editor = screen.getByRole("form", { name: "Name this pin" });
+    expect(editor.closest(".mc-draft-inline")).not.toBeNull();
+    expect(editor.closest(".mc-workspace-panel")).not.toBeNull();
+    expect(container.querySelector(".mc-draft-overlay")).not.toBeInTheDocument();
   });
 
   it("runs analysis for a selected place", async () => {
