@@ -191,7 +191,7 @@ export function ManagePlacesModal({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="mc-modal" ref={modalRef}>
+      <div className="mc-modal mc-manage-modal" ref={modalRef}>
         <div className="mc-modal-head">
           <h2 id="manage-places-title">{modalLabel(view)}</h2>
           <button type="button" className="mc-iconbtn" aria-label="Close" onClick={onClose}>
