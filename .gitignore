@@ -20,6 +20,7 @@ frontend/public/basemaps-assets/
 .tools/
 .claude/
 soak-out/
+assistant-eval-results/
 *.db
 *.sqlite
 *.sqlite3

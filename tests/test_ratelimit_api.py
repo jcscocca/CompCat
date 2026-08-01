@@ -249,7 +249,10 @@ def test_assistant_per_ip_rejection_does_not_burn_global_budget(tmp_path, monkey
     assert get_rate_limiter().try_count_global(limit=1) is True
 
 
-def test_assistant_per_ip_default_is_thirty() -> None:
+def test_assistant_hourly_defaults_allow_deeper_testing_without_removing_backstops() -> None:
     from app.config import Settings
 
-    assert Settings(_env_file=None).rate_limit_assistant_per_ip_per_hour == 30
+    settings = Settings(_env_file=None)
+    assert settings.rate_limit_assistant_per_hour == 60
+    assert settings.rate_limit_assistant_per_ip_per_hour == 90
+    assert settings.rate_limit_assistant_global_per_day == 100

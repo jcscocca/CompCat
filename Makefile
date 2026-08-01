@@ -1,4 +1,4 @@
-.PHONY: install test lint run dev migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe
+.PHONY: install test lint run dev migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe assistant-eval
 
 install:
 	python3.11 -m venv .venv
@@ -80,3 +80,7 @@ soak-load:
 
 soak-observe:
 	.venv/bin/python scripts/soak/pg_observer.py --interval $${INTERVAL:-15} --duration $${DURATION:-2h} --out $${OUT:-soak-out}
+
+# Full local-model behavioral corpus. Start and prewarm the personal app first.
+assistant-eval:
+	.venv/bin/python scripts/evaluate_assistant.py --target local

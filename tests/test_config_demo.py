@@ -12,7 +12,8 @@ def test_rate_limit_defaults_off() -> None:
     assert s.rate_limit_enabled is False
     assert s.trust_proxy_headers is False
     assert s.rate_limit_sessions_per_hour == 10
-    assert s.rate_limit_assistant_per_hour == 20
+    assert s.rate_limit_assistant_per_hour == 60
+    assert s.rate_limit_assistant_per_ip_per_hour == 90
     assert s.rate_limit_assistant_global_per_day == 100
     assert s.rate_limit_burst_per_minute == 120
 
