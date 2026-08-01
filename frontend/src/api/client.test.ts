@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPlace, deletePlace, friendlyMessageOr, friendlyRequestError, getDashboardFreshness, getDashboardSummary, getTrends, isFriendlyRequestError, isRateLimited, isSessionExpired, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
+import { createPlace, deleteAllPlaces, deletePlace, friendlyMessageOr, friendlyRequestError, getDashboardFreshness, getDashboardSummary, getTrends, isFriendlyRequestError, isRateLimited, isSessionExpired, streamAssistantChat, streamAssistantCommand, uploadPersonalData, GENERIC_ERROR_MESSAGE, RATE_LIMITED_MESSAGE, SERVER_ERROR_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./client";
 import type { AssistantDashboardState } from "../types";
 
 afterEach(() => {
@@ -55,9 +55,14 @@ describe("api client", () => {
   });
 
   it("returns undefined for delete responses without content", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
 
     await expect(deletePlace("place-1")).resolves.toBeUndefined();
+    await expect(deleteAllPlaces()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/places",
+      expect.objectContaining({ credentials: "include", method: "DELETE" }),
+    );
   });
 
   it("maps 401 to the session-expired line and never leaks the body", async () => {

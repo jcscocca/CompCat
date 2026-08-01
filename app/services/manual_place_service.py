@@ -115,6 +115,33 @@ def delete_manual_place(session: Session, user_id_hash: str, place_id: str) -> b
     return True
 
 
+def delete_all_manual_places(session: Session, user_id_hash: str) -> int:
+    """Delete every user-entered place in one transaction.
+
+    Source-derived clusters remain owned by the upload lifecycle; the public place editor
+    cannot mutate them individually and clear-all preserves that same boundary.
+    """
+    place_ids = list(
+        session.scalars(
+            select(PlaceCluster.id).where(
+                PlaceCluster.user_id_hash == user_id_hash,
+                PlaceCluster.cluster_method == MANUAL_CLUSTER_METHOD,
+                PlaceCluster.label_source == "manual",
+            )
+        )
+    )
+    if not place_ids:
+        return 0
+    session.execute(
+        delete(PlaceCrimeSummary).where(PlaceCrimeSummary.place_cluster_id.in_(place_ids))
+    )
+    deleted = session.execute(
+        delete(PlaceCluster).where(PlaceCluster.id.in_(place_ids))
+    ).rowcount
+    session.commit()
+    return deleted
+
+
 def create_bulk_manual_places(
     session: Session,
     user_id_hash: str,

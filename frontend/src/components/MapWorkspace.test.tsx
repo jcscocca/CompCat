@@ -51,6 +51,7 @@ vi.mock("../api/client", async (importOriginal) => ({
   createBulkPlaces: vi.fn(),
   createPlace: vi.fn(),
   createSession: vi.fn(),
+  deleteAllPlaces: vi.fn(),
   deletePlace: vi.fn(),
   getBeatPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getIncidentDetails: vi.fn(),
@@ -75,7 +76,7 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deletePlace, getBeatPolygons, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
+import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deleteAllPlaces, deletePlace, getBeatPolygons, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
 import { getIncidentPoints, SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { assertValidPlaceCreate } from "../api/placeCreateContract";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
@@ -1206,6 +1207,35 @@ describe("MapWorkspace", () => {
       expect(screen.getByRole("checkbox", { name: "Home" })).toHaveAttribute("aria-checked", "false");
     });
     expect(screen.getByRole("checkbox", { name: "Work" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("clears every pin from the search shortcut after confirmation", async () => {
+    let serverPlaces = [home, work];
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockImplementation(async () => makeSummary(serverPlaces));
+    vi.mocked(deleteAllPlaces).mockImplementation(async () => {
+      serverPlaces = [];
+    });
+
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+    const shortcut = screen.getByRole("button", { name: "Clear all pins" });
+    expect(shortcut).toBeEnabled();
+    fireEvent.click(shortcut);
+
+    const dialog = screen.getByRole("dialog", { name: "Clear all pins?" });
+    expect(dialog).toHaveTextContent("This removes 2 saved places from this session.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Clear all pins" }));
+
+    await waitFor(() => {
+      expect(deleteAllPlaces).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("dialog", { name: "Clear all pins?" })).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      const last = canvasCaptures[canvasCaptures.length - 1]!;
+      expect(last.places).toEqual([]);
+      expect(shortcut).toBeDisabled();
+    });
   });
 
   it("synthesizes lettered pins for ad-hoc entries", async () => {
