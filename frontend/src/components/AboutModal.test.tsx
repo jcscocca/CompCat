@@ -73,7 +73,12 @@ describe("AboutModal", () => {
     );
     expect(screen.getByText(/quiet.*automatically deleted.*about 30 days/i)).toBeInTheDocument();
     expect(screen.getByText(/no account, name, email, or personal identity/i)).toBeInTheDocument();
-    expect(screen.getByText(/about 110 m/)).toBeInTheDocument();
+    expect(screen.getByText(/share links include the exact coordinates and location labels/i)).toHaveTextContent(
+      /anyone with the link can see those locations/i,
+    );
+    expect(screen.getByText(/share links include the exact coordinates and location labels/i)).toHaveTextContent(
+      /no session id or saved-place ids/i,
+    );
     expect(screen.getByText(/normalized address you typed and the returned coordinates/i)).toBeInTheDocument();
     expect(screen.getByText(/cache is shared across visitors.*about 30 days/i)).toBeInTheDocument();
     expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();

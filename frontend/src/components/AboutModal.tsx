@@ -161,7 +161,7 @@ export function AboutModal({
               Server-side data for a session that goes quiet is automatically deleted after
               the retention window, currently about 30 days.
             </li>
-            <li>Share links carry only coordinates rounded to about 110 m plus the analysis filters — no session id, no saved-place ids.</li>
+            <li>Share links include the exact coordinates and location labels used for the analysis, plus its filters. Anyone with the link can see those locations; the link contains no session id or saved-place ids.</li>
             <li>
               Address lookup uses a server-side cache. It stores the normalized address you
               typed and the returned coordinates. The cache is shared across visitors and

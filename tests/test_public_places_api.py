@@ -22,8 +22,8 @@ def test_create_update_list_and_delete_public_place(tmp_path):
         "/places",
         json={
             "display_label": "Downtown transfer stop",
-            "latitude": 47.609,
-            "longitude": -122.333,
+            "latitude": 47.6094567,
+            "longitude": -122.3337654,
             "visit_count": 12,
             "total_dwell_minutes": 360,
             "median_dwell_minutes": 30,
@@ -36,8 +36,8 @@ def test_create_update_list_and_delete_public_place(tmp_path):
     assert create_response.status_code == 201
     place_id = create_response.json()["id"]
     assert create_response.json()["display_label"] == "Downtown transfer stop"
-    assert create_response.json()["latitude"] == 47.609
-    assert create_response.json()["longitude"] == -122.333
+    assert create_response.json()["latitude"] == 47.6094567
+    assert create_response.json()["longitude"] == -122.3337654
 
     update_response = client.patch(
         f"/places/{place_id}",
@@ -52,6 +52,12 @@ def test_create_update_list_and_delete_public_place(tmp_path):
     assert list_response.status_code == 200
     assert list_response.json()["count"] == 1
     assert list_response.json()["places"][0]["id"] == place_id
+    assert list_response.json()["places"][0]["latitude"] == 47.6094567
+    assert list_response.json()["places"][0]["longitude"] == -122.3337654
+
+    dashboard_place = client.get("/dashboard/summary").json()["places"][0]
+    assert dashboard_place["latitude"] == 47.6094567
+    assert dashboard_place["longitude"] == -122.3337654
 
     delete_response = client.delete(f"/places/{place_id}")
     assert delete_response.status_code == 204

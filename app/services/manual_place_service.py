@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import PlaceCluster, PlaceCrimeSummary
-from app.normalization.geo import is_valid_coordinate, snap_to_grid
+from app.normalization.geo import is_valid_coordinate
 from app.places.schemas import (
     BulkPlaceCreateResponse,
     ManualPlaceCreate,
@@ -36,7 +36,6 @@ def create_manual_place(
 
 
 def _place_model(user_id_hash: str, payload: ManualPlaceCreate) -> PlaceCluster:
-    display_latitude, display_longitude = snap_to_grid(payload.latitude, payload.longitude)
     return PlaceCluster(
         id=new_id(),
         user_id_hash=user_id_hash,
@@ -44,8 +43,8 @@ def _place_model(user_id_hash: str, payload: ManualPlaceCreate) -> PlaceCluster:
         cluster_method=MANUAL_CLUSTER_METHOD,
         centroid_latitude=payload.latitude,
         centroid_longitude=payload.longitude,
-        display_latitude=display_latitude,
-        display_longitude=display_longitude,
+        display_latitude=payload.latitude,
+        display_longitude=payload.longitude,
         cluster_radius_m=100,
         visit_count=payload.visit_count,
         total_dwell_minutes=payload.total_dwell_minutes,
@@ -77,10 +76,8 @@ def update_manual_place(
     if "longitude" in values and values["longitude"] is not None:
         place.centroid_longitude = values["longitude"]
     if "latitude" in values or "longitude" in values:
-        place.display_latitude, place.display_longitude = snap_to_grid(
-            place.centroid_latitude,
-            place.centroid_longitude,
-        )
+        place.display_latitude = place.centroid_latitude
+        place.display_longitude = place.centroid_longitude
     if "visit_count" in values and values["visit_count"] is not None:
         place.visit_count = values["visit_count"]
     if "total_dwell_minutes" in values:

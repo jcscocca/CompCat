@@ -83,7 +83,10 @@ def _row_for_cluster(
     latitude = cluster.display_latitude
     longitude = cluster.display_longitude
     if latitude is None or longitude is None:
-        latitude, longitude = snap_to_grid(cluster.centroid_latitude, cluster.centroid_longitude)
+        latitude, longitude = cluster.centroid_latitude, cluster.centroid_longitude
+    # Analysis and share links retain manually entered coordinates exactly. Exports have a
+    # separate privacy contract and always generalize every included location to the grid.
+    latitude, longitude = snap_to_grid(latitude, longitude)
     return {
         "user_id_hash": cluster.user_id_hash,
         "place_cluster_id": cluster.id,

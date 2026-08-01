@@ -18,7 +18,7 @@ describe("PlaceForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /add place/i }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      display_label: "Pin at 47.621, -122.321",
+      display_label: "Pin at 47.621000, -122.321000",
       latitude: 47.621,
       longitude: -122.321,
       visit_count: 1,

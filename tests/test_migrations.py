@@ -264,6 +264,64 @@ def test_session_activity_migration_is_reversible(tmp_path, monkeypatch):
         engine.dispose()
 
 
+def test_exact_manual_coordinate_migration_backfills_only_manual_places(tmp_path, monkeypatch):
+    db_path = tmp_path / "exact-manual-coordinates.sqlite3"
+    database_url = f"sqlite+pysqlite:///{db_path}"
+    monkeypatch.setenv("MCA_DATABASE_URL", database_url)
+    cfg = Config("alembic.ini")
+
+    command.upgrade(cfg, "0016_analysis_run_places")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        for place_id, method in (("manual", "manual_public_dashboard"), ("imported", "dbscan")):
+            connection.execute(
+                text(
+                    "INSERT INTO place_clusters ("
+                    "id, user_id_hash, cluster_version, cluster_method, centroid_latitude, "
+                    "centroid_longitude, display_latitude, display_longitude, visit_count, "
+                    "inferred_place_type, sensitivity_class, created_at, updated_at"
+                    ") VALUES ("
+                    ":id, 'user', 'v1', :method, 47.6094567, -122.3337654, 47.609, "
+                    "-122.334, 1, 'manual_place', 'normal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP"
+                    ")"
+                ),
+                {"id": place_id, "method": method},
+            )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            rows = {
+                row.id: (row.display_latitude, row.display_longitude)
+                for row in connection.execute(
+                    text(
+                        "SELECT id, display_latitude, display_longitude "
+                        "FROM place_clusters ORDER BY id"
+                    )
+                )
+            }
+        assert rows["manual"] == (47.6094567, -122.3337654)
+        assert rows["imported"] == (47.609, -122.334)
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, "0016_analysis_run_places")
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            manual = connection.execute(
+                text(
+                    "SELECT display_latitude, display_longitude FROM place_clusters "
+                    "WHERE id = 'manual'"
+                )
+            ).one()
+        assert tuple(manual) == (47.609, -122.334)
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.skipif(
     not _PG_URL.startswith("postgresql"),
     reason="Route-comparison cleanup FK guard runs only on Postgres (SQLite doesn't enforce FKs).",

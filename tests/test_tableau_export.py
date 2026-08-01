@@ -10,7 +10,7 @@ from app.schemas import PlaceClusterData, PlaceCrimeSummaryData
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_tableau_export_excludes_sensitive_clusters_by_default_and_uses_display_coordinates():
+def test_tableau_export_excludes_sensitive_clusters_and_generalizes_exact_display_coordinates():
     normal = PlaceClusterData(
         id="normal-cluster",
         user_id_hash="user-hash",
@@ -18,8 +18,8 @@ def test_tableau_export_excludes_sensitive_clusters_by_default_and_uses_display_
         cluster_method="pure_python_radius",
         centroid_latitude=47.609512,
         centroid_longitude=-122.333123,
-        display_latitude=47.61,
-        display_longitude=-122.333,
+        display_latitude=47.609512,
+        display_longitude=-122.333123,
         cluster_radius_m=30,
         visit_count=3,
         total_dwell_minutes=90,

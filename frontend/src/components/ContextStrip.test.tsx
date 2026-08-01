@@ -122,16 +122,16 @@ describe("ContextStrip", () => {
     expect(await screen.findByText("Couldn't copy — try again.")).toBeInTheDocument();
   });
 
-  it("explains that share links recompute once a link is copied", async () => {
+  it("discloses exact locations and recomputation once a link is copied", async () => {
     const onCopyLink = vi.fn().mockResolvedValue(true);
     render(<ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onCopyLink={onCopyLink} />);
     fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    expect(screen.queryByText(/Links recompute from fresh data/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/includes the exact locations, labels, and filters/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
-    expect(
-      await screen.findByText("Link copied. Links recompute from fresh data — bookmark one to keep a view."),
-    ).toBeInTheDocument();
+    const hint = await screen.findByText(/includes the exact locations, labels, and filters/i);
+    expect(hint).toHaveTextContent(/anyone with the link can see them/i);
+    expect(hint).toHaveTextContent(/Results recompute from fresh data/i);
   });
 
   it("keeps the ephemerality hint off the failure path", async () => {
@@ -140,7 +140,7 @@ describe("ContextStrip", () => {
     fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
     expect(await screen.findByText("Couldn't copy — try again.")).toBeInTheDocument();
-    expect(screen.queryByText(/Links recompute from fresh data/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/includes the exact locations, labels, and filters/i)).not.toBeInTheDocument();
   });
 
   it("copy status region is polite live and empty at rest", () => {
