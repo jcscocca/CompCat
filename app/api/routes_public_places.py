@@ -17,11 +17,21 @@ from app.places.schemas import (
 from app.services.manual_place_service import (
     create_bulk_manual_places,
     create_manual_place,
+    delete_all_manual_places,
     delete_manual_place,
     update_manual_place,
 )
 
 router = APIRouter()
+
+
+@router.delete("/places", status_code=status.HTTP_204_NO_CONTENT)
+def delete_places(
+    user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    delete_all_manual_places(session, user_id_hash)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/places", response_model=ManualPlaceResponse, status_code=status.HTTP_201_CREATED)

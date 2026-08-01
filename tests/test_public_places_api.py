@@ -85,6 +85,29 @@ def test_public_places_are_scoped_to_session(tmp_path):
     assert second.get("/places").json()["count"] == 0
 
 
+def test_clear_all_public_places_is_scoped_to_session(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    first = TestClient(app)
+    second = TestClient(app)
+    first.post("/sessions")
+    second.post("/sessions")
+    payload = {
+        "display_label": "Library",
+        "latitude": 47.621,
+        "longitude": -122.321,
+        "visit_count": 4,
+    }
+    first.post("/places", json=payload)
+    first.post("/places", json={**payload, "display_label": "Station"})
+    second.post("/places", json={**payload, "display_label": "Other session"})
+
+    response = first.delete("/places")
+
+    assert response.status_code == 204
+    assert first.get("/places").json()["count"] == 0
+    assert second.get("/places").json()["count"] == 1
+
+
 def test_public_place_write_requires_session_cookie(tmp_path):
     app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     client = TestClient(app)
@@ -138,9 +161,11 @@ def test_public_place_write_does_not_mutate_non_manual_cluster(tmp_path):
         json={"display_label": "Mutated by public write", "visit_count": 99},
     )
     delete_response = client.delete(f"/places/{cluster_id}")
+    clear_response = client.delete("/places")
 
     assert patch_response.status_code == 404
     assert delete_response.status_code == 404
+    assert clear_response.status_code == 204
     with session_factory() as session:
         cluster = session.get(PlaceCluster, cluster_id)
         assert cluster is not None
