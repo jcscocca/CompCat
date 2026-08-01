@@ -58,9 +58,10 @@ describe("PlaceChipStrip", () => {
     expect(handlers.onRemove).toHaveBeenCalledWith(1);
   });
 
-  it("has a trailing Add chip that opens the manager", () => {
+  it("has a trailing Manage places chip that opens the manager", () => {
     const handlers = setup();
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    expect(screen.getByRole("button", { name: "Manage places" })).toHaveTextContent("Manage places");
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     expect(handlers.onAdd).toHaveBeenCalled();
   });
 });

@@ -31,6 +31,7 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
             role="checkbox"
             aria-checked={selected}
             aria-label={place.display_label}
+            title={`${selected ? "Remove" : "Add"} ${place.display_label} ${selected ? "from" : "to"} this analysis`}
             className={`mc-chip${selected ? " on" : ""}`}
             onClick={() => onToggle(place.id)}
             onMouseEnter={() => onHoverPlace(place.id)}
@@ -79,6 +80,7 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
               type="button"
               className="mc-scope-location-remove"
               aria-label={`Remove ${entry.label} from analysis`}
+              title={`Remove ${entry.label} from analysis`}
               onClick={() => onRemove(index)}
             >
               ×
@@ -86,9 +88,9 @@ export function PlaceChipStrip({ places, entries, identityByPlaceId, savingKey =
           </span>
         );
       })}
-      <button type="button" className="mc-chip mc-chip-add" aria-label="Add or manage places" onClick={onAdd}>
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-        Add place
+      <button type="button" className="mc-chip mc-chip-add" aria-label="Manage places" title="Add, rename, or remove places" onClick={onAdd}>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></svg>
+        Manage places
       </button>
     </div>
   );
