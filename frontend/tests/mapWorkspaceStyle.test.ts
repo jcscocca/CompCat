@@ -12,6 +12,11 @@ describe("map workspace styles", () => {
     expect(css).toMatch(/\.mc-incident-count\{[^}]*color:var\(--text\);/);
     expect(css).toMatch(/\.mc-breakdown-head h4\{[^}]*color:var\(--text-strong\);/);
   });
+
+  it("aligns every ranked comparison bar to shared columns", () => {
+    expect(css).toMatch(/\.mc-ranked\{[^}]*grid-template-columns:22px minmax\(0,1\.6fr\) minmax\(0,2fr\) auto auto;/);
+    expect(css).toMatch(/\.mc-ranked-row\{[^}]*grid-template-columns:subgrid;[^}]*grid-column:1 \/ -1;/);
+  });
 });
 
 // --- contrast ---------------------------------------------------------------

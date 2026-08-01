@@ -792,8 +792,9 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-cat-fill{display:block;height:100%;border-radius:2px;}
 .mc-cat-fill.place{background:var(--slate);}
 .mc-cat-fill.beat{background:var(--border);}
-.mc-ranked{display:grid;gap:2px;margin:0 0 14px;}
-.mc-ranked-row{display:grid;grid-template-columns:22px minmax(0,1.6fr) minmax(0,2fr) auto auto;align-items:center;gap:11px;padding:8px 2px;border-bottom:1px solid var(--border);}
+/* Shared tracks keep each bar on one scale; the first row template is the non-subgrid fallback. */
+.mc-ranked{display:grid;grid-template-columns:22px minmax(0,1.6fr) minmax(0,2fr) auto auto;column-gap:11px;row-gap:2px;margin:0 0 14px;}
+.mc-ranked-row{display:grid;grid-template-columns:22px minmax(0,1.6fr) minmax(0,2fr) auto auto;grid-template-columns:subgrid;grid-column:1 / -1;align-items:center;column-gap:11px;row-gap:0;padding:8px 2px;border-bottom:1px solid var(--border);}
 .mc-ranked-row .mc-ranked-detail{grid-column:1 / -1;margin-top:2px;}
 .mc-rank{width:22px;height:22px;border-radius:50%;border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:11px;color:var(--text);}
 .mc-ranked-row.is-lowest .mc-rank{border-color:var(--accent);color:var(--accent);}
