@@ -41,10 +41,11 @@ export const BEATS_SOURCE = "mc-beats";
 export const INCIDENTS_SOURCE = "mc-incidents";
 export const INCIDENT_SELECTED_LAYER = "mc-incident-selected";
 export const EMPTY_FC: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
-export const CLUSTER_MAX_ZOOM = 12; // clusters through z12, precise block markers at z13+
+export const CLUSTER_MAX_ZOOM = 15; // clusters through z15, precise block markers at z16+
+export const PRECISE_LOCATION_MIN_ZOOM = CLUSTER_MAX_ZOOM + 1;
 export const CLUSTER_LABEL_MIN_ZOOM = 12;
 export const CLUSTER_LABEL_MIN_COUNT = 25;
-export const STACK_LABEL_MIN_ZOOM = 16;
+export const STACK_LABEL_MIN_ZOOM = PRECISE_LOCATION_MIN_ZOOM;
 export const STACK_LABEL_MIN_COUNT = 10;
 
 export function incidentSelectionFilter(id: string | null): maplibregl.FilterSpecification {
@@ -152,6 +153,7 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
     id: "mc-incident-dot",
     type: "circle",
     source: INCIDENTS_SOURCE,
+    minzoom: PRECISE_LOCATION_MIN_ZOOM,
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": "#3A3F46",
@@ -167,6 +169,7 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
     id: INCIDENT_SELECTED_LAYER,
     type: "circle",
     source: INCIDENTS_SOURCE,
+    minzoom: PRECISE_LOCATION_MIN_ZOOM,
     filter: incidentSelectionFilter(null),
     paint: {
       "circle-color": "#3A3F46",
@@ -206,6 +209,7 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
     id: "mc-incident-hit",
     type: "circle",
     source: INCIDENTS_SOURCE,
+    minzoom: PRECISE_LOCATION_MIN_ZOOM,
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": "#3A3F46",
