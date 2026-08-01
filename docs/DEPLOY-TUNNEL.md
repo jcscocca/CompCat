@@ -305,6 +305,12 @@ The script:
 
 It is idempotent: `git pull` then re-running it is the normal way to deploy a new commit.
 
+`git pull` does not overwrite the gitignored `.env.tunnel`. When adopting the deeper-testing
+hourly limits, update the existing file once to
+`MCA_RATE_LIMIT_ASSISTANT_PER_HOUR=60` and
+`MCA_RATE_LIMIT_ASSISTANT_PER_IP_PER_HOUR=90`; keep the 500/day global ceiling and 2,000,000/day
+token budget unchanged. Subsequent starts retain those explicit values.
+
 **The tunnel.** `cloudflared` connects within a few seconds and logs four connections (one per
 Cloudflare edge colo):
 
@@ -438,8 +444,8 @@ Every item has an observable pass condition. Work through it before advertising 
      Cloudflare, which is the one heavy asset — see §8);
    - Tabby answers a free-text question, and shows the offline panel when you temporarily remove
      the LLM keys and restart;
-   - a 21st Analyst call within one hour is declined with the request-limit message (the caps in
-     `.env.tunnel` are 20/hour/session, 30/hour/IP, 500/day global).
+   - a 61st Analyst call in one session within one hour is declined with the request-limit
+     message (the caps in `.env.tunnel` are 60/hour/session, 90/hour/IP, 500/day global).
 
 6. **Rate limiting keys on real client IPs.** Cloudflare sets `CF-Connecting-IP` and the limiter
    reads it first; nothing can bypass the tunnel to forge it. Check from **two networks** (e.g.

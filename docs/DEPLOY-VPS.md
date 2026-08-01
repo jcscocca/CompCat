@@ -270,6 +270,12 @@ The script:
 
 It is idempotent: re-running it is the normal way to deploy a new commit.
 
+`git pull` does not overwrite the gitignored `.env.prod`. When adopting the deeper-testing
+hourly limits, update the existing file once to
+`MCA_RATE_LIMIT_ASSISTANT_PER_HOUR=60` and
+`MCA_RATE_LIMIT_ASSISTANT_PER_IP_PER_HOUR=90`; keep the 500/day global ceiling and 2,000,000/day
+token budget unchanged. Subsequent starts retain those explicit values.
+
 **Certificates.** Caddy requests the Let's Encrypt certificate on first start; the first
 `https://compcat.app/` typically works within ~30 seconds. If it does not:
 
@@ -438,8 +444,8 @@ Every item has an observable pass condition. Work through it before advertising 
    - export → the CSV downloads and opens;
    - Tabby answers a free-text question, and shows the offline panel when you temporarily remove
      the LLM keys and restart;
-   - a 21st Analyst call within one hour is declined with the request-limit message (the caps in
-     `.env.prod` are 20/hour/session, 100/day global).
+   - a 61st Analyst call in one session within one hour is declined with the request-limit
+     message (the caps in `.env.prod` are 60/hour/session, 90/hour/IP, 500/day global).
 
 5. **Rate limiting keys on real client IPs.** Caddy replaces any client-sent `X-Forwarded-For`
    and the Caddyfile strips `CF-Connecting-IP`, so the limiter's leftmost-XFF read is the true

@@ -12,6 +12,7 @@ update its doc in the same PR.
 | [Data model](architecture/data-model.md) | The 11 SQLAlchemy entities, the upload→stop→cluster lifecycle, coordinate generalization, and the Alembic migration approach. |
 | [API contract](architecture/api.md) | Auth model (session cookie, demo identity, admin token), the three-tier endpoint reference, the internal-surface invariant, and upload/SSE transport notes. |
 | [Assistant / agent design](architecture/assistant.md) | The CompCat Analyst: the single-LLM-call decision-tree turn, the tool toolbox + frontend bridge, deterministic summaries, and the safety-refusal guard. |
+| [Assistant evaluation](assistant-evaluation.md) | Repeatable local-first behavioral corpus, Groq acceptance subset, report format, and baseline comparisons. |
 | [WCAG 2.2 accessibility](accessibility.md) | The React dashboard's Level AA accessibility contract, implementation coverage, and repeatable conformance evidence. |
 | [Run modes](RUN-MODES.md) | Which personal, public-ThinkPad, VPS, or Mac launcher to use; their databases, ports, update behavior, and stop commands. |
 | [Roadmap](ROADMAP.md) | Where CompCat is going: a subsystem maturity snapshot and phased work, refreshed against current `main`. |

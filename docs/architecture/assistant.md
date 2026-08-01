@@ -1,6 +1,6 @@
 Reference for the CompCat Analyst — the optional chat assistant that is grounded in the user's current dashboard data and answers questions about reported SPD incident context.
 
-> Updated 2026-07-30 for the direct report action and assistant hardening.
+> Updated 2026-07-31 for the local-first behavioral evaluation harness.
 
 ## Persona — "Tabby, case desk"
 
@@ -194,6 +194,16 @@ default `true`) is the deploy-side off switch. Set to `false`, the turn restores
 pre-streaming behavior: no `status` events, the deterministic template/draft streams as a single
 `token` event, and no narration call is made — useful if local-model narration misbehaves in a
 given deployment.
+
+### Live behavioral regression corpus
+
+`scripts/evaluate_assistant.py` drives this complete SSE path against a running CompCat app. The
+versioned `evals/assistant/v1.json` corpus asserts properties rather than exact prose: terminal
+`done`, no error, non-empty output, expected tool selection and argument subsets, required
+concepts, and prohibited policy claims. The runner labels the target `local` or `groq`, records
+latency and event/tool traces in a gitignored JSON report, and can compare pass states and timing
+with a prior report. `groq` has no implicit URL so a hosted-quota run must be explicit. See
+[`docs/assistant-evaluation.md`](../assistant-evaluation.md) for the operating workflow.
 
 ---
 
