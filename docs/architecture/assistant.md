@@ -1,6 +1,6 @@
 Reference for the CompCat Analyst — the optional chat assistant that is grounded in the user's current dashboard data and answers questions about reported SPD incident context.
 
-> Updated 2026-07-31 for the local-first behavioral evaluation harness.
+> Updated 2026-08-01 for the Tabby rail visual refresh.
 
 ## Persona — "Tabby, case desk"
 
@@ -13,6 +13,10 @@ records cat"), and a layer-aware lead-in on `analyze_places`/`compare_places` su
 ("From the reports: ", "From the arrest records: ", or "From the call logs: " — see §5). Data
 content, the guards, and the planning prompt carry no persona. Tabby wears no SPD insignia and
 never claims official status; "analyst" remains the product term (and the dock's aria-label).
+The rail gives that chrome a consistent identity treatment: a presence-mark header, a
+full-illustration welcome card for empty threads, and a Tabby-specific composer prompt. Those
+elements remain decorative or explicitly labeled so the accessible heading and controls do not
+depend on the mascot art.
 
 Tabby remains the workspace rail, but a user is not required to chat with it. Once a place is
 selected, a persistent **Show me the data** action in the same rail calls the public dashboard

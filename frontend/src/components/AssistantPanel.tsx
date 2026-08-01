@@ -162,12 +162,20 @@ export function AssistantPanel({
   return (
     <div className={`mc-dock mc-rail${resultFocused ? " is-result-focused" : ""}`}>
       <div className="mc-dock-head">
-        <h2>
-          <TabbyAvatar variant="mark" size={20} className={greeted ? undefined : "mc-tabby-pulse"} />
-          Tabby
-          <span className="mc-dock-role">case desk · analyst</span>
-        </h2>
-        <span className="mc-dock-status">{busy ? "Checking the files…" : "At the desk"}</span>
+        <div className="mc-tabby-identity">
+          <span className={`mc-tabby-mark${greeted ? "" : " mc-tabby-pulse"}${offline ? " is-offline" : ""}`}>
+            <TabbyAvatar variant="mark" size={30} />
+            <span className="mc-tabby-presence" aria-hidden="true" />
+          </span>
+          <span className="mc-tabby-title">
+            <h2>Tabby</h2>
+            <span className="mc-dock-role">CompCat analyst</span>
+          </span>
+        </div>
+        <span className={`mc-dock-status${offline ? " is-offline" : busy ? " is-busy" : ""}`}>
+          <span aria-hidden="true" />
+          {offline ? "Offline" : busy ? "On the case" : "At the desk"}
+        </span>
         {paneActions}
       </div>
 
@@ -243,12 +251,20 @@ export function AssistantPanel({
         ) : null}
         {conversationEmpty && !draft ? (
           <div className="mc-dock-empty">
-            <TabbyAvatar variant="bust" size={72} />
-            <p>
-              {hasPlaces
-                ? "Tabby, case desk. Point me at a place and I'll pull the reports near it."
-                : "Tabby, case desk. Point me at a place — search an address, drop a pin, or add one by hand — and I'll pull the reports near it."}
-            </p>
+            <div className="mc-tabby-welcome">
+              <div className="mc-tabby-portrait">
+                <TabbyAvatar variant="bust" size={106} />
+              </div>
+              <div className="mc-tabby-intro">
+                <span className="mc-tabby-kicker">Your case desk</span>
+                <h3>{hasPlaces ? "What should we look into?" : "Let’s start with a place"}</h3>
+                <p>
+                  {hasPlaces
+                    ? "Point me at a place and I’ll pull the reports near it."
+                    : "Point me at a place — search an address, drop a pin, or add one by hand. I’ll pull the reports near it."}
+                </p>
+              </div>
+            </div>
             <div className="mc-dock-chips">
               {(hasPlaces ? SUGGESTED_ACTIONS : ONBOARDING_ACTIONS).map((suggestion) => {
                 if (suggestion.action) {
@@ -327,6 +343,7 @@ export function AssistantPanel({
             value={input}
             rows={2}
             disabled={offline}
+            placeholder={offline ? "Tabby is offline" : "Ask Tabby about a place or result…"}
             onChange={(event) => setInput(event.target.value)}
           />
           <button type="submit" disabled={busy || offline || !input.trim()}>

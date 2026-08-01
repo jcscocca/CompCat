@@ -125,6 +125,7 @@ describe("AssistantPanel", () => {
 
   it("offline disables the composer and prompt chip but keeps command chips live", () => {
     const { onRunCommand } = setup({ offline: true });
+    expect(screen.getByText("Offline").closest(".mc-dock-status")).toHaveClass("is-offline");
     expect(screen.getByLabelText("Analyst message")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "What's on file around here?" })).toBeDisabled();
@@ -290,9 +291,10 @@ describe("AssistantPanel", () => {
   describe("onboarding empty state (hasPlaces=false)", () => {
     it("renders the fresh-session greeting and action chips, routing clicks to onAction", () => {
       const { onAction } = setup({ hasPlaces: false });
+      expect(screen.getByRole("heading", { name: "Let’s start with a place" })).toBeInTheDocument();
       expect(
         screen.getByText(
-          "Tabby, case desk. Point me at a place — search an address, drop a pin, or add one by hand — and I'll pull the reports near it.",
+          "Point me at a place — search an address, drop a pin, or add one by hand. I’ll pull the reports near it.",
         ),
       ).toBeInTheDocument();
 
@@ -326,10 +328,21 @@ describe("AssistantPanel", () => {
 
   it("keeps the has-places greeting and SUGGESTED_ACTIONS chips when hasPlaces is true", () => {
     setup({ hasPlaces: true });
-    expect(screen.getByText("Tabby, case desk. Point me at a place and I'll pull the reports near it.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What should we look into?" })).toBeInTheDocument();
+    expect(screen.getByText("Point me at a place and I’ll pull the reports near it.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "What's near this pin?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Compare my places" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "What's on file around here?" })).toBeInTheDocument();
+  });
+
+  it("gives the composer a Tabby-specific prompt", () => {
+    const { rerender } = setup();
+    expect(screen.getByLabelText("Analyst message")).toHaveAttribute(
+      "placeholder",
+      "Ask Tabby about a place or result…",
+    );
+    rerender({ offline: true });
+    expect(screen.getByLabelText("Analyst message")).toHaveAttribute("placeholder", "Tabby is offline");
   });
 
   it("shows Retry on a notice followed only by receipts and calls onRetry", () => {
