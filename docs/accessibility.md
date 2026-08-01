@@ -44,6 +44,9 @@ contract.
 
 - Search results, map controls, pins, sheet controls, tabs, disclosures, filters, forms, and
   analysis actions are keyboard operable. Chart tables replace pointer-only value readouts.
+- Each visible analysis-filter value is a named disclosure button. Every non-modal anchored
+  picker closes on outside pointer input or Escape, and option pickers close immediately on
+  selection; Escape and option selection restore focus to the originating filter.
 - Modal dialogs move focus inside on open, contain both forward and reverse Tab navigation,
   close with Escape, and restore focus to their trigger.
 - Mobile sheet dragging has a keyboard/tap toggle. Desktop drawer resizing has arrow, Home,

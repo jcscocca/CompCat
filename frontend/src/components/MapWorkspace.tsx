@@ -1117,8 +1117,10 @@ export function MapWorkspace() {
                   onChange={handleAnalysisChange}
                   onRun={handleDirectReportRun}
                   runDisabled={list.entries.length === 0 || !activeLayerAvailable}
+                  layerAvailability={layerAvailability}
                   locationControls={locationControls}
                   onCopyLink={handleCopyLink}
+                  copyDisabled={list.entries.length === 0}
                 />
               }
             />

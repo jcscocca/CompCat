@@ -64,8 +64,10 @@ Analyze/Compare tabs.
   click **+ Add** to open the manage-places dialog, where you can search, drop a pin, enter
   coordinates, paste a CSV, rename/remove places, and control export inclusion.
 - **Context strip** — the active dates, radius, offense category, and data layer stay visible
-  above Tabby's composer. Open it for exact controls, run the current selection, or copy a
-  share link containing the exact locations and filters for the current analysis.
+  above Tabby's composer. Each value is directly selectable and opens a compact anchored
+  picker; no separate edit mode is required. The strip also keeps the run and copy-link
+  actions visible, including a share link containing the exact locations and filters for the
+  current analysis.
 - **Inline analysis cards** — one selected place compares its count with empirical
   equal-radius circles centered on eligible Seattle street segments; two or more also produce
   the separate place-to-place statistical comparison. Expanding a card reveals MCPP, sector,

@@ -18,160 +18,178 @@ afterEach(cleanup);
 
 function setup(overrides: Partial<AnalysisSettings> = {}) {
   const onChange = vi.fn();
+  const onRun = vi.fn();
   const result = render(
     <ContextStrip
       analysis={{ ...analysis, ...overrides }}
       availableRadii={[250, 500, 1000]}
       onChange={onChange}
+      onRun={onRun}
+      layerAvailability={{ reported: true, arrests: true, calls: false }}
       locationControls={<div data-testid="location-controls">Saved location controls</div>}
     />,
   );
-  return { ...result, onChange };
+  return { ...result, onChange, onRun };
 }
 
 describe("ContextStrip", () => {
-  // The toggle read "Edit" but was named "Analysis context filters: ..." — a speech-input
-  // user saying "click Edit" could not activate it (SC 2.5.3).
-  it("leads the accessible name with the button's visible text", () => {
-    render(<ContextStrip analysis={analysis} availableRadii={[250, 500]} onChange={vi.fn()} />);
-    const toggle = screen.getByRole("button", { name: /edit filters/i });
-    expect(toggle).toHaveTextContent("Edit");
-    expect(toggle.getAttribute("aria-label")).toMatch(/^Edit filters — /);
-    fireEvent.click(toggle);
-    const open = screen.getByRole("button", { name: /close filters/i });
-    expect(open).toHaveTextContent("Close");
-    expect(open.getAttribute("aria-label")).toMatch(/^Close filters — /);
-  });
-
-  it("summarizes the active context", () => {
+  it("keeps every active filter directly selectable without an Edit disclosure", () => {
     const { container } = setup({ offenseCategory: "PROPERTY", layer: "arrests" });
-    const toggle = screen.getByRole("button", { name: /edit filters/i });
-    expect(toggle).toHaveTextContent("Edit");
     const summary = container.querySelector(".mc-ctx-summary");
+
     expect(summary).toHaveTextContent("Analysis filters");
     expect(summary).toHaveTextContent("Saved location controls");
-    expect(summary).toHaveTextContent("2026-01-01 – 2026-07-19");
-    expect(summary).toHaveTextContent("250 m");
-    expect(summary).toHaveTextContent("Property");
-    expect(summary).toHaveTextContent("Arrests");
+    expect(screen.getByRole("button", { name: "Date range: 2026-01-01 – 2026-07-19" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Search radius: 250 m" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Arrest category: Property" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Data layer: Arrests" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /edit filters/i })).not.toBeInTheDocument();
   });
 
-  it("opens the editor on click and patches the radius", () => {
-    const { onChange, container } = setup();
-    const toggle = screen.getByRole("button", { name: /edit filters/i });
-    fireEvent.click(toggle);
-    expect(toggle).toHaveTextContent("Close");
-    expect(container.querySelector(".mc-ctx-summary-values")).not.toBeInTheDocument();
+  it("opens a compact radius popup, applies a choice immediately, and closes", () => {
+    const { onChange } = setup();
+    const trigger = screen.getByRole("button", { name: "Search radius: 250 m" });
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("dialog", { name: "Search radius" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "250 m" })).toHaveAttribute("aria-pressed", "true");
+
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(onChange).toHaveBeenCalledWith({ radiusM: 500 });
+    expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
   });
 
-  it("patches dates through the date inputs", () => {
+  it("opens only one filter popup at a time", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
+    expect(screen.getByRole("dialog", { name: "Date range" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
+    expect(screen.queryByRole("dialog", { name: "Date range" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Search radius" })).toBeInTheDocument();
+  });
+
+  it("patches dates through the anchored date popup", () => {
     const { onChange } = setup();
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-03-01" } });
     expect(onChange).toHaveBeenCalledWith({ startDate: "2026-03-01" });
+    expect(screen.getByRole("dialog", { name: "Date range" })).toBeInTheDocument();
   });
 
-  it("patches the offense category", () => {
-    const { onChange } = setup();
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Person" }));
-    expect(onChange).toHaveBeenCalledWith({ offenseCategory: "PERSON" });
-  });
-
-  it("closes the editor with the Done button", () => {
+  it("closes on Escape and restores focus to the active filter", () => {
     setup();
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    expect(screen.getByLabelText("Start date")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Search radius: 250 m" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
-  it("Run analysis is disabled when runDisabled and fires onRun when enabled", () => {
-    const onRun = vi.fn();
-    const { rerender } = render(
-      <ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onRun={onRun} runDisabled />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    const runButton = screen.getByRole("button", { name: "Run analysis" });
-    expect(runButton).toBeDisabled();
+  it("closes when the user points outside the filter card", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
+  });
 
-    rerender(
-      <ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onRun={onRun} runDisabled={false} />,
-    );
-    expect(screen.getByRole("button", { name: "Run analysis" })).toBeEnabled();
+  it("patches the offense category and restores focus to its trigger", () => {
+    const { onChange } = setup();
+    const trigger = screen.getByRole("button", { name: "Incident category: All reported" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Person" }));
+
+    expect(onChange).toHaveBeenCalledWith({ offenseCategory: "PERSON" });
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole("dialog", { name: "Incident category" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the all-categories reset label when a narrower category is active", () => {
+    setup({ offenseCategory: "PERSON" });
+    fireEvent.click(screen.getByRole("button", { name: "Incident category: Person" }));
+    expect(screen.getByRole("button", { name: "All reported" })).toBeInTheDocument();
+  });
+
+  it("switches data layers, clears the category, and disables unloaded layers", () => {
+    const { onChange } = setup({ offenseCategory: "PERSON" });
+    fireEvent.click(screen.getByRole("button", { name: "Data layer: Reported incidents" }));
+
+    expect(screen.getByRole("button", { name: "911 calls — No data loaded" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Arrests" }));
+    expect(onChange).toHaveBeenCalledWith({ layer: "arrests", offenseCategory: "" });
+  });
+
+  it("keeps Run analysis and Copy link immediately available", () => {
+    const { onRun } = setup();
+    expect(screen.queryByRole("button", { name: /edit filters/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
-    expect(onRun).toHaveBeenCalled();
+    expect(onRun).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
   });
 
-  it("copies the share link and flashes a transient Copied note", async () => {
+  it("disables Run analysis when requested", () => {
+    render(
+      <ContextStrip
+        analysis={analysis}
+        availableRadii={[250, 500, 1000]}
+        onChange={vi.fn()}
+        onRun={vi.fn()}
+        runDisabled
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
+  });
+
+  it("copies the share link and discloses exact locations and recomputation", async () => {
     const onCopyLink = vi.fn().mockResolvedValue(true);
     render(<ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onCopyLink={onCopyLink} />);
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
+
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
     expect(onCopyLink).toHaveBeenCalled();
     expect(await screen.findByText("Copied")).toBeInTheDocument();
-  });
-
-  it("shows a failure note when the copy handler reports failure", async () => {
-    const onCopyLink = vi.fn().mockResolvedValue(false);
-    render(<ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onCopyLink={onCopyLink} />);
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
-    expect(await screen.findByText("Couldn't copy — try again.")).toBeInTheDocument();
-  });
-
-  it("discloses exact locations and recomputation once a link is copied", async () => {
-    const onCopyLink = vi.fn().mockResolvedValue(true);
-    render(<ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onCopyLink={onCopyLink} />);
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    expect(screen.queryByText(/includes the exact locations, labels, and filters/i)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
-    const hint = await screen.findByText(/includes the exact locations, labels, and filters/i);
+    const hint = screen.getByText(/includes the exact locations, labels, and filters/i);
     expect(hint).toHaveTextContent(/anyone with the link can see them/i);
     expect(hint).toHaveTextContent(/Results recompute from fresh data/i);
   });
 
-  it("keeps the ephemerality hint off the failure path", async () => {
+  it("shows copy failure without the success disclosure", async () => {
     const onCopyLink = vi.fn().mockResolvedValue(false);
     render(<ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onCopyLink={onCopyLink} />);
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+
     expect(await screen.findByText("Couldn't copy — try again.")).toBeInTheDocument();
     expect(screen.queryByText(/includes the exact locations, labels, and filters/i)).not.toBeInTheDocument();
   });
 
-  it("copy status region is polite live and empty at rest", () => {
+  it("keeps the copy status region polite and empty at rest", () => {
     setup();
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
     const status = screen.getByTestId("copy-status");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveTextContent("");
   });
 
-  it("shows the arrests layer disclosure below the summary, editor closed or open", () => {
+  it("shows layer disclosures whether a popup is closed or open", () => {
     setup({ layer: "arrests" });
-    const note = screen.getByRole("note");
-    expect(note).toHaveTextContent(/enforcement activity, not reported incidents/);
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
+    expect(screen.getByRole("note")).toHaveTextContent(/enforcement activity, not reported incidents/);
+    fireEvent.click(screen.getByRole("button", { name: "Arrest category: All arrests" }));
     expect(screen.getByRole("note")).toHaveTextContent(/enforcement activity, not reported incidents/);
   });
 
-  it("shows the calls layer disclosure", () => {
+  it("hides the category filter for 911 calls and shows the calls disclosure", () => {
     setup({ layer: "calls" });
     expect(screen.getByRole("note")).toHaveTextContent(/requests for service, not confirmed incidents/);
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    expect(screen.queryByRole("group", { name: "Incident categories" })).not.toBeInTheDocument();
-    expect(screen.queryByText("All reported")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /category:/i })).not.toBeInTheDocument();
   });
 
   it("uses arrest-specific category copy", () => {
     setup({ layer: "arrests" });
-    fireEvent.click(screen.getByRole("button", { name: /edit filters/i }));
-    expect(screen.getByRole("group", { name: "Arrest categories" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All arrests" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Arrest category: All arrests" }));
+    expect(screen.getByRole("dialog", { name: "Arrest category" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All arrests" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("has no layer disclosure for the reported layer", () => {
