@@ -78,9 +78,12 @@ export function ManagePlacesModal({
     initialView === "upload" && !onUploaded ? "manage" : initialView,
   );
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const analyzedAtRadius = summary?.crime_summaries.some((entry) => entry.radius_m === radiusM) ?? false;
   const modalRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
+  const renameActionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const removeActionRefs = useRef(new Map<string, HTMLButtonElement>());
   // onClose is a fresh arrow each parent render; read it through a ref so the focus/trap effect
   // runs once on open (not on every render, which would steal focus back to the first control).
   const onCloseRef = useRef(onClose);
@@ -94,11 +97,32 @@ export function ManagePlacesModal({
 
   function activateView(next: ManageView, moveFocus = false) {
     setView(next);
+    setEditing(null);
+    setConfirmingRemoveId(null);
     if (moveFocus) {
       tabsRef.current
         ?.querySelector<HTMLButtonElement>(`[data-view="${next}"]`)
         ?.focus();
     }
+  }
+
+  async function commitRename(id: string) {
+    if (editing?.id !== id) return;
+    const label = editing.value.trim();
+    if (!label) return;
+    await onRename(id, label);
+    setEditing(null);
+    window.setTimeout(() => renameActionRefs.current.get(id)?.focus(), 0);
+  }
+
+  function cancelRename(id: string) {
+    setEditing(null);
+    window.setTimeout(() => renameActionRefs.current.get(id)?.focus(), 0);
+  }
+
+  function cancelRemove(id: string) {
+    setConfirmingRemoveId(null);
+    window.setTimeout(() => removeActionRefs.current.get(id)?.focus(), 0);
   }
 
   function onTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, current: ManageView) {
@@ -213,13 +237,16 @@ export function ManagePlacesModal({
             {places.length === 0 ? (
               <p className="mc-empty-list">No places yet. Choose <strong>Drop pin</strong> then click the map, or search for an address.</p>
             ) : (
-              <ul className="mc-list" aria-label="Saved places">
-                {places.map((place) => {
-                  const selected = selectedIds.has(place.id);
-                  const count = incidentCountForPlace(summary, place.id, radiusM);
-                  const low = count === null && analyzedAtRadius && selected;
-                  return (
-                    <li key={place.id} className={`mc-card${selected ? " on" : ""}`}>
+              <>
+                <p className="mc-manage-help">Choose saved places for analysis, rename them, or remove them from this session.</p>
+                <ul className="mc-list" aria-label="Saved places">
+                  {places.map((place) => {
+                    const selected = selectedIds.has(place.id);
+                    const count = incidentCountForPlace(summary, place.id, radiusM);
+                    const low = count === null && analyzedAtRadius && selected;
+                    const confirmingRemove = confirmingRemoveId === place.id;
+                    return (
+                      <li key={place.id} className={`mc-card mc-place-card${selected ? " on" : ""}`}>
                       <button
                         type="button"
                         className="chk"
@@ -247,13 +274,10 @@ export function ManagePlacesModal({
                                 if (e.key === "Escape") {
                                   // Cancel the rename only; don't let the dialog's Escape close the modal.
                                   e.stopPropagation();
-                                  setEditing(null);
+                                  cancelRename(place.id);
                                 }
                                 if (e.key === "Enter") {
-                                  const label = editing.value.trim();
-                                  if (!label) return;
-                                  await onRename(place.id, label);
-                                  setEditing(null);
+                                  await commitRename(place.id);
                                 }
                               }}
                             />
@@ -278,17 +302,76 @@ export function ManagePlacesModal({
                       <div className="right">
                         {count !== null ? <span className="cnt">{count} {summary?.layer === "calls" ? "calls" : summary?.layer === "arrests" ? "arr." : "inc."}</span> : null}
                         {low ? <span className="cnt low">Low data</span> : null}
-                        <button type="button" className="ico" aria-label={`Rename ${place.display_label}`} onClick={() => setEditing({ id: place.id, value: place.display_label })}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4L8 20l-5 1 1-5L17 3z" /></svg>
-                        </button>
-                        <button type="button" className="ico" aria-label={`Remove ${place.display_label}`} onClick={() => onDelete(place.id)}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
-                        </button>
+                      </div>
+                      <div className="mc-place-actions">
+                        {editing?.id === place.id ? (
+                          <>
+                            <span className="mc-place-action-note">Save the new name or cancel.</span>
+                            <button type="button" className="mc-place-action" onClick={() => cancelRename(place.id)}>Cancel</button>
+                            <button
+                              type="button"
+                              className="mc-place-action is-primary"
+                              disabled={!editing.value.trim()}
+                              onClick={() => void commitRename(place.id)}
+                            >
+                              Save name
+                            </button>
+                          </>
+                        ) : confirmingRemove ? (
+                          <div
+                            className="mc-remove-confirm"
+                            role="group"
+                            aria-label={`Confirm removal of ${place.display_label}`}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Escape") return;
+                              event.stopPropagation();
+                              cancelRemove(place.id);
+                            }}
+                          >
+                            <span className="mc-place-action-note">Remove <strong>{place.display_label}</strong> from this session?</span>
+                            <button type="button" className="mc-place-action" autoFocus onClick={() => cancelRemove(place.id)}>Cancel</button>
+                            <button
+                              type="button"
+                              className="mc-place-action is-danger"
+                              onClick={() => {
+                                setConfirmingRemoveId(null);
+                                tabsRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
+                                onDelete(place.id);
+                              }}
+                            >
+                              Remove place
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              ref={(node) => { if (node) renameActionRefs.current.set(place.id, node); else renameActionRefs.current.delete(place.id); }}
+                              type="button"
+                              className="mc-place-action"
+                              aria-label={`Rename ${place.display_label}`}
+                              onClick={() => { setConfirmingRemoveId(null); setEditing({ id: place.id, value: place.display_label }); }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 3l4 4L8 20l-5 1 1-5L17 3z" /></svg>
+                              Rename
+                            </button>
+                            <button
+                              ref={(node) => { if (node) removeActionRefs.current.set(place.id, node); else removeActionRefs.current.delete(place.id); }}
+                              type="button"
+                              className="mc-place-action is-danger"
+                              aria-label={`Remove ${place.display_label}`}
+                              onClick={() => { setEditing(null); setConfirmingRemoveId(place.id); }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                              Remove
+                            </button>
+                          </>
+                        )}
                       </div>
                     </li>
-                  );
-                })}
-              </ul>
+                    );
+                  })}
+                </ul>
+              </>
             )}
             <p className="mc-places-expiry">Saved places last for this session (about a day). Keep a result with a share link.</p>
             <div className="mc-places-note"><Notice /></div>

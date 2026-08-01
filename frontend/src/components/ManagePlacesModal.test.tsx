@@ -49,6 +49,8 @@ describe("ManagePlacesModal", () => {
     expect(screen.getByRole("checkbox", { name: "Select Work" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByTestId("search-slot")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Work" })).toBeInTheDocument();
+    expect(screen.getByText(/choose saved places for analysis/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Work" })).toHaveTextContent("Remove");
   });
 
   it("switches to the Manual view and submits a place", async () => {
@@ -99,16 +101,29 @@ describe("ManagePlacesModal", () => {
     expect(badge).toHaveAttribute("title", "Hidden from public exports");
   });
 
-  it("delegates delete, toggle, drop-pin, and close", () => {
+  it("confirms removal before delegating delete", () => {
     render(<ManagePlacesModal {...baseProps} initialView="manage" />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Work" }));
     expect(baseProps.onToggleSelect).toHaveBeenCalledWith("p2");
     fireEvent.click(screen.getByRole("button", { name: "Remove Home" }));
+    expect(baseProps.onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("group", { name: "Confirm removal of Home" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove place" }));
     expect(baseProps.onDelete).toHaveBeenCalledWith("p1");
+    expect(screen.getByRole("tab", { name: "Manage" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: /drop pin/i }));
     expect(baseProps.onStartAddPin).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(baseProps.onClose).toHaveBeenCalled();
+  });
+
+  it("lets the user cancel a removal and restores focus", async () => {
+    render(<ManagePlacesModal {...baseProps} initialView="manage" />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Home" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Confirm removal of Home" })).getByRole("button", { name: "Cancel" }));
+    expect(baseProps.onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("group", { name: "Confirm removal of Home" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove Home" })).toHaveFocus());
   });
 
   it("closes on Escape", () => {
@@ -133,6 +148,14 @@ describe("ManagePlacesModal", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(baseProps.onRename).toHaveBeenCalledWith("p1", "Home base"));
     expect(screen.queryByRole("textbox", { name: "New name for Home" })).not.toBeInTheDocument();
+  });
+
+  it("offers visible save and cancel actions while renaming", async () => {
+    render(<ManagePlacesModal {...baseProps} initialView="manage" />);
+    fireEvent.click(screen.getByRole("button", { name: "Rename Home" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "New name for Home" }), { target: { value: "Home base" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+    await waitFor(() => expect(baseProps.onRename).toHaveBeenCalledWith("p1", "Home base"));
   });
 
   it("escape cancels a rename without calling the API", () => {

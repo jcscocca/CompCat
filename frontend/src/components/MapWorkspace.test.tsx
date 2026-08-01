@@ -398,7 +398,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     expect(screen.getByRole("dialog", { name: "Manage places" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search an address or place"), { target: { value: "500 Pine" } });
@@ -420,7 +420,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     await screen.findByRole("dialog", { name: "Manage places" });
     fireEvent.click(screen.getByRole("button", { name: "Rename Home" }));
     const input = screen.getByRole("textbox", { name: "New name for Home" });
@@ -1174,9 +1174,10 @@ describe("MapWorkspace", () => {
     expect(await screen.findByRole("checkbox", { name: "Home" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("checkbox", { name: "Work" })).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage places" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Remove Home" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove place" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
 
     // handleDelete drops the deleted place's entry from the one address list, so its chip
@@ -1852,9 +1853,10 @@ describe("MapWorkspace", () => {
     expect(screen.getByTestId("badge-p2")).toBeInTheDocument();
 
     // Deleting ONE place clears EVERY badge (delete invalidates the whole context).
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage places" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Remove Home" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove place" }));
 
     await waitFor(() => {
       expect(screen.queryByTestId("badge-p1")).not.toBeInTheDocument();
@@ -2413,7 +2415,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     await screen.findByText("Home");
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     await screen.findByRole("dialog", { name: "Manage places" });
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Include Home in export" }));
@@ -2426,7 +2428,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     await screen.findByText("Home");
-    fireEvent.click(screen.getByRole("button", { name: "Add or manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     await screen.findByRole("dialog", { name: "Manage places" });
 
     expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute("href", "/exports/current.csv");
