@@ -29,12 +29,15 @@ function response(over: Partial<IncidentPointsResponse> = {}): IncidentPointsRes
     points: [
       {
         id: "inc-1", latitude: 47.61, longitude: -122.33,
+        record_count: 1,
         offense_category: "PROPERTY", offense_subcategory: "THEFT",
         occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST",
         source_dataset: "seattle_spd_crime",
       },
     ],
-    returned_count: 1, total_count: 1, unmappable_citywide_count: 2, limit: 5000,
+    returned_count: 1, total_count: 1, returned_location_count: 1,
+    total_location_count: 1, layer_totals: { reported: 1, arrests: 5, calls: 20 },
+    unmappable_citywide_count: 2, limit: 5000,
     ...over,
   };
 }
@@ -69,6 +72,13 @@ describe("useIncidentPoints", () => {
     });
     expect(result.current.geojson.features).toHaveLength(1);
     expect(result.current.geojson.features[0].geometry.coordinates).toEqual([-122.33, 47.61]);
+    expect(result.current.geojson.features[0].properties).toMatchObject({
+      record_count: 1,
+      item_label: "reported incidents",
+    });
+    expect(result.current.returnedLocationCount).toBe(1);
+    expect(result.current.totalLocationCount).toBe(1);
+    expect(result.current.layerTotals).toEqual({ reported: 1, arrests: 5, calls: 20 });
     expect(result.current.unmappableCitywideCount).toBe(2);
   });
 

@@ -43,10 +43,11 @@
   font-size:12.5px;box-shadow:0 8px 20px -10px rgba(0,0,0,.5);}
 .mc-map-fallback code{font-family:var(--f-mono);font-size:11.5px;}
 .mc-disclosure{position:absolute;left:16px;bottom:18px;z-index:34;
-  max-width:calc(100vw - 32px);text-align:center;
+  max-width:min(520px,calc(100vw - 32px));text-align:left;line-height:1.35;
   padding:7px 13px;border-radius:9px;background:var(--surface);color:var(--text-strong);
   font-size:12px;box-shadow:0 8px 20px -10px rgba(0,0,0,.35);}
-.mc-disclosure strong{font-weight:600;}
+.mc-disclosure strong{display:block;font-weight:600;}
+.mc-disclosure-detail{display:block;margin-top:2px;color:var(--text-dim);}
 .mc-incident-card{font-family:var(--f-ui);font-size:12.5px;color:var(--text-strong);min-width:180px;display:grid;gap:2px;}
 .mc-incident-card strong{font-size:13px;}
 .maplibregl-popup-content{border-radius:10px;box-shadow:0 10px 26px -12px rgba(0,0,0,.4);padding:10px 12px;}
@@ -343,6 +344,8 @@
 /* Compact layer switch in the workspace top bar (shared across tabs). */
 .mc-layertoggle{gap:4px;flex-wrap:nowrap;}
 .mc-layertoggle .mc-chip{height:28px;padding:0 10px;font-size:11.5px;white-space:nowrap;}
+.mc-layer-count{margin-left:5px;font-family:var(--f-mono);font-size:9.5px;font-weight:500;color:var(--text-dim);}
+.mc-layertoggle .mc-chip.on .mc-layer-count{color:var(--on-accent);opacity:.85;}
 .mc-layer-unavailable{margin-left:4px;font-family:var(--f-mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;}
 .mc-field{margin-bottom:14px;}
 .mc-field label{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text);margin-bottom:7px;}

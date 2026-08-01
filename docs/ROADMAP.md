@@ -213,9 +213,12 @@ thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
   Plan: `docs/superpowers/plans/2026-07-04-map-foundation.md`.
 - [x] **Slice 2 — Transparency layers:** `/dashboard/beats` (slimmed `{beat}`-only GeoJSON,
   gzip-negotiated + `Vary`, cached) + `/dashboard/incident-points` (bbox-gated + Seattle-clamped,
-  5,000-row cap, arrests −1/−1 sentinel excluded structurally, `unmappable_citywide_count`); beat
+  matching rows grouped into persistent block-location stacks with true `record_count`,
+  a 5,000-location cap plus separate record/location totals, arrests −1/−1 sentinel excluded
+  structurally, `unmappable_citywide_count`); beat
   outlines with static labels (≥z12) + assigned-beat highlight from the neighborhood payload;
-  clustered→individual incident dots at z14 (no heatmap, one neutral palette — invariant); XSS-safe
+  clustered→persistent counted location stacks / individual dots at z14 (no heatmap, one neutral
+  palette — invariant); XSS-safe
   click card with canonical incident formatting; debounced+abortable viewport hook; redacted-locations
   disclosure chip. Live-verified end-to-end. Plan:
   `docs/superpowers/plans/2026-07-04-transparency-layers.md`.
@@ -229,7 +232,7 @@ thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
 - [ ] **Deferred (slice 2, non-blocking):** `/dashboard/incident-points` filters + sorts on the
   unindexed `coalesce(offense_start_utc, report_utc)` expression; a Postgres expression index is
   the mitigation when incident volume grows (needs a migration — out of scope for the no-migration
-  slices). Bounded today by the 5,000-row cap + Seattle bbox clamp.
+  slices). Bounded today by the 5,000-location cap + Seattle bbox clamp.
 
 ## Phase 7 — Public capstone (2026-07-09)
 *Strategic direction chosen 2026-07-09: CompCat's next chapter is a **portfolio/showcase

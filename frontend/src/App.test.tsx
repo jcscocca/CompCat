@@ -16,7 +16,9 @@ vi.mock("./api/client", () => ({
   deletePlace: vi.fn(),
   getBeatPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getIncidentPoints: vi.fn().mockResolvedValue({
-    points: [], returned_count: 0, total_count: 0, unmappable_citywide_count: 0, limit: 5000,
+    points: [], returned_count: 0, total_count: 0, returned_location_count: 0,
+    total_location_count: 0, layer_totals: { reported: 0, arrests: 0, calls: 0 },
+    unmappable_citywide_count: 0, limit: 5000,
   }),
   getDashboardSummary: vi.fn().mockResolvedValue({
     totals: { place_count: 0, visit_count: 0, incident_count: 0 },
