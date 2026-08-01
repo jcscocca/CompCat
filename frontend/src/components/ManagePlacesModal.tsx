@@ -22,6 +22,8 @@ type Props = {
   onStartAddPin: () => void;
   onToggleSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  canClearAll: boolean;
+  onClearAll: () => void;
   onManualSubmit: (place: PlaceCreate) => Promise<void>;
   onImportSubmit: (csv: string) => Promise<void>;
   onUploaded?: () => void;
@@ -66,6 +68,8 @@ export function ManagePlacesModal({
   onStartAddPin,
   onToggleSelect,
   onDelete,
+  canClearAll,
+  onClearAll,
   onManualSubmit,
   onImportSubmit,
   onUploaded,
@@ -228,6 +232,15 @@ export function ManagePlacesModal({
               <button type="button" className={`mc-tinybtn${addPinMode ? " on" : ""}`} onClick={onStartAddPin}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                 {addPinMode ? "Click map..." : "Drop pin"}
+              </button>
+              <button
+                type="button"
+                className="mc-tinybtn is-danger"
+                disabled={!canClearAll}
+                onClick={onClearAll}
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                Clear all
               </button>
               {summary && summary.privacy.suppressed > 0 ? (
                 <span className="cnt" title="Hidden from public exports">{summary.privacy.suppressed} hidden</span>

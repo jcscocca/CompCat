@@ -32,6 +32,8 @@ const baseProps = {
   onStartAddPin: vi.fn(),
   onToggleSelect: vi.fn(),
   onDelete: vi.fn(),
+  canClearAll: true,
+  onClearAll: vi.fn(),
   onManualSubmit: vi.fn().mockResolvedValue(undefined),
   onImportSubmit: vi.fn().mockResolvedValue(undefined),
   onUploaded: undefined,
@@ -115,6 +117,12 @@ describe("ManagePlacesModal", () => {
     expect(baseProps.onStartAddPin).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(baseProps.onClose).toHaveBeenCalled();
+  });
+
+  it("exposes the shared clear-all action from Manage Places", () => {
+    render(<ManagePlacesModal {...baseProps} initialView="manage" />);
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(baseProps.onClearAll).toHaveBeenCalledTimes(1);
   });
 
   it("lets the user cancel a removal and restores focus", async () => {

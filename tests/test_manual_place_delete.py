@@ -78,3 +78,43 @@ def test_delete_after_analyze_removes_the_place(tmp_path):
         == 0
     )
     session.close()
+
+
+def test_clear_all_after_analyze_removes_places_and_summaries(tmp_path):
+    client = _client(tmp_path)
+    place_ids = []
+    for label, latitude in (("Downtown", 47.6094), ("Nearby", 47.6098)):
+        created = client.post(
+            "/places",
+            json={
+                "display_label": label,
+                "latitude": latitude,
+                "longitude": -122.3334,
+                "visit_count": 1,
+            },
+        )
+        assert created.status_code == 201
+        place_ids.append(created.json()["id"])
+    analyzed = client.post(
+        "/dashboard/analyze",
+        json={
+            "place_ids": place_ids,
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [250],
+        },
+    )
+    assert analyzed.status_code == 200
+
+    deleted = client.delete("/places")
+
+    assert deleted.status_code == 204
+    session = get_sessionmaker()()
+    assert session.query(PlaceCluster).filter(PlaceCluster.id.in_(place_ids)).count() == 0
+    assert (
+        session.query(PlaceCrimeSummary)
+        .filter(PlaceCrimeSummary.place_cluster_id.in_(place_ids))
+        .count()
+        == 0
+    )
+    session.close()

@@ -6,7 +6,7 @@
 // the selection orchestrator, assistant-effect application) are noted in the repo review.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { createBulkPlaces, createPlace, deletePlace, friendlyMessageOr, getBeatPolygons, SESSION_EXPIRED_MESSAGE, updatePlace, type AssistantCommandName } from "../api/client";
+import { createBulkPlaces, createPlace, deleteAllPlaces, deletePlace, friendlyMessageOr, getBeatPolygons, SESSION_EXPIRED_MESSAGE, updatePlace, type AssistantCommandName } from "../api/client";
 import { availableDataAnalysisWindow, currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { compactGeocodeLabel } from "../lib/addressLabel";
 import { interpretToolResult } from "../lib/assistantBridge";
@@ -31,6 +31,7 @@ import { useThread } from "../lib/useThread";
 import { AboutModal } from "./AboutModal";
 import { AssistantPanel } from "./AssistantPanel";
 import { BottomSheet } from "./BottomSheet";
+import { ClearPinsDialog } from "./ClearPinsDialog";
 import { ContextStrip } from "./ContextStrip";
 import { DataFreshness } from "./DataFreshness";
 import { LayerToggle } from "./LayerToggle";
@@ -72,6 +73,9 @@ export function MapWorkspace() {
   const [offer, setOffer] = useState<{ text: string; chips: FollowupChip[] } | null>(null);
   const [chipFlyTo, setChipFlyTo] = useState<LatLng | null>(null);
   const [managePlaces, setManagePlaces] = useState<ManageView | null>(null);
+  const [clearPinsOpen, setClearPinsOpen] = useState(false);
+  const [clearingPins, setClearingPins] = useState(false);
+  const [clearPinsError, setClearPinsError] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);
   const [savingEntryKey, setSavingEntryKey] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisSettings>(() => {
@@ -92,6 +96,10 @@ export function MapWorkspace() {
   const [viewport, setViewport] = useState<MapBounds | null>(null);
 
   const data = useDashboardData();
+  const clearablePlaces = useMemo(
+    () => data.places.filter((place) => place.inferred_place_type === "manual_place"),
+    [data.places],
+  );
   useEffect(() => {
     if (!data.sessionReady) return;
     getBeatPolygons().then(setBeats).catch(() => setBeats(null)); // outline layer is optional chrome
@@ -552,6 +560,41 @@ export function MapWorkspace() {
     }
   }
 
+  function requestClearPins() {
+    setClearPinsError("");
+    setClearPinsOpen(true);
+  }
+
+  async function handleClearPins() {
+    if (clearingPins) return;
+    const clearableIds = new Set(clearablePlaces.map((place) => place.id));
+    setClearingPins(true);
+    setClearPinsError("");
+    data.setError("");
+    try {
+      if (clearableIds.size > 0) await deleteAllPlaces();
+      invalidateAnalysisContext();
+      pendingIdsRef.current = [];
+      pinDraft.setDraft(null);
+      pinDraft.setAddPinMode(false);
+      setSharedBanner(false);
+      list.replaceAll(
+        list.entries.filter((entry) => entry.savedPlaceId && !clearableIds.has(entry.savedPlaceId)),
+      );
+      setSelectedIds((current) => new Set(Array.from(current).filter((id) => !clearableIds.has(id))));
+      if (clearableIds.size > 0) {
+        await data.refreshWithFallback("Cleared pins, but dashboard totals could not refresh.");
+      }
+      setClearPinsOpen(false);
+    } catch (cause) {
+      const message = friendlyMessageOr(cause, "Unable to clear pins. Try again.");
+      setClearPinsError(message);
+      data.setError(message);
+    } finally {
+      setClearingPins(false);
+    }
+  }
+
   async function handleManualSubmit(place: PlaceCreate) {
     data.setError("");
     const created = await createPlace(place);
@@ -918,6 +961,8 @@ export function MapWorkspace() {
           onSelect={handleLookup}
           addPinMode={pinDraft.addPinMode}
           onToggleAddPin={() => (pinDraft.addPinMode ? pinDraft.setAddPinMode(false) : pinDraft.startAddPin())}
+          canClearPins={clearablePlaces.length > 0 || adhocPlaces.length > 0 || Boolean(pinDraft.draft)}
+          onClearPins={requestClearPins}
           />
           {pinDraft.addPinMode ? (
             <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
@@ -1092,6 +1137,8 @@ export function MapWorkspace() {
             onStartAddPin={() => { setManagePlaces(null); pinDraft.startAddPin(); }}
             onToggleSelect={handleToggleSelect}
             onDelete={handleDelete}
+            canClearAll={clearablePlaces.length > 0 || adhocPlaces.length > 0 || Boolean(pinDraft.draft)}
+            onClearAll={() => { setManagePlaces(null); requestClearPins(); }}
             onManualSubmit={handleManualSubmit}
             onImportSubmit={handleImport}
             onUploaded={data.personalUploadsEnabled ? () => data.refreshWithFallback("Uploaded, but dashboard totals could not refresh.") : undefined}
@@ -1107,6 +1154,17 @@ export function MapWorkspace() {
                 data.setError("Unable to rename place. Try again.");
               }
             }}
+          />
+        ) : null}
+
+        {clearPinsOpen ? (
+          <ClearPinsDialog
+            savedPlaceCount={clearablePlaces.length}
+            hasUnsavedPins={adhocPlaces.length > 0 || Boolean(pinDraft.draft)}
+            busy={clearingPins}
+            error={clearPinsError}
+            onCancel={() => { if (!clearingPins) setClearPinsOpen(false); }}
+            onConfirm={() => void handleClearPins()}
           />
         ) : null}
 

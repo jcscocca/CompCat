@@ -13,6 +13,7 @@ vi.mock("./api/client", () => ({
   createBulkPlaces: vi.fn(),
   createPlace: vi.fn(),
   createSession: vi.fn().mockResolvedValue({ session_state: "ready" }),
+  deleteAllPlaces: vi.fn(),
   deletePlace: vi.fn(),
   getBeatPolygons: vi.fn().mockResolvedValue({ type: "FeatureCollection", features: [] }),
   getIncidentPoints: vi.fn().mockResolvedValue({

@@ -170,6 +170,10 @@ export function deletePlace(placeId: string): Promise<void> {
   return request(`/places/${placeId}`, { method: "DELETE" });
 }
 
+export function deleteAllPlaces(): Promise<void> {
+  return request("/places", { method: "DELETE" });
+}
+
 export function updatePlace(placeId: string, payload: { display_label?: string; sensitivity_class?: string }): Promise<Place> {
   return request(`/places/${placeId}`, {
     method: "PATCH",

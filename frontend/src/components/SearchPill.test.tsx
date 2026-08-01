@@ -134,4 +134,32 @@ describe("SearchPill", () => {
     render(<SearchPill search={search} onSelect={vi.fn()} addPinMode onToggleAddPin={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Drop a pin on the map" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("offers a clear-all shortcut only when pins exist", () => {
+    const onClearPins = vi.fn();
+    const { rerender } = render(
+      <SearchPill
+        search={search}
+        onSelect={vi.fn()}
+        addPinMode={false}
+        onToggleAddPin={vi.fn()}
+        onClearPins={onClearPins}
+      />,
+    );
+    const clear = screen.getByRole("button", { name: "Clear all pins" });
+    expect(clear).toBeDisabled();
+
+    rerender(
+      <SearchPill
+        search={search}
+        onSelect={vi.fn()}
+        addPinMode={false}
+        onToggleAddPin={vi.fn()}
+        canClearPins
+        onClearPins={onClearPins}
+      />,
+    );
+    fireEvent.click(clear);
+    expect(onClearPins).toHaveBeenCalledTimes(1);
+  });
 });

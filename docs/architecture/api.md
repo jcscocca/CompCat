@@ -79,6 +79,7 @@ which are unauthenticated or session-creating.
 | `/input-modes` | GET | `app/api/routes_input_modes.py` | — | `{"modes": [...]}` |
 | `/places` | GET | `app/api/routes_places.py` | — | `{"count": int, "places": [...]}` |
 | `/places` | POST | `app/api/routes_public_places.py` | `ManualPlaceCreate` (`app/places/schemas.py`) | `ManualPlaceResponse` |
+| `/places` | DELETE | `app/api/routes_public_places.py` | — | 204; removes all user-entered places |
 | `/places/bulk` | POST | `app/api/routes_public_places.py` | `BulkPlaceCreate` | `BulkPlaceCreateResponse` |
 | `/places/{place_id}` | PATCH | `app/api/routes_public_places.py` | `ManualPlaceUpdate` | `ManualPlaceResponse` |
 | `/places/{place_id}` | DELETE | `app/api/routes_public_places.py` | — | 204 No Content |

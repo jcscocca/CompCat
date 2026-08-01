@@ -8,9 +8,11 @@ type Props = {
   onSelect: (result: GeocodeResult) => void;
   addPinMode: boolean;
   onToggleAddPin: () => void;
+  canClearPins?: boolean;
+  onClearPins?: () => void;
 };
 
-export function SearchPill({ search, onSelect, addPinMode, onToggleAddPin }: Props) {
+export function SearchPill({ search, onSelect, addPinMode, onToggleAddPin, canClearPins = false, onClearPins }: Props) {
   const { query, setQuery, results, status, rememberPlace } = useAddressSearch(search);
   const [open, setOpen] = useState(false);
   // -1 = nothing highlighted, so Enter falls through to the first suggestion.
@@ -97,6 +99,22 @@ export function SearchPill({ search, onSelect, addPinMode, onToggleAddPin }: Pro
           onClick={onToggleAddPin}
         >
           <svg viewBox="0 0 24 32" width="13" height="16"><path d="M12 0C5.4 0 0 5.2 0 11.6 0 20 12 32 12 32s12-12 12-20.4C24 5.2 18.6 0 12 0z" fill="currentColor" /></svg>
+        </button>
+        <button
+          type="button"
+          className="mc-searchpill-clear"
+          aria-label="Clear all pins"
+          title="Clear all pins"
+          disabled={!canClearPins}
+          onClick={() => {
+            setOpen(false);
+            setActive(-1);
+            onClearPins?.();
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+          </svg>
         </button>
       </div>
       {listOpen ? (
