@@ -163,8 +163,9 @@ vi.mock("pmtiles", () => ({ Protocol: class { tile = vi.fn(); } }));
 import * as maplibregl from "maplibre-gl";
 
 import { MapCanvas, iconHtml, markerKindFor, ringsGeoJSON } from "./MapCanvas";
+import { incidentNoun } from "../lib/layerCopy";
 import { placeIdentity } from "../lib/placeIdentity";
-import type { DashboardSummary, Place } from "../types";
+import type { DashboardSummary, LayerKey, Place } from "../types";
 
 type MockMapInstance = {
   fireClick: (lat: number, lng: number) => void;
@@ -249,12 +250,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderCanvas(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
-  return render(
+function canvasElement(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
+  return (
     <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
       summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
-      incidentPoints={null} theme="light" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} {...over} />,
+      incidentPoints={null} incidentNoun={incidentNoun("reported")} theme="light"
+      onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} {...over} />
   );
+}
+
+function renderCanvas(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
+  return render(canvasElement(over));
 }
 
 describe("markerKindFor", () => {
@@ -384,7 +390,8 @@ describe("MapCanvas", () => {
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set(["p1"])} draft={null} addPinMode={false}
         summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
-        incidentPoints={null} theme="light" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
+        incidentPoints={null} incidentNoun={incidentNoun("reported")} theme="light"
+        onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
     await waitFor(() => {
       const el = document.body.querySelector(".mc-pin-icon") as HTMLElement;
@@ -481,7 +488,7 @@ const POINTS_FC = {
   features: [
     {
       type: "Feature" as const,
-      properties: { id: "inc-1", offense_category: "PROPERTY", offense_subcategory: "THEFT", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST", record_count: 1, item_label: "reported incidents" },
+      properties: { id: "inc-1", offense_category: "PROPERTY", offense_subcategory: "THEFT", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST", record_count: 1 },
       geometry: { type: "Point" as const, coordinates: [-122.33, 47.61] as [number, number] },
     },
   ],
@@ -557,17 +564,21 @@ describe("beat + incident layers", () => {
     expect(card).not.toBeNull();
     expect(card!.textContent).toContain('<img'); // title-cased but rendered as TEXT, tag intact
     expect(card!.querySelector("img")).toBeNull(); // never parsed as HTML
+    expect(card).toHaveTextContent("Reported incident");
     expect(card!.textContent).toContain("100 block of Pine St"); // formatted via formatIncidentAddress
   });
 
-  it("explains a shared-coordinate stack without presenting representative offense metadata", async () => {
-    renderCanvas({ incidentPoints: POINTS_FC });
+  it.each([
+    ["reported", "Reported incident"],
+    ["arrests", "Arrest"],
+    ["calls", "911 call"],
+  ] as const)("identifies the active layer on a single %s location", async (layer, label) => {
+    renderCanvas({ incidentPoints: POINTS_FC, incidentNoun: incidentNoun(layer) });
     await waitFor(() => expect(MockedMap.last).not.toBeNull());
     MockedMap.last!.fireLayerClick("mc-incident-hit", {
       properties: {
-        id: "inc-stack-1",
-        record_count: 27,
-        item_label: "reported incidents",
+        id: `single-${layer}`,
+        record_count: 1,
         offense_subcategory: "THEFT",
         occurred_at: "2025-06-03T12:00:00Z",
         block_address: "1XX BLOCK OF PINE ST",
@@ -575,8 +586,48 @@ describe("beat + incident layers", () => {
     });
     const card = document.body.querySelector(".mc-incident-card");
     expect(card).not.toBeNull();
-    expect(card!.textContent).toContain("27 reported incidents");
-    expect(card!.textContent).toContain("These records are mapped to the same block.");
+    expect(card).toHaveTextContent("Theft");
+    expect(card).toHaveTextContent(label);
+  });
+
+  it("closes an open incident popup when the active layer changes", async () => {
+    const view = renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-hit", {
+      properties: { id: "inc-1", offense_subcategory: "THEFT" },
+    });
+    expect(document.body.querySelector(".mc-incident-card")).toHaveTextContent("Reported incident");
+
+    view.rerender(canvasElement({ incidentPoints: POINTS_FC, incidentNoun: incidentNoun("arrests") }));
+
+    await waitFor(() => expect(document.body.querySelector(".mc-incident-card")).toBeNull());
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-selected")?.filter).toEqual([
+      "all",
+      ["!", ["has", "point_count"]],
+      ["==", ["get", "id"], "__no_selected_incident__"],
+    ]);
+  });
+
+  it.each([
+    ["reported", "27 reported incidents", "These reported incidents are mapped to the same block."],
+    ["arrests", "27 arrests", "These arrests are mapped to the same block."],
+    ["calls", "27 911 calls", "These 911 calls are mapped to the same block."],
+  ] as const)("labels a shared-coordinate %s stack without presenting representative offense metadata", async (layer, title, note) => {
+    renderCanvas({ incidentPoints: POINTS_FC, incidentNoun: incidentNoun(layer) });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-hit", {
+      properties: {
+        id: "inc-stack-1",
+        record_count: 27,
+        offense_subcategory: "THEFT",
+        occurred_at: "2025-06-03T12:00:00Z",
+        block_address: "1XX BLOCK OF PINE ST",
+      },
+    });
+    const card = document.body.querySelector(".mc-incident-card");
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent(title);
+    expect(card).toHaveTextContent(note);
     expect(card!.textContent).toContain("Latest record: 2025-06-03");
     expect(card!.textContent).not.toContain("Theft");
     expect(card!.textContent).not.toContain("Pine");
@@ -593,8 +644,12 @@ describe("beat + incident layers", () => {
     ]);
   });
 
-  it("discloses an aggregate count while expanding a selected map cluster", async () => {
-    renderCanvas({ incidentPoints: POINTS_FC });
+  it.each([
+    ["reported", "125 reported incidents"],
+    ["arrests", "125 arrests"],
+    ["calls", "125 911 calls"],
+  ] as Array<[LayerKey, string]>)("discloses the %s aggregate count while expanding a selected map cluster", async (layer, title) => {
+    renderCanvas({ incidentPoints: POINTS_FC, incidentNoun: incidentNoun(layer) });
     await waitFor(() => expect(MockedMap.last).not.toBeNull());
     MockedMap.last!.fireLayerClick("mc-incident-cluster", {
       properties: { cluster_id: 7, record_count: 125 },
@@ -602,7 +657,7 @@ describe("beat + incident layers", () => {
     });
     const card = document.body.querySelector(".mc-incident-card");
     expect(card).not.toBeNull();
-    expect(card).toHaveTextContent("125 matching records");
+    expect(card).toHaveTextContent(title);
     expect(card).toHaveTextContent("Grouped in this map view. Zooming in shows their block locations.");
     const source = MockedMap.last!.sources.get("mc-incidents")!;
     expect(source.getClusterExpansionZoom).toHaveBeenCalledWith(7);
@@ -629,7 +684,8 @@ describe("themed map", () => {
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
         summary={null} radiusM={250} flyTo={null} beats={BEATS_FC} highlightBeats={[]}
-        incidentPoints={POINTS_FC} theme="dark" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
+        incidentPoints={POINTS_FC} incidentNoun={incidentNoun("reported")} theme="dark"
+        onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
     await waitFor(() => {
       expect(MockedMap.last!.setStyle).toHaveBeenCalledTimes(1);
@@ -657,7 +713,8 @@ describe("themed map", () => {
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
         summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
-        incidentPoints={null} theme="dark" onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
+        incidentPoints={null} incidentNoun={incidentNoun("reported")} theme="dark"
+        onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
     await waitFor(() => expect(MockedMap.last!.setStyle).toHaveBeenCalledTimes(1));
     const [style, options] = MockedMap.last!.setStyle.mock.calls[0]!;

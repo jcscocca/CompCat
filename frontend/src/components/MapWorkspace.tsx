@@ -979,6 +979,7 @@ export function MapWorkspace() {
             beats={beats}
             highlightBeats={highlightBeats}
             incidentPoints={incidentLayer.geojson}
+            incidentNoun={incidentNoun(analysis.layer)}
             theme={theme}
             identityByPlaceId={identityByPlaceId}
             pulsePlaceId={hoveredPlaceId}
@@ -1019,7 +1020,7 @@ export function MapWorkspace() {
           totalLocationCount={incidentLayer.totalLocationCount}
           unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
           limit={incidentLayer.limit}
-          itemLabel={incidentNoun(analysis.layer).plural}
+          itemNoun={incidentNoun(analysis.layer)}
           />
 
           {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (

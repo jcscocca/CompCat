@@ -74,7 +74,6 @@ describe("useIncidentPoints", () => {
     expect(result.current.geojson.features[0].geometry.coordinates).toEqual([-122.33, 47.61]);
     expect(result.current.geojson.features[0].properties).toMatchObject({
       record_count: 1,
-      item_label: "reported incidents",
     });
     expect(result.current.returnedLocationCount).toBe(1);
     expect(result.current.totalLocationCount).toBe(1);

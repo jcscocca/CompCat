@@ -1,6 +1,7 @@
 import * as maplibregl from "maplibre-gl";
 
 import { formatIncidentAddress, titleCase } from "./addressLabel";
+import type { IncidentNoun } from "./layerCopy";
 import type { MapTheme } from "./mapStyle";
 import type { IncidentFeatureCollection } from "./useIncidentPoints";
 
@@ -226,17 +227,20 @@ export function registerDataLayers(map: maplibregl.Map, theme: MapTheme): void {
   addIncidentLayers(map, theme);
 }
 
-export function incidentCardElement(props: Record<string, unknown>): HTMLElement {
+function sentenceCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function incidentCardElement(props: Record<string, unknown>, noun: IncidentNoun): HTMLElement {
   // textContent only — properties come from SPD strings; never parse them as HTML.
   const card = document.createElement("div");
   card.className = "mc-incident-card";
   const title = document.createElement("strong");
   const recordCount = Number(props.record_count ?? 1);
   if (Number.isFinite(recordCount) && recordCount > 1) {
-    const itemLabel = typeof props.item_label === "string" ? props.item_label : "records";
-    title.textContent = `${recordCount.toLocaleString("en-US")} ${itemLabel}`;
+    title.textContent = `${recordCount.toLocaleString("en-US")} ${noun.plural}`;
     const note = document.createElement("div");
-    note.textContent = "These records are mapped to the same block.";
+    note.textContent = `These ${noun.plural} are mapped to the same block.`;
     const latest = document.createElement("div");
     latest.textContent = props.occurred_at
       ? `Latest record: ${String(props.occurred_at).slice(0, 10)}`
@@ -245,23 +249,28 @@ export function incidentCardElement(props: Record<string, unknown>): HTMLElement
     return card;
   }
   const rawTitle = props.offense_subcategory ?? props.offense_category;
-  title.textContent = rawTitle ? titleCase(String(rawTitle)) : "Incident";
+  title.textContent = rawTitle ? titleCase(String(rawTitle)) : sentenceCase(noun.singular);
+  const kind = document.createElement("div");
+  kind.className = "mc-incident-kind";
+  kind.textContent = sentenceCase(noun.singular);
   const when = document.createElement("div");
   when.textContent = props.occurred_at ? String(props.occurred_at).slice(0, 10) : "date not recorded";
   const where = document.createElement("div");
   where.textContent = formatIncidentAddress(props.block_address as string | null | undefined);
-  card.append(title, when, where);
+  card.append(title);
+  if (rawTitle) card.append(kind);
+  card.append(when, where);
   return card;
 }
 
-export function incidentClusterCardElement(props: Record<string, unknown>): HTMLElement {
+export function incidentClusterCardElement(props: Record<string, unknown>, noun: IncidentNoun): HTMLElement {
   const card = document.createElement("div");
   card.className = "mc-incident-card";
   const title = document.createElement("strong");
   const recordCount = Number(props.record_count ?? 0);
   title.textContent = Number.isFinite(recordCount)
-    ? `${recordCount.toLocaleString("en-US")} matching records`
-    : "Grouped records";
+    ? `${recordCount.toLocaleString("en-US")} ${noun.plural}`
+    : `Grouped ${noun.plural}`;
   const note = document.createElement("div");
   note.textContent = "Grouped in this map view. Zooming in shows their block locations.";
   card.append(title, note);

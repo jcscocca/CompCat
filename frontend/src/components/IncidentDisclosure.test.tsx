@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IncidentDisclosure } from "./IncidentDisclosure";
+import { incidentNoun } from "../lib/layerCopy";
 
 afterEach(cleanup);
 
@@ -29,8 +30,17 @@ describe("IncidentDisclosure", () => {
   });
 
   it("uses the active layer noun", () => {
-    render(<IncidentDisclosure returnedCount={8} totalCount={8} returnedLocationCount={1} totalLocationCount={1} unmappableCitywideCount={0} limit={5000} itemLabel="911 calls" />);
+    render(<IncidentDisclosure returnedCount={8} totalCount={8} returnedLocationCount={1} totalLocationCount={1} unmappableCitywideCount={0} limit={5000} itemNoun={incidentNoun("calls")} />);
     expect(screen.getByRole("status")).toHaveTextContent("8 911 calls across 1 block location in current map view");
+  });
+
+  it.each([
+    ["reported", "1 reported incident across 1 block location in current map view"],
+    ["arrests", "1 arrest across 1 block location in current map view"],
+    ["calls", "1 911 call across 1 block location in current map view"],
+  ] as const)("uses the singular %s noun for a one-record viewport", (layer, expected) => {
+    render(<IncidentDisclosure returnedCount={1} totalCount={1} returnedLocationCount={1} totalLocationCount={1} unmappableCitywideCount={0} limit={5000} itemNoun={incidentNoun(layer)} />);
+    expect(screen.getByRole("status")).toHaveTextContent(expected);
   });
 
   it("omits the redaction clause when nothing was redacted", () => {
@@ -39,7 +49,7 @@ describe("IncidentDisclosure", () => {
   });
 
   it("states an empty viewport without claiming zero locations", () => {
-    render(<IncidentDisclosure returnedCount={0} totalCount={0} returnedLocationCount={0} totalLocationCount={0} unmappableCitywideCount={0} limit={5000} itemLabel="arrests" />);
+    render(<IncidentDisclosure returnedCount={0} totalCount={0} returnedLocationCount={0} totalLocationCount={0} unmappableCitywideCount={0} limit={5000} itemNoun={incidentNoun("arrests")} />);
     expect(screen.getByRole("status")).toHaveTextContent("No arrests in current map view");
     expect(screen.getByRole("status")).not.toHaveTextContent("block location");
   });
