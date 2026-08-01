@@ -9,6 +9,7 @@ import {
   BEATS_SOURCE,
   EMPTY_FC,
   incidentCardElement,
+  incidentClusterCardElement,
   incidentSelectionFilter,
   INCIDENT_SELECTED_LAYER,
   INCIDENTS_SOURCE,
@@ -275,7 +276,11 @@ export function MapCanvas({
         const feature = event.features?.[0];
         const clusterId = feature?.properties?.cluster_id;
         const source = map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-        if (clusterId === undefined || !source) return;
+        if (!feature || clusterId === undefined || !source) return;
+        new maplibregl.Popup({ offset: 18 })
+          .setLngLat(event.lngLat)
+          .setDOMContent(incidentClusterCardElement(feature.properties ?? {}))
+          .addTo(map);
         source.getClusterExpansionZoom(clusterId).then((zoom) => {
           map.easeTo({ center: (feature!.geometry as Point).coordinates as [number, number], zoom });
         }).catch(() => {});

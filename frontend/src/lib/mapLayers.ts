@@ -41,7 +41,9 @@ export const BEATS_SOURCE = "mc-beats";
 export const INCIDENTS_SOURCE = "mc-incidents";
 export const INCIDENT_SELECTED_LAYER = "mc-incident-selected";
 export const EMPTY_FC: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
-export const CLUSTER_MAX_ZOOM = 13; // clusters below, individual dots at z14+ (spec: initial threshold)
+export const CLUSTER_MAX_ZOOM = 12; // clusters through z12, precise block markers at z13+
+export const CLUSTER_LABEL_MIN_ZOOM = 12;
+export const CLUSTER_LABEL_MIN_COUNT = 25;
 export const STACK_LABEL_MIN_ZOOM = 16;
 export const STACK_LABEL_MIN_COUNT = 10;
 
@@ -106,21 +108,43 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
     filter: ["has", "point_count"],
     paint: {
       "circle-color": "#3A3F46",
-      "circle-opacity": 0.85,
-      "circle-radius": ["step", ["get", "record_count"], 12, 25, 16, 100, 22],
+      // The default view communicates relative volume without turning each aggregate into a
+      // heavy numbered bubble. Radius follows a capped square-root scale, so area remains the
+      // magnitude cue without allowing the largest downtown cluster to dominate the map.
+      "circle-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.42, 12, 0.6],
+      "circle-radius": [
+        "interpolate",
+        ["linear"],
+        ["sqrt", ["min", ["get", "record_count"], 500]],
+        1,
+        5,
+        3.1622776602,
+        7,
+        10,
+        12,
+        22.360679775,
+        18,
+      ],
       "circle-stroke-color": "#FFFFFF",
-      "circle-stroke-width": 1.5,
+      "circle-stroke-width": 0.75,
     },
   });
   map.addLayer({
     id: "mc-incident-cluster-count",
     type: "symbol",
     source: INCIDENTS_SOURCE,
-    filter: ["has", "point_count"],
+    minzoom: CLUSTER_LABEL_MIN_ZOOM,
+    filter: [
+      "all",
+      ["has", "point_count"],
+      [">=", ["get", "record_count"], CLUSTER_LABEL_MIN_COUNT],
+    ],
     layout: {
       "text-field": ["number-format", ["get", "record_count"], { locale: "en-US", "max-fraction-digits": 0 }],
       "text-font": ["Noto Sans Medium"],
-      "text-size": 11,
+      "text-size": 10.5,
+      "text-padding": 4,
+      "text-allow-overlap": false,
     },
     paint: { "text-color": "#FFFFFF" },
   });
@@ -223,5 +247,19 @@ export function incidentCardElement(props: Record<string, unknown>): HTMLElement
   const where = document.createElement("div");
   where.textContent = formatIncidentAddress(props.block_address as string | null | undefined);
   card.append(title, when, where);
+  return card;
+}
+
+export function incidentClusterCardElement(props: Record<string, unknown>): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "mc-incident-card";
+  const title = document.createElement("strong");
+  const recordCount = Number(props.record_count ?? 0);
+  title.textContent = Number.isFinite(recordCount)
+    ? `${recordCount.toLocaleString("en-US")} matching records`
+    : "Grouped records";
+  const note = document.createElement("div");
+  note.textContent = "Grouped in this map view. Zooming in shows their block locations.";
+  card.append(title, note);
   return card;
 }

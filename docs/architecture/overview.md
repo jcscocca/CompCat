@@ -144,8 +144,11 @@ The dashboard freshness response also drives the initial analysis context. Untou
 The incident map deliberately distinguishes records from visible coordinates. The public
 source geography is reported at block level, so `/dashboard/incident-points` groups matching rows by
 latitude/longitude and returns a `record_count` for each block location. MapLibre sums
-that value in low-zoom clusters and retains one compact marker per exact block location after
-clustering ends; it never lets overlapping block-level coordinates masquerade as one record.
+that value in low-zoom clusters, which use capped square-root sizing without ambient numbers in
+the default view. At zoom 12, only clusters representing 25 or more records receive
+collision-aware labels; selecting any cluster discloses its exact count and expands toward the
+represented block locations. Precise block markers begin at zoom 13, so the quieter overview
+never lets overlapping block-level coordinates masquerade as one record.
 The click card always exposes the exact stack count, while ambient stack labels appear only for
 counts of 10 or more at zoom 16 and above so dense views stay geographically legible. The
 response separately
