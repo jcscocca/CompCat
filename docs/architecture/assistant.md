@@ -39,7 +39,7 @@ to a second, **streamed** narration call that writes the user-facing reply in Ta
 every failure mode of that second call degrades back to the deterministic text, so the
 single-planning-call reliability story below still holds end to end.
 
-**Phase 1 — safety-refusal gate (no LLM)**
+**Phase 1 — deterministic preflight responses (no LLM)**
 
 Before the LLM is consulted, `run_assistant_turn` in `app/assistant/agent.py` checks the current
 user request with the deterministic safety-ranking and personal-presence guards. When the
@@ -49,6 +49,13 @@ fail-closed boundary covers open-ended continuations such as “give me the orde
 again,” and “compare them anyway” without letting an old refusal poison a later explicit data
 request. On a hit the turn is short-circuited: a pre-written refusal is streamed as a `token`
 event followed by `done`. The LLM is never contacted.
+
+The same preflight owns two narrow, application-authored responses that do not benefit from
+planning: a definition of CompCat's “reported incident context,” and a clarification when an
+analysis request explicitly refers to the current selection but no place or map pin is selected.
+Both stream `meta` → `token` → `done` without a model call. Named-place requests and selected-place
+requests with a real selection continue through normal planning; the recognizers do not become a
+general intent router.
 
 **Phase 2 — single classify-only LLM call**
 
@@ -127,8 +134,9 @@ event types (`AssistantStreamEvent`, `app/assistant/schemas.py`):
 | `error` | `{message}` | Once, on a hard failure (LLM unreachable during planning, bad plan JSON, tool error, or an uncaught exception caught by the route handler) |
 
 **Turn flow.** `run_assistant_turn` (`app/assistant/agent.py`) always emits `meta` first. The
-input guards (safety-score ask, presence-claim ask — §7) short-circuit before any `status`
-event: a refusal streams straight to `token` + `done`. Otherwise, when
+deterministic preflight (safety-score ask, presence claim, static product-scope definition, or an
+explicitly referenced but missing selection) short-circuits before any `status` event and streams
+straight to `token` + `done`. Otherwise, when
 `assistant_narration_enabled` is true, a `status(interpreting your request…)` event precedes the
 single planning call. From there the plan branches exactly as in §1: a `tool_call` plan emits
 `status(running <tool>…)` before `execute_tool`, then the raw result as a `tool` event, then the

@@ -93,6 +93,16 @@ _CLARIFY_FALLBACK = (
     "I didn't quite catch what you'd like me to look at — could you rephrase that? "
     "You can ask me to analyze a place, compare a few addresses, or adjust the filters."
 )
+_PRODUCT_SCOPE_ANSWER = (
+    "From the case desk: reported incident context means CompCat describes patterns in "
+    "Seattle Police records around a place — counts, categories, timing, and geographic "
+    "comparisons within the filters you chose. It is context about reported records, not a "
+    "judgment about a place or a claim that anyone was present."
+)
+_MISSING_SELECTION_CLARIFICATION = (
+    "Select a map pin or name a Seattle place first, and I'll examine its reported incident "
+    "context using your current filters."
+)
 _NARRATION_TEMPERATURE = 0.4
 _NARRATION_MAX_TOKENS = 512
 _STATUS_INTERPRETING = "interpreting your request…"
@@ -138,6 +148,26 @@ _RESULT_FOLLOWUP_PATTERN = re.compile(
     r"|\b(?:which|what)\s+(?:offen[cs]e\s+)?categor(?:y|ies)\b"
     r"[^.?!]{0,80}\b(?:difference|comparison|result)\b"
     r"|\baccount(?:s|ed|ing)?\s+for\b[^.?!]{0,60}\b(?:difference|result)\b",
+    re.IGNORECASE,
+)
+
+# Two common requests have complete, application-owned answers and should not depend on the
+# planner. Keep these recognizers deliberately narrow: named-place analysis and general product
+# questions still go through normal planning.
+_PRODUCT_SCOPE_PATTERN = re.compile(
+    r"^\s*(?:what\s+(?:does|is)|define|explain)\s+(?:the\s+)?"
+    r"reported\s+incident\s+context(?:\s+mean)?"
+    r"(?:\s+(?:in|on)\s+compcat)?\s*[?!.]*\s*$",
+    re.IGNORECASE,
+)
+_ANALYSIS_INTENT_PATTERN = re.compile(
+    r"\b(?:analy[sz]e|compare|examine|summari[sz]e|show|look)\b",
+    re.IGNORECASE,
+)
+_SELECTION_REFERENCE_PATTERN = re.compile(
+    r"\b(?:my|the|this|that|current)\s+"
+    r"(?:(?:selected|saved)\s+)?(?:place|places|selection|pin|pins)\b"
+    r"|\bhere\b",
     re.IGNORECASE,
 )
 
@@ -211,6 +241,22 @@ async def run_assistant_turn(
         yield AssistantStreamEvent(event="done", data={})
         return
 
+    newest_user_text = recent_user_texts[-1] if recent_user_texts else ""
+    if _PRODUCT_SCOPE_PATTERN.fullmatch(newest_user_text):
+        yield AssistantStreamEvent(event="token", data={"delta": _PRODUCT_SCOPE_ANSWER})
+        yield AssistantStreamEvent(event="done", data={})
+        return
+    if (
+        not context.selected_places
+        and _ANALYSIS_INTENT_PATTERN.search(newest_user_text)
+        and _SELECTION_REFERENCE_PATTERN.search(newest_user_text)
+    ):
+        yield AssistantStreamEvent(
+            event="token", data={"delta": _MISSING_SELECTION_CLARIFICATION}
+        )
+        yield AssistantStreamEvent(event="done", data={})
+        return
+
     # Budget checkpoint 1 of 2: refuse before the planning call, so an exhausted day makes no
     # upstream request at all. Placed before the status event so the UI gets no dangling spinner.
     if _budget_exhausted(settings):
@@ -228,7 +274,6 @@ async def run_assistant_turn(
     # narration-await rollbacks further down.
     session.rollback()
 
-    newest_user_text = recent_user_texts[-1] if recent_user_texts else ""
     if latest_result_context is not None and _RESULT_FOLLOWUP_PATTERN.search(newest_user_text):
         # This scope is entirely application-authored, so a clearly referential follow-up
         # needs no model judgement. Skipping local planning removes its slowest/frailiest call;
