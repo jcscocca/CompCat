@@ -36,6 +36,8 @@ The runner creates one anonymous app session and reuses it across isolated cases
 the model endpoint directly and does not read model API keys. Reports go to the gitignored
 `assistant-eval-results/` directory and include prompts, rendered responses, tool choices,
 event sequences, per-property results, and latency. They do not contain cookies or credentials.
+Reports are UTF-8 JSON on every platform and are atomically checkpointed after each completed
+case, so a long local run retains its earlier evidence if a later case or terminal is interrupted.
 
 Useful filters:
 
