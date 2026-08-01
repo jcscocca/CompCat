@@ -218,10 +218,10 @@ thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
   a 5,000-location cap plus separate record/location totals, arrests −1/−1 sentinel excluded
   structurally, `unmappable_citywide_count`); beat
   outlines with static labels (≥z12) + assigned-beat highlight from the neighborhood payload;
-  calm, capped area-scaled clusters through z12→persistent compact location stacks / individual
-  dots at z13 (no heatmap, one neutral palette — invariant), with cluster labels reserved for
-  counts of 25+ at z12, exact counts on selection, and same-block labels reserved for stacks of
-  10+ at z16+; XSS-safe
+  calm, capped area-scaled clusters through z15→persistent compact location stacks / individual
+  dots at z16+ (no heatmap, one neutral palette — invariant), with collision-aware cluster labels
+  reserved for counts of 25+ at z12–z15, exact counts on selection, and same-block labels reserved
+  for stacks of 10+ at z16+; XSS-safe
   click card with canonical incident formatting; debounced+abortable viewport hook; redacted-locations
   disclosure chip. Live-verified end-to-end. Plan:
   `docs/superpowers/plans/2026-07-04-transparency-layers.md`.

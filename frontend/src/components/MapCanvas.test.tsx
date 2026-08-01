@@ -504,7 +504,7 @@ describe("beat + incident layers", () => {
       const source = MockedMap.last!.sources.get("mc-incidents");
       expect(source!.options).toMatchObject({
         cluster: true,
-        clusterMaxZoom: 12,
+        clusterMaxZoom: 15,
         clusterRadius: 40,
         clusterProperties: { record_count: ["+", ["get", "record_count"]] },
       });
@@ -527,10 +527,14 @@ describe("beat + incident layers", () => {
       layout: { "text-padding": 4, "text-allow-overlap": false },
     });
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-dot")).toMatchObject({
+      minzoom: 16,
       paint: {
         "circle-opacity": 0.72,
         "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 5.5, 10, 7, 100, 8.5],
       },
+    });
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-selected")).toMatchObject({
+      minzoom: 16,
     });
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-stack-count")).toMatchObject({
       minzoom: 16,
@@ -538,6 +542,7 @@ describe("beat + incident layers", () => {
       layout: { "text-allow-overlap": false },
     });
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-hit")).toMatchObject({
+      minzoom: 16,
       paint: { "circle-opacity": 0, "circle-radius": 13 },
     });
   });
