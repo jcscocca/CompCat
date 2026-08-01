@@ -52,9 +52,9 @@ export function MapLegend({ layer, id, hidden }: Props) {
       </div>
       <div className="mc-leg-row">
         <span className="g">
-          <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#3A3F46", border: "1.5px solid #fff", display: "grid", placeItems: "center", color: "#fff", fontSize: 10, fontWeight: 700 }}>5</span>
+          <span style={{ width: 13, height: 13, borderRadius: "50%", background: "#3A3F46", border: "1px solid #fff", display: "block" }} />
         </span>
-        <span>Same-block {noun.plural}<small>number = records on this block</small></span>
+        <span>Same-block {noun.plural}<small>select for exact count · large stacks label at close zoom</small></span>
       </div>
     </section>
   );

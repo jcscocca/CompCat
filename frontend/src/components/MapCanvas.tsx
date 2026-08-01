@@ -9,6 +9,8 @@ import {
   BEATS_SOURCE,
   EMPTY_FC,
   incidentCardElement,
+  incidentSelectionFilter,
+  INCIDENT_SELECTED_LAYER,
   INCIDENTS_SOURCE,
   registerDataLayers,
   RINGS_SOURCE,
@@ -188,6 +190,7 @@ export function MapCanvas({
   const onBadgeClickRef = useRef(onBadgeClick);
   const onViewportChangeRef = useRef(onViewportChange);
   const themeRef = useRef(theme);
+  const selectedIncidentIdRef = useRef<string | null>(null);
   const tilesMissingRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [styleEpoch, setStyleEpoch] = useState(0);
@@ -238,6 +241,7 @@ export function MapCanvas({
       });
       map.on("style.load", () => {
         registerDataLayers(map, themeRef.current);
+        map.setFilter(INCIDENT_SELECTED_LAYER, incidentSelectionFilter(selectedIncidentIdRef.current));
         setStyleEpoch((n) => n + 1);
       });
       map.on("load", () => setMapReady(true));
@@ -247,13 +251,25 @@ export function MapCanvas({
       };
       map.on("moveend", emitViewport);
       map.on("load", emitViewport);
-      map.on("click", "mc-incident-dot", (event) => {
+      map.on("click", "mc-incident-hit", (event) => {
         const feature = event.features?.[0];
         if (!feature) return;
-        new maplibregl.Popup({ offset: 10 })
+        const incidentId = typeof feature.properties?.id === "string" ? feature.properties.id : null;
+        const popup = new maplibregl.Popup({ offset: 10 })
           .setLngLat(event.lngLat)
-          .setDOMContent(incidentCardElement(feature.properties ?? {}))
-          .addTo(map);
+          .setDOMContent(incidentCardElement(feature.properties ?? {}));
+        if (incidentId) {
+          popup.on("close", () => {
+            if (selectedIncidentIdRef.current !== incidentId) return;
+            selectedIncidentIdRef.current = null;
+            if (map.getLayer(INCIDENT_SELECTED_LAYER)) {
+              map.setFilter(INCIDENT_SELECTED_LAYER, incidentSelectionFilter(null));
+            }
+          });
+        }
+        popup.addTo(map);
+        selectedIncidentIdRef.current = incidentId;
+        map.setFilter(INCIDENT_SELECTED_LAYER, incidentSelectionFilter(incidentId));
       });
       map.on("click", "mc-incident-cluster", (event) => {
         const feature = event.features?.[0];
@@ -264,7 +280,7 @@ export function MapCanvas({
           map.easeTo({ center: (feature!.geometry as Point).coordinates as [number, number], zoom });
         }).catch(() => {});
       });
-      for (const hoverable of ["mc-incident-dot", "mc-incident-cluster"]) {
+      for (const hoverable of ["mc-incident-hit", "mc-incident-cluster"]) {
         map.on("mouseenter", hoverable, () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", hoverable, () => { map.getCanvas().style.cursor = ""; });
       }
