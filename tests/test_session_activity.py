@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -20,7 +20,7 @@ def test_session_create_and_resume_upsert_activity(tmp_path, monkeypatch) -> Non
     with get_sessionmaker()() as session:
         first_seen = session.get(SessionActivity, user_hash).last_seen_at
 
-    future = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+    future = first_seen.replace(tzinfo=UTC) + timedelta(minutes=1)
     monkeypatch.setattr("app.services.session_activity_service.utc_now", lambda: future)
     resumed = client.post("/sessions")
 

@@ -184,6 +184,28 @@ describe("AssistantPanel", () => {
     expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
   });
 
+  it("gives an expanded result the rail and restores controls when it is collapsed", () => {
+    const { rerender } = setup({
+      items: [{ kind: "analysis_card", card: analyzeCard }] as ThreadItem[],
+      expandedCard: analyzeCard,
+      followupChips: [widenChip],
+      contextStrip: <div data-testid="ctx-slot" />,
+    });
+
+    expect(document.querySelector(".mc-rail")).toHaveClass("is-result-focused");
+    expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Widen to 500 m" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ctx-slot")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
+
+    rerender({ expandedCard: null });
+    expect(document.querySelector(".mc-rail")).not.toHaveClass("is-result-focused");
+    expect(screen.getByRole("button", { name: "Show me the data" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Widen to 500 m" })).toBeInTheDocument();
+    expect(screen.getByTestId("ctx-slot")).toBeInTheDocument();
+    expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
+  });
+
   it("renders the follow-up chip row when chips are present and forwards clicks", () => {
     const { onFollowupChip } = setup({ followupChips: [widenChip] });
     const chip = screen.getByRole("button", { name: "Widen to 500 m" });
@@ -226,7 +248,7 @@ describe("AssistantPanel", () => {
         focusCard: { card: analyzeCard },
       });
       expect(scrollSpy).toHaveBeenCalledTimes(1);
-      expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+      expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     });
 
     it("does not scroll when focusCard is null", () => {
@@ -363,6 +385,15 @@ describe("AssistantPanel", () => {
 
       rerender({ items: [{ kind: "user_text", text: "hello" }, { kind: "tabby_text", text: "Hi." }] });
       expect(log.scrollTop).toBe(log.scrollHeight);
+    });
+
+    it("does not apply chat bottom-stick behavior when an analysis card lands", () => {
+      const items: ThreadItem[] = [{ kind: "user_text", text: "analyze Home" }];
+      const { rerender } = setup({ items });
+      const log = stubScrollableLog();
+
+      rerender({ items: [...items, { kind: "analysis_card", card: analyzeCard }] });
+      expect(log.scrollTop).toBe(0);
     });
 
     it("keeps following the bottom while an answer streams", () => {

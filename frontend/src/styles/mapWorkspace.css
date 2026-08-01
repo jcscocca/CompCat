@@ -155,6 +155,11 @@
 .mc-rail-wrap{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;}
 .mc-dock.mc-rail{flex:1;min-height:0;max-height:none;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
 .mc-dock.mc-rail .mc-dock-log{flex:1;min-height:0;max-height:none;overflow:auto;align-content:start;}
+.mc-dock.mc-rail.is-result-focused{gap:8px;}
+.mc-dock.mc-rail.is-result-focused .mc-dock-log{scroll-padding-block:8px;}
+.mc-dock.mc-rail.is-result-focused .mc-result-head{
+  position:sticky;top:0;z-index:2;padding:2px 0 8px;background:var(--surface);border-bottom:1px solid var(--border);
+}
 .mc-direct-run{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid var(--accent-soft);border-radius:12px;background:var(--accent-soft);}
 .mc-direct-run>div{min-width:0;display:grid;gap:2px;}
 .mc-direct-run strong{color:var(--text-strong);font-size:12.5px;}

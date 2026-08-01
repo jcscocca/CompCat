@@ -131,14 +131,18 @@ export function AssistantPanel({
   // bubble that shows streaming text is the same DOM node the final commit updates in
   // place (rather than an unmount+remount when the turn settles).
   const displayItems: ThreadItem[] = draft ? [...items, { kind: "tabby_text", text: draft }] : items;
+  const newestDisplayItem = displayItems.at(-1);
+  const resultFocused = expandedCard !== null;
 
   // Follow the newest entry and the streaming draft. Runs on every commit rather than on a
-  // length change alone: a streamed answer grows the same node in place.
+  // length change alone: a streamed answer grows the same node in place. Analysis cards are
+  // documents, not chat bubbles; their dedicated focus effect below owns the landing position
+  // so a tall report opens at its heading instead of at its final chart.
   useEffect(() => {
     const log = logRef.current;
-    if (!log || !stickToBottomRef.current) return;
+    if (!log || !stickToBottomRef.current || newestDisplayItem?.kind === "analysis_card") return;
     log.scrollTop = log.scrollHeight;
-  }, [displayItems.length, draft, statusLine, toolActivity.length]);
+  }, [displayItems.length, draft, newestDisplayItem?.kind, statusLine, toolActivity.length]);
 
   useEffect(() => {
     if (!focusCard) return;
@@ -148,7 +152,7 @@ export function AssistantPanel({
     for (let i = displayItems.length - 1; i >= 0; i--) {
       const item = displayItems[i];
       if (item.kind === "analysis_card" && item.card === focusCard.card) {
-        cardRefs.current.get(i)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        cardRefs.current.get(i)?.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }
     }
@@ -156,7 +160,7 @@ export function AssistantPanel({
   }, [focusCard]);
 
   return (
-    <div className="mc-dock mc-rail">
+    <div className={`mc-dock mc-rail${resultFocused ? " is-result-focused" : ""}`}>
       <div className="mc-dock-head">
         <h2>
           <TabbyAvatar variant="mark" size={20} className={greeted ? undefined : "mc-tabby-pulse"} />
@@ -274,7 +278,7 @@ export function AssistantPanel({
         ) : null}
       </div>
 
-      {toolActivity.length ? (
+      {!resultFocused && toolActivity.length ? (
         <ul className="mc-dock-tools" aria-label="Tool activity">
           {toolActivity.map((item, index) => (
             <li key={`${item.label}-${index}`}>{item.label}</li>
@@ -282,7 +286,7 @@ export function AssistantPanel({
         </ul>
       ) : null}
 
-      {followupChips.length > 0 && !busy ? (
+      {!resultFocused && followupChips.length > 0 && !busy ? (
         <div className="mc-followups">
           {followupChips.map((chip) => (
             <button key={chip.label} type="button" className="mc-chip" onClick={() => onFollowupChip(chip)}>
@@ -294,7 +298,7 @@ export function AssistantPanel({
 
       {errorLine ? <p className="mc-inline-error" role="alert">{errorLine}</p> : null}
 
-      {hasPlaces ? (
+      {!resultFocused && hasPlaces ? (
         <div className="mc-direct-run">
           <div>
             <strong>Quick report</strong>
@@ -311,23 +315,25 @@ export function AssistantPanel({
         </div>
       ) : null}
 
-      {contextStrip}
+      {!resultFocused ? contextStrip : null}
 
-      {offline ? <p className="mc-rail-offline">{OFFLINE_COMPOSER_HINT}</p> : null}
+      {!resultFocused && offline ? <p className="mc-rail-offline">{OFFLINE_COMPOSER_HINT}</p> : null}
 
-      <form className="mc-dock-form" onSubmit={handleSubmit}>
-        <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
-        <textarea
-          id="assistant-message"
-          value={input}
-          rows={2}
-          disabled={offline}
-          onChange={(event) => setInput(event.target.value)}
-        />
-        <button type="submit" disabled={busy || offline || !input.trim()}>
-          Send
-        </button>
-      </form>
+      {!resultFocused ? (
+        <form className="mc-dock-form" onSubmit={handleSubmit}>
+          <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
+          <textarea
+            id="assistant-message"
+            value={input}
+            rows={2}
+            disabled={offline}
+            onChange={(event) => setInput(event.target.value)}
+          />
+          <button type="submit" disabled={busy || offline || !input.trim()}>
+            Send
+          </button>
+        </form>
+      ) : null}
     </div>
   );
 }
