@@ -149,7 +149,7 @@ desktop locator-strip state.
 
 Tabby's conversational controls consume the assistant endpoints as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
 
-The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's single **Analysis filters** control owns both saved-place selection and unsaved search/share points; result cards are marked as previous analyses as soon as that context changes.
+The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's **Analysis filters** card owns both saved-place selection and unsaved search/share points. Its visible date, radius, category, and layer pills are direct disclosure buttons with one anchored picker open at a time; result cards are marked as previous analyses as soon as that context changes.
 
 The incident map deliberately distinguishes records from visible coordinates. The public
 source geography is reported at block level, so `/dashboard/incident-points` groups matching rows by

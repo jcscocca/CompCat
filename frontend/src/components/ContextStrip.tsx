@@ -3,7 +3,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
 import { incidentNoun, layerDisclosure } from "../lib/layerCopy";
 import { CATEGORIES, categoryLabel } from "../lib/offenseCategories";
-import type { AnalysisSettings } from "../types";
+import type { AnalysisSettings, LayerKey } from "../types";
+
+type FilterMenu = "dates" | "radius" | "category" | "layer";
+
+const LAYERS: { value: LayerKey; label: string }[] = [
+  { value: "reported", label: "Reported incidents" },
+  { value: "arrests", label: "Arrests" },
+  { value: "calls", label: "911 calls" },
+];
 
 type Props = {
   analysis: AnalysisSettings;
@@ -12,31 +20,100 @@ type Props = {
   /** Runs the direct dashboard analysis for the current places. */
   onRun?: () => void;
   runDisabled?: boolean;
+  /** False means the freshness endpoint confirmed that this layer has no loaded rows. */
+  layerAvailability?: Partial<Record<LayerKey, boolean>>;
   /** Saved-place selection belongs to the analysis context, so it is composed into
    * this single control instead of living in a second toolbar at the top of the rail. */
   locationControls?: ReactNode;
   /** Copies the share link and reports success/failure (the caller owns the URL + the
    * clipboard write); the strip only owns the transient status note. */
   onCopyLink?: () => Promise<boolean> | boolean;
+  copyDisabled?: boolean;
 };
 
-/** One-line active-context summary above Tabby's input. This is literally the
- * dashboard_state Tabby sees each turn — tapping it opens inline editors. */
-export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDisabled, locationControls, onCopyLink }: Props) {
-  const [open, setOpen] = useState(false);
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg className={open ? "is-open" : ""} viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function Checkmark() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m5 12 4 4L19 6" />
+    </svg>
+  );
+}
+
+/** The live dashboard context above Tabby's input. Each visible value is its own
+ * disclosure button, so changing a filter no longer requires opening a separate editor. */
+export function ContextStrip({
+  analysis,
+  availableRadii,
+  onChange,
+  onRun,
+  runDisabled,
+  layerAvailability,
+  locationControls,
+  onCopyLink,
+  copyDisabled,
+}: Props) {
+  const [openMenu, setOpenMenu] = useState<FilterMenu | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef<Record<FilterMenu, HTMLButtonElement | null>>({
+    dates: null,
+    radius: null,
+    category: null,
+    layer: null,
+  });
   const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
   const disclosure = layerDisclosure(analysis.layer);
   const showCategories = analysis.layer !== "calls";
   const activeCategoryLabel = categoryLabel(analysis.offenseCategory, analysis.layer);
-  const contextLabel = [
-    `${analysis.startDate} – ${analysis.endDate}`,
-    `${analysis.radiusM} m`,
-    ...(showCategories ? [activeCategoryLabel] : []),
-    incidentNoun(analysis.layer).pluralCap,
-  ].join(", ");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyResetRef = useRef<number | null>(null);
-  useEffect(() => () => { if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current); }, []);
+
+  useEffect(() => () => {
+    if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const activeMenu = openMenu;
+
+    function onPointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      triggerRefs.current[activeMenu]?.focus();
+      setOpenMenu(null);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openMenu]);
+
+  useEffect(() => {
+    if (!showCategories && openMenu === "category") setOpenMenu(null);
+  }, [openMenu, showCategories]);
+
+  function toggleMenu(menu: FilterMenu) {
+    setOpenMenu((current) => current === menu ? null : menu);
+  }
+
+  function patchAndClose(menu: FilterMenu, patch: Partial<AnalysisSettings>) {
+    onChange(patch);
+    triggerRefs.current[menu]?.focus();
+    setOpenMenu(null);
+  }
 
   async function handleCopyLink() {
     if (!onCopyLink) return;
@@ -47,90 +124,179 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
   }
 
   return (
-    <div className="mc-ctx">
-      <div className={`mc-ctx-summary${open ? " is-open" : ""}`}>
-        <span className="mc-ctx-summary-head">
+    <div className="mc-ctx" ref={rootRef}>
+      <div className={`mc-ctx-summary${openMenu ? " is-open" : ""}`}>
+        <div className="mc-ctx-summary-head">
           <span className="mc-ctx-summary-label">
             <svg className="mc-ctx-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
             Analysis filters
           </span>
-          <button
-            type="button"
-            className="mc-ctx-summary-action"
-            aria-expanded={open}
-            aria-label={`${open ? "Close" : "Edit"} filters — ${contextLabel}`}
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? "Close" : "Edit"}
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
-            </svg>
-          </button>
-        </span>
+        </div>
+
         {locationControls ? (
-          <span className="mc-ctx-locations">
+          <div className="mc-ctx-locations">
             <span className="mc-ctx-locations-label">Places</span>
             {locationControls}
-          </span>
+          </div>
         ) : null}
-        {!open ? (
-          <span className="mc-ctx-summary-values">
-            <span className="mc-ctx-value">{analysis.startDate} – {analysis.endDate}</span>
-            <span className="mc-ctx-value">{analysis.radiusM} m</span>
-            {showCategories ? <span className="mc-ctx-value">{activeCategoryLabel}</span> : null}
-            <span className="mc-ctx-value">{incidentNoun(analysis.layer).pluralCap}</span>
-          </span>
-        ) : null}
+
+        <div className="mc-ctx-summary-values" role="group" aria-label="Analysis filter controls">
+          <div className="mc-ctx-filter-row">
+          <div className="mc-ctx-filter is-grow">
+            <button
+              ref={(node) => { triggerRefs.current.dates = node; }}
+              type="button"
+              className="mc-ctx-filter-trigger"
+              aria-label={`Date range: ${analysis.startDate} – ${analysis.endDate}`}
+              aria-expanded={openMenu === "dates"}
+              aria-haspopup="dialog"
+              aria-controls="mc-ctx-dates-menu"
+              onClick={() => toggleMenu("dates")}
+            >
+              <span>{analysis.startDate} – {analysis.endDate}</span>
+              <Chevron open={openMenu === "dates"} />
+            </button>
+            {openMenu === "dates" ? (
+              <div id="mc-ctx-dates-menu" className="mc-ctx-popover mc-ctx-date-popover" role="dialog" aria-modal="false" aria-labelledby="mc-ctx-dates-title">
+                <strong id="mc-ctx-dates-title" className="mc-ctx-popover-title">Date range</strong>
+                <div className="mc-ctx-date-grid">
+                  <label htmlFor="ctx-start-date">Start date</label>
+                  <input id="ctx-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} onChange={(event) => onChange({ startDate: event.target.value })} />
+                  <label htmlFor="ctx-end-date">End date</label>
+                  <input id="ctx-end-date" type="date" className="mc-inp" value={analysis.endDate} min={ANALYSIS_MIN_DATE} onChange={(event) => onChange({ endDate: event.target.value })} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mc-ctx-filter">
+            <button
+              ref={(node) => { triggerRefs.current.radius = node; }}
+              type="button"
+              className="mc-ctx-filter-trigger"
+              aria-label={`Search radius: ${analysis.radiusM} m`}
+              aria-expanded={openMenu === "radius"}
+              aria-haspopup="dialog"
+              aria-controls="mc-ctx-radius-menu"
+              onClick={() => toggleMenu("radius")}
+            >
+              <span>{analysis.radiusM} m</span>
+              <Chevron open={openMenu === "radius"} />
+            </button>
+            {openMenu === "radius" ? (
+              <div id="mc-ctx-radius-menu" className="mc-ctx-popover" role="dialog" aria-modal="false" aria-labelledby="mc-ctx-radius-title">
+                <strong id="mc-ctx-radius-title" className="mc-ctx-popover-title">Search radius</strong>
+                <div className="mc-ctx-option-list">
+                  {radii.map((value) => {
+                    const selected = analysis.radiusM === value;
+                    return (
+                      <button key={value} type="button" className={`mc-ctx-option${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => patchAndClose("radius", { radiusM: value })}>
+                        <span>{value} m</span>
+                        {selected ? <Checkmark /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          </div>
+
+          <div className="mc-ctx-filter-row">
+          {showCategories ? (
+            <div className="mc-ctx-filter is-category">
+              <button
+                ref={(node) => { triggerRefs.current.category = node; }}
+                type="button"
+                className="mc-ctx-filter-trigger"
+                aria-label={`${analysis.layer === "arrests" ? "Arrest" : "Incident"} category: ${activeCategoryLabel}`}
+                aria-expanded={openMenu === "category"}
+                aria-haspopup="dialog"
+                aria-controls="mc-ctx-category-menu"
+                onClick={() => toggleMenu("category")}
+              >
+                <span>{activeCategoryLabel}</span>
+                <Chevron open={openMenu === "category"} />
+              </button>
+              {openMenu === "category" ? (
+                <div id="mc-ctx-category-menu" className="mc-ctx-popover" role="dialog" aria-modal="false" aria-labelledby="mc-ctx-category-title">
+                  <strong id="mc-ctx-category-title" className="mc-ctx-popover-title">{analysis.layer === "arrests" ? "Arrest category" : "Incident category"}</strong>
+                  <div className="mc-ctx-option-list">
+                    {CATEGORIES.map((category) => {
+                      const selected = analysis.offenseCategory === category.value;
+                      const label = category.value ? category.label : categoryLabel("", analysis.layer);
+                      return (
+                        <button key={category.value || "all"} type="button" className={`mc-ctx-option${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => patchAndClose("category", { offenseCategory: category.value })}>
+                          <span>{label}</span>
+                          {selected ? <Checkmark /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mc-ctx-filter is-layer is-align-end is-grow">
+            <button
+              ref={(node) => { triggerRefs.current.layer = node; }}
+              type="button"
+              className="mc-ctx-filter-trigger"
+              aria-label={`Data layer: ${incidentNoun(analysis.layer).pluralCap}`}
+              aria-expanded={openMenu === "layer"}
+              aria-haspopup="dialog"
+              aria-controls="mc-ctx-layer-menu"
+              onClick={() => toggleMenu("layer")}
+            >
+              <span>{incidentNoun(analysis.layer).pluralCap}</span>
+              <Chevron open={openMenu === "layer"} />
+            </button>
+            {openMenu === "layer" ? (
+              <div id="mc-ctx-layer-menu" className="mc-ctx-popover mc-ctx-layer-popover" role="dialog" aria-modal="false" aria-labelledby="mc-ctx-layer-title">
+                <strong id="mc-ctx-layer-title" className="mc-ctx-popover-title">Data layer</strong>
+                <div className="mc-ctx-option-list">
+                  {LAYERS.map((option) => {
+                    const selected = analysis.layer === option.value;
+                    const unavailable = layerAvailability?.[option.value] === false;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`mc-ctx-option${selected ? " is-selected" : ""}`}
+                        aria-pressed={selected}
+                        disabled={unavailable}
+                        aria-label={unavailable ? `${option.label} — No data loaded` : undefined}
+                        onClick={() => patchAndClose("layer", { layer: option.value, offenseCategory: "" })}
+                      >
+                        <span>{option.label}</span>
+                        {unavailable ? <small>No data</small> : selected ? <Checkmark /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          </div>
+        </div>
+
+        <div className="mc-ctx-actions">
+          <button type="button" className="mc-cta" disabled={runDisabled || !onRun} onClick={() => onRun?.()}>Run analysis</button>
+          <button type="button" className="mc-link-copy" disabled={copyDisabled || !onCopyLink} onClick={() => void handleCopyLink()}>Copy link</button>
+        </div>
       </div>
 
-      {disclosure ? <p className="mc-layer-note" role="note">{disclosure}</p> : null}
-
-      {open ? (
-        <div className="mc-ctx-editor">
-          <div className="mc-field">
-            <label htmlFor="ctx-start-date">Date range</label>
-            <div className="mc-inputs">
-              <input id="ctx-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} aria-label="Start date" onChange={(event) => onChange({ startDate: event.target.value })} />
-              <input id="ctx-end-date" type="date" className="mc-inp" value={analysis.endDate} min={ANALYSIS_MIN_DATE} aria-label="End date" onChange={(event) => onChange({ endDate: event.target.value })} />
-            </div>
-          </div>
-          <div className="mc-field">
-            <label id="ctx-radius-label">Search radius</label>
-            <div className="mc-chips" role="group" aria-labelledby="ctx-radius-label">
-              {radii.map((value) => (
-                <button key={value} type="button" className={`mc-chip${analysis.radiusM === value ? " on" : ""}`} aria-pressed={analysis.radiusM === value} onClick={() => onChange({ radiusM: value })}>
-                  {value} m
-                </button>
-              ))}
-            </div>
-          </div>
-          {showCategories ? (
-            <div className="mc-field">
-              <label id="ctx-category-label">{analysis.layer === "arrests" ? "Arrest categories" : "Incident categories"}</label>
-              <div className="mc-chips" role="group" aria-labelledby="ctx-category-label">
-                {CATEGORIES.map((category) => (
-                  <button key={category.value || "all"} type="button" className={`mc-chip${analysis.offenseCategory === category.value ? " on" : ""}`} aria-pressed={analysis.offenseCategory === category.value} onClick={() => onChange({ offenseCategory: category.value })}>
-                    {category.value ? category.label : activeCategoryLabel}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <div className="mc-ctx-actions">
-            <button type="button" className="mc-cta" disabled={runDisabled} onClick={() => onRun?.()}>Run analysis</button>
-            <button type="button" className="mc-link-copy" onClick={() => void handleCopyLink()}>Copy link</button>
-            <button type="button" className="mc-chip" onClick={() => setOpen(false)}>Done</button>
-          </div>
-          <span className="mc-copy-status" data-testid="copy-status" role="status" aria-live="polite">
-            {copyState === "copied" ? "Copied" : copyState === "failed" ? "Couldn't copy — try again." : ""}
-          </span>
-          {copyState === "copied" ? (
-            <p className="mc-copy-hint">Link copied. It includes the exact locations, labels, and filters; anyone with the link can see them. Results recompute from fresh data.</p>
-          ) : null}
-        </div>
+      <span className="mc-copy-status" data-testid="copy-status" role="status" aria-live="polite">
+        {copyState === "copied" ? "Copied" : copyState === "failed" ? "Couldn't copy — try again." : ""}
+      </span>
+      {copyState === "copied" ? (
+        <p className="mc-copy-hint">Link copied. It includes the exact locations, labels, and filters; anyone with the link can see them. Results recompute from fresh data.</p>
       ) : null}
+
+      {disclosure ? <p className="mc-layer-note" role="note">{disclosure}</p> : null}
     </div>
   );
 }
