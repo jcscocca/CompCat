@@ -3,6 +3,8 @@ import type { SheetSnap } from "../types";
 export const DRAWER_MIN = 340;
 export const DRAWER_DEFAULT = 400;
 export const DRAWER_WIDE = 640;
+// Expanded analysis cards need a little more room than the user-selectable wide preset.
+export const DRAWER_DETAIL = 720;
 export const DRAWER_RAIL = 48;
 export const DRAWER_RESIZE_STEP = 24;
 // Focus mode (and manual drag) always leave this much live map at the left edge.

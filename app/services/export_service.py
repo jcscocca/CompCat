@@ -117,6 +117,8 @@ def analysis_run_csv(session: Session, user_id_hash: str, run_id: str) -> str:
     )
     return build_analysis_csv(
         analysis,
+        analysis_start_date=run.analysis_start_date,
+        analysis_end_date=run.analysis_end_date,
         layer=layer,
         offense_subcategory=run.offense_subcategory,
         nibrs_group=run.nibrs_group,
@@ -149,11 +151,11 @@ def _empty_analysis_csv(run: AnalysisRun) -> str:
     return build_analysis_csv(
         {
             "radius_m": "",
-            "analysis_start_date": run.analysis_start_date.isoformat(),
-            "analysis_end_date": run.analysis_end_date.isoformat(),
             "offense_category": run.offense_category,
             "places": [],
         },
+        analysis_start_date=run.analysis_start_date,
+        analysis_end_date=run.analysis_end_date,
         layer=run.layer or "reported",
         offense_subcategory=run.offense_subcategory,
         nibrs_group=run.nibrs_group,

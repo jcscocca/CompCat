@@ -131,11 +131,21 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 Analysis cards use `GET /exports/analysis.csv?run_id=...`, which verifies run ownership,
 recomputes the same reference-circle payload from the frozen run parameters and selected
 places, and exports one row per place/reference geography using the same values displayed in
-the card. The retained polygon-density baseline fields are not part of this analytical export.
+the card. The export stamps both analysis-window dates directly from that immutable run, so
+the end date cannot disappear when the detail payload is recomputed. The retained
+polygon-density baseline fields are not part of this analytical export.
 The Manage Places footer retains the separate session-wide Tableau place-summary download.
 Both paths honor the per-place export privacy class.
 
 The Tabby rail's **Show me the data** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an expanded `AnalysisCard` in the same rail. The rail keeps one live client-generated quick-report card, so another direct run replaces that card instead of stacking a duplicate “previous analysis”; assistant-produced cards remain part of the conversation.
+
+On desktop, opening an analysis card's detailed pane temporarily grows the Tabby rail to at
+least 720 px (without shrinking an already wider user width); collapsing the card restores the
+previous width. The card also refits the map from its frozen saved-place or ad-hoc coordinates,
+using the expanded rail as camera padding; nearby locations therefore zoom in together while
+spread-out locations remain in frame. Mobile uses the full-height sheet snap instead. The full
+map key stays behind a compact toggle at every viewport width and disappears in the narrow
+desktop locator-strip state.
 
 Tabby's conversational controls consume the assistant endpoints as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
 

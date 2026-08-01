@@ -790,6 +790,16 @@ describe("MapWorkspace", () => {
     // view): the card itself is the receipt, and — runId null — has no export link.
     expect(await screen.findByTestId("compare-callout")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
+    await waitFor(() => expect(fitToCaptures.length).toBeGreaterThan(0));
+    const fit = fitToCaptures.at(-1) as {
+      points: { lat: number; lng: number }[];
+      padding: { top: number; right: number; bottom: number; left: number };
+    };
+    expect(fit.points).toEqual([
+      { lat: 47.61, lng: -122.34 },
+      { lat: 47.62, lng: -122.33 },
+    ]);
+    expect(fit.padding).toEqual({ top: 90, left: 40, right: 440, bottom: 40 });
   });
 
   it("leads a fresh session with Tabby's onboarding chips", async () => {
@@ -856,6 +866,14 @@ describe("MapWorkspace", () => {
     // The explicit report action opens the card directly; no second "View details" click.
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
+    // A point-backed card can frame its frozen coordinates even though no dashboard Place
+    // exists. The expanded desktop panel is 720px wide, plus a 40px map gutter.
+    const fit = fitToCaptures.at(-1) as {
+      points: { lat: number; lng: number }[];
+      padding: { top: number; right: number; bottom: number; left: number };
+    };
+    expect(fit.points).toEqual([{ lat: 47.61, lng: -122.34 }]);
+    expect(fit.padding).toEqual({ top: 90, left: 40, right: 760, bottom: 40 });
   });
 
   it("lets a later search recenter supersede the last chip fly", async () => {
@@ -1703,9 +1721,21 @@ describe("MapWorkspace", () => {
     // Two cards now sit on the rail (the restored auto-run's + the assistant's); expand the
     // newest. Only one card expands at a time, so Collapse is then unambiguous.
     fireEvent.click(screen.getAllByRole("button", { name: "View details" }).at(-1)!);
-    expect(widthNow()).toBe("640px");
+    expect(widthNow()).toBe("720px");
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(widthNow()).toBe("400px");
+  });
+
+  it("expanding a card does not shrink a drawer already wider than the detail minimum", async () => {
+    localStorage.setItem("compcat.drawer.width", "800");
+    const { container } = await renderWithAnalyzeCard(analyzeCardResult());
+    const widthNow = () => (container.querySelector(".mc-workspace-panel") as HTMLElement).style.width;
+
+    expect(widthNow()).toBe("800px");
+    fireEvent.click(screen.getAllByRole("button", { name: "View details" }).at(-1)!);
+    expect(widthNow()).toBe("800px");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(widthNow()).toBe("800px");
   });
 
   it("narrow viewport: expanding a card raises the sheet to full, collapsing restores half", async () => {
@@ -2507,10 +2537,15 @@ describe("MapWorkspace", () => {
     expect(toggle).toHaveFocus();
   });
 
-  it("wide viewport: the map key stays on screen with no toggle", async () => {
+  it("wide viewport: the map key stays behind the same compact toggle", async () => {
     await renderForMapKey(1024);
 
-    expect(screen.queryByRole("button", { name: "Map key" })).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Map key" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Saved place")).not.toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Saved place")).toBeVisible();
   });
 });
