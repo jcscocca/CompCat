@@ -154,6 +154,93 @@ def test_agent_returns_final_answer_without_tool(tmp_path):
     assert len(client.calls) == 1
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What does reported incident context mean in CompCat?",
+        "What is reported incident context?",
+        "Explain the reported incident context in CompCat.",
+    ],
+)
+def test_agent_explains_static_product_scope_without_model(tmp_path, monkeypatch, question):
+    _narration_on(monkeypatch)
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient([])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content=question)],
+                AssistantDashboardState(),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert "reported incident context" in events[1].data["delta"]
+    assert "case desk" in events[1].data["delta"]
+    assert client.calls == []
+
+
+def test_agent_clarifies_missing_referenced_selection_without_model(tmp_path, monkeypatch):
+    _narration_on(monkeypatch)
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient([])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content="Analyze my selected place.")],
+                AssistantDashboardState(
+                    analysis_start_date=date(2024, 1, 1),
+                    analysis_end_date=date(2024, 1, 31),
+                    radii_m=[500],
+                ),
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert [event.event for event in events] == ["meta", "token", "done"]
+    assert "select a map pin or name a seattle place" in events[1].data["delta"].lower()
+    assert client.calls == []
+
+
+@pytest.mark.parametrize(
+    ("text", "state"),
+    [
+        ("Analyze Pike Place Market.", AssistantDashboardState()),
+        (
+            "Analyze my selected place.",
+            AssistantDashboardState(selected_place_ids=["place-1"]),
+        ),
+    ],
+)
+def test_deterministic_preflight_does_not_capture_supported_analysis(tmp_path, text, state):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    client = FakeClient(['{"type":"final","message":"Planning still ran."}'])
+    try:
+        events = asyncio.run(
+            _collect(
+                session,
+                user_hash,
+                [AssistantChatMessage(role="user", content=text)],
+                state,
+                client,
+            )
+        )
+    finally:
+        session.close()
+
+    assert client.calls
+    assert events[1].data["delta"] == "Planning still ran."
+
+
 def test_agent_soft_falls_back_on_unrecognized_plan_type(tmp_path):
     # A syntactically valid plan whose type is neither tool_call nor final (small local models
     # occasionally emit this) must degrade to a gentle clarify token, not an "internal" error.
