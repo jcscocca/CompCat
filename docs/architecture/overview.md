@@ -137,12 +137,13 @@ polygon-density baseline fields are not part of this analytical export.
 The Manage Places footer retains the separate session-wide Tableau place-summary download.
 Both paths honor the per-place export privacy class.
 
-The Tabby rail's **Show me the data** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an expanded `AnalysisCard` in the same rail. The rail keeps one live client-generated quick-report card, so another direct run replaces that card instead of stacking a duplicate “previous analysis”; assistant-produced cards remain part of the conversation.
+The Tabby rail's **Show me the data** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an expanded, result-focused `AnalysisCard` in the same rail. The report is focused at its heading and owns the rail's remaining height until it is collapsed; Quick report, filters, follow-up chips, and the composer then return. The rail keeps one live client-generated quick-report card, so another direct run replaces that card instead of stacking a duplicate “previous analysis”; assistant-produced cards remain part of the conversation.
 
-On desktop, opening an analysis card's detailed pane temporarily grows the Tabby rail to at
-least 720 px (without shrinking an already wider user width); collapsing the card restores the
-previous width. The card also refits the map from its frozen saved-place or ad-hoc coordinates,
-using the expanded rail as camera padding; nearby locations therefore zoom in together while
+On desktop, explicitly opening a collapsed analysis card's detailed pane temporarily grows the
+Tabby rail to at least 720 px (without shrinking an already wider user width); collapsing the
+card restores the previous width. A direct Quick report preserves the reader's existing desktop
+width while entering the same result-focused layout. The card also refits the map from its frozen saved-place or ad-hoc coordinates,
+using the active rail width as camera padding; nearby locations therefore zoom in together while
 spread-out locations remain in frame. Mobile uses the full-height sheet snap instead. The full
 map key stays behind a compact toggle at every viewport width and disappears in the narrow
 desktop locator-strip state.

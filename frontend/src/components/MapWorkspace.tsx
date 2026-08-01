@@ -343,10 +343,15 @@ export function MapWorkspace() {
     localCardRef.current = card;
     setCurrentCard(card);
     if (shouldExpand) {
-      // A full mobile sheet temporarily covers the map; fit while it is still at its current
-      // snap so the locations are framed correctly when the sheet comes back down.
-      if (isMobile) fitCard(card);
-      expandCard(card);
+      // A direct report becomes the rail's primary document without changing a desktop width
+      // the reader already chose. Mobile still needs the full sheet; fit before raising it so
+      // the map is framed correctly when the sheet comes back down. In both cases, focus the
+      // card explicitly so the report opens at its heading rather than inheriting chat's
+      // stick-to-bottom behavior.
+      setExpandedCard(card);
+      setFocusCard({ card });
+      fitCard(card);
+      if (isMobile) onSnap("full");
     } else {
       fitCard(card);
     }

@@ -315,7 +315,7 @@ describe("MapWorkspace", () => {
     vi.mocked(getNeighborhoodAnalysis).mockResolvedValue(makeNeighborhoodAnalysis());
     vi.mocked(getIncidentDetails).mockResolvedValue(makeIncidentDetails());
 
-    render(<MapWorkspace />);
+    const { container } = render(<MapWorkspace />);
     await screen.findByText(/point me at a place/i);
 
     fireEvent.click(screen.getByRole("button", { name: "Drop a pin on the map" }));
@@ -347,6 +347,16 @@ describe("MapWorkspace", () => {
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
+    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("400px");
+    expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Analysis filters")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(screen.getByRole("button", { name: "Show me the data" })).toBeInTheDocument();
+    expect(screen.getByText("Analysis filters")).toBeInTheDocument();
+    expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
 
   it("lets bulk imported places run a direct comparison report", async () => {
@@ -868,13 +878,13 @@ describe("MapWorkspace", () => {
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
     expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
     // A point-backed card can frame its frozen coordinates even though no dashboard Place
-    // exists. The expanded desktop panel is 720px wide, plus a 40px map gutter.
+    // exists. A direct report preserves the 400px desktop panel, plus a 40px map gutter.
     const fit = fitToCaptures.at(-1) as {
       points: { lat: number; lng: number }[];
       padding: { top: number; right: number; bottom: number; left: number };
     };
     expect(fit.points).toEqual([{ lat: 47.61, lng: -122.34 }]);
-    expect(fit.padding).toEqual({ top: 90, left: 40, right: 760, bottom: 40 });
+    expect(fit.padding).toEqual({ top: 90, left: 40, right: 440, bottom: 40 });
   });
 
   it("lets a later search recenter supersede the last chip fly", async () => {
@@ -1414,7 +1424,7 @@ describe("MapWorkspace", () => {
 
     // Places arrive after the lookup edit; the restore greet must not fire a second run.
     resolveSummary(makeSummary([home]));
-    await screen.findByRole("checkbox", { name: "Home" });
+    await screen.findByTestId("marker-p1");
     expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1);
   });
 
@@ -1846,7 +1856,7 @@ describe("MapWorkspace", () => {
 
     // The panel scrolls the matching card into view; the composer stays on the rail.
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
-    await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "center" }));
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "start" }));
   });
 
   it("narrow viewport: tapping a presence badge on a bar sheet raises it to half", async () => {
