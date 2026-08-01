@@ -65,7 +65,7 @@ Analyze/Compare tabs.
   coordinates, paste a CSV, rename/remove places, and control export inclusion.
 - **Context strip** — the active dates, radius, offense category, and data layer stay visible
   above Tabby's composer. Open it for exact controls, run the current selection, or copy a
-  generalized-coordinate share link.
+  share link containing the exact locations and filters for the current analysis.
 - **Inline analysis cards** — one selected place compares its count with empirical
   equal-radius circles centered on eligible Seattle street segments; two or more also produce
   the separate place-to-place statistical comparison. Expanding a card reveals MCPP, sector,
@@ -134,9 +134,12 @@ rate"; it must never call a place safe, unsafe, dangerous, or crime-preventing.
 
 ## Privacy posture
 
-- Places are stored as saved clusters with **generalized display coordinates**
-  (`display_latitude` / `display_longitude`); when those are missing the exporter rounds exact
-  centroids to a coarse grid.
+- Manually entered or geocoded places retain their **exact coordinates** so saving, restoring,
+  analyzing, and sharing a place do not shift the analysis center. Share links also include the
+  location label and are readable by anyone who receives the link.
+- Personal-upload clusters keep **generalized display coordinates** in the user-visible layer;
+  their exact centroids remain internal. CSV exports independently round every included place
+  to a coarse grid, including manually entered places.
 - In the default `tableau_safe` mode, home-like, work-like, health-like, religious-like, and
   explicitly suppressed clusters are excluded from exports.
 - Demo identity comes from the `X-Demo-User-Id` header (or `demo_user` when omitted) and is

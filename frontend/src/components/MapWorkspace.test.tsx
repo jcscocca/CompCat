@@ -80,7 +80,7 @@ import { getIncidentPoints, SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { assertValidPlaceCreate } from "../api/placeCreateContract";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { snapHeightPx } from "../lib/drawer";
-import { encodeView } from "../lib/savedView";
+import { decodeView, encodeView } from "../lib/savedView";
 import { keyOf } from "../lib/useAddressList";
 import type { DashboardFreshness, DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
 
@@ -294,7 +294,7 @@ describe("MapWorkspace", () => {
 
     await waitFor(() => {
       expect(createPlace).toHaveBeenCalledWith({
-        display_label: "Pin at 47.600, -122.300",
+        display_label: "Pin at 47.600000, -122.300000",
         latitude: 47.6,
         longitude: -122.3,
         visit_count: 1,
@@ -2424,8 +2424,9 @@ describe("MapWorkspace", () => {
   });
 
   it("ContextStrip Copy link writes the share URL and flashes Copied", async () => {
+    const preciseHome = { ...home, latitude: 47.6123456, longitude: -122.3345678 };
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
-    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([preciseHome]));
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 
@@ -2436,7 +2437,12 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalled());
-    expect(writeText.mock.calls[0][0]).toContain("?view=");
+    const copiedUrl = new URL(writeText.mock.calls[0][0]);
+    const sharedView = decodeView(copiedUrl.searchParams.get("view") ?? "");
+    expect(sharedView?.points[0]).toMatchObject({
+      latitude: 47.6123456,
+      longitude: -122.3345678,
+    });
     expect(await screen.findByText("Copied")).toBeInTheDocument();
   });
 

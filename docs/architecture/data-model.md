@@ -1,6 +1,6 @@
 SQLAlchemy/Alembic schema for CompCat's FastAPI backend: 12 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, statistical comparison, and infrastructure.
 
-> Updated 2026-07-30 for analysis-run selection provenance.
+> Updated 2026-07-31 for exact manual-place coordinates and export-only generalization.
 
 ---
 
@@ -17,7 +17,7 @@ user-scoped table carries `user_id_hash` (a hashed session identity; see §2). S
 | `ImportBatch` | `import_batches` | Records one file upload: provenance, parse state, retention policy. | `source_type`, `file_hash_sha256`, `parser_version`, `status` (`"parsed"` → `"normalized"`), `raw_retention_until`, `privacy_mode` |
 | `StagingLocationObservation` | `staging_location_observations` | Raw location records parsed from the upload before normalization. Unique on `(import_id, source_record_hash)`. Deleted post-clustering unless `MCA_RAW_UPLOAD_RETENTION=true`. | `import_id` → `import_batches`, `source_record_type`, `source_record_hash`, `observed_at_utc`, `latitude`, `longitude`, `accuracy_m`, `activity_type`, `confidence_score`, `display_label` |
 | `StopVisit` | `stop_visits` | Inferred dwell periods derived from raw observations (or from structured stop records). Deleted post-clustering unless `MCA_RAW_UPLOAD_RETENTION=true`. | `import_id` → `import_batches`, `place_cluster_id` → `place_clusters` (nullable, set during clustering), `start_time_utc`, `end_time_utc`, `duration_minutes`, `centroid_latitude`, `centroid_longitude`, `radius_m`, `source_basis`, `point_count_used` |
-| `PlaceCluster` | `place_clusters` | A recurring place inferred by grouping nearby stop visits. The durable user-visible entity. | `centroid_latitude/longitude` (exact centroid), `display_latitude/display_longitude` (privacy-generalized, see §4), `cluster_radius_m`, `visit_count`, `total_dwell_minutes`, `inferred_place_type`, `sensitivity_class`, `cluster_version`, `cluster_method` |
+| `PlaceCluster` | `place_clusters` | A recurring place inferred by grouping nearby stop visits, or a manually saved address. The durable user-visible entity. | `centroid_latitude/longitude` (exact source point or centroid), `display_latitude/display_longitude` (exact for manual places, privacy-generalized for personal-upload clusters; see §4), `cluster_radius_m`, `visit_count`, `total_dwell_minutes`, `inferred_place_type`, `sensitivity_class`, `cluster_version`, `cluster_method` |
 
 ### Crime
 
@@ -141,8 +141,9 @@ if not settings.raw_upload_retention:
 
 ⚠ **Invariant:** `StagingLocationObservation` rows (exact GPS points) and `StopVisit`
 rows (intermediate dwell periods) are **deleted immediately after clustering** unless
-`MCA_RAW_UPLOAD_RETENTION=true`. The default is `false`. Only `PlaceCluster` rows —
-which carry generalized coordinates (see §4) — survive into the user-visible data layer.
+`MCA_RAW_UPLOAD_RETENTION=true`. The default is `false`. Only `PlaceCluster` rows — whose
+personal-upload display coordinates are generalized (see §4) — survive into the user-visible
+data layer.
 
 Re-normalizing an import (`_delete_existing_normalization`) first wipes `StopVisit`,
 `PlaceCluster`, and `PlaceCrimeSummary` rows for that import, then rebuilds them. The
@@ -153,25 +154,32 @@ source for the second pass) and are only discarded at the public-upload completi
 
 ## 4. Generalized vs exact coordinates
 
-`PlaceCluster` stores two coordinate pairs:
+`PlaceCluster` stores two coordinate pairs. Their precision depends on how the place entered
+the app:
 
-| Field | Precision | Use |
-|---|---|---|
-| `centroid_latitude`, `centroid_longitude` | Full float (exact centroid of member stops) | Internal computation only (analysis radius queries, re-clustering) |
-| `display_latitude`, `display_longitude` | Rounded to 3 decimal places (~111 m grid) | Returned to the frontend and exported |
+| Field | Manual/geocoded place | Personal-upload cluster | Use |
+|---|---|---|---|
+| `centroid_latitude`, `centroid_longitude` | Full input precision | Full float (exact centroid of member stops) | Source coordinate; upload centroids remain internal |
+| `display_latitude`, `display_longitude` | Full input precision | Rounded to 3 decimal places (~111 m latitude grid) | Returned to the frontend and used as the analysis center |
 
-The snapping is performed by `app/normalization/geo.snap_to_grid(lat, lon)` (its `decimals` argument defaults to `3`),
-called inside `_build_cluster` in `app/normalization/clusters.py`. This produces a
-display position that cannot be reverse-engineered to a precise home or workplace address.
+Personal-upload snapping is performed by `app/normalization/geo.snap_to_grid(lat, lon)` (its
+`decimals` argument defaults to `3`), called inside `_build_cluster` in
+`app/normalization/clusters.py`. Manual places deliberately do not use this transform: changing
+the center can change a small-radius analysis. Migration `0017` restores full stored centroids
+to `display_*` for existing manual rows.
 
-⚠ **Invariant:** Only generalized coordinates (`display_*`) should be returned in API
-responses visible to the user. Exact centroids are internal.
+Tableau exports have a separate privacy boundary: `app/exports/tableau.py` snaps every included
+coordinate to the same three-decimal grid even when a manual place is exact in the app.
+
+⚠ **Invariant:** Exact personal-upload centroids remain internal. Manual-place API responses and
+share links are exact and must disclose that anyone receiving a link can read its coordinates
+and location labels. Exports remain generalized.
 
 ---
 
 ## 5. Migrations
 
-Alembic manages the Postgres production schema; 16 migration scripts live in
+Alembic manages the Postgres production schema; 17 migration scripts live in
 `alembic/versions/`:
 
 | File | Content |
@@ -192,6 +200,7 @@ Alembic manages the Postgres production schema; 16 migration scripts live in
 | `0014_retention_indexes.py` | Adds age-filter indexes used by the bounded retention sweep. |
 | `0015_session_activity.py` | Creates `session_activity` with a hash primary key and indexed `last_seen_at`, and indexes `place_clusters.updated_at` for the active-identity union; downgrade reverses both. |
 | `0016_analysis_run_places.py` | Adds nullable `analysis_runs.place_ids_json`; new runs record their selected saved-place IDs so run exports retain zero-count selections, while old runs fall back to attached summaries. |
+| `0017_exact_manual_coords.py` | Backfills manual-place display coordinates from their exact stored centroids. |
 
 **Dual bootstrap path** (`app/db.init_db`):
 

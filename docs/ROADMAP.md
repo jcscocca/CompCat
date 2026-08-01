@@ -95,8 +95,9 @@ soak run, and the explicitly deferred performance/methodology follow-ups below.
   for **Analyze & Compare** that recompute on open and store nothing new server-side. Enabled by
   making analyze/compare/incidents/neighborhood accept inline `points` (Seattle-bbox-validated,
   ≤10) as an alternative to identity-bound `place_ids`; the points path is stateless (no
-  `AnalysisRun`/`PlaceCrimeSummary` write). Links carry only generalized (~110 m) coordinates; no
-  account. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-30-saved-views*`. _Increment 2
+  `AnalysisRun`/`PlaceCrimeSummary` write). Links carry exact coordinates and location labels
+  plus the filters, but no session or saved-place ids; anyone with a link can read its locations.
+  Spec/plan: `docs/superpowers/{specs,plans}/2026-06-30-saved-views*`. _Increment 2
   (Routes saved views, #81) removed 2026-07._
 - [x] **C4 · Second data source** — shipped across two increments. **Inc 1 (#75):** a
   source-aware crime layer (queries / freshness / backfill watermark all default to SPD
@@ -355,7 +356,7 @@ parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md
 
 - [x] **Rail-first shell + typed thread:** Tabby is the persistent desktop rail / mobile sheet;
   user text, narration, receipts, notices, and frozen analysis cards share a session-scoped
-  thread. The context strip owns exact settings, explicit run, and generalized share links.
+  thread. The context strip owns exact settings, explicit run, and exact-coordinate share links.
 - [x] **Deterministic command path:** `POST /assistant/commands` validates a fixed command enum,
   bypasses the LLM, and shares the chat SSE reducer. Free-text failure no longer disables chips,
   filters, cards, badges, or exports.

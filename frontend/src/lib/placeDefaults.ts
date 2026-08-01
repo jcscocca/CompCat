@@ -3,7 +3,7 @@ export const PLACE_LABEL_PLACEHOLDER = "Name this place (optional)";
 
 /** How an unnamed place identifies itself in lists, chips and cards: where it is. */
 export function coordinateLabel(latitude: number, longitude: number): string {
-  return `Pin at ${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
+  return `Pin at ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
 }
 
 /**

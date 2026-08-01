@@ -50,12 +50,16 @@ describe("useAddressList", () => {
     expect(result.current.edited).toBe(true);
   });
 
-  it("add() normalizes coords to 3 decimals and dedupes by keyOf, capped at MAX", () => {
+  it("add() preserves coordinate precision and dedupes only exact matches, capped at MAX", () => {
     const { result } = renderHook(() => useAddressList({ seed: [], onSavedIdsChange: persistSpy }));
     act(() => result.current.add({ latitude: 47.6123456, longitude: -122.334567, label: "A" }));
-    act(() => result.current.add({ latitude: 47.6123999, longitude: -122.334999, label: "A dup" }));
-    expect(result.current.entries).toHaveLength(2 - 1);
-    expect(result.current.entries[0].latitude).toBe(47.612);
+    act(() => result.current.add({ latitude: 47.6123999, longitude: -122.334999, label: "Nearby" }));
+    act(() => result.current.add({ latitude: 47.6123456, longitude: -122.334567, label: "A dup" }));
+    expect(result.current.entries).toHaveLength(2);
+    expect(result.current.entries[0]).toMatchObject({
+      latitude: 47.6123456,
+      longitude: -122.334567,
+    });
     for (let i = 0; i < MAX_ADDRESSES + 3; i += 1) {
       act(() => result.current.add({ latitude: 47.0 + i * 0.01, longitude: -122.0, label: `P${i}` }));
     }

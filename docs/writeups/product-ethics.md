@@ -218,12 +218,13 @@ session-required server-side proxy that caches results with a TTL and holds a pr
 rate gate between upstream calls, so the browser never contacts the geocoder directly and the
 upstream sees one polite server rather than every user.
 
-Anything that leaves the app leaves generalized. I round coordinates in exports and share links
-to three decimals — roughly 110 m, a city block or so — because that is the resolution where
-the analysis still reproduces and the coordinate no longer points at a door; exports fall back
-to snapping exact centroids to the same grid when a stored display coordinate is missing. Share
-links are the strongest version: rounded points, a radius, a date range, and a layer inside an
-encoded URL parameter, storing nothing server-side, needing no account, recomputing on open.
+Exports and deliberate sharing have different precision contracts. Every exported coordinate is
+rounded to three decimals, and sensitive place classes are excluded by default. A share link,
+however, keeps the analysis coordinates exact: shifting a center can change the incidents inside
+a small radius, and the link already needs to disclose its location label to reproduce the view.
+The UI therefore says plainly that anyone with the link can read its exact coordinates and
+labels. The link contains only those locations plus the radius, date range, category, and layer —
+no session or saved-place ids — and recomputes on open without creating server-side view state.
 
 Whole classes of place don't get exported at all. In the default `tableau_safe` mode, clusters
 classified home-like, work-like, health-like, religious-like, or explicitly suppressed are

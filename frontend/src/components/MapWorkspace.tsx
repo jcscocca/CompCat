@@ -398,11 +398,11 @@ export function MapWorkspace() {
     // A just-saved place whose coordinates match an existing ad-hoc entry links in place
     // (markSaved — mirroring the retired Compare row-save) instead of dedup-adding, which
     // would keep the entry ad-hoc and leave the saved place looking unselected. Coords are
-    // rounded to 3 decimals to match useAddressList's normalize before keying.
+    // preserved exactly so saving never shifts the analysis point.
     const linked = new Set<string>();
     for (const place of savedPlaces ?? []) {
       if (place.latitude == null || place.longitude == null) continue;
-      const key = keyOf({ latitude: Number(place.latitude.toFixed(3)), longitude: Number(place.longitude.toFixed(3)) });
+      const key = keyOf({ latitude: place.latitude, longitude: place.longitude });
       if (list.entries.some((e) => !e.savedPlaceId && keyOf(e) === key)) {
         list.markSaved(key, place.id);
         linked.add(place.id);
@@ -484,7 +484,7 @@ export function MapWorkspace() {
         return next;
       });
     }
-    if (pinDraft.draft && keyOf({ latitude: Number(pinDraft.draft.latitude.toFixed(3)), longitude: Number(pinDraft.draft.longitude.toFixed(3)) }) === keyOf(entry)) {
+    if (pinDraft.draft && keyOf(pinDraft.draft) === keyOf(entry)) {
       pinDraft.setDraft(null);
     }
     list.removeAt(index);
@@ -631,7 +631,7 @@ export function MapWorkspace() {
   }
 
   const buildShareUrl = useCallback((): string | null => {
-    const points = list.entries.map((e) => ({ latitude: Number(e.latitude.toFixed(3)), longitude: Number(e.longitude.toFixed(3)), label: e.label }));
+    const points = list.entries.map((e) => ({ latitude: e.latitude, longitude: e.longitude, label: e.label }));
     if (points.length === 0) return null;
     const encoded = encodeView({
       points, radiusM: analysis.radiusM,
@@ -858,7 +858,7 @@ export function MapWorkspace() {
       entries={list.entries}
       identityByPlaceId={identityByPlaceId}
       savingKey={savingEntryKey}
-      saveHiddenKey={pinDraft.draft ? keyOf({ latitude: Number(pinDraft.draft.latitude.toFixed(3)), longitude: Number(pinDraft.draft.longitude.toFixed(3)) }) : null}
+      saveHiddenKey={pinDraft.draft ? keyOf(pinDraft.draft) : null}
       onToggle={handleToggleSelect}
       onFocus={handleFocusEntry}
       onHoverPlace={setHoveredPlaceId}

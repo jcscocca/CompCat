@@ -127,7 +127,7 @@ export function ContextStrip({ analysis, availableRadii, onChange, onRun, runDis
             {copyState === "copied" ? "Copied" : copyState === "failed" ? "Couldn't copy — try again." : ""}
           </span>
           {copyState === "copied" ? (
-            <p className="mc-copy-hint">Link copied. Links recompute from fresh data — bookmark one to keep a view.</p>
+            <p className="mc-copy-hint">Link copied. It includes the exact locations, labels, and filters; anyone with the link can see them. Results recompute from fresh data.</p>
           ) : null}
         </div>
       ) : null}

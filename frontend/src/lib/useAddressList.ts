@@ -29,13 +29,7 @@ export interface AddressList {
 }
 
 export function keyOf(p: { latitude: number; longitude: number }): string {
-  return `${p.latitude.toFixed(4)},${p.longitude.toFixed(4)}`;
-}
-
-function normalize(entry: AddressEntry): AddressEntry {
-  // Backend generalizes saved coords to ~3 decimals for privacy; normalizing here keeps
-  // keyOf matches (Saved badges, dedupe) stable across the save round-trip.
-  return { ...entry, latitude: Number(entry.latitude.toFixed(3)), longitude: Number(entry.longitude.toFixed(3)) };
+  return `${p.latitude},${p.longitude}`;
 }
 
 function dedupeCap(entries: AddressEntry[]): AddressEntry[] {
@@ -56,7 +50,7 @@ export function entriesFromPlaces(places: Place[]): AddressEntry[] {
   const entries: AddressEntry[] = [];
   for (const place of places) {
     if (place.latitude == null || place.longitude == null) continue;
-    entries.push(normalize({ latitude: place.latitude, longitude: place.longitude, label: place.display_label, savedPlaceId: place.id }));
+    entries.push({ latitude: place.latitude, longitude: place.longitude, label: place.display_label, savedPlaceId: place.id });
   }
   return dedupeCap(entries);
 }
@@ -111,7 +105,7 @@ export function useAddressList({ seed, onSavedIdsChange }: AddressListDeps): Add
   // selection) compose instead of clobbering each other.
   function add(entry: AddressEntry) {
     editedRef.current = true;
-    setEntries((cur) => dedupeCap([...cur, normalize(entry)]));
+    setEntries((cur) => dedupeCap([...cur, entry]));
   }
 
   function removeAt(index: number) {
@@ -125,7 +119,7 @@ export function useAddressList({ seed, onSavedIdsChange }: AddressListDeps): Add
     setEntries((cur) => {
       const existing = cur.findIndex((e) => e.savedPlaceId === place.id);
       if (existing >= 0) return cur.filter((_, i) => i !== existing);
-      const entry = normalize({ latitude: place.latitude as number, longitude: place.longitude as number, label: place.display_label, savedPlaceId: place.id });
+      const entry = { latitude: place.latitude as number, longitude: place.longitude as number, label: place.display_label, savedPlaceId: place.id };
       const collision = cur.findIndex((e) => keyOf(e) === keyOf(entry));
       if (collision >= 0) {
         // Address already in the list ad-hoc: stamp it saved in place (toggle-off then removes it whole).
@@ -137,7 +131,7 @@ export function useAddressList({ seed, onSavedIdsChange }: AddressListDeps): Add
 
   function replaceAll(next: AddressEntry[]) {
     editedRef.current = true;
-    setEntries(dedupeCap(next.map(normalize)));
+    setEntries(dedupeCap(next));
   }
 
   // Deliberately not an edit: stamping an id must not stop re-seeding.
