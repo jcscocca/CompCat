@@ -42,6 +42,9 @@ vi.mock("maplibre-gl", () => {
     getSource(id: string) {
       return this.sources.get(id);
     }
+    getLayer(id: string) {
+      return this.layers.find((entry) => entry.id === id);
+    }
     addLayer(layer: Record<string, unknown>) {
       this.layers.push(layer);
     }
@@ -110,6 +113,7 @@ vi.mock("maplibre-gl", () => {
   class MockPopup {
     static last: MockPopup | null = null;
     content: HTMLElement | null = null;
+    closeHandlers: Array<() => void> = [];
     constructor() {
       MockPopup.last = this;
     }
@@ -120,12 +124,17 @@ vi.mock("maplibre-gl", () => {
       this.content = el;
       return this;
     }
+    on(event: string, cb: () => void) {
+      if (event === "close") this.closeHandlers.push(cb);
+      return this;
+    }
     addTo() {
       document.body.appendChild(this.content!);
       return this;
     }
     remove() {
       this.content?.remove();
+      for (const cb of this.closeHandlers) cb();
     }
   }
   // maplibre-gl v6 is ESM-only with named exports (`import * as maplibregl`),
@@ -162,7 +171,9 @@ const MockedMap = maplibregl.Map as unknown as {
   last: MockMapInstance | null;
   lastOptions: { style: { sprite: string; sources: { protomaps: { url: string } } } } | null;
 };
-const MockPopup = (maplibregl as unknown as { Popup: { last: unknown } }).Popup;
+const MockPopup = (maplibregl as unknown as {
+  Popup: { last: { remove: () => void } | null };
+}).Popup;
 
 const place: Place = {
   id: "p1",
@@ -485,15 +496,26 @@ describe("beat + incident layers", () => {
       });
       expect(source!.setData).toHaveBeenCalledWith(POINTS_FC);
     });
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-dot")).toMatchObject({
+      paint: {
+        "circle-opacity": 0.72,
+        "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 5.5, 10, 7, 100, 8.5],
+      },
+    });
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-stack-count")).toMatchObject({
-      filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "record_count"], 1]],
+      minzoom: 16,
+      filter: ["all", ["!", ["has", "point_count"]], [">=", ["get", "record_count"], 10]],
+      layout: { "text-allow-overlap": false },
+    });
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-hit")).toMatchObject({
+      paint: { "circle-opacity": 0, "circle-radius": 13 },
     });
   });
 
   it("opens an XSS-safe popup card on dot click", async () => {
     renderCanvas({ incidentPoints: POINTS_FC });
     await waitFor(() => expect(MockedMap.last).not.toBeNull());
-    MockedMap.last!.fireLayerClick("mc-incident-dot", {
+    MockedMap.last!.fireLayerClick("mc-incident-hit", {
       properties: { id: "inc-1", offense_subcategory: '<img src=x onerror="a">', offense_category: "PROPERTY", occurred_at: "2025-06-01T12:00:00Z", block_address: "1XX BLOCK OF PINE ST" },
     });
     const card = document.body.querySelector(".mc-incident-card");
@@ -506,8 +528,9 @@ describe("beat + incident layers", () => {
   it("explains a shared-coordinate stack without presenting representative offense metadata", async () => {
     renderCanvas({ incidentPoints: POINTS_FC });
     await waitFor(() => expect(MockedMap.last).not.toBeNull());
-    MockedMap.last!.fireLayerClick("mc-incident-dot", {
+    MockedMap.last!.fireLayerClick("mc-incident-hit", {
       properties: {
+        id: "inc-stack-1",
         record_count: 27,
         item_label: "reported incidents",
         offense_subcategory: "THEFT",
@@ -522,6 +545,17 @@ describe("beat + incident layers", () => {
     expect(card!.textContent).toContain("Latest record: 2025-06-03");
     expect(card!.textContent).not.toContain("Theft");
     expect(card!.textContent).not.toContain("Pine");
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-selected")?.filter).toEqual([
+      "all",
+      ["!", ["has", "point_count"]],
+      ["==", ["get", "id"], "inc-stack-1"],
+    ]);
+    MockPopup.last!.remove();
+    expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-selected")?.filter).toEqual([
+      "all",
+      ["!", ["has", "point_count"]],
+      ["==", ["get", "id"], "__no_selected_incident__"],
+    ]);
   });
 
   it("emits viewport bounds on moveend and once after load", async () => {
@@ -555,6 +589,8 @@ describe("themed map", () => {
     // read CSS vars, so the theme picks the fixed color at registration).
     const ringLine = MockedMap.last!.layers.find((l) => l.id === "mc-ring-line");
     expect((ringLine?.paint as Record<string, unknown>)["line-color"]).toBe("#3FBF8F");
+    const selectedIncident = MockedMap.last!.layers.find((l) => l.id === "mc-incident-selected");
+    expect((selectedIncident?.paint as Record<string, unknown>)["circle-stroke-color"]).toBe("#3FBF8F");
   });
 
   // Regression: under maplibre-gl v6 the default (diffing) setStyle applies a theme swap in

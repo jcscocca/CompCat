@@ -39,8 +39,19 @@ export function addRingLayers(map: maplibregl.Map, theme: MapTheme): void {
 
 export const BEATS_SOURCE = "mc-beats";
 export const INCIDENTS_SOURCE = "mc-incidents";
+export const INCIDENT_SELECTED_LAYER = "mc-incident-selected";
 export const EMPTY_FC: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
 export const CLUSTER_MAX_ZOOM = 13; // clusters below, individual dots at z14+ (spec: initial threshold)
+export const STACK_LABEL_MIN_ZOOM = 16;
+export const STACK_LABEL_MIN_COUNT = 10;
+
+export function incidentSelectionFilter(id: string | null): maplibregl.FilterSpecification {
+  return [
+    "all",
+    ["!", ["has", "point_count"]],
+    ["==", ["get", "id"], id ?? "__no_selected_incident__"],
+  ];
+}
 
 export function addBeatLayers(map: maplibregl.Map): void {
   map.addSource(BEATS_SOURCE, { type: "geojson", data: EMPTY_FC });
@@ -71,7 +82,10 @@ export function addBeatLayers(map: maplibregl.Map): void {
   });
 }
 
-export function addIncidentLayers(map: maplibregl.Map): void {
+export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
+  const selectedColor = theme === "dark" ? "#3FBF8F" : "#0F6E56";
+  const labelColor = theme === "dark" ? "#E8EDF2" : "#3A3F46";
+  const labelHalo = theme === "dark" ? "#141A20" : "#FFFFFF";
   map.addSource(INCIDENTS_SOURCE, {
     type: "geojson",
     data: EMPTY_FC,
@@ -117,30 +131,71 @@ export function addIncidentLayers(map: maplibregl.Map): void {
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": "#3A3F46",
-      "circle-opacity": 0.85,
-      "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 10, 10, 13, 100, 17],
+      "circle-opacity": 0.72,
+      // Preserve one precise marker per block location without letting a count turn it into
+      // a dominant bubble. Exact record counts remain available in the click card.
+      "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 5.5, 10, 7, 100, 8.5],
       "circle-stroke-color": "#FFFFFF",
-      "circle-stroke-width": 1,
+      "circle-stroke-width": 0.75,
+    },
+  });
+  map.addLayer({
+    id: INCIDENT_SELECTED_LAYER,
+    type: "circle",
+    source: INCIDENTS_SOURCE,
+    filter: incidentSelectionFilter(null),
+    paint: {
+      "circle-color": "#3A3F46",
+      "circle-opacity": 0,
+      "circle-radius": ["step", ["get", "record_count"], 9.5, 2, 10.5, 10, 12, 100, 13.5],
+      "circle-stroke-color": selectedColor,
+      "circle-stroke-width": 2.5,
     },
   });
   map.addLayer({
     id: "mc-incident-stack-count",
     type: "symbol",
     source: INCIDENTS_SOURCE,
-    filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "record_count"], 1]],
+    minzoom: STACK_LABEL_MIN_ZOOM,
+    filter: [
+      "all",
+      ["!", ["has", "point_count"]],
+      [">=", ["get", "record_count"], STACK_LABEL_MIN_COUNT],
+    ],
     layout: {
       "text-field": ["number-format", ["get", "record_count"], { locale: "en-US", "max-fraction-digits": 0 }],
       "text-font": ["Noto Sans Medium"],
-      "text-size": 10,
+      "text-size": 11,
+      "text-anchor": "bottom-left",
+      "text-offset": [0.65, -0.5],
+      "text-padding": 3,
+      "text-allow-overlap": false,
     },
-    paint: { "text-color": "#FFFFFF" },
+    paint: {
+      "text-color": labelColor,
+      "text-halo-color": labelHalo,
+      "text-halo-width": 2,
+    },
+  });
+  // Keep compact markers easy to click and tap without adding visible map ink.
+  map.addLayer({
+    id: "mc-incident-hit",
+    type: "circle",
+    source: INCIDENTS_SOURCE,
+    filter: ["!", ["has", "point_count"]],
+    paint: {
+      "circle-color": "#3A3F46",
+      "circle-opacity": 0,
+      "circle-radius": 13,
+      "circle-stroke-width": 0,
+    },
   });
 }
 
 export function registerDataLayers(map: maplibregl.Map, theme: MapTheme): void {
   addBeatLayers(map);
   addRingLayers(map, theme);
-  addIncidentLayers(map);
+  addIncidentLayers(map, theme);
 }
 
 export function incidentCardElement(props: Record<string, unknown>): HTMLElement {

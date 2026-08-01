@@ -1,7 +1,7 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Updated 2026-07-30 for the direct report action, public-runtime hardening, and
-> the WCAG 2.2 Level AA frontend contract.
+> Updated 2026-07-31 for progressive block-stack map disclosure, the direct report action,
+> public-runtime hardening, and the WCAG 2.2 Level AA frontend contract.
 
 ---
 
@@ -144,8 +144,11 @@ The dashboard freshness response also drives the initial analysis context. Untou
 The incident map deliberately distinguishes records from visible coordinates. The public
 source geography is reported at block level, so `/dashboard/incident-points` groups matching rows by
 latitude/longitude and returns a `record_count` for each block location. MapLibre sums
-that value in low-zoom clusters and retains numbered stacks after clustering ends; it never
-lets overlapping block-level coordinates masquerade as one record. The response separately
+that value in low-zoom clusters and retains one compact marker per exact block location after
+clustering ends; it never lets overlapping block-level coordinates masquerade as one record.
+The click card always exposes the exact stack count, while ambient stack labels appear only for
+counts of 10 or more at zoom 16 and above so dense views stay geographically legible. The
+response separately
 reports total/returned records and total/returned block locations, and the 5,000-feature
 payload ceiling applies to locations ordered by their latest matching record. The same count
 query also returns current-viewport totals for all three layers, which the layer switch keeps

@@ -29,7 +29,7 @@ describe("MapLegend", () => {
     expect(screen.getByText(singular)).toBeInTheDocument();
     const plural = layer === "reported" ? "reported incidents" : layer === "arrests" ? "arrests" : "911 calls";
     expect(screen.getByText(`Same-block ${plural}`)).toBeInTheDocument();
-    expect(screen.getByText("number = records on this block")).toBeInTheDocument();
+    expect(screen.getByText("select for exact count · large stacks label at close zoom")).toBeInTheDocument();
     expect(screen.getByText(radiusNote)).toBeInTheDocument();
   });
 });
