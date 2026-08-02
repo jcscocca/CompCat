@@ -11,14 +11,14 @@ import type { SitePairwiseResult } from "../types";
 const pair: SitePairwiseResult = {
   id: "a-b", option_a_id: "a", option_a_label: "Pike", option_b_id: "b", option_b_label: "Bell",
   winner_option_id: "a", winner_label: "Pike", decision_class: "statistically_lower", method: "quasipoisson",
-  incident_count_a: 12, incident_count_b: 31, exposure_a: 1, exposure_b: 1, exposure_unit: "square_km_days",
-  rate_a: 3.9, rate_b: 10.1, rate_ratio: 2.6, ci_lower: 1.4, ci_upper: 4.9, p_value: 0.001, adjusted_p_value: 0.004,
+  incident_count_a: 10, incident_count_b: 31, exposure_a: 1, exposure_b: 1, exposure_unit: "square_km_days",
+  rate_a: 10, rate_b: 31, rate_ratio: 10 / 31, ci_lower: 0.145, ci_upper: 0.718, p_value: 0.001, adjusted_p_value: 0.004,
   overdispersion_phi: 1.1, overdispersion_status: "ok", minimum_data_status: "met", caveat_text: "",
 };
 
 const rows: CompareVerdictRow[] = [
-  { rank: 1, optionId: "a", label: "Pike", incidentCount: 12, rate: 3.9, barFraction: 0.27, multipleOfLowest: null, relationship: "lowest", pairwise: null },
-  { rank: 2, optionId: "b", label: "Bell", incidentCount: 31, rate: 10.1, barFraction: 0.71, multipleOfLowest: 2.6, relationship: "higher", pairwise: pair },
+  { rank: 1, optionId: "a", label: "Pike", incidentCount: 10, rate: 10, barFraction: 10 / 31, multipleOfLowest: null, relationship: "lowest", pairwise: null },
+  { rank: 2, optionId: "b", label: "Bell", incidentCount: 31, rate: 31, barFraction: 1, multipleOfLowest: 3.1, relationship: "higher", pairwise: pair },
 ];
 
 afterEach(cleanup);
@@ -28,15 +28,111 @@ describe("CompareRankedList", () => {
     render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
     const region = screen.getByTestId("compare-ranked");
     expect(within(region).getByText("Pike")).toBeInTheDocument();
-    expect(within(region).getByText("lowest rate")).toBeInTheDocument();
-    expect(within(region).getByText("clearly higher")).toBeInTheDocument();
-    expect(within(region).getByText(/2\.6× lowest/)).toBeInTheDocument();
-    expect(within(region).getByText(/12 reported incidents/)).toBeInTheDocument();
+    expect(within(region).getByText("lower observed rate")).toBeInTheDocument();
+    expect(within(region).getByText("statistically higher rate")).toBeInTheDocument();
+    expect(within(region).getByText(/3\.1× the other observed rate/)).toBeInTheDocument();
+    expect(region).not.toHaveTextContent(/lowest|clearly higher/i);
+    expect(within(region).getByText(/10 reported incidents/)).toBeInTheDocument();
   });
 
   it("keeps the descriptive lowest-rate chip visually neutral", () => {
     render(<CompareRankedList rows={rows} noun={incidentNoun("reported")} radiusM={250} />);
-    expect(screen.getByText("lowest rate")).not.toHaveClass("clear");
+    expect(screen.getByText("lower observed rate")).not.toHaveClass("clear");
+  });
+
+  it("keeps superlative wording for comparisons of three or more places", () => {
+    const middle = { ...rows[1], barFraction: 31 / 44 };
+    const third = {
+      ...rows[1],
+      rank: 3,
+      optionId: "c",
+      label: "Yesler",
+      incidentCount: 44,
+      rate: 44,
+      barFraction: 1,
+      multipleOfLowest: 4.4,
+      pairwise: {
+        ...pair,
+        id: "a-c",
+        option_b_id: "c",
+        option_b_label: "Yesler",
+        incident_count_b: 44,
+        rate_b: 44,
+        rate_ratio: 10 / 44,
+        ci_lower: 0.1,
+        ci_upper: 0.5,
+      },
+    };
+    render(<CompareRankedList rows={[rows[0], middle, third]} noun={incidentNoun("reported")} radiusM={250} />);
+    const region = screen.getByTestId("compare-ranked");
+    expect(within(region).getByText("lowest observed rate")).toBeInTheDocument();
+    expect(within(region).getByText(/3\.1× the lowest observed rate/)).toBeInTheDocument();
+    expect(within(region).getByText(/4\.4× the lowest observed rate/)).toBeInTheDocument();
+    expect(within(region).getAllByText("statistically higher than lowest")).toHaveLength(2);
+  });
+
+  it("keeps a large observed multiple separate from an unclear statistical result", () => {
+    const unclearPair: SitePairwiseResult = {
+      ...pair,
+      decision_class: "not_statistically_clear",
+      winner_option_id: null,
+      winner_label: null,
+      ci_lower: 0.2,
+      ci_upper: 1.2,
+      adjusted_p_value: 0.18,
+    };
+    render(
+      <CompareRankedList
+        rows={[
+          rows[0],
+          {
+            ...rows[1],
+            multipleOfLowest: 3.1,
+            relationship: "similar",
+            pairwise: unclearPair,
+          },
+        ]}
+        noun={incidentNoun("reported")}
+        radiusM={250}
+      />,
+    );
+    const region = screen.getByTestId("compare-ranked");
+    expect(within(region).getByText(/3\.1× the other observed rate/)).toBeInTheDocument();
+    expect(within(region).getByText("no statistically clear difference")).toBeInTheDocument();
+    expect(region).not.toHaveTextContent(/statistically higher rate|clearly higher/i);
+  });
+
+  it("does not call either observed rate lower when two rates tie", () => {
+    render(
+      <CompareRankedList
+        rows={[
+          rows[0],
+          {
+            ...rows[1],
+            rate: rows[0].rate,
+            multipleOfLowest: 1,
+            relationship: "similar",
+            pairwise: {
+              ...pair,
+              decision_class: "not_statistically_clear",
+              winner_option_id: null,
+              winner_label: null,
+              rate_b: rows[0].rate,
+              rate_ratio: 1,
+              ci_lower: 0.7,
+              ci_upper: 1.4,
+              adjusted_p_value: 0.9,
+            },
+          },
+        ]}
+        noun={incidentNoun("reported")}
+        radiusM={250}
+      />,
+    );
+    const region = screen.getByTestId("compare-ranked");
+    expect(within(region).getByText("same observed rate")).toBeInTheDocument();
+    expect(within(region).getByText(/1\.0× the other observed rate/)).toBeInTheDocument();
+    expect(region).not.toHaveTextContent(/lower observed rate/i);
   });
 
   it("shows a How-we-know disclosure only for non-lowest rows", () => {
@@ -44,6 +140,9 @@ describe("CompareRankedList", () => {
     const region = screen.getByTestId("compare-ranked");
     const details = within(region).getAllByText("How we know");
     expect(details).toHaveLength(1);
+    expect(within(region).getByText("rate vs the other observed rate")).toBeInTheDocument();
+    expect(within(region).getByText("3.10×")).toBeInTheDocument();
+    expect(within(region).getByText("1.39–6.90")).toBeInTheDocument();
     expect(within(region).getByText(/0\.004/)).toBeInTheDocument(); // adjusted p
   });
 
