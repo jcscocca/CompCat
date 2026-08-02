@@ -165,12 +165,12 @@ BH is applied **per request, one family at a time**:
 
 | Family | Where | Members |
 |---|---|---|
-| **Across the `k − 1` pairwise tests** (Compare tab) | `app/analysis/comparison.py` | the candidate vs. each of the other `k − 1` options |
+| **Across the `k − 1` pairwise tests** (multi-place result) | `app/analysis/comparison.py` | the candidate vs. each of the other `k − 1` options |
 | **Within-place across the four nested baselines** | `app/services/neighborhood_service.py` (`_baselines_for_place`) | the place vs. its MCPP, beat, sector, and citywide baselines |
 | **Across places** | `app/services/neighborhood_service.py` | each place's primary place-vs-(rest-of-beat) test, one p per place |
 
 (The neighborhood surface's place-vs-place matrix is BH-adjusted within itself as well, exactly
-like the Compare tab's pairwise family.)
+like the multi-place result's pairwise family.)
 
 **PRDS validity of the nested-baseline family.** The within-place family (MCPP ⊂ beat ⊂ sector
 ⊂ city) is *not* independent: the four baselines are strongly positively dependent (each larger

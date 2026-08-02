@@ -194,7 +194,7 @@ class PlaceCrimeSummary(Base):
     incidents_per_visit: Mapped[float | None] = mapped_column(Float, nullable=True)
     incidents_per_hour_dwell: Mapped[float | None] = mapped_column(Float, nullable=True)
     analysis_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    # Which analysis layer produced this summary ("reported" or "calls"); null = legacy
+    # Which analysis layer produced this summary ("reported", "arrests", or "calls"); null = legacy
     # rows, treated as "reported" on read.
     layer: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

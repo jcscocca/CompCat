@@ -1,5 +1,10 @@
 # CompCat pre-launch audit — 2026-07-28
 
+> **Historical snapshot.** This report records the pre-launch state and its then-current
+> fast-follows. Several actions and test counts below are now superseded. Use the
+> [2026-08-01 public-release cleanup audit](2026-08-01-public-release-cleanup.md) and the
+> current [`../ROADMAP.md`](../ROADMAP.md) for release status and remaining work.
+
 Seven lanes: live UX walkthrough, assistant interaction battery (16 live Groq turns),
 frontend code audit, backend audit (defects reproduced and measured), statistical-communication
 audit, security/abuse re-check with DoS/privacy and API-robustness sub-audits.

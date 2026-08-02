@@ -8,7 +8,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.crime.backfill import backfill_socrata, latest_observed_date
+from app.crime.backfill import (
+    backfill_socrata,
+    incremental_start_date,
+    latest_observed_date,
+)
 from app.crime.seattle_socrata import SeattleSocrataClient
 from app.crime.sources import SOURCE_SPD_CRIME, get_crime_source
 from app.db import get_session
@@ -62,11 +66,16 @@ def ingest_socrata(
         app_token=settings.socrata_app_token,
         mapper=crime_source.mapper,
         date_field=crime_source.date_field,
+        cursor_id_field=crime_source.cursor_id_field,
         data_floor=run_floor,
     )
     if mode == "backfill":
         if start_date is None:
-            start_date = latest_observed_date(session, source_dataset=source)
+            start_date = incremental_start_date(
+                latest_observed_date(session, source_dataset=source),
+                data_floor=run_floor,
+                reconciliation_days=settings.socrata_reconciliation_days,
+            )
         result = backfill_socrata(
             session, client, start_date=start_date, end_date=end_date, page_size=limit
         )

@@ -9,7 +9,7 @@ This document describes CompCat's system architecture for maintainers and AI cod
 
 CompCat is a privacy-first web application for exploring **reported Seattle SPD incident context** around saved places. Users look up an address (or add places manually or via a file upload), select a date range and offense filter, and then view incident counts and exposure-adjusted rates in a map-centered workspace. A persistent Tabby rail (three-snap bottom sheet on mobile) carries the place list, filters, assistant conversation, and frozen analysis/comparison cards. A visible **Show me the data** action in that same rail lets users run the report directly without sending Tabby a message. The manage-places dialog owns add/rename/remove, a confirmed clear-all action, and export privacy controls. The same clear-all action is available beside the map's pin-drop control for quick access; it removes user-entered saved places and transient pins while leaving historical result cards intact.
 
-⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/agent.py` contains a regex guard (`_SAFETY_SCORE_PATTERN`) that intercepts any chat message matching safety-scoring language and returns a hard refusal before the LLM is ever called. Both enforcement points must be preserved in future changes.
+⚠ **Invariant:** CompCat surfaces *reported incident context only*. It must not produce safety scores, rank places as safe or unsafe, or claim a user was present at any incident. This boundary is enforced in two places: (1) copy and labels throughout the UI must use neutral, count/rate language; and (2) `app/assistant/output_guard.py`, wired through `app/assistant/agent.py`, deterministically intercepts safety-ranking language before the LLM is called and guards model output before it is shown. Both enforcement points must be preserved in future changes.
 
 ---
 
@@ -38,10 +38,12 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 **Database strategy:** `app/db.py` `init_db()` runs `Base.metadata.create_all` only when the backend is SQLite (dev/test). Postgres schema is owned by Alembic (`make migrate` = `alembic upgrade head`). Mixing both paths on Postgres would leave `alembic_version` unstamped and mask migration drift.
 
 **Python dependency strategy:** `pyproject.toml` remains the editable developer source
-(`make install` installs `.[dev]`). `requirements.lock` is the Python 3.11 runtime
-resolution with exact versions and hashes; Docker installs it with `--require-hashes`
-before installing the local package with `--no-deps`. After changing runtime dependency
-constraints, regenerate it with
+(`make install` installs `.[dev]`). Python 3.11 is the minimum and the direct backend CI
+runtime; the production image currently runs Python 3.14. `requirements.lock` is generated
+with Python 3.11 and contains exact versions and hashes; Docker installs it with
+`--require-hashes` before installing the local package with `--no-deps`, and CI builds that
+image to verify the same lock on Python 3.14. After changing runtime dependency constraints,
+regenerate it with
 `pip-compile pyproject.toml --output-file=requirements.lock --generate-hashes --strip-extras`
 using Python 3.11, then build the image.
 
@@ -62,7 +64,11 @@ using Python 3.11, then build the image.
 
 See `./api.md` for full endpoint-by-endpoint detail. Summary:
 
-**Public** — in OpenAPI schema; require a real session token validated by `required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/uploads` (additionally gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`; responds 404 when the flag is off).
+**Public** — in OpenAPI schema; require a real session token validated by
+`required_public_user_hash` (`app/api/deps.py`). Endpoints: `/sessions`, `/places*`,
+`/dashboard/*`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/uploads`.
+New `POST /uploads` requests additionally require `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`;
+authenticated `DELETE /uploads` remains available for erasure when the flag is off.
 
 `POST /sessions` slides the signed 24-hour window while preserving the original `issued_at`;
 `MCA_SESSION_ABSOLUTE_MAX_DAYS` (30 by default) caps the identity lifetime. `DELETE /sessions`
@@ -200,7 +206,9 @@ bursts.
 
 ## 7. Invariants index
 
-- **Reported-context-only (no safety scoring):** enforced in `app/assistant/agent.py` (`_SAFETY_SCORE_PATTERN` guard) and in all UI copy. See `./assistant.md` for agent-level detail.
+- **Reported-context-only (no safety scoring):** enforced by
+  `app/assistant/output_guard.py`, wired through `app/assistant/agent.py`, and in all UI copy.
+  See `./assistant.md` for agent-level detail.
 - **WCAG 2.2 Level AA frontend:** semantic structure, keyboard alternatives, unobscured
   focus, reflow, text spacing, and theme contrast are regression-tested. See
   `../accessibility.md`.
@@ -208,13 +216,15 @@ bursts.
 - **No `create_all` on Postgres:** `app/db.py` `init_db()` skips `create_all` when the backend is not SQLite; schema is owned exclusively by Alembic. See `./data-model.md` for migration guidance.
 - **Public session required for public endpoints:** `required_public_user_hash` raises HTTP 401 when no valid `mca_session` cookie is present; internal endpoints use the more permissive `current_user_hash`. See `./api.md`.
 - **Geocoder region-locked to Seattle metro:** `NominatimProvider` applies `MCA_GEOCODER_VIEWBOX` and `MCA_GEOCODER_BOUNDED` so ambiguous place names resolve in Seattle, not elsewhere. See `app/config.py` and `app/geocoding/providers.py`.
-- **Personal uploads off by default:** `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=false` causes `/uploads` to 404; the feature must be explicitly enabled. See `./api.md`.
+- **Personal uploads off by default:** `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=false` causes new
+  `POST /uploads` requests to 404; authenticated deletion stays available for erasure. The
+  feature must be explicitly enabled. See `./api.md`.
 - **Bodies are bounded before routing:** ordinary request bodies default to 1 MiB; the larger
   upload ceiling applies only while public uploads are enabled. Missing `Content-Length` is
   still measured and capped.
 - **Read-only visits count as retention activity:** session create/resume upserts
-  `SessionActivity`; active identity detection also includes recent analyses and place
-  creation/update timestamps.
+  `SessionActivity`; active identity detection also includes recent analyses, place
+  creation/update timestamps, and upload/import activity.
 
 ---
 

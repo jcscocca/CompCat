@@ -56,7 +56,7 @@ describe("followupChipsFor", () => {
     // The analyze/compare tool arg models (AnalyzePlacesArgs / ComparePlacesByNameArgs in
     // app/assistant/tools.py) don't understand the "ALL" sentinel — that only exists on
     // UpdateFiltersArgs. Clearing the category here means omitting it, so the patch carries
-    // an explicit null for the Task 6 arg-builder to strip before the command is sent.
+    // an explicit null for the command arg-builder to strip before the request is sent.
     expect(chips[1].argsPatch).toEqual({ offense_category: null });
   });
 

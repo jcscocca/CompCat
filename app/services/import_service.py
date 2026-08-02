@@ -55,6 +55,8 @@ def persist_point_import(
     payload: bytes,
     filename: str,
     user_id_hash: str,
+    *,
+    commit: bool = True,
 ) -> ImportBatch:
     times = _time_bounds(result)
     batch = ImportBatch(
@@ -107,7 +109,10 @@ def persist_point_import(
             )
         )
     session.add_all(rows)
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     return batch
 
 

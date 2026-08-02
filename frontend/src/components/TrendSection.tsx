@@ -31,6 +31,13 @@ const ANCHOR_SUPPRESSED_NOTE =
 const SHORT_WINDOW_NOTE = "Not enough complete months for a trend view yet.";
 const SHORT_WINDOW_MONTHS = 13;
 
+export function trendSpanLabel(months: string[]): string {
+  if (months.length === 0) return "monthly series";
+  const first = months[0];
+  const last = months[months.length - 1];
+  return first === last ? first : `${first} – ${last}`;
+}
+
 export function TrendSection({ neighborhood, layer, category }: TrendSectionProps) {
   const labels = useMemo(() => {
     const out: string[] = [];
@@ -50,9 +57,12 @@ export function TrendSection({ neighborhood, layer, category }: TrendSectionProp
 
   if (labels.length === 0) return null;
 
-  const windowLabel = layer === "calls" ? "last 24 months — data floor" : "last 5 years";
+  // The service normally returns 60 complete months, but calls can start at their data floor
+  // and newly loaded sources can cover less. State the keys actually returned instead of
+  // promising a five-year/two-year span that is not present in the chart.
+  const windowLabel = data ? trendSpanLabel(data.months) : "monthly series";
   const subLabel = data?.mcpp_label ?? selected;
-  const subtitle = `${subLabel} · ${windowLabel} · monthly · fixed window`;
+  const subtitle = `${subLabel} · ${windowLabel} · calendar-month counts · fixed service window`;
 
   let body = null;
   if (loading) {

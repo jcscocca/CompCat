@@ -25,6 +25,7 @@ describe("ClearPinsDialog", () => {
       "This removes 2 saved places from this session and clears every unsaved pin.",
     );
     expect(screen.getByText(/previous result cards will remain/i)).toBeInTheDocument();
+    expect(screen.getByText(/clears recent address searches from this tab/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear all pins" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });

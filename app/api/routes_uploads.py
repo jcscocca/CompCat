@@ -37,6 +37,6 @@ def delete_uploads(
     user_id_hash: Annotated[str, Depends(required_public_user_hash)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, object]:
-    if not get_settings().public_enable_personal_uploads:
-        raise HTTPException(status_code=404, detail="Not found")
+    # Erasure stays available even when new uploads are disabled. Otherwise an operator
+    # turning the feature off would strand data that an existing session can still delete.
     return delete_personal_data(session, user_id_hash)

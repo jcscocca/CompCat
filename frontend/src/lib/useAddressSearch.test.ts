@@ -7,12 +7,14 @@ import { DEBOUNCE_MS, SEARCH_EMPTY_MSG, SEARCH_ERROR_MSG, useAddressSearch } fro
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
   vi.runAllTimers();
   vi.useRealTimers();
   localStorage.clear();
+  sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -182,7 +184,7 @@ describe("useAddressSearch", () => {
 
   it("loads persisted recent places on mount", () => {
     const pike = { label: "Pike Place", latitude: 47.61, longitude: -122.34, source: "nominatim" };
-    localStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
+    sessionStorage.setItem("compcat.search.recent", JSON.stringify([pike]));
     const search = vi.fn().mockResolvedValue([]);
     const { result } = renderHook(() => useAddressSearch(search));
     expect(result.current.recent).toHaveLength(1);
@@ -198,8 +200,23 @@ describe("useAddressSearch", () => {
 
     expect(result.current.recent).toHaveLength(1);
     expect(result.current.recent[0]).toEqual(pike);
-    const stored = JSON.parse(localStorage.getItem("compcat.search.recent") ?? "[]");
+    const stored = JSON.parse(sessionStorage.getItem("compcat.search.recent") ?? "[]");
     expect(stored[0]).toEqual(pike);
+    expect(localStorage.getItem("compcat.search.recent")).toBeNull();
+  });
+
+  it("clearRecent removes stored history and updates mounted state", () => {
+    const search = vi.fn().mockResolvedValue([]);
+    const { result } = renderHook(() => useAddressSearch(search));
+    const pike = { label: "Pike Place", latitude: 47.61, longitude: -122.34, source: "nominatim" };
+
+    act(() => { result.current.rememberPlace(pike); });
+    expect(result.current.recent).toEqual([pike]);
+
+    act(() => { result.current.clearRecent(); });
+
+    expect(result.current.recent).toEqual([]);
+    expect(sessionStorage.getItem("compcat.search.recent")).toBeNull();
   });
 
   it("rememberPlace deduplicates and keeps the most recent first", () => {

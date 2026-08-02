@@ -21,7 +21,9 @@ def test_browser_security_headers_apply_to_every_response(tmp_path) -> None:
     policy = response.headers["content-security-policy"]
     assert "frame-ancestors 'none'" in policy
     assert "object-src 'none'" in policy
-    assert "script-src 'self' https://static.cloudflareinsights.com" in policy
+    assert "script-src 'self'" in policy
+    assert "cloudflareinsights.com" not in policy
+    assert "cartocdn.com" not in policy
     assert "worker-src 'self' blob:" in policy
     assert "script-src 'self' 'unsafe-inline'" not in policy
 

@@ -1,0 +1,469 @@
+# CompCat — shipped history through the 2026-08-01 public release
+
+**Archived:** 2026-08-01 · **Status:** historical release record, not current guidance.
+**Audit baseline:** `44656c9` (the frontend assets observed at compcat.app on 2026-08-01).
+
+This file preserves the former long-form roadmap exactly enough to explain how the public
+release was assembled. It intentionally contains retired tabs, removed features, old fix
+instructions, and point-in-time counts. Do not use it as a description of current code. See
+[`../ROADMAP.md`](../ROADMAP.md) for current priorities and canonical subsystem docs under
+[`../architecture/`](../architecture/).
+
+> **Product invariant (the thread through everything below):** CompCat reports *reported
+> incident context*. It MUST NOT score safety or rank places safe/unsafe/dangerous. Every
+> phase here has an invariant checkpoint — it is the thing most worth defending as the
+> surface grows.
+
+> **Removed: Routes (2026-07).** The routes/commute feature (shipped #29, saved views #81,
+> divergent corridors #87–#90) was removed in 2026-07. Its premise — comparing routes between
+> areas — was retired in favor of the address-first product: look up an address, compare
+> candidate addresses. Shipped-history entries below are kept and marked `(removed 2026-07)`
+> rather than deleted; see git history and
+> `docs/superpowers/specs/2026-07-03-routes-removal-design.md`.
+
+## Where it stands
+
+CompCat is a **public, disciplined, low-debt v1**. The analytical core (rate-ratio
+engine, neighborhood baselines, exposure model) is genuinely production-grade and well-tested;
+the public dashboard, places, geocoding, exports, and the Analyst are all real and wired. A
+repo-wide marker sweep found **essentially zero in-code TODO/FIXME debt**. All of the
+planned Phase 0–3 work has now landed — the sharp edges, the analytical-invariant hardening,
+the data/ops durability, and the core product-breadth items are closed. Remaining work is
+focused rather than foundational: the Postgres soak run and the explicitly deferred
+performance, accessibility, and methodology follow-ups below.
+
+## Maturity snapshot
+
+| State | What's here |
+|---|---|
+| **Production** | Analytical engine + neighborhood stats (overdispersion, BH correction, point-in-polygon beat assignment), places CRUD/bulk/geocoding (Seattle-region-locked), dashboard analyze/compare/incidents, run-scoped analytical CSV + session-wide Tableau place-summary export, sessions/tiers, config/secrets validators (salt/secret/admin-token all gated in prod boot), CI (SQLite + Postgres lanes), migrations |
+| **Beta-ready** | Assistant (decision-tree router, streaming SSE, friendly offline state + Retry, markdown), single-host ThinkPad deploy stack, Socrata incremental backfill + data-freshness endpoint, sensitivity-class UI (place creation + exports), personal-upload (enabled on single-host trial, flag-gated elsewhere), seed dataset |
+| **Half-baked** | Real-data query perf still has residual full-table paths outside the main summarize path; Postgres-in-prod (CI-proven; soak harness now available — H2, `docs/soak-testing.md` — but the multi-hour run itself is still pending) |
+| **Open — invariant risk** | Safety-refusal guard is layered and now covers English/Spanish safety language, proxy numeric/star/letter-grade ratings, livability choices, Spanish presence claims, and a narrow set of French ranking constructions. Residual: deterministic coverage is not language-general; terse unlabeled shorthand such as `Ballard: 2/10`, lowercase grades, novel euphemisms, and other scripts still rely on prompt/stream defenses. Typed deterministic conclusions remain the durable follow-up. |
+| **Deprecated / dead** | LocalAgent gateway + `MCA_LOCALAGENT_BASE_URL`, `statistical-comparisons.csv` public export (removed — was dead surface), ~6 internal duplicate routers (internal-gated, still present) |
+
+---
+
+## Phase 0 — Land the in-flight work & fix the sharp edges
+*All items verified shipped as of d30235b.*
+
+- [x] **Merge Routes (PR #29)** — shipped, then **removed 2026-07** (see the removal note above). (#29, #39, #49, #52)
+- [x] **Fix the half-exposed `statistical-comparisons.csv` export.** Removed entirely (not wired, not discoverable — dead public surface). The `StatisticalComparison` models and `/dashboard/compare` writer still power the live compare feature. (Phase 0 sharp-edges commit, pre-9a654bc)
+- [x] **`PlaceForm.test.tsx` jsdom pragma.** `// @vitest-environment jsdom` present on line 1. (Phase 0 sharp-edges commit)
+- [x] **Retire the LocalAgent gateway & fix the Analyst docs.** `MCA_LOCALAGENT_BASE_URL`/`LocalAgentClient` absent from `app/` and `README.md`; `app/assistant/llm_client.py` present; `MCA_LLM_BASE_URL` in README. (#50, Phase 0 sharp-edges commit)
+- [x] **Gate `MCA_ADMIN_INGEST_TOKEN` in the prod boot validator.** `app/config.py` rejects `DEFAULT_ADMIN_INGEST_TOKEN` (`local-admin-token`) in production via `require_production_secret_overrides`. (Phase 0 sharp-edges commit)
+
+## Phase 1 — Protect the invariant & analytical credibility
+*The brand and legal core — all items resolved: safety-guard hardening and the full neighborhood-stats QA.*
+
+- [x] **Harden the safety-refusal guard** — shipped: the object-first regex gap was fixed (#59), and an output-side guard on the model's answer plus broadened ranking/determiner detection landed in #63 (closing #60). Residual synonym-lexicon and non-English breadth is lower-priority follow-up. _(Original analysis, retained for context:)_ The guard was substantially broadened: it is now a broad `re` pattern scanning recent turns (last 8 user messages), not just the latest message. It catches "which block is more dangerous", "how risky", "safest", "unsafe", etc. **However**, a regex gap remains: the `(?:these|those|them|the\s+)?` group is missing a trailing `\s+`, so "rank these places" / "score these areas" (object-before-verb order) bypass it. Fix the `_SAFETY_SCORE_PATTERN` in `app/assistant/agent.py` and add the **output-side guard test** asserting the engine and assistant never emit `safe/unsafe/dangerous/risk` language. (`test_statistical_comparison_service.py` has an output check for compare summaries; there is no analogous test for the assistant response token stream.)
+- [x] **Close the rigor asymmetry.** `MIN_PLACE_COUNT` / `MIN_COMBINED_COUNT` live in the shared `build_statistical_comparison` engine (`app/analysis/comparison.py`), which `compare_site_options` funnels through, so the per-option data floor applies uniformly; there was no asymmetry. _(The route path that also funneled through this engine was removed 2026-07.)_
+- [x] **Neighborhood-stats QA — complete:** The candidate-selection-before-BH question is reviewed and resolved (#65) — selecting the lowest-rate candidate before BH is a real selective-inference effect, but the decision is conservative by design (must be statistically lower than every alternative, an effect-size floor, and the data floors), so selection alone cannot crown a winner. The overdispersion/small-sample handling and the multiple-comparison edge cases are now resolved too (#69): the small-sample dispersion limitation is documented inline in `app/analysis/comparison.py` (the doc that formerly covered it was removed with the routes feature — 2026-07), and tests pin the single-period `model_warning` guard, single/empty BH (no over-correction), and the multi-place BH-adjusted-p alignment.
+- [x] **Point-in-polygon beat assignment** — `assign_beat` + `load_beat_polygons` (pure-Python ray-casting) implemented in `app/analysis/beat_baselines.py` and wired into `app/services/neighborhood_service.py` (the main analyze path). Also used by assistant tools. Shipped.
+
+## Phase 2 — Data & ops durability
+*All items verified shipped as of d30235b.*
+
+- [x] **Crime-data pipeline:** incremental Socrata backfill with retry/backoff, watermark, and stable composite date/Socrata-row-ID keyset paging (#37); repeat ingest performs a true composite-key upsert so upstream corrections replace mutable incident fields; data-freshness/coverage endpoint (ingested snapshot_at, #36); realistic seed dataset + `make seed-crime` (#38). `snapshot_at=2024-01-01` hardcode removed.
+- [x] **Query perf (epic C):** `summarize_for_user` replaced with SQL-filtered path (#33). Residual: other full-table paths outside this function are out of scope for this item.
+- [x] **Prod-DB confidence:** Postgres CI lane (migrate-to-head + parity smoke, #35); ops hardening (ca-certs, right-sized postgres image, `/health` readiness probe, compose healthcheck, backups, schema ownership, #34); `init_db`/`alembic` race reconciled.
+- [x] **Decouple OTP bring-up from Windows** — bash script + compose profile (#39). _(removed 2026-07)_
+
+## Phase 3 — Product breadth
+*Shipped — including the `MapWorkspace` per-tab-hooks split.*
+
+- [x] **Routes UX to parity** (#40). _(removed 2026-07)_ The shared `useAddressSearch` hook (`frontend/src/lib/useAddressSearch.ts`) extracted for it — deduplicating the geocode state machine behind Places' search — remains in use.
+- [x] **Sensitivity-class UI:** `PlaceForm.tsx` includes a sensitivity selector backed by `SENSITIVITY_OPTIONS`; exports respect the class. This is the "classify/suppress affordance" — v1 scoped to exports (#44).
+- [x] **Assistant:** token streaming (SSE via `StreamingResponse`), friendly "analyst offline" degraded state + Retry button, markdown rendering (#42). Failover LLM client also shipped.
+- [x] **Frontend cleanup:** ~322 lines trimmed from dead `styles.css` (#41); Analyst panel clamped on mobile (#41); `MapWorkspace` split into per-tab hooks — `useDrawer` / `useDashboardData` / `usePinDraft` / `useAnalyze` / `useCompare` under `frontend/src/lib/` (the `useRoutes` hook was removed 2026-07), leaving the component a thin coordinating shell (the cross-cutting selection / analysis-context-invalidation / assistant-fan-out glue stays central); behavior-preserving against the existing 12 `MapWorkspace` tests, plus new unit tests for the isolated hooks (#68).
+- [x] **Personal-upload disposition decided:** enabled on single-host ThinkPad trial (`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` in `.env.deploy.example` with explicit "keep OFF for shared/public" guardrail), with consent/retention copy in `docs/DEPLOY.md` (#43).
+- [x] **Data-freshness indicator:** the dashboard topbar shows a "Data through <date>" pill sourced from `GET /dashboard/freshness` (`frontend/src/components/DataFreshness.tsx`), so users know the shared SPD dataset isn't live.
+
+## Phase 4 — Harden & polish + new capabilities
+*The next slate, chosen 2026-06-29. Worked one item at a time per Conventions.*
+
+**Harden & polish**
+- [x] **H1 · Query-perf sweep** — shipped (lean): a query audit found the main public incident paths already bbox+date+category SQL-filtered (the audit's `_beat_incidents` flag was a false positive — its whole-beat load is the rest-of-beat baseline). The one genuine full-table-on-every-load path, `crime_data_freshness`, is now TTL-cached in-process (#73). Deferred: ingest stats-row/watermark; real spatial index (R*Tree/PostGIS).
+- [x] **H2 · Long-run Postgres validation** — soak harness shipped (tooling + runbook, not yet the multi-hour run itself, which is an on-demand ops step on the ThinkPad). `scripts/soak/soak_driver.py` drives N threaded virtual users over the perf-sensitive public dashboard endpoints (incl. the whole-beat `neighborhood` load) and reports per-endpoint p50/p95/p99 + first-vs-last-hour latency drift; `scripts/soak/pg_observer.py` samples `pg_stat_activity`/`pg_stat_database`/`pg_locks` and diffs `pg_stat_statements` by shelling `docker compose exec db psql --csv` (no host psycopg). `docker-compose.yml` now preloads `pg_stat_statements`; `make soak-load`/`make soak-observe` + `docs/soak-testing.md` (prereqs, first-run recipe, threshold table, pass criteria). Pure logic is unit-tested; the soak itself is out of `make test-all`. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-02-postgres-soak-harness*`.
+- [x] **H3 · Address-search polish** — shipped (#72): debounced type-ahead with stale-request abort, first-class empty/error states with shared copy, a tab-scoped `sessionStorage` recent-places history (with explicit clear controls and legacy persistent-key purge), and a client-side Seattle-bbox guard. Result ranking dropped (no relevance metadata). Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-address-search-polish*`.
+- [x] **H4 · Assistant guard breadth** — shipped: broadened the deterministic guard's English lexicon with colloquial place-character terms (`sketchy`/`shady`/`dodgy`/`seedy`/`scary`/`frightening`/`ghetto`, plus their comparative/superlative forms) and English rank-verb inflections (`ranking`/`rated`/`scoring`), and added a Spanish mirror of both arms — safety lexicon (`seguro`/`peligroso`/`riesgo`/… + the `-idad` nouns `seguridad`/`inseguridad`/`peligrosidad`) + rank-verb→place-noun including Latin-American place nouns (`colonia`/`vecindario`/`sector`/`distrito`/`manzana`/`avenida`), accent-tolerant. Event/offense descriptors (`violent`/`threatening`/`menacing`) stay excluded as legitimate incident context. **Follow-up (context-scoping) shipped:** the single regex was split into three cooperating patterns (`_UNAMBIGUOUS_SAFETY_PATTERN`, `_AMBIGUOUS_TERM_PATTERN`, `_PLACE_CONTEXT_PATTERN`) gated by `_contains_safety_ranking` — ambiguous terms trip only when a place-context word co-occurs. Closes: proper-noun colloquial false-positives (`Shady Grove Ave`, `Warsaw Ghetto`), Spanish colloquials (`tranquilo`/`conflictivo`/`problemático`), `mal barrio`/`barrio malo` (both word orders), `avoid`/`evitar` + place (both word orders, all `evitar` inflections), rank-verb-then-punctuation, and `centro`/`esquina` EN/ES parity. Regex can't reliably separate epistemic Spanish "estoy seguro de X" from physical "seguro en X", so an epistemic-strip was attempted then reverted; the guard accepts a fail-safe over-refusal on "estoy seguro de X + place" (bare epistemic without a place word still reaches the model). _Deferred candidates (not scheduled): (a) reverse H4's English `bad`/`good`/`worst`/`rough` exclusion so English "bad neighborhood" is caught symmetrically with Spanish `mal barrio` (needs a false-positive review — `worst`/`best` collide with "which route is best"); (b) extend the rank-arm place nouns beyond the current list (`zip code`/`district`/`precinct`/`town`/`county`/`park`)._ Spec/plan: `docs/superpowers/{specs,plans}/2026-07-01-assistant-guard-breadth*` and `…/2026-07-01-assistant-guard-context-scoping*`.
+
+**New capabilities**
+- [x] **C1 · Temporal analysis** — descriptive hour-of-day + day-of-week incident profiles around a place, with a travel-window highlight, on the Analyze tab. Pure `app/analysis/temporal.py` wired into the analyze path; `offense_start_utc` read as naive Seattle local. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-temporal-analysis*`.
+- [x] **C2 · Incident category breakdown** — shipped: `_category_breakdown` replaces `type_mix`; each subcategory shows place-share vs rest-of-beat share (null when no baseline), top-6 + "Other"; descriptive (no per-category significance — deferred); renders on the Analyze tab for baseline-available and degraded places alike. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-29-category-breakdown*`.
+- [x] **C3 · Saved views** — increment 1 shipped (#78): durable, shareable `?view=` links
+  for **Analyze & Compare** that recompute on open and store nothing new server-side. Enabled by
+  making analyze/compare/incidents/neighborhood accept inline `points` (Seattle-bbox-validated,
+  ≤10) as an alternative to identity-bound `place_ids`; the points path is stateless (no
+  `AnalysisRun`/`PlaceCrimeSummary` write). Links carry exact coordinates and location labels
+  plus the filters, but no session or saved-place ids; anyone with a link can read its locations.
+  Spec/plan: `docs/superpowers/{specs,plans}/2026-06-30-saved-views*`. _Increment 2
+  (Routes saved views, #81) removed 2026-07._
+- [x] **C4 · Second data source** — shipped across two increments. **Inc 1 (#75):** a
+  source-aware crime layer (queries / freshness / backfill watermark all default to SPD
+  reports, so existing analyses are unchanged) plus SPD **Arrest Data** (`9bjs-7a7w`) ingest
+  tagged `source_dataset="seattle_spd_arrests"` — backend only, demographics not ingested.
+  **Inc 2 (#76):** SPD **911 Call Data** (`33kz-ixgy`) as a **two-layer** model — a *Reported
+  incidents* layer (crime + arrests, unioned) vs a *911 calls* layer (calls for service),
+  mutually exclusive, chosen with a global top-bar toggle that every incident-context surface
+  (Analyze / Compare / Assistant / exports / freshness) follows; `AnalysisRun` /
+  `PlaceCrimeSummary` carry a `layer` column (migrations `0009`/`0010`). Calls
+  are framed everywhere as *requests for service, not confirmed incidents* (LLM prompt +
+  semantic layer + UI, test-pinned), and the safety-refusal guard is untouched / layer-independent.
+  Spec/plan (inc 1): `docs/superpowers/{specs,plans}/2026-06-29-second-source-arrests-foundation*`.
+  _Arrests enforcement-lens **shipped** as a de-merged third layer: `reported` is now SPD
+  crime reports only, and arrests are a disjoint, clearly-labeled `arrests` layer (Reported /
+  Arrests / Calls) framed everywhere as *enforcement activity, not reported incidents*
+  (assistant prompt + caveats, toggle, Analyze note + "Charge" column, freshness/copy). This
+  fixes the prior reported-layer double-count (a crime report and its resulting arrest — which
+  may share a `report_number` — were both counted) and the enforcement-vs-incidence conflation;
+  on the public (redacted) data an arrest can't be linked back to its crime, so the union was
+  never sound there. One-line `LAYERS` change (validation/freshness/queries auto-propagate) +
+  framing copy; no DB migration. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-02-arrests-third-layer*`. Two follow-ups now **shipped**:
+  (1) the arrest↔crime **taxonomy crosswalk** — arrests carry a best-effort NIBRS-crosswalked
+  `offense_category` (PROPERTY/PERSON/SOCIETY) + `nibrs_group`, mapped at ingest
+  (`app/crime/nibrs_crosswalk.py`, full NIBRS Group A + B; Group A authoritative, Group B
+  best-effort) and backfilled on existing rows (migration `0011`), so the category filter and
+  arrest-vs-crime category comparison work on the arrests layer (spec/plan
+  `…/2026-07-02-arrest-taxonomy-crosswalk*`); and (2) the `CALLS_DATA_FLOOR` fixed-date drift —
+  the 911 floor is now a rolling first-of-month, 24-month window computed per ingest run
+  (`calls_data_floor`, `app/crime/seattle_socrata.py`), so it no longer drifts past 24 months
+  (spec/plan `…/2026-07-02-calls-floor-rolling*`). Still deferred: arrest demographics (not
+  ingested)._
+- [x] **C5 · Routes verdict on divergent corridors** (#87–#90) — _(removed 2026-07)_. Spec/plan
+  retained: `docs/superpowers/{specs,plans}/2026-07-03-route-divergent-comparison*`.
+
+> Deferred temporal follow-ups (after C1): comparative/baseline temporal (rate-ratio per bucket), an assistant temporal tool, and renaming the misnamed `offense_start_utc` column (holds local time) — a separate migration.
+
+## Phase 5 — Compare-first flagship (pivot phase 2 — to be brainstormed)
+*Placeholder for the address-first product's next chapter — not yet spec'd. This is phase 2 of
+the 2026-07 address-first pivot (the routes removal — see the note at the top): with routes
+removed, the flagship experience is comparing candidate addresses.*
+
+> Historical surface note: the Compare-first and Unified Compare slices below established the
+> data contracts and components, but their tabbed presentation was superseded by the
+> Tabby-central rail on 2026-07-19. Comparison remains a first-class inline card rather than a
+> standalone tab.
+
+- **Primary scenario:** choosing where to live — compare candidate addresses side by side.
+- **Secondary scenario:** knowing your own area — understand the reported-incident context
+  around where you already are.
+- **Directions to explore:** richer side-by-side verdicts, multi-address compare (beyond the
+  current pairwise view), and a comparison-first landing experience that leads with the compare
+  flow rather than single-place analysis.
+
+Each of these needs its own `docs/superpowers/` brainstorm → spec → plan before implementation.
+
+**Decomposition (2026-07-03):** worked as three slices, A→B→C, so the compare experience is
+strong before it becomes the front door.
+- [x] **Slice A — richer side-by-side verdicts** — specced & built: rebuild the Compare tab
+  on the statistical richness the `/dashboard/compare` payload already returns (hybrid
+  callout + ranked lowest-first list + per-pair analytics), frontend-only. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-03-compare-first-flagship*`.
+- [x] **Slice B — multi-address compare UX** — shipped: a Compare-owned editable address set
+  (add via the reused address search, remove, seeded-from-selection, decoupled, 2–10) driving
+  the verdict, plus an honest rate-ratio interval plot in the verdict (the payload-ready
+  visualization; overlapping bell curves were rejected as statistically dishonest here).
+  Frontend-only. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-03-compare-multi-address*`.
+- [x] **Slice C — single-address entry → context → optional compare** — shipped: a fresh
+  session leads with a single-address lookup (ephemeral inline-`points` path, no DB write)
+  that flies the map and shows the address's reported-incident context on the reused Analyze
+  tab, plus a one-click compare bridge that carries the looked-up address in as the anchor and
+  an optional "Save to my places". Frontend-only; invariant untouched. Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-03-compare-single-address-entry*`.
+
+**Unified Compare surface (2026-07-16):** the tabs converge on one surface named Compare
+(spec: `docs/superpowers/specs/2026-07-16-unified-compare-surface-design.md`), in three
+slices.
+- [x] **Slice 1 — extract + enrich** — `PlaceContextCard` extracted from Analyze; Compare
+  fetches the points-based neighborhood analysis in parallel and ranked rows expand into
+  full per-address context. Plan: `docs/superpowers/plans/2026-07-16-unified-compare-slice1.md`.
+- [x] **Slice 2 — unify** — shipped: one address list (saved + ad-hoc, persisted saved ids),
+  one run (neighborhood + incidents always, compare at 2+, saved-summary refresh), one panel;
+  tabs collapsed to Compare + Export; tab-free share links with legacy decode; assistant
+  bridge and pin/lookup/manage flows retargeted. Plan:
+  `docs/superpowers/plans/2026-07-16-unified-compare-slice2.md`.
+- [x] **Slice 3 — polish** — shipped: `useAddressList.ts` rename, queued-id invalidation,
+  copy-link success/failure feedback, polite completion announcement, lettered map pins
+  for ad-hoc entries with row↔map hover linkage (assistant-pane fallback included), and
+  the pre-load banner-Exit guard. Mobile pass verified. Plan:
+  `docs/superpowers/plans/2026-07-16-unified-compare-slice3.md`.
+- [ ] **Compare backlog (optional):** pin-to-compare side-by-side columns (Shape A for
+  2–3 candidates), progressive spine-first rendering, ephemeral-flag refactor for ad-hoc
+  pin synthetics, post-save hover re-key (pulse resumes only after the next run), and
+  `expansionByOptionId` entries-dep for the assistant created-id tail.
+
+- [x] **Per-address rate interval (backend)** — every compared address now carries its own
+  quasi-Poisson rate confidence interval (`rate_confidence_interval`), surfaced on the
+  `/dashboard/compare` options payload (persisted via migration `0013`). Empirically chosen
+  over negative binomial — the mean–variance relationship in real SPD data is linear, not
+  quadratic: `docs/analysis/overdispersion-and-rate-intervals.md`. The intuitive
+  "rate ± margin of error" number-line viz (`CompareRateNumberLine`) ships alongside it,
+  reading each address's absolute rate with its 95% interval on one shared axis.
+
+## Phase 6 — Map & UI overhaul (2026-07-04)
+*Three slices; spec: `docs/superpowers/specs/2026-07-04-map-ui-overhaul-design.md`. Driven by
+three user goals: visible geography + beat transparency, incidents on the map, and a
+thoughtful shell redesign (Civic Clear + night mode, Evolved Workspace layout).*
+
+- [x] **Slice 1 — Map foundation:** maplibre-gl over a self-hosted Seattle PMTiles vector
+  basemap (privacy: no third-party tile server sees viewports), light/dark civic style
+  builders, 206-range `/tiles` + `/basemaps-assets` serving, hardened `fetch_tiles.py`
+  (`make fetch-tiles`), Leaflet removed, deploy wired (compose ro volume + ps1 fetch).
+  Plan: `docs/superpowers/plans/2026-07-04-map-foundation.md`.
+- [x] **Slice 2 — Transparency layers:** `/dashboard/beats` (slimmed `{beat}`-only GeoJSON,
+  gzip-negotiated + `Vary`, cached) + `/dashboard/incident-points` (bbox-gated + Seattle-clamped,
+  matching rows grouped into persistent block-location stacks with true `record_count`,
+  a 5,000-location cap plus separate record/location totals, arrests −1/−1 sentinel excluded
+  structurally, `unmappable_citywide_count`); beat
+  outlines with static labels (≥z12) + assigned-beat highlight from the neighborhood payload;
+  calm, capped area-scaled clusters through z15→persistent compact location stacks / individual
+  dots at z16+ (no heatmap, one neutral palette — invariant), with collision-aware cluster labels
+  reserved for counts of 25+ at z12–z15, exact counts on selection, and same-block labels reserved
+  for stacks of 10+ at z16+; XSS-safe
+  click card with canonical incident formatting; debounced+abortable viewport hook; redacted-locations
+  disclosure chip. Live-verified end-to-end. Plan:
+  `docs/superpowers/plans/2026-07-04-transparency-layers.md`.
+- [x] **Slice 3 — Shell overhaul:** Evolved Workspace layout (SearchPill absorbs pin-drop,
+  in-panel Analyst dock, theme toggle), Civic Clear tokens + night mode, self-hosted webfonts
+  (zero external requests — dropped the app's last external call), legend/zoom moved bottom-right.
+  Both slice-2 carry-ins landed: (a) `setStyle()` layer re-registration via `style.load`; (b) the
+  `mapLayers.ts` extraction (`addBeatLayers`/`addIncidentLayers`/`incidentCardElement` out of
+  `MapCanvas.tsx`). Deviations logged in the spec's _Shipped deviations_ section.
+  (#113; css hygiene follow-up #114)
+- [ ] **Deferred (slice 2, non-blocking):** `/dashboard/incident-points` filters + sorts on the
+  unindexed `coalesce(offense_start_utc, report_utc)` expression; a Postgres expression index is
+  the mitigation when incident volume grows (needs a migration — out of scope for the no-migration
+  slices). Bounded today by the 5,000-location cap + Seattle bbox clamp.
+
+## Phase 7 — Public capstone (2026-07-09)
+*Strategic direction chosen 2026-07-09: CompCat's next chapter is a **portfolio/showcase
+capstone** — public repo (real history), hosted live demo, deep write-up — for both the
+3-minute hiring skim and the technical-peer deep dive. This deliberately replaces the
+"eventual public release" service pile (auth/tenancy/accounts stay unplanned). Sequenced
+repo-first because publishing history is the irreversible step. Spec:
+`docs/superpowers/specs/2026-07-09-public-capstone-design.md`; each slice gets its own
+spec → plan → PR.*
+
+- [x] **Slice 1 — Repo goes public:** full-history audit shipped clean — secrets, personal
+  data, GitHub surface (PR/issue/review text), and dangling objects all clear; **no history
+  rewrite needed** (the `git filter-repo` contingency went unused). Discovery: the repo had
+  been public since 2026-06-22 already — the audit became confirmation, not precondition. MIT
+  license + metadata, GitHub rename → `waypoint`, README front door (badges, invariant
+  callout, light/night screenshots), CONTRIBUTING note, example LAN IPs genericized, City of
+  Seattle open-data terms verified sufficient (2026-07-10), 14 stale merged branches pruned.
+  Audit report kept private outside the repo. Plan:
+  `docs/superpowers/plans/2026-07-10-repo-public.md`.
+- [x] **Slice 2 — Demo-on-demand (revised 2026-07-10):** SHIPPED #118/#119 + live-verified through the quick tunnel 2026-07-10 (dashboard end-to-end, Analyst on Groq, 429s w/ Retry-After). ThinkPad + ephemeral Cloudflare
+  quick tunnel (VPS/domain/durable link deferred to a future "for-real" launch); isolated
+  second compose project (own env/volume/port — the personal instance is never exposed);
+  **rate limiter (the phase's one substantial new backend surface**, incl. the Groq-quota
+  global cap and the long-open free-sessions cap**)**; `MCA_LLM_API_KEY` auth patch;
+  Analyst on Groq free tier (offline state as fallback); refresh-on-start instead of an
+  ingest cron. Spec: `docs/superpowers/specs/2026-07-10-demo-on-demand-design.md`.
+- [x] **Follow-up — Analyst knob control (from slice-2 live testing):** SHIPPED #123 + live-verified (explicit "radius to 500" extracted exactly; vague ask stepped 250→1000 — adjacent-step prompt tweak is a known minor). the Analyst can
+  adjust radius / dates / category / layer conversationally ("increase radius to 500")
+  and re-run; changes sync the dashboard controls so they stick across turns. Spec:
+  `docs/superpowers/specs/2026-07-10-analyst-knob-control-design.md`.
+- [x] **Follow-up — Result-aware Analyst:** the newest frozen analysis card now contributes a
+  compact typed scope to chat (kind, place IDs, settings — never cached evidence). Questions
+  about that result use a read-only server tool that recomputes authoritative evidence, while
+  referential reruns can retain the frozen scope even if the live dashboard has moved. The
+  slice also closed multi-turn refusal, hostile-label, named-place fallback, and provider
+  rate-limit propagation gaps with transcript-style regressions.
+- [x] **Follow-up — Analyst persona, now Tabby:** the original Copper chrome shipped first;
+  Tabby-central renamed the case-desk persona to Tabby, a fictional records cat (no SPD
+  insignia, never claims official status). The avatar header, in-voice status, greeting,
+  first-visit pulse, safety redirect, and layer-aware analysis lead-ins remain chrome + framing
+  only; guards, data content, and the planning prompt are unchanged. Historical spec:
+  `docs/superpowers/specs/2026-07-10-analyst-copper-persona-design.md`.
+- [x] **Slice 3 — Write-up:** the methodology story (QP-vs-NB settled empirically,
+  baselines, BH) and the product-ethics story (the invariant, routes removal, arrests
+  de-merge, privacy posture) as long-form pieces linked from the README. **Shipped
+  2026-07-26:** two first-person essays under `docs/writeups/` (statistical methods,
+  product ethics). Spec: `docs/superpowers/specs/2026-07-26-capstone-writeup-design.md`.
+  **This closes Phase 7.**
+- [x] **Copper streamed finals + turn progress:** model-authored replies in Copper's
+  voice streamed token-by-token (second, streamed narration call grounded on the tool
+  result + deterministic template), honest `status` phase events during the planning,
+  tool, and narration waits, and a holdback stream guard that keeps the
+  no-safety-scoring invariant absolute mid-stream. Kill switch
+  `MCA_ASSISTANT_NARRATION_ENABLED`. Spec:
+  `docs/superpowers/specs/2026-07-12-assistant-token-streaming-design.md`.
+
+## CompCat on iOS (2026-07-10)
+*Personal device + demos target (no App Store). Decomposed A/B/C; spec:
+`docs/superpowers/specs/2026-07-10-ios-shell-design.md`.*
+
+- [x] **Slice A — iOS shell + Tailscale reachability:** Capacitor 7 remote-URL shell
+  (SPM, no CocoaPods) loading the frontend from the backend's tailnet HTTPS origin;
+  env-driven server URL keeps the hostname out of the repo (the synced native config
+  is gitignored); Copper bust app icon + splash; `docs/IOS.md` runbook. First device
+  run tracked as its own item below.
+- [ ] **First device run (Slice A acceptance):** one-time environment setup — Xcode on
+  the Mac (full app from the App Store, then `xcode-select`), Tailscale on ThinkPad +
+  iPhone, `tailscale serve --bg 8000` with MagicDNS/HTTPS certs enabled — then
+  `docs/IOS.md` Build & run (pick signing: free Apple ID = 7-day re-sign vs $99
+  account) and the 6-item on-device checklist. Item 4 is the empirical unknown:
+  Tabby's SSE must stream token-by-token through `tailscale serve`, not buffer.
+- [x] **Slice B — phone-first redesign:** shipped through the Tabby-central mobile sheet:
+  bar/half/full snap heights, handle-only dragging with velocity-biased release, safe areas,
+  `visualViewport` keyboard handling, sheet-aware map padding, and a single thread scroll owner.
+- [ ] **Slice C — niceties:** friendly offline screen, haptics, share-sheet exports,
+  app shortcuts.
+
+## Desktop focus mode & multi-baseline analysis (2026-07-12)
+*Three connected desktop changes — a focus drawer preset, a place identity/locator system, and
+multi-baseline (MCPP/beat/sector/city) neighborhood comparison — decomposed into three
+independently-shippable slices. Spec:
+`docs/superpowers/specs/2026-07-12-desktop-focus-multi-baseline-design.md`.*
+
+- [x] **Slice 1 — Backend geography + API:** Multi-baseline neighborhood API — MCPP assets +
+  `baselines[]` (mcpp/beat/sector/city) + `/dashboard/mcpp` (2026-07-12)
+- [x] **Slice 2 — Analyze tab plot:** `BaselineIntervalPlot`, headline aggregation, How-we-know
+  table, identity badges on cards; removes `ComparisonBars` + the legacy top-level beat fields.
+  (2026-07-12)
+- [x] **Slice 3 — Focus mode + locators:** drawer preset (spec's `min(vw−96, 0.9·vw)` clamp shared
+  with drag, focus-width chrome treatment), MCPP locator chips on verdict cards, card→pin
+  hover pulse, identity-colored lettered pins. Pure frontend. (2026-07-12)
+- [x] Sector/city baselines via month-grouped SQL COUNT(*) (calls layer materializes ~700k
+  rows/yr per citywide request today — do before demoing the calls layer) (2026-07-12)
+- [x] **Empirical reference-circle replacement for single-place context:** fixed observed
+  incidents; versioned Seattle SND street-segment midpoint frame; equal-radius MCPP/sector/city
+  distributions with overlap-weighted mixtures, deterministic exact/Monte Carlo computation,
+  adequacy fallback, accessible plot/details, assistant grounding, and run-scoped CSV parity.
+  The former polygon-density fields remain in the API during validation, but the current
+  single-place UI/export no longer uses them. Method:
+  `docs/analysis/empirical-reference-circles.md`. (2026-07-30)
+
+## Volume-over-time trend section (2026-07-16)
+*First slice of the public-release feature push: descriptive monthly trends on the analyze
+surface. Methodology (anchored citywide indexing, rolling mean, inference limits) is a
+durable reference: `docs/analysis/trend-indexing-method.md`.*
+
+- [x] **Trend section — reported volume over time:** monthly MCPP-vs-citywide series on the
+  expanded inline analysis/comparison cards (12-month rolling mean + anchored-indexed
+  citywide overlay, neutral marks, layer-aware copy, suppression rules for short windows /
+  degenerate anchors); lazy `GET /dashboard/trends` returning raw zero-filled series with a
+  shared-citywide TTL cache; safety guard broadened for trend-flavored asks
+  (`worse`/`empeorando` + place context). Spec/plan:
+  `docs/superpowers/{specs,plans}/2026-07-16-analyze-trend-section*`. (2026-07-16)
+
+## Tabby-central rail (2026-07-19)
+*Seven shipped slices; spec: `docs/superpowers/specs/2026-07-19-tabby-central-redesign-design.md`;
+parity record: `docs/superpowers/specs/2026-07-19-tabby-central-slice7-parity.md`.*
+
+- [x] **Rail-first shell + typed thread:** Tabby is the persistent desktop rail / mobile sheet;
+  user text, narration, receipts, notices, and frozen analysis cards share a session-scoped
+  thread. The context strip owns exact settings, explicit run, and exact-coordinate share links.
+- [x] **Deterministic command path:** `POST /assistant/commands` validates a fixed command enum,
+  bypasses the LLM, and shares the chat SSE reducer. Free-text failure no longer disables chips,
+  filters, cards, badges, or exports.
+- [x] **Inline cards and map presence:** analyze/compare outputs render compact or expanded with
+  run-scoped exports; neutral badges connect analyzed pins to the newest matching card and clear
+  when live context changes.
+- [x] **Proactivity + mobile mechanics:** deterministic onboarding/place-added/follow-up chips;
+  three mobile snaps, keyboard handling, and sheet-aware camera padding.
+- [x] **Legacy surface retirement:** Compare/Export tabs and rail navigation were removed after
+  the written parity pass; export privacy moved to Manage Places and current-run export moved to
+  each stored card.
+- [ ] **Follow-up:** run the first on-device iPhone acceptance and the multi-hour Postgres soak;
+  reassess the older optional Compare backlog against the card-first interaction before building it.
+
+## Phase 8 — Durable public instance (2026-07-27)
+*CompCat always-on at a registered domain — still session-based, still not an operated
+multi-user service. Umbrella
+spec: `docs/superpowers/specs/2026-07-27-public-instance-design.md`; four slices, each with
+its own spec (same date prefix), worked one at a time, code-first (1→4). Decisions: VPS
+(provider open), Groq wired for setup with Anthropic as the prod Analyst posture, compcat.app
+as the registered domain, "Built by Jacob Scocca" + GitHub link as the in-app operator identity.*
+
+- [x] **Slice 1 — Safety rails (#168):** LLM boot guard (prod-like + hosted key + limiter off →
+  refuse boot), daily token budget (`MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY`) charged by every LLM
+  client and enforced before each upstream call, boot-time posture warnings, and
+  `docker-compose.prod.yml` (no published 5432, required DB password) with a CI render assertion.
+- [x] **Slice 2 — Trust surface (#167):** in-app About/Privacy panel (ⓘ in topbar; invariant,
+  scope, storage, honest limits), favicon + meta/OG tags, session-ephemerality hints,
+  error-copy hygiene, "Export CSV" label unification, pinch-zoom restore, SPD/NIBRS glosses.
+- [x] **Slice 3 — Freshness automation (#169):** compose `ops` cron sidecar driving the existing
+  admin ingest daily per layer; `GET /health/data` staleness probe (200/503, schema-hidden) for
+  external monitoring; container liveness stays on `/health`.
+- [x] **Slice 4 — VPS bring-up — repo-side shipped; bring-up pending on the operator steps in
+  `docs/DEPLOY-VPS.md`:** Caddy TLS edge as the only ingress (api no longer publishes 8000),
+  `X-Forwarded-For` client identity, `.env.prod.example` (Anthropic primary + Groq fallback),
+  `scripts/prod/` start/stop with ingest-if-stale, nightly `pg_dump` with 7-daily/4-weekly
+  rotation, absolute link-preview metadata via `VITE_CANONICAL_ORIGIN`, and the full runbook.
+  **Still manual, on the box:** create the server, point `compcat.app` DNS, fill `.env.prod` with
+  real keys, run the start script, rehearse the restore, create the uptime monitor, run the soak
+  (closes the pending H2 run), then add the live link to the README.
+
+## Phase 9 — Pre-launch audit & fixes (2026-07-28)
+*Seven-lane audit (live UX walkthrough, 16-turn assistant battery on Groq, frontend, backend
+with reproduced measurements, statistical communication, security + DoS/robustness sub-audits),
+then four review-gated fix batches. Report: `docs/reviews/2026-07-28-pre-launch-audit.md`.*
+
+- [x] **Assistant quality (#173):** output guard on every emission path, compact grounding,
+  honest data-floor summaries, deterministic relative dates, bilingual refusals, arg bounds.
+- [x] **Backend hardening (#174):** DoS caps (radii/date/absolute/filters/body), event-loop
+  offloads, delete-after-analyze fix, CSV formula escaping, per-IP assistant bucket, sliding
+  session expiry, access-log privacy + rotation, /docs off in prod.
+- [x] **Frontend (#183):** save-searched-address contract fix, Enter-in-search, chat
+  auto-scroll, theme-toggle maplibre-6 regression, session-expiry surfacing, "no clear
+  difference" + Methods-sheet corrections, contrast/a11y/mobile fixes.
+- [x] **Retention (#184):** identity-scoped nightly sweep for abandoned session data +
+  geocode-cache eviction (a live visitor's data is never touched), created_at indexes.
+- [x] **Closed fast-follows:** hash-pinned Python runtime lockfile; numeric/star/letter-grade
+  proxy-rating guard patterns; mobile keyboard-safe sheet behavior.
+- [ ] **Fast-follow backlog** (not launch-blocking): full combobox ARIA pattern, broader tab
+  order/aria-live restructure, ranked-surface selective-inference disclosure line,
+  ErrorBoundary, and share-link fragment migration.
+- [x] **Product decisions from the audit:** the dead MCPP locator subsystem is deleted (it
+  never rendered); **place** is the primary noun in user-facing copy, with "address" kept
+  only where the user literally types or searches one and "pin" kept for the map-drop
+  gesture; the mobile map key is no longer `display:none` but a toggle-opened overlay. The
+  assistant caps shipped with #173/#174.
+
+## Phase 10 — Launch posture: named tunnel, VPS retained (2026-07-28)
+*Phase 8 built the public instance but left the edge assuming a rented box. The launch path is
+now the **zero-cost named Cloudflare tunnel from the ThinkPad**: Cloudflare terminates TLS at its
+own edge and a `cloudflared` container dials out, so there is no Caddy, no certificate, no
+published host port and no inbound firewall hole. Everything else from Phase 8 — required
+secrets, unpublished Postgres, restart policies, the nightly ops sidecar, log rotation — is
+reused unchanged. `docs/DEPLOY-VPS.md` is retained as the upgrade, unmodified except for a
+pointer.*
+
+- [x] **Tunnel overlay + posture — live at [compcat.app](https://compcat.app) as of 2026-08-01:**
+  [`docs/DEPLOY-TUNNEL.md`](../DEPLOY-TUNNEL.md), `docker-compose.tunnel.yml` (caddy parked on a dead profile,
+  pinned `cloudflared` with the token required at render time, api still unpublished),
+  `.env.tunnel.example` (`MCA_TRUST_PROXY_HEADERS=true` because here Cloudflare *is* the edge and
+  `CF-Connecting-IP` is authoritative — the inverse of the Caddyfile's strip),
+  `scripts/public/start-public.ps1` / `stop-public.ps1` as an isolated third compose project
+  (`compcat-public`, own volumes, uploads off — never the personal instance), the full runbook,
+  and render assertions in `tests/test_compose_tunnel_overlay.py`. The public health and data
+  probes were healthy during the audit. **Operator follow-up:** disable Cloudflare Web Analytics
+  in the authenticated dashboard (the app CSP now blocks its injected beacon as a backstop),
+  and retain the runbook's restore rehearsal and uptime-monitor checks as recurring operations.
+- [x] **Trade-offs recorded, not glossed:** uptime follows the ThinkPad (no SLA; sleep is the
+  enemy), Cloudflare's free tier discourages serving large non-HTML assets at volume and the
+  ~100 MB PMTiles extract is the one heavy asset (range-requested, edge-cached, portfolio-scale
+  traffic — but named honestly, with R2 or the VPS as the escape hatch), and Caddy's outer
+  1 MB cap is gone while the application still enforces its 1 MiB pre-routing default (no
+  multipart endpoint is enabled on this posture; a plan-dependent WAF rule is optional).
+- [ ] **Upgrade trigger:** if uptime or the asset volume ever stops being acceptable, migrate per
+  `docs/DEPLOY-VPS.md` — restore the newest dump, swap the tunnel CNAME for an A record. Only the
+  edge overlay changes.
+
+## Conventions
+- Each unchecked box above is a candidate unit of work; large ones get their own `docs/superpowers/` spec → plan → PR (the established cadence).
+- Keep this file current as phases land — it is the one roadmap concurrent agents should read.
+
+---
+
+> **Eventual public release — Phase 7 (2026-07-09) chose the showcase; Phase 8 (2026-07-27)
+> makes it durable.** The open question this note held ("does CompCat ever go public, and as
+> what?") resolved in two steps: Phase 7 made CompCat public as a **showcase** (public repo,
+> demo-on-demand, write-ups); Phase 8 upgrades the demo to an **always-on public instance**
+> (VPS, domain, automated freshness) — still anonymous-session-based. The service pile this
+> note enumerated (real authentication, encryption at rest, per-user tenant isolation, user
+> accounts, onboarding) remains deliberately unplanned with no date.

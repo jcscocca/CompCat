@@ -27,6 +27,8 @@ if [ ! -f "${ENV_FILE}" ]; then
     exit 1
 fi
 
+python3 scripts/public/validate_public_env.py --mode vps "${ENV_FILE}"
+
 compose() {
     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
         --profile ops --env-file "${ENV_FILE}" "$@"

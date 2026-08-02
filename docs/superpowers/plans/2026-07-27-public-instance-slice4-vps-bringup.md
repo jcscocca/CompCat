@@ -778,8 +778,8 @@ Then confirm the posture actually boots the app (this is the combination slice 1
 ```bash
 env -i PATH="$PATH" \
   MCA_ENVIRONMENT=production \
-  MCA_SESSION_SECRET=0123456789abcdef0123456789abcdef \
-  MCA_USER_HASH_SALT=0123456789abcdef0123456789abcdef \
+  MCA_SESSION_SECRET=example-session-secret \
+  MCA_USER_HASH_SALT=example-user-hash-salt \
   MCA_ANTHROPIC_API_KEY=sk-not-a-real-key \
   MCA_LLM_API_KEY=gsk-not-a-real-key \
   MCA_RATE_LIMIT_ENABLED=true \

@@ -84,6 +84,7 @@ services:
       MCA_RAW_UPLOAD_RETENTION: "${MCA_RAW_UPLOAD_RETENTION:-false}"
       # Crime ingest (Socrata) — optional app token.
       SOCRATA_APP_TOKEN: ${SOCRATA_APP_TOKEN:-}
+      MCA_SOCRATA_RECONCILIATION_DAYS: "${MCA_SOCRATA_RECONCILIATION_DAYS:-14}"
       # Geocoding — contact email is REQUIRED when MCA_ENVIRONMENT=production (the app
       # refuses to boot otherwise), so these must reach the container.
       MCA_GEOCODER_PROVIDER: ${MCA_GEOCODER_PROVIDER:-nominatim}

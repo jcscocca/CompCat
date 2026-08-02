@@ -46,6 +46,19 @@ describe("savedView", () => {
     expect(decodeView(withRadius(250))?.radiusM).toBe(250); // a valid radius still decodes
   });
 
+  it("rejects a shared view with a reversed or malformed date range", () => {
+    const withDates = (s: unknown, e: unknown) =>
+      btoa(JSON.stringify({
+        v: 1, pts: [{ y: 47.6, x: -122.3, l: "P" }],
+        r: 250, s, e, ly: "reported", c: null,
+      }));
+    expect(decodeView(withDates("2024-02-01", "2024-01-31"))).toBeNull();
+    expect(decodeView(withDates("not-a-date", "2024-01-31"))).toBeNull();
+    expect(decodeView(withDates("2024-02-31", "2024-03-01"))).toBeNull();
+    expect(decodeView(withDates("2018-01-01", "2026-08-01"))).toBeNull();
+    expect(decodeView(withDates("2026-08-01", "9999-12-31"))).toBeNull();
+  });
+
   it("preserves the arrests layer through encode/decode", () => {
     const view = { points: [{ latitude: 47.6, longitude: -122.3, label: "P" }], radiusM: 250, startDate: "2024-01-01", endDate: "2024-01-31", layer: "arrests" as const, offenseCategory: "" };
     expect(decodeView(encodeView(view))?.layer).toBe("arrests");

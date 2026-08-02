@@ -165,7 +165,7 @@ import * as maplibregl from "maplibre-gl";
 import { MapCanvas, iconHtml, markerKindFor, ringsGeoJSON } from "./MapCanvas";
 import { incidentNoun } from "../lib/layerCopy";
 import { placeIdentity } from "../lib/placeIdentity";
-import type { DashboardSummary, LayerKey, Place } from "../types";
+import type { AnalysisSettings, DashboardSummary, LayerKey, Place } from "../types";
 
 type MockMapInstance = {
   fireClick: (lat: number, lng: number) => void;
@@ -200,6 +200,14 @@ const place: Place = {
   sensitivity_class: "normal",
 };
 
+const ANALYSIS: AnalysisSettings = {
+  startDate: "2026-01-01",
+  endDate: "2026-06-24",
+  radiusM: 250,
+  offenseCategory: "",
+  layer: "reported",
+};
+
 // MapWorkspace's ad-hoc synthetic shape: coordinate-key id, adhoc_entry type, always
 // in selectedIds — never present in crime_summaries.
 const adhoc: Place = {
@@ -213,6 +221,7 @@ const adhoc: Place = {
 
 function summaryWithCount(): DashboardSummary {
   return {
+    layer: "reported",
     totals: { place_count: 1, visit_count: 5, incident_count: 9 },
     privacy: { normal: 0, home_candidate: 0, work_candidate: 0, suppressed: 0 },
     places: [place],
@@ -229,9 +238,24 @@ function summaryWithCount(): DashboardSummary {
         nearest_incident_m: null,
         incidents_per_visit: null,
         incidents_per_hour_dwell: null,
+        analysis_run_id: "run-1",
+        layer: "reported",
       },
     ],
-    analysis: { available_radii_m: [250] },
+    analysis: {
+      available_radii_m: [250],
+      persisted_scope: {
+        run_id: "run-1",
+        place_ids: ["p1"],
+        radii_m: [250],
+        analysis_start_date: ANALYSIS.startDate,
+        analysis_end_date: ANALYSIS.endDate,
+        offense_category: null,
+        offense_subcategory: null,
+        nibrs_group: null,
+        layer: "reported",
+      },
+    },
     exports: { tableau_place_summary_csv: "/x.csv" },
   };
 }
@@ -253,7 +277,7 @@ afterEach(() => {
 function canvasElement(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
   return (
     <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
-      summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
+      summary={null} analysis={ANALYSIS} flyTo={null} beats={null} highlightBeats={[]}
       incidentPoints={null} incidentNoun={incidentNoun("reported")} theme="light"
       onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} {...over} />
   );
@@ -266,19 +290,33 @@ function renderCanvas(over: Partial<Parameters<typeof MapCanvas>[0]> = {}) {
 describe("markerKindFor", () => {
   it("classifies analyzed, low-data, selected, and default places", () => {
     const s = summaryWithCount();
-    expect(markerKindFor(place, new Set(), s, 250)).toBe("analyzed");
+    expect(markerKindFor(place, new Set(["p1"]), s, ANALYSIS)).toBe("analyzed");
     const other: Place = { ...place, id: "p2" };
-    expect(markerKindFor(other, new Set(["p2"]), s, 250)).toBe("low");
-    expect(markerKindFor(other, new Set(["p2"]), null, 250)).toBe("selected");
-    expect(markerKindFor(other, new Set(), null, 250)).toBe("default");
+    const zeroRowRun = summaryWithCount();
+    zeroRowRun.crime_summaries = [];
+    zeroRowRun.analysis.persisted_scope!.place_ids = ["p2"];
+    expect(markerKindFor(other, new Set(["p2"]), zeroRowRun, ANALYSIS)).toBe("low");
+    expect(markerKindFor(other, new Set(["p2"]), null, ANALYSIS)).toBe("selected");
+    expect(markerKindFor(other, new Set(), null, ANALYSIS)).toBe("default");
   });
 
   it("never marks ad-hoc synthetics low, even when the radius has analyzed summaries", () => {
     // summaryWithCount analyzes p1 at 250 m, so the global analyzedAtRadius flag is true —
     // the trap that would otherwise classify a selected-but-unanalyzable synthetic as "low".
     const s = summaryWithCount();
-    expect(markerKindFor(adhoc, new Set([adhoc.id]), s, 250)).toBe("selected");
-    expect(markerKindFor(adhoc, new Set(), s, 250)).toBe("default");
+    expect(markerKindFor(adhoc, new Set([adhoc.id]), s, ANALYSIS)).toBe("selected");
+    expect(markerKindFor(adhoc, new Set(), s, ANALYSIS)).toBe("default");
+  });
+
+  it.each([
+    ["layer", { layer: "arrests" as const }],
+    ["date window", { startDate: "2025-01-01" }],
+    ["category", { offenseCategory: "PERSON" }],
+  ])("does not render persisted count/ring state under a changed %s", (_label, patch) => {
+    const changed = { ...ANALYSIS, ...patch };
+    const summary = summaryWithCount();
+    expect(markerKindFor(place, new Set([place.id]), summary, changed)).toBe("selected");
+    expect(ringsGeoJSON([place], new Set([place.id]), summary, changed).features).toHaveLength(0);
   });
 });
 
@@ -313,23 +351,22 @@ describe("iconHtml with identity", () => {
 
 describe("ringsGeoJSON", () => {
   it("emits one polygon per analyzed/low place with the kind tagged", () => {
-    const fc = ringsGeoJSON([place], new Set(), summaryWithCount(), 250);
+    const fc = ringsGeoJSON([place], new Set([place.id]), summaryWithCount(), ANALYSIS);
     expect(fc.features).toHaveLength(1);
     expect(fc.features[0].properties?.kind).toBe("analyzed");
     expect(fc.features[0].geometry.type).toBe("Polygon");
   });
 
   it("emits nothing for unanalyzed places", () => {
-    const fc = ringsGeoJSON([place], new Set(), null, 250);
+    const fc = ringsGeoJSON([place], new Set(), null, ANALYSIS);
     expect(fc.features).toHaveLength(0);
   });
 
-  it("never rings ad-hoc synthetics in a mixed session", () => {
-    // Saved analyzed place + selected ad-hoc synthetic under the same summary: only the
-    // saved place rings — synthetics have no persisted summary to ring around.
-    const fc = ringsGeoJSON([place, adhoc], new Set([adhoc.id]), summaryWithCount(), 250);
-    expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].properties.kind).toBe("analyzed");
+  it("hides saved-place rings when the current list also contains an ad-hoc point", () => {
+    // The persisted run covered only p1. Once an ad-hoc point joins the current list, the
+    // complete selected-place scope differs, so no part of that old run is presented.
+    const fc = ringsGeoJSON([place, adhoc], new Set([place.id, adhoc.id]), summaryWithCount(), ANALYSIS);
+    expect(fc.features).toHaveLength(0);
   });
 });
 
@@ -373,7 +410,7 @@ describe("MapCanvas", () => {
   });
 
   it("pushes ring polygons into the mc-rings source", async () => {
-    renderCanvas({ summary: summaryWithCount() });
+    renderCanvas({ summary: summaryWithCount(), selectedIds: new Set([place.id]) });
     await waitFor(() =>
       expect(MockedMap.last?.sources.get("mc-rings")?.setData).toHaveBeenCalled(),
     );
@@ -389,7 +426,7 @@ describe("MapCanvas", () => {
     expect((document.body.querySelector(".mc-pin-icon") as HTMLElement).innerHTML).not.toContain("mc-pin-tag");
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set(["p1"])} draft={null} addPinMode={false}
-        summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
+        summary={null} analysis={ANALYSIS} flyTo={null} beats={null} highlightBeats={[]}
         incidentPoints={null} incidentNoun={incidentNoun("reported")} theme="light"
         onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
@@ -608,6 +645,22 @@ describe("beat + incident layers", () => {
     ]);
   });
 
+  it("closes an open incident popup when a same-layer filter refresh clears the points", async () => {
+    const view = renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-hit", {
+      properties: { id: "inc-1", offense_subcategory: "THEFT" },
+    });
+    expect(document.body.querySelector(".mc-incident-card")).not.toBeNull();
+
+    view.rerender(canvasElement({
+      incidentPoints: { type: "FeatureCollection", features: [] },
+      incidentNoun: incidentNoun("reported"),
+    }));
+
+    await waitFor(() => expect(document.body.querySelector(".mc-incident-card")).toBeNull());
+  });
+
   it.each([
     ["reported", "27 reported incidents", "These reported incidents are mapped to the same block."],
     ["arrests", "27 arrests", "These arrests are mapped to the same block."],
@@ -683,7 +736,7 @@ describe("themed map", () => {
     await waitFor(() => expect(MockedMap.last!.sources.get("mc-incidents")).toBeTruthy());
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
-        summary={null} radiusM={250} flyTo={null} beats={BEATS_FC} highlightBeats={[]}
+        summary={null} analysis={ANALYSIS} flyTo={null} beats={BEATS_FC} highlightBeats={[]}
         incidentPoints={POINTS_FC} incidentNoun={incidentNoun("reported")} theme="dark"
         onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );
@@ -712,7 +765,7 @@ describe("themed map", () => {
     await waitFor(() => expect(MockedMap.last!.sources.get("mc-rings")).toBeTruthy());
     view.rerender(
       <MapCanvas places={[place]} selectedIds={new Set()} draft={null} addPinMode={false}
-        summary={null} radiusM={250} flyTo={null} beats={null} highlightBeats={[]}
+        summary={null} analysis={ANALYSIS} flyTo={null} beats={null} highlightBeats={[]}
         incidentPoints={null} incidentNoun={incidentNoun("reported")} theme="dark"
         onViewportChange={noop} onMapClick={noop} onMarkerClick={noop} />,
     );

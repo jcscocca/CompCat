@@ -10,7 +10,7 @@ type Props = {
 };
 
 export function PlaceSearch({ provider, onSelectResult }: Props) {
-  const { query, setQuery, status, results, recent, runSearch, rememberPlace } = useAddressSearch(provider.search);
+  const { query, setQuery, status, results, recent, runSearch, rememberPlace, clearRecent } = useAddressSearch(provider.search);
   const [focused, setFocused] = useState(false);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -62,6 +62,15 @@ export function PlaceSearch({ provider, onSelectResult }: Props) {
               </button>
             </li>
           ))}
+          <li className="mc-recent-clear">
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={clearRecent}
+            >
+              Clear recent searches
+            </button>
+          </li>
         </ul>
       ) : null}
       {results.length > 0 ? (

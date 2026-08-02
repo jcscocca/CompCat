@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.models import PlaceCluster, PlaceCrimeSummary
+from app.models import AnalysisRun, PlaceCluster, PlaceCrimeSummary
 from app.services.analysis_runs import latest_analysis_run_id
 
 
@@ -21,6 +22,7 @@ def dashboard_summary(
         .order_by(PlaceCluster.visit_count.desc(), PlaceCluster.display_label.asc())
     ).all()
     run_id = latest_analysis_run_id(session, user_id_hash)
+    run = session.get(AnalysisRun, run_id) if run_id is not None else None
     summaries = (
         session.scalars(
             select(PlaceCrimeSummary).where(PlaceCrimeSummary.analysis_run_id == run_id)
@@ -31,7 +33,9 @@ def dashboard_summary(
     privacy_counts = Counter(cluster.sensitivity_class for cluster in clusters)
     # The layer the persisted totals were computed for (null/legacy rows read as "reported"),
     # so the UI labels counts as reported incidents vs 911 calls rather than guessing.
-    summary_layer = next((s.layer for s in summaries if s.layer), "reported")
+    summary_layer = (run.layer if run is not None else None) or next(
+        (s.layer for s in summaries if s.layer), "reported"
+    )
     return {
         "layer": summary_layer,
         "totals": {
@@ -49,7 +53,13 @@ def dashboard_summary(
         },
         "places": [_place_payload(cluster) for cluster in clusters],
         "crime_summaries": [_summary_payload(summary) for summary in summaries],
-        "analysis": {"available_radii_m": settings.crime_radii_m},
+        "analysis": {
+            "available_radii_m": settings.crime_radii_m,
+            # Rows are grouped by observed offense dimensions, so their category columns
+            # cannot prove which filters originated the run. Publish the existing AnalysisRun
+            # provenance additively; older clients ignore it and newer clients can fail closed.
+            "persisted_scope": _analysis_run_payload(run),
+        },
         "exports": {
             "tableau_place_summary_csv": "/exports/tableau/place-summary.csv",
             "analysis_csv": "/exports/analysis.csv",
@@ -86,5 +96,46 @@ def _summary_payload(summary: PlaceCrimeSummary) -> dict[str, object]:
         "nearest_incident_m": summary.nearest_incident_m,
         "incidents_per_visit": summary.incidents_per_visit,
         "incidents_per_hour_dwell": summary.incidents_per_hour_dwell,
+        "analysis_run_id": summary.analysis_run_id,
         "layer": summary.layer,
     }
+
+
+def _analysis_run_payload(run: AnalysisRun | None) -> dict[str, object] | None:
+    if run is None:
+        return None
+    return {
+        "run_id": run.id,
+        "place_ids": _string_list(run.place_ids_json),
+        "radii_m": _integer_list(run.radii_m_json),
+        "analysis_start_date": run.analysis_start_date,
+        "analysis_end_date": run.analysis_end_date,
+        "offense_category": run.offense_category,
+        "offense_subcategory": run.offense_subcategory,
+        "nibrs_group": run.nibrs_group,
+        "layer": run.layer or "reported",
+    }
+
+
+def _string_list(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return None
+    return value
+
+
+def _integer_list(raw: str) -> list[int] | None:
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, list) or not all(
+        isinstance(item, int) and not isinstance(item, bool) for item in value
+    ):
+        return None
+    return value

@@ -8,8 +8,9 @@ field-level source of truth; this document covers rules and tier structure only.
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
-The assistant refuses safety-score requests by design (`app/assistant/agent.py`). This
-invariant applies to code, copy, and any future endpoints.
+The assistant refuses safety-score requests through the deterministic guard in
+`app/assistant/output_guard.py`, wired through `app/assistant/agent.py`. This invariant
+applies to code, copy, and any future endpoints.
 
 ---
 
@@ -97,7 +98,7 @@ which are unauthenticated or session-creating.
 | `/assistant/chat` | POST | `app/api/routes_assistant.py` | `AssistantChatRequest` (`app/assistant/schemas.py`) | SSE stream (see §4) |
 | `/assistant/commands` | POST | `app/api/routes_assistant.py` | `AssistantCommandRequest` (fixed command enum) | SSE stream (no LLM; see §4) |
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
-| `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (gated — see §4) |
+| `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (always available for erasure — see §4) |
 | `/exports/analysis.csv` | GET | `app/api/routes_exports.py` | required `?run_id=` | Current analytical detail CSV for an owned run; unknown/foreign run is 404 |
 | `/exports/tableau/place-summary.csv` | GET | `app/api/routes_exports.py` | optional `?run_id=` | CSV attachment for the requested user-owned run, or the latest run when omitted |
 
@@ -111,10 +112,14 @@ The layers are mutually exclusive and disjoint — arrests are a separate layer,
 into `"reported"` (on the public redacted data an arrest can't be linked back to its crime
 report, so counting both would double-count), and a 911 call is never counted with the report
 it produced. `/dashboard/analyze` records the layer on the `AnalysisRun` and the
-`PlaceCrimeSummary` rows it persists, returns that exact run ID for a saved-place request
-(`null` for an ad-hoc points request), and `/dashboard/summary` echoes a `layer` field.
-`/dashboard/freshness` returns coverage keyed by layer (`{"reported": {...}, "calls": {...}}`)
-so the UI pill reflects the active layer.
+`PlaceCrimeSummary` rows it persists and returns that exact run ID for a saved-place request
+(`null` for an ad-hoc points request). `/dashboard/summary` echoes a `layer` field, an additive
+`analysis.persisted_scope` object derived from the exact `AnalysisRun`, and `analysis_run_id` on
+each summary row. The frontend shows persisted rings/counts only when run ID, selected-place set,
+dates, radius, category, representable subfilters, and layer all match; legacy responses without
+that provenance fail closed until rerun. `/dashboard/freshness` returns coverage keyed by layer
+(`{"reported": {...}, "arrests": {...}, "calls": {...}}`) so the UI pill reflects the active
+layer.
 
 `/dashboard/neighborhood` response payload. Each place carries
 `reference_comparisons`, ordered MCPP → sector → city. Every entry has:
@@ -203,11 +208,13 @@ were retired and must not be re-exposed.
 
 ### Admin tier
 
-The single admin endpoint appears in the public OpenAPI schema but is gated by token.
+Both admin endpoints are token-gated. Socrata ingest appears in OpenAPI; the operational
+retention endpoint is deliberately hidden from the schema.
 
 | Endpoint | Method | Router file | Auth | Notes |
 |---|---|---|---|---|
 | `/admin/crime/ingest/socrata` | POST | `app/api/routes_admin_crime.py` | `X-Admin-Token: MCA_ADMIN_INGEST_TOKEN` (HTTP 403 without it) | Ingests or backfills SPD data from Seattle Socrata |
+| `/admin/maintenance/retention-sweep` | POST | `app/api/routes_admin_maintenance.py` | `X-Admin-Token: MCA_ADMIN_INGEST_TOKEN` (HTTP 403 without it) | Deletes abandoned identity-owned rows in bounded FK order; hidden from OpenAPI |
 
 ---
 
@@ -237,10 +244,12 @@ directly for the canonical list.
 
 ### Personal uploads (`/uploads`)
 
-`POST /uploads` and `DELETE /uploads` are public-tier endpoints (session-cookie
-authenticated, in schema) but return **HTTP 404** unless `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`
-is set. The gate is checked at request time inside the handler (`app/api/routes_uploads.py`),
-not at startup. The `/input-modes` response also reflects this flag via
+`POST /uploads` and `DELETE /uploads` are public-tier endpoints (session-cookie authenticated,
+in schema). `POST` returns **HTTP 404** unless
+`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true` is set; `DELETE` deliberately remains available when
+the flag is off so an operator cannot strand previously uploaded data by disabling new uploads.
+The gate is checked at request time inside the handler (`app/api/routes_uploads.py`), not at
+startup. The `/input-modes` response also reflects this flag via
 `app/input_modes.supported_input_modes`.
 
 Default: `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is `false`; uploads are disabled in the

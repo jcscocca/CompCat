@@ -240,6 +240,39 @@ describe("api client", () => {
     expect(events).toContain("error");
   });
 
+  it("rejects a truncated assistant stream that reaches EOF without done or error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse('event: token\ndata: {"delta":"partial"}\n\n'),
+    );
+
+    const deltas: string[] = [];
+    await expect(streamAssistantChat(
+      { messages: [{ role: "user", content: "hi" }], dashboard_state: emptyDashboardState },
+      {
+        onEvent: (event) => {
+          if (event.event === "token") deltas.push(event.data.delta ?? "");
+        },
+      },
+    )).rejects.toThrow(/terminal event/i);
+    expect(deltas).toEqual(["partial"]);
+  });
+
+  it("does not treat a malformed done frame at EOF as successful completion", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(
+        'event: token\ndata: {"delta":"partial"}\n\n' +
+          "event: done\ndata: {\n\n",
+      ),
+    );
+
+    const events: string[] = [];
+    await expect(streamAssistantChat(
+      { messages: [{ role: "user", content: "hi" }], dashboard_state: emptyDashboardState },
+      { onEvent: (event) => events.push(event.event) },
+    )).rejects.toThrow(/terminal event/i);
+    expect(events).toEqual(["token"]);
+  });
+
   it("maps a failing assistant stream response to friendly copy, never the body", async () => {
     const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockImplementation(async () =>

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ANALYSIS_MIN_DATE } from "../lib/analysisDefaults";
+import {
+  analysisDateRangeError,
+  maxAnalysisDate,
+} from "../lib/analysisDateRange";
 import { incidentNoun, layerDisclosure } from "../lib/layerCopy";
 import { CATEGORIES, categoryLabel } from "../lib/offenseCategories";
 import type { AnalysisSettings, LayerKey } from "../types";
@@ -74,10 +78,19 @@ export function ContextStrip({
   const activeCategoryLabel = categoryLabel(analysis.offenseCategory, analysis.layer);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyResetRef = useRef<number | null>(null);
+  const [dateInputError, setDateInputError] = useState("");
+  const currentDateError = analysisDateRangeError(analysis.startDate, analysis.endDate);
+  const datesValid = currentDateError === null;
+  const dateError = dateInputError || currentDateError || "";
+  const latestAnalysisDate = maxAnalysisDate();
 
   useEffect(() => () => {
     if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
   }, []);
+
+  useEffect(() => {
+    if (datesValid) setDateInputError("");
+  }, [analysis.startDate, analysis.endDate, datesValid]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -123,6 +136,17 @@ export function ContextStrip({
     copyResetRef.current = window.setTimeout(() => setCopyState("idle"), 2000);
   }
 
+  function handleDateChange(field: "startDate" | "endDate", value: string) {
+    const next = { ...analysis, [field]: value };
+    const error = analysisDateRangeError(next.startDate, next.endDate);
+    if (error) {
+      setDateInputError(error);
+      return;
+    }
+    setDateInputError("");
+    onChange({ [field]: value });
+  }
+
   return (
     <div className="mc-ctx" ref={rootRef}>
       <div className={`mc-ctx-summary${openMenu ? " is-open" : ""}`}>
@@ -153,6 +177,8 @@ export function ContextStrip({
               aria-expanded={openMenu === "dates"}
               aria-haspopup="dialog"
               aria-controls="mc-ctx-dates-menu"
+              aria-invalid={Boolean(dateError)}
+              aria-describedby={dateError ? "mc-ctx-date-error" : undefined}
               onClick={() => toggleMenu("dates")}
             >
               <span>{analysis.startDate} – {analysis.endDate}</span>
@@ -163,9 +189,9 @@ export function ContextStrip({
                 <strong id="mc-ctx-dates-title" className="mc-ctx-popover-title">Date range</strong>
                 <div className="mc-ctx-date-grid">
                   <label htmlFor="ctx-start-date">Start date</label>
-                  <input id="ctx-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} onChange={(event) => onChange({ startDate: event.target.value })} />
+                  <input id="ctx-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} max={analysis.endDate} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "mc-ctx-date-error" : undefined} onChange={(event) => handleDateChange("startDate", event.target.value)} />
                   <label htmlFor="ctx-end-date">End date</label>
-                  <input id="ctx-end-date" type="date" className="mc-inp" value={analysis.endDate} min={ANALYSIS_MIN_DATE} onChange={(event) => onChange({ endDate: event.target.value })} />
+                  <input id="ctx-end-date" type="date" className="mc-inp" value={analysis.endDate} min={analysis.startDate > ANALYSIS_MIN_DATE ? analysis.startDate : ANALYSIS_MIN_DATE} max={latestAnalysisDate} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "mc-ctx-date-error" : undefined} onChange={(event) => handleDateChange("endDate", event.target.value)} />
                 </div>
               </div>
             ) : null}
@@ -283,9 +309,11 @@ export function ContextStrip({
           </div>
         </div>
 
+        {dateError ? <p id="mc-ctx-date-error" className="mc-ctx-date-error" role="alert">{dateError}</p> : null}
+
         <div className="mc-ctx-actions">
-          <button type="button" className="mc-cta" disabled={runDisabled || !onRun} onClick={() => onRun?.()}>Run analysis</button>
-          <button type="button" className="mc-link-copy" disabled={copyDisabled || !onCopyLink} onClick={() => void handleCopyLink()}>Copy link</button>
+          <button type="button" className="mc-cta" disabled={runDisabled || !onRun || !datesValid} onClick={() => onRun?.()}>Run analysis</button>
+          <button type="button" className="mc-link-copy" disabled={copyDisabled || !onCopyLink || !datesValid} onClick={() => void handleCopyLink()}>Copy link</button>
         </div>
       </div>
 

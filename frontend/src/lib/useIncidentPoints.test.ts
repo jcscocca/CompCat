@@ -91,6 +91,19 @@ describe("useIncidentPoints", () => {
     expect(result.current.geojson.features).toHaveLength(0);
   });
 
+  it("does not fetch a reversed analysis window", async () => {
+    const { result } = renderHook(() => useIncidentPoints({
+      bounds: BOUNDS,
+      analysis: { ...ANALYSIS, startDate: "2025-11-01", endDate: "2025-10-31" },
+    }));
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(fetchPoints).not.toHaveBeenCalled();
+    expect(result.current.geojson.features).toHaveLength(0);
+    expect(result.current.totalCount).toBe(0);
+  });
+
   it("collapses rapid viewport changes into one trailing fetch", async () => {
     const { rerender } = renderHook(
       ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
@@ -105,20 +118,51 @@ describe("useIncidentPoints", () => {
     expect(fetchPoints.mock.calls[0][0].bounds.north).toBe(47.67);
   });
 
-  it("refetches when the layer changes", async () => {
-    const { rerender } = renderHook(
+  it("clears reported dots and counts immediately when the layer changes", async () => {
+    const { result, rerender } = renderHook(
       ({ analysis }) => useIncidentPoints({ bounds: BOUNDS, analysis }),
       { initialProps: { analysis: ANALYSIS } },
     );
     await act(async () => {
       vi.advanceTimersByTime(300);
     });
+    expect(result.current.geojson.features).toHaveLength(1);
+    expect(result.current.totalCount).toBe(1);
+
     rerender({ analysis: { ...ANALYSIS, layer: "arrests" } });
+    expect(result.current.geojson.features).toHaveLength(0);
+    expect(result.current.totalCount).toBe(0);
+    expect(result.current.layerTotals).toBeNull();
     await act(async () => {
       vi.advanceTimersByTime(300);
     });
     expect(fetchPoints).toHaveBeenCalledTimes(2);
     expect(fetchPoints.mock.calls[1][0].layer).toBe("arrests");
+  });
+
+  it("clears prior dots and counts when the date or category filter changes", async () => {
+    const { result, rerender } = renderHook(
+      ({ analysis }) => useIncidentPoints({ bounds: BOUNDS, analysis }),
+      { initialProps: { analysis: ANALYSIS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.geojson.features).toHaveLength(1);
+
+    rerender({ analysis: { ...ANALYSIS, startDate: "2025-02-01", offenseCategory: "PERSON" } });
+    expect(result.current.geojson.features).toHaveLength(0);
+    expect(result.current.returnedCount).toBe(0);
+    expect(result.current.totalCount).toBe(0);
+    expect(result.current.limit).toBe(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(fetchPoints.mock.calls[1][0]).toMatchObject({
+      analysis_start_date: "2025-02-01",
+      offense_category: "PERSON",
+    });
   });
 
   it("ignores results from aborted requests", async () => {
@@ -147,7 +191,7 @@ describe("useIncidentPoints", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("keeps the prior geojson and surfaces the message when a later fetch fails", async () => {
+  it("does not retain prior GeoJSON or counts when a later fetch fails", async () => {
     const { result, rerender } = renderHook(
       ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
       { initialProps: { bounds: BOUNDS } },
@@ -156,7 +200,7 @@ describe("useIncidentPoints", () => {
       vi.advanceTimersByTime(300);
     });
     expect(result.current.geojson.features).toHaveLength(1);
-    const priorGeojson = result.current.geojson;
+    expect(result.current.totalCount).toBe(1);
 
     // An arbitrary rejection is not shippable copy — this surface renders `error`, so an
     // unrecognised message must be replaced rather than shown.
@@ -166,7 +210,32 @@ describe("useIncidentPoints", () => {
       vi.advanceTimersByTime(300);
     });
     expect(result.current.error).toBe("Incident pins could not load for this view.");
-    expect(result.current.geojson).toBe(priorGeojson);
+    expect(result.current.errorId).toBe(1);
+    expect(result.current.geojson.features).toHaveLength(0);
+    expect(result.current.returnedCount).toBe(0);
+    expect(result.current.totalCount).toBe(0);
+    expect(result.current.totalLocationCount).toBe(0);
+    expect(result.current.layerTotals).toBeNull();
+    expect(result.current.limit).toBe(0);
+  });
+
+  it("assigns a new occurrence id when the same warning happens on a later request", async () => {
+    fetchPoints.mockRejectedValue(new Error("boom"));
+    const { result, rerender } = renderHook(
+      ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
+      { initialProps: { bounds: BOUNDS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.errorId).toBe(1);
+
+    rerender({ bounds: { ...BOUNDS, north: 47.7 } });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.error).toBe("Incident pins could not load for this view.");
+    expect(result.current.errorId).toBe(2);
   });
 
   it("surfaces a status-mapped message verbatim", async () => {

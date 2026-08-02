@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import CrimeIncident
+from app.models import CrimeIncident, utc_now
 from app.schemas import CrimeIncidentData
 from app.services.crime_service import _incident_model
 
@@ -16,6 +16,7 @@ def ingest_crime_incidents(
     incidents: list[CrimeIncidentData],
 ) -> dict[str, int]:
     inserted_count = 0
+    updated_count = 0
     skipped_count = 0
     seen_keys: set[tuple[str, str]] = set()
 
@@ -28,31 +29,62 @@ def ingest_crime_incidents(
         if key in seen_keys:
             skipped_count += 1
             continue
+        seen_keys.add(key)
 
-        existing = session.scalar(
-            select(CrimeIncident).where(
+        # Update every source-owned mutable field while preserving the local primary key and
+        # composite identity. Running UPDATE first gives accurate counters without a read/write
+        # race; the insert-conflict fallback repeats it after a concurrent writer wins.
+        mutable_values = {
+            "report_number": incident.report_number,
+            "offense_id": incident.offense_id,
+            "offense_start_utc": incident.offense_start_utc,
+            "offense_end_utc": incident.offense_end_utc,
+            "report_utc": incident.report_utc,
+            "offense_category": incident.offense_category,
+            "offense_subcategory": incident.offense_subcategory,
+            "nibrs_group": incident.nibrs_group,
+            "precinct": incident.precinct,
+            "sector": incident.sector,
+            "beat": incident.beat,
+            "mcpp": incident.mcpp,
+            "block_address": incident.block_address,
+            "latitude": incident.latitude,
+            "longitude": incident.longitude,
+            "snapshot_at": incident.snapshot_at or utc_now(),
+        }
+        update_statement = (
+            update(CrimeIncident)
+            .where(
                 CrimeIncident.source_dataset == incident.source_dataset,
                 CrimeIncident.external_incident_id == incident.external_incident_id,
             )
+            .values(**mutable_values)
         )
-        if existing is not None:
-            skipped_count += 1
+        if session.execute(update_statement).rowcount:
+            updated_count += 1
             continue
-
-        seen_keys.add(key)
 
         try:
             with session.begin_nested():
                 session.add(_incident_model(incident))
                 session.flush()
         except IntegrityError:
-            skipped_count += 1
+            # Another transaction inserted this composite key between our UPDATE and INSERT.
+            # Apply the incoming source values to the winning row instead of silently dropping
+            # the update. The uniqueness constraint remains the serialization point.
+            if not session.execute(update_statement).rowcount:
+                raise
+            updated_count += 1
             continue
 
         inserted_count += 1
 
     session.commit()
-    return {"inserted_count": inserted_count, "skipped_count": skipped_count}
+    return {
+        "inserted_count": inserted_count,
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+    }
 
 
 def purge_incidents_below_floor(

@@ -1,6 +1,6 @@
 # Anchored indexing for the area-vs-citywide trend overlay
 
-**Status:** methodology reference (2026-07-16). Backs the Analyze tab's
+**Status:** methodology reference (2026-07-16). Backs an expanded analysis card's
 "Reported incident volume over time" section (`GET /dashboard/trends` + the frontend
 indexing/rolling-mean computation). Companion to
 [Overdispersion, Poisson vs. NB, and the per-address rate interval](overdispersion-and-rate-intervals.md),
@@ -200,7 +200,7 @@ invites overreading of wiggles.
 **Lag — the honest cost.** A trailing window's centroid sits 5.5 months behind `t`: a
 step change appears in `R_t` with a ~6-month delay and takes 12 months to be fully
 absorbed. A centered window would halve the apparent lag but cannot be computed for the
-6 most recent months — exactly the months an Analyze user cares most about. The design
+6 most recent months — exactly the months an analysis-card viewer cares most about. The design
 keeps the trailing mean *and* draws the raw counts, so the most recent months are
 visible in raw form while the smoothed line catches up. The first 11 months of the
 window show no rolling value (no zero-padding, no partial windows).

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { friendlyMessageOr, getIncidentPoints } from "../api/client";
+import { isValidAnalysisDateRange } from "./analysisDateRange";
 import type { AnalysisSettings, IncidentPoint, IncidentPointsResponse, LayerKey, MapBounds } from "../types";
 
 const DEBOUNCE_MS = 300;
@@ -22,6 +23,18 @@ export type IncidentFeatureCollection = {
 };
 
 const EMPTY: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
+
+function emptyCounts() {
+  return {
+    returned: 0,
+    total: 0,
+    returnedLocations: 0,
+    totalLocations: 0,
+    layerTotals: null as Record<LayerKey, number> | null,
+    unmappable: 0,
+    limit: 0,
+  };
+}
 
 function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
   return {
@@ -61,29 +74,23 @@ export function useIncidentPoints({
   enabled?: boolean;
 }) {
   const [geojson, setGeojson] = useState<IncidentFeatureCollection>(EMPTY);
-  const [counts, setCounts] = useState({
-    returned: 0,
-    total: 0,
-    returnedLocations: 0,
-    totalLocations: 0,
-    layerTotals: null as Record<LayerKey, number> | null,
-    unmappable: 0,
-    limit: 0,
-  });
+  const [counts, setCounts] = useState(emptyCounts);
   const [error, setError] = useState<string | null>(null);
+  // A repeated failure may have identical copy but represents a new request and deserves a
+  // fresh warning. Consumers use this occurrence id instead of permanently dismissing by text.
+  const [errorId, setErrorId] = useState(0);
+  const errorSequenceRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { startDate, endDate, offenseCategory, layer } = analysis;
 
   useEffect(() => {
-    if (!bounds || !enabled) {
-      if (!enabled) {
-        abortRef.current?.abort();
-        setGeojson(EMPTY);
-        setCounts({ returned: 0, total: 0, returnedLocations: 0, totalLocations: 0, layerTotals: null, unmappable: 0, limit: 0 });
-        setError(null);
-      }
+    if (!bounds || !enabled || !isValidAnalysisDateRange(startDate, endDate)) {
+      abortRef.current?.abort();
+      setGeojson(EMPTY);
+      setCounts(emptyCounts());
+      setError(null);
       return undefined;
     }
     if (timerRef.current) {
@@ -92,6 +99,11 @@ export function useIncidentPoints({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    // The visible noun and filters switch immediately. Keeping the previous response during
+    // debounce/refetch would relabel old dots and counts as the new layer/window/category.
+    setGeojson(EMPTY);
+    setCounts(emptyCounts());
+    setError(null);
     timerRef.current = setTimeout(() => {
       getIncidentPoints(
         {
@@ -119,7 +131,13 @@ export function useIncidentPoints({
         })
         .catch((cause: unknown) => {
           if (controller.signal.aborted) return;
+          // Stay empty on failure: an empty disclosure plus an explicit warning is more honest
+          // than showing the previous scope under the newly selected labels.
+          setGeojson(EMPTY);
+          setCounts(emptyCounts());
           setError(friendlyMessageOr(cause, "Incident pins could not load for this view."));
+          errorSequenceRef.current += 1;
+          setErrorId(errorSequenceRef.current);
         });
     }, DEBOUNCE_MS);
     return () => {
@@ -142,5 +160,6 @@ export function useIncidentPoints({
     unmappableCitywideCount: counts.unmappable,
     limit: counts.limit,
     error,
+    errorId,
   };
 }

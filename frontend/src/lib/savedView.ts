@@ -1,4 +1,5 @@
 import type { LayerKey } from "../types";
+import { isValidAnalysisDateRange } from "./analysisDateRange";
 
 export interface ViewPoint {
   latitude: number;
@@ -60,11 +61,14 @@ export function decodeView(param: string): SavedView | null {
     if (points.some((p: ViewPoint | null) => p === null)) return null;
     const radiusM = Number(wire.r);
     if (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 5000) return null;
+    const startDate = String(wire.s);
+    const endDate = String(wire.e);
+    if (!isValidAnalysisDateRange(startDate, endDate)) return null;
     return {
       points: points as ViewPoint[],
       radiusM,
-      startDate: String(wire.s),
-      endDate: String(wire.e),
+      startDate,
+      endDate,
       layer: wire.ly === "calls" ? "calls" : wire.ly === "arrests" ? "arrests" : "reported",
       offenseCategory: wire.c ?? "",
     };

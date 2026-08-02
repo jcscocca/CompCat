@@ -21,3 +21,11 @@ def test_runtime_lock_is_committed_and_docker_installs_from_it() -> None:
 def test_make_install_remains_the_editable_developer_workflow() -> None:
     makefile = (_ROOT / "Makefile").read_text(encoding="utf-8")
     assert ".venv/bin/python -m pip install -e '.[dev]'" in makefile
+
+
+def test_docker_context_excludes_local_secrets_and_agent_state() -> None:
+    dockerignore = (_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+
+    assert ".env*" in dockerignore
+    assert "!.env*.example" in dockerignore
+    assert {".agents", ".claude", ".Codex", ".codex"} <= set(dockerignore)

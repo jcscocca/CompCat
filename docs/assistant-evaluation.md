@@ -29,7 +29,7 @@ python scripts/evaluate_assistant.py --target local
 Override the app origin when it is not listening on `http://127.0.0.1:8000`:
 
 ```powershell
-python scripts/evaluate_assistant.py --target local --base-url http://10.0.0.76:8000
+python scripts/evaluate_assistant.py --target local --base-url http://<private-host>:8000
 ```
 
 The runner creates one anonymous app session and reuses it across isolated cases. It never calls

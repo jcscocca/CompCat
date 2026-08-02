@@ -22,7 +22,7 @@ would be more appropriate. We tested this against the real SPD source data.
 **Decision:** the per-address rate interval uses a **quasi-Poisson Wald interval on the log
 rate**, reusing the exact overdispersion factor φ and continuity convention the pairwise test
 already uses. Negative binomial is **not** adopted. See
-[Decision and alternatives](#decision-and-alternatives-considered).
+[Decision and alternatives](#5-decision-and-alternatives-considered).
 
 ## 1. What the engine does today
 

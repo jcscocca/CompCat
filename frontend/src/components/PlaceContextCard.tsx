@@ -33,6 +33,36 @@ function barHeight(value: number, all: number[]) {
   return Math.round((value / max) * 100);
 }
 
+function partialBoundaryMonthCopy(windowLabel: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2}) – (\d{4})-(\d{2})-(\d{2})$/.exec(windowLabel);
+  if (!match) return "";
+  const [, startYear, startMonth, startDay, endYear, endMonth, endDay] = match;
+  const startIsPartial = Number(startDay) !== 1;
+  const endMonthLastDay = new Date(Date.UTC(Number(endYear), Number(endMonth), 0)).getUTCDate();
+  const endIsPartial = Number(endDay) !== endMonthLastDay;
+  const sameMonth = startYear === endYear && startMonth === endMonth;
+  if (sameMonth && (startIsPartial || endIsPartial)) return "This bucket is a partial calendar month.";
+  if (startIsPartial && endIsPartial) return "The first and last buckets are partial calendar months.";
+  if (startIsPartial) return "The first bucket is a partial calendar month.";
+  if (endIsPartial) return "The last bucket is a partial calendar month.";
+  return "";
+}
+
+function MonthlySpark({ counts, windowLabel }: { counts: number[]; windowLabel: string }) {
+  const boundaryCopy = partialBoundaryMonthCopy(windowLabel);
+  const description = `Calendar-month counts within the selected window${windowLabel ? ` (${windowLabel})` : ""}. ${boundaryCopy}`.trim();
+  return (
+    <div className="mc-spark-wrap">
+      <div className="mc-spark" role="img" aria-label={`${description} Values: ${counts.join(", ")}.`}>
+        {counts.map((n, i) => (
+          <span key={i} aria-hidden="true" style={{ height: `${barHeight(n, counts)}%` }} />
+        ))}
+      </div>
+      <p className="mc-spark-note">{description}</p>
+    </div>
+  );
+}
+
 function ProfileBars({
   counts,
   highlight,
@@ -95,7 +125,7 @@ function TemporalSection({ temporal, windowLabel, noun }: { temporal: TemporalPr
     return (
       <div className="mc-temporal">
         <h4 className="mc-temporal-title">When {noun.plural} occurred</h4>
-        <p className="mc-empty-list">No {noun.plural} with a recorded time in this area.</p>
+        <p className="mc-empty-list">No {noun.plural} with a recorded time in this area{windowLabel ? ` during ${windowLabel}` : ""}.</p>
       </div>
     );
   }
@@ -110,6 +140,7 @@ function TemporalSection({ temporal, windowLabel, noun }: { temporal: TemporalPr
   return (
     <div className="mc-temporal">
       <h4 className="mc-temporal-title">When {noun.plural} occurred</h4>
+      {windowLabel ? <p className="mc-temporal-note">Hour and day profiles use the selected window: {windowLabel}.</p> : null}
 
       <div className="mc-temporal-profile">
         <span className="mc-temporal-axis">By hour</span>
@@ -270,13 +301,7 @@ export function PlaceContextCard({
             {place.place_incident_count} {countNoun(noun, place.place_incident_count)} within {place.radius_m} m · {windowLabel}
           </p>
           <ReferenceCirclePlot place={place} noun={noun} />
-          {place.monthly_counts?.length ? (
-            <div className="mc-spark" aria-hidden="true">
-              {place.monthly_counts.map((n, i) => (
-                <span key={i} style={{ height: `${barHeight(n, place.monthly_counts!)}%` }} />
-              ))}
-            </div>
-          ) : null}
+          {place.monthly_counts?.length ? <MonthlySpark counts={place.monthly_counts} windowLabel={windowLabel} /> : null}
           <CategoryBreakdown rows={place.category_breakdown} />
         </>
       ) : place.baseline_available ? (
@@ -291,13 +316,7 @@ export function PlaceContextCard({
             domainMax={domainMax}
             comparisonDataAdequate={comparisonDataAdequate}
           />
-          {place.monthly_counts?.length ? (
-            <div className="mc-spark" aria-hidden="true">
-              {place.monthly_counts.map((n, i) => (
-                <span key={i} style={{ height: `${barHeight(n, place.monthly_counts!)}%` }} />
-              ))}
-            </div>
-          ) : null}
+          {place.monthly_counts?.length ? <MonthlySpark counts={place.monthly_counts} windowLabel={windowLabel} /> : null}
           <details className="mc-analytical">
             <summary>How we know</summary>
             {place.baselines.length > 0 ? (

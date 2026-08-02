@@ -112,10 +112,19 @@ def test_public_thinkpad_launchers_name_the_persistent_tunnel_mode() -> None:
     assert "this script does not pull" in start
     assert "'-p', 'compcat-public'" in start
     assert "'.env.tunnel'" in start
+    assert "validate_public_env.py --mode tunnel .env.tunnel" in start
 
     assert "PUBLIC instance (project: compcat-public)" in stop
     assert "-p compcat-public" in stop
     assert "Volumes kept: compcat-public_mca-postgres" in stop
+
+
+def test_public_vps_launcher_validates_its_env_before_starting() -> None:
+    text = _read("prod/start-compcat.sh")
+
+    validation = 'validate_public_env.py --mode vps "${ENV_FILE}"'
+    assert validation in text
+    assert text.index(validation) < text.index("compose up -d --build")
 
 
 def test_vps_and_mac_launchers_cannot_be_mistaken_for_thinkpad_personal() -> None:

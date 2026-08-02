@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from app.main import create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -44,6 +45,20 @@ def test_uploads_creates_clusters_when_enabled(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["place_cluster_count"] == 1
     assert client.delete("/uploads").status_code == 200
+
+
+def test_erasure_remains_available_after_uploads_are_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS", "true")
+    client = _client(tmp_path)
+    client.post("/sessions")
+    assert client.post("/uploads", files=_files()).status_code == 200
+
+    monkeypatch.setenv("MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS", "false")
+    get_settings.cache_clear()
+
+    response = client.delete("/uploads")
+    assert response.status_code == 200
+    assert response.json()["place_clusters"] == 1
 
 
 def test_uploads_reject_oversize_body(tmp_path, monkeypatch):

@@ -25,8 +25,15 @@ function place(id: string, label: string, sensitivityClass = "normal"): Place {
 const baseProps = {
   places: [place("p1", "Home"), place("p2", "Work")],
   selectedIds: new Set(["p1"]),
+  analysisPlaceIds: new Set(["p1"]),
   summary: null,
-  radiusM: 400,
+  analysis: {
+    startDate: "2026-01-01",
+    endDate: "2026-06-24",
+    radiusM: 400,
+    offenseCategory: "",
+    layer: "reported" as const,
+  },
   addPinMode: false,
   search: <div data-testid="search-slot" />,
   onStartAddPin: vi.fn(),

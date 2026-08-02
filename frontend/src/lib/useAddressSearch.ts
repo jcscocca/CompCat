@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { GeocodeResult } from "../types";
-import { addRecentPlace, loadRecentPlaces } from "./searchHistory";
+import { addRecentPlace, clearRecentPlaces, loadRecentPlaces } from "./searchHistory";
 
 export type AddressSearchStatus = "idle" | "loading" | "done" | "empty" | "error";
 
@@ -17,6 +17,7 @@ export interface AddressSearch {
   recent: GeocodeResult[];
   runSearch: () => Promise<void>;
   rememberPlace: (result: GeocodeResult) => void;
+  clearRecent: () => void;
 }
 
 /**
@@ -28,8 +29,9 @@ export interface AddressSearch {
  * aborting any in-flight stale request. runSearch() bypasses the debounce for immediate
  * triggers (Enter key / Search button).
  *
- * Recent places: loaded from localStorage on mount; updated via rememberPlace (call inside
- * the consumer's existing select handler so selection logic stays in the consumer).
+ * Recent places: loaded from tab-scoped sessionStorage on mount; updated via rememberPlace
+ * (call inside the consumer's existing select handler so selection logic stays in the
+ * consumer). clearRecent updates both storage and the mounted search UI.
  */
 export function useAddressSearch(
   search: (query: string, signal?: AbortSignal) => Promise<GeocodeResult[]>,
@@ -122,5 +124,10 @@ export function useAddressSearch(
     setRecent(next);
   }
 
-  return { query, setQuery, status, results, recent, runSearch, rememberPlace };
+  function clearRecent() {
+    clearRecentPlaces();
+    setRecent([]);
+  }
+
+  return { query, setQuery, status, results, recent, runSearch, rememberPlace, clearRecent };
 }

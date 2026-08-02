@@ -377,6 +377,9 @@ def test_agent_redirects_broadened_safety_and_ranking_phrasings(tmp_path):
         "Score the neighborhood for me.",
         "Is it safe around here?",
         "Which route is safer?",
+        "Would you give this neighborhood a 2/10?",
+        "Which would you choose for living, Ballard or Fremont?",
+        "Quel quartier est le plus sûr ?",
     ]
     try:
         for phrasing in phrasings:
@@ -2268,6 +2271,11 @@ def test_agent_redirects_non_lexicon_ranking_prose_in_model_answer(tmp_path):
         "This block is a high-crime area.",
         "I wouldn't recommend living here.",
         "It's a rough neighborhood.",
+        "I'd give it a 2/10.",
+        "My rating: ★★☆☆☆.",
+        "The neighborhood earns a D grade.",
+        "I would choose A over B for living.",
+        "Le quartier A est plus sûr que le quartier B.",
     ]
     try:
         for answer in answers:
@@ -3342,23 +3350,26 @@ def test_presence_refusal_answers_spanish_asks_in_spanish(tmp_path):
     from app.assistant.agent import PRESENCE_REDIRECT, PRESENCE_REDIRECT_ES
 
     session, user_hash = _session_with_place_and_crime(tmp_path)
+    spanish = [
+        "¿Estuve presente en alguno de estos incidentes?",
+        "¿Estuve cerca de alguno de estos incidentes?",
+        "¿Fui víctima de este robo?",
+        "Presencié el asalto.",
+    ]
     try:
-        client = FakeClient(['{"type":"final","message":"unused"}'])
-        events = asyncio.run(
-            _collect(
-                session,
-                user_hash,
-                [
-                    AssistantChatMessage(
-                        role="user", content="¿estuve cerca de alguno de estos incidentes?"
-                    ),
-                    AssistantChatMessage(role="user", content="was I present at any incident?"),
-                ],
-                AssistantDashboardState(selected_place_ids=["place-1"]),
-                client,
+        for question in spanish:
+            client = FakeClient(['{"type":"final","message":"unused"}'])
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content=question)],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    client,
+                )
             )
-        )
-        assert events[1].data["delta"] == PRESENCE_REDIRECT_ES
+            assert events[1].data["delta"] == PRESENCE_REDIRECT_ES, question
+            assert client.calls == [], question
 
         client = FakeClient(['{"type":"final","message":"unused"}'])
         events = asyncio.run(

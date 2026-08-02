@@ -168,6 +168,12 @@ export function AboutModal({
               retained for about 30 days.
             </li>
             <li>
+              Up to five recent address selections — their labels and exact coordinates — are
+              kept in this tab's session storage so they survive reloads in this tab. Choosing
+              “Clear recent searches” or “Clear all” removes them; they are also discarded when
+              the tab session ends.
+            </li>
+            <li>
               Your browser does not contact third parties: map tiles, fonts, and address-search
               requests load from this server.
             </li>

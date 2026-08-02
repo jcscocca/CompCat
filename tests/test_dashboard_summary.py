@@ -105,3 +105,48 @@ def test_dashboard_summary_returns_places_totals_privacy_and_exports(tmp_path):
     )
     assert payload["exports"]["analysis_csv"].endswith("/exports/analysis.csv")
     assert payload["places"][0]["display_label"]
+    scope = payload["analysis"]["persisted_scope"]
+    assert {
+        key: value for key, value in scope.items() if key not in {"run_id", "place_ids"}
+    } == {
+        "radii_m": [250],
+        "analysis_start_date": "2024-01-01",
+        "analysis_end_date": "2024-01-31",
+        "offense_category": None,
+        "offense_subcategory": None,
+        "nibrs_group": None,
+        "layer": "reported",
+    }
+    assert isinstance(scope["run_id"], str)
+    assert set(scope["place_ids"]) == {place["id"] for place in payload["places"]}
+    assert all(
+        row["analysis_run_id"] == scope["run_id"]
+        for row in payload["crime_summaries"]
+    )
+
+
+def test_dashboard_summary_keeps_scope_for_a_zero_row_run(tmp_path):
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'zero-row.sqlite3'}")
+    client = TestClient(app)
+    headers = {"X-Demo-User-Id": "demo@example.com"}
+    client.post(
+        "/internal/imports",
+        headers=headers,
+        files={
+            "file": (
+                "recurring_places.csv",
+                (FIXTURES / "recurring_places.csv").read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+
+    _run_summarize(client, headers, radii=[500])
+    payload = client.get("/internal/dashboard/summary", headers=headers).json()
+
+    assert payload["crime_summaries"] == []
+    assert payload["totals"]["incident_count"] == 0
+    assert payload["analysis"]["persisted_scope"]["radii_m"] == [500]
+    assert set(payload["analysis"]["persisted_scope"]["place_ids"]) == {
+        place["id"] for place in payload["places"]
+    }

@@ -4,7 +4,7 @@
  * Node 25 exposes a built-in `localStorage` global (via --localstorage-file)
  * that does not implement the full Web Storage API (.clear, .key, .length).
  * This shim replaces that broken object with a compliant in-memory
- * implementation so jsdom-environment tests can use localStorage normally.
+ * implementation so jsdom-environment tests can use Web Storage normally.
  *
  * jsdom does not implement PointerEvent, so @testing-library/dom falls back
  * to the base Event constructor which does not carry clientX/clientY.
@@ -48,6 +48,12 @@ if (
 }
 
 Object.defineProperty(globalThis, "localStorage", {
+  value: makeInMemoryStorage(),
+  configurable: true,
+  writable: true,
+});
+
+Object.defineProperty(globalThis, "sessionStorage", {
   value: makeInMemoryStorage(),
   configurable: true,
   writable: true,

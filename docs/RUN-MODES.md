@@ -72,8 +72,9 @@ pwsh -File .\scripts\install-gpt-oss-120b.ps1 -ActivateForCompCat
 ```
 
 The installer downloads the llama.cpp MXFP4 GGUF into
-`C:\Users\jacob\AI Models\Library\OpenAI\gpt-oss-120b`, resumes interrupted downloads, verifies
-the pinned SHA-256, backs up and updates `C:\Users\jacob\llama-swap.yaml`, and optionally changes
+`$env:USERPROFILE\AI Models\Library\OpenAI\gpt-oss-120b`, resumes interrupted downloads,
+verifies the pinned SHA-256, backs up and updates `$env:USERPROFILE\llama-swap.yaml`, and
+optionally changes
 the private `.env.deploy` model selection before restarting the personal stack. Activation keeps
 Tabby narration enabled, raises only the private OpenAI-compatible timeout to 300 seconds, sets
 llama-swap's root health-check timeout to 300 seconds, warms the model before the first chat, and
@@ -123,7 +124,10 @@ pwsh -File .\scripts\public\stop-public.ps1
 The public launcher builds the current checkout but does **not** pull Git changes. It uses the
 production and named-tunnel Compose overlays under the fixed project `compcat-public`. The API
 and Postgres publish no host ports; a `cloudflared` container makes the outbound connection to
-the durable `compcat.app` tunnel.
+the durable `compcat.app` tunnel. Before touching Docker it runs
+`scripts/public/validate_public_env.py` and refuses any env that would enable uploads/internal
+routes, disable the production cookie/rate-limit posture, misconfigure proxy trust, or retain
+example credentials.
 
 This project has uploads and the internal API tier disabled. It has its own database, nightly
 ingestion, backups, retention sweep, restart policy, hosted LLM configuration, and rate limits.
@@ -144,7 +148,7 @@ scripts/prod/stop-compcat.sh
 These are Linux production scripts, not ThinkPad launchers. They use Caddy as the public TLS
 edge on ports 80 and 443. The API and Postgres remain private to the Compose network. The VPS
 path otherwise shares the public posture: uploads off, rate limits on, nightly ingestion,
-backups, and retention.
+backups, and retention. The same validator gates `.env.prod` before Compose starts.
 
 Detailed provisioning and recovery: [DEPLOY-VPS.md](DEPLOY-VPS.md).
 
@@ -165,7 +169,7 @@ The two ThinkPad Docker projects must remain separate:
 | Project | Database volume | Can contain personal data? | Internet exposure |
 |---|---|---|---|
 | `compcat` | `compcat_mca-postgres` | Yes | None intended; trusted LAN only |
-| `compcat-public` | `compcat-public_mca-postgres` | No personal uploads | Persistent named tunnel |
+| `compcat-public` | `compcat-public_mca-postgres` | Yes—saved places; timeline uploads off | Persistent named tunnel |
 
 The basemap file under `app\data\tiles` is shared read-only. Databases, backups, networks,
 session secrets, and LLM credentials are not shared.

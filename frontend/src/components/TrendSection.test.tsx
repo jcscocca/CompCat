@@ -103,15 +103,16 @@ describe("TrendSection", () => {
     renderSection({ neighborhood: neighborhood("Test Hill") });
     expect(screen.getByText("Reported incident volume over time")).toBeInTheDocument();
     await screen.findByTestId("trend-chart");
-    expect(screen.getByText(/last 5 years · monthly/)).toBeInTheDocument();
+    expect(screen.getByText(/2021-07 – 2026-06 · calendar-month counts/)).toBeInTheDocument();
   });
 
-  it("labels the calls window as a data floor", async () => {
+  it("labels the calls chart with the months actually returned", async () => {
     getTrends.mockResolvedValue(trends({ layer: "calls", months: months(24) }));
     renderSection({ neighborhood: neighborhood("Test Hill"), layer: "calls" });
     expect(screen.getByText("911 call volume over time")).toBeInTheDocument();
     await screen.findByTestId("trend-chart");
-    expect(screen.getByText(/last 24 months — data floor/)).toBeInTheDocument();
+    expect(screen.getByText(/2021-07 – 2023-06 · calendar-month counts/)).toBeInTheDocument();
+    expect(screen.queryByText(/last 24 months/i)).not.toBeInTheDocument();
   });
 
   it("shows both the index and count footnotes", async () => {

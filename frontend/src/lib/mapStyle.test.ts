@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildMapStyle,
   CIVIC_MAP_COLORS,
-  cartoRasterStyle,
   fallbackMapStyle,
   TILES_URL,
 } from "./mapStyle";
@@ -66,14 +65,5 @@ describe("fallbackMapStyle", () => {
     expect(style.layers).toHaveLength(1);
     expect(style.layers[0].type).toBe("background");
     expect(JSON.stringify(style)).toContain(CIVIC_MAP_COLORS.light.background);
-  });
-});
-
-describe("cartoRasterStyle", () => {
-  it("keeps the temporary Carto raster fallback reachable behind the dev flag", () => {
-    const style = cartoRasterStyle();
-    const source = style.sources.carto as { type: string; tiles?: string[] };
-    expect(source.type).toBe("raster");
-    expect(source.tiles?.[0]).toContain("basemaps.cartocdn.com");
   });
 });

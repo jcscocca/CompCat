@@ -1,6 +1,6 @@
-// MapWorkspace is the dashboard's central coordinator, not a thin shell: the per-tab data/UI
-// concerns were extracted into hooks (useDrawer / useDashboardData / usePinDraft / useAnalyze /
-// useCompare / useAddressList), but the cross-cutting glue — selection state, analysis-context
+// MapWorkspace is the dashboard's central coordinator, not a thin shell: focused data/UI
+// concerns live in hooks (useDrawer / useDashboardData / usePinDraft / useCompare /
+// useAddressList), but the cross-cutting glue — selection state, analysis-context
 // invalidation, and the assistant tool-result fan-out — deliberately stays here so those slices
 // stay in sync. It is large by design; further extraction candidates (auto-run card synthesis,
 // the selection orchestrator, assistant-effect application) are noted in the repo review.
@@ -12,11 +12,12 @@ import { compactGeocodeLabel } from "../lib/addressLabel";
 import { interpretToolResult } from "../lib/assistantBridge";
 import { buildRerunArgs, followupChipsFor, type FollowupChip } from "../lib/followupChips";
 import { offerForPlaces, type SavedPlaceRef } from "../lib/offers";
-import { clampWidth, DRAWER_DETAIL, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, MOBILE_MAX_WIDTH, snapHeightPx } from "../lib/drawer";
+import { clampWidth, DRAWER_DETAIL, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, isCompactDesktopViewport, isMobileViewport, snapHeightPx } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
 import { cardFromCompareResults, cardWithSavedPlaceIds } from "../lib/localCard";
 import { incidentNoun } from "../lib/layerCopy";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
+import { clearRecentPlaces } from "../lib/searchHistory";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useIncidentPoints } from "../lib/useIncidentPoints";
 import { useCompare } from "../lib/useCompare";
@@ -135,7 +136,8 @@ export function MapWorkspace() {
   const [pendingAutoRun, setPendingAutoRun] = useState(false);
   // Recomputed every render: useDrawer's window-resize listener always produces a new
   // drawer object, so viewport changes re-render. No extra state needed.
-  const isMobile = window.innerWidth <= MOBILE_MAX_WIDTH;
+  const isMobile = isMobileViewport(window.innerWidth);
+  const isCompactDesktop = isCompactDesktopViewport(window.innerWidth);
   const { drawer, setCollapsed: setDrawerCollapsed, onResize: onDrawerResize, onToggleCollapsed, onPreset, onSnap } = useDrawer();
   // Which thread card is expanded (by object identity — the thread cap shifts indices but
   // card references survive), plus the drawer width to restore when it collapses (null
@@ -229,7 +231,7 @@ export function MapWorkspace() {
     [savedIdSet, adhocPlaces],
   );
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
-  const [dismissedIncidentError, setDismissedIncidentError] = useState("");
+  const [dismissedIncidentErrorId, setDismissedIncidentErrorId] = useState(0);
   // The full map key is useful reference material but noisy as standing chrome, so every
   // viewport keeps it behind a compact toggle (focus mode hides the toggle too).
   const [mapKeyOpen, setMapKeyOpen] = useState(false);
@@ -578,6 +580,7 @@ export function MapWorkspace() {
     data.setError("");
     try {
       if (clearableIds.size > 0) await deleteAllPlaces();
+      clearRecentPlaces();
       invalidateAnalysisContext();
       pendingIdsRef.current = [];
       pinDraft.setDraft(null);
@@ -701,8 +704,8 @@ export function MapWorkspace() {
     }
   }, [buildShareUrl]);
 
-  // Export privacy toggles live in both the manage modal (per place) and the legacy Export
-  // panel until Task 3 deletes it — one handler, two callers.
+  // The manage-places dialog owns per-place export privacy toggles; keep mutation and summary
+  // refresh centralized here with the rest of the workspace coordination.
   async function handleToggleExport(id: string, include: boolean) {
     data.setError("");
     try {
@@ -931,7 +934,7 @@ export function MapWorkspace() {
   return (
     <div className="mc-scope">
       <div
-        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}${isFocus ? " is-focus" : ""}${isMobile ? ` is-sheet-${drawer.snap}` : ""}`}
+        className={`mc-frame${pinDraft.addPinMode ? " is-placing-pin" : ""}${isFocus ? " is-focus" : ""}${isCompactDesktop ? " is-compact-desktop" : ""}${isMobile ? ` is-sheet-${drawer.snap}` : ""}`}
         style={{ "--panel-width": `${drawer.collapsed ? DRAWER_RAIL : drawer.widthPx}px` } as CSSProperties}
       >
         <main aria-label="Map and reported incident context">
@@ -946,8 +949,8 @@ export function MapWorkspace() {
             <span className="mc-wordmark">CompCat</span>
           </div>
           <div className="mc-topbar-right">
-            {!isMobile ? layerControls : null}
-            {!isMobile ? <div className="mc-status"><span className="dot" />Public session - Seattle</div> : null}
+            {!isMobile && !isCompactDesktop ? layerControls : null}
+            {!isMobile && !isCompactDesktop ? <div className="mc-status"><span className="dot" />Public session - Seattle</div> : null}
             <button
               type="button"
               className="mc-aboutbtn"
@@ -979,7 +982,7 @@ export function MapWorkspace() {
             draft={pinDraft.draft}
             addPinMode={pinDraft.addPinMode}
             summary={data.summary}
-            radiusM={analysis.radiusM}
+            analysis={analysis}
             flyTo={chipFlyTo ?? pinDraft.flyTo}
             beats={beats}
             highlightBeats={highlightBeats}
@@ -1044,10 +1047,10 @@ export function MapWorkspace() {
 
         {/* The dot layer failed silently before: the map just showed no incidents, which
             reads as "nothing happened here" rather than "this did not load". */}
-          {incidentLayer.error && dismissedIncidentError !== incidentLayer.error ? (
+          {incidentLayer.error && dismissedIncidentErrorId !== incidentLayer.errorId ? (
           <div className="mc-banner mc-banner-warn" role="alert">
             {incidentLayer.error}{" "}
-            <button type="button" onClick={() => setDismissedIncidentError(incidentLayer.error ?? "")}>Dismiss</button>
+            <button type="button" onClick={() => setDismissedIncidentErrorId(incidentLayer.errorId)}>Dismiss</button>
           </div>
           ) : null}
 
@@ -1137,8 +1140,9 @@ export function MapWorkspace() {
           <ManagePlacesModal
             places={data.places}
             selectedIds={savedIdSet}
+            analysisPlaceIds={pinIdSet}
             summary={data.summary}
-            radiusM={analysis.radiusM}
+            analysis={analysis}
             addPinMode={pinDraft.addPinMode}
             search={<PlaceSearch provider={geocodingProvider} onSelectResult={(result) => { setManagePlaces(null); pinDraft.handleSearchSelect(result); }} />}
             initialView={managePlaces}

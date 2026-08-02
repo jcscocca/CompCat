@@ -56,6 +56,12 @@ if (-not (Test-Path '.env.tunnel')) {
     Write-Error 'Missing .env.tunnel - copy .env.tunnel.example and fill in real values (see docs/DEPLOY-TUNNEL.md).'
 }
 
+# Fail before Docker starts if the env file contradicts the public-instance isolation
+# advertised above. The application allows uploads/internal routes in legitimate private
+# deployments, so this stricter check belongs to the public launcher.
+python scripts\public\validate_public_env.py --mode tunnel .env.tunnel
+if ($LASTEXITCODE -ne 0) { throw 'Unsafe public posture; refusing to start.' }
+
 # 1. Docker engine. Docker Desktop starts at login, but the engine takes a moment.
 if (-not (Test-Docker)) {
     $dd = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
@@ -96,8 +102,9 @@ while ($true) {
 Write-Host 'API: healthy'
 
 # 5. Data freshness, per layer (same policy as scripts/start-compcat.ps1). mode=backfill
-#    resolves each layer's start date from its stored watermark and pages through Socrata
-#    internally, so re-runs advance or no-op. The first 911-calls backfill is the long one
+#    starts from the configured overlap before each stored watermark and pages through Socrata
+#    internally, so re-runs reconcile recent late rows/corrections and advance. The first
+#    911-calls backfill is the long one
 #    (rolling 24-month window). Non-fatal by design: an offline Socrata must not block the
 #    site from coming up.
 if ($SkipIngest) {

@@ -545,8 +545,8 @@ def _place_rate_fields(
     place_incidents: list[CrimeIncidentData], radius_m: int, days: int, start: date, end: date
 ) -> dict[str, Any]:
     """The place's own exposure-adjusted rate with a quasi-Poisson interval — same
-    helper and same own-monthly-dispersion convention as the Compare tab's per-address
-    interval, so the two surfaces share one variance model."""
+    helper and same own-monthly-dispersion convention as the multi-place comparison's
+    per-address interval, so the two result slices share one variance model."""
     exposure = _place_exposure_km2_days(radius_m, days)
     if exposure <= 0:
         return {}
@@ -919,8 +919,8 @@ def _pairwise(clusters, buffered, radius_m, days, start, end):
         for j in range(i + 1, len(sized)):
             a, b = sized[i], sized[j]
             # Decide each pair on the overdispersion-aware p-value from the two places' combined
-            # monthly counts, exactly as the Compare tab (build_statistical_comparison) does — so
-            # the two surfaces can't contradict each other on the same pair.
+            # monthly counts, exactly as build_statistical_comparison does — so the single-place
+            # and multi-place result slices can't contradict each other on the same pair.
             combined_monthly = trim_partial_edge_months(
                 [x + y for x, y in zip(monthly_by_id[a.id], monthly_by_id[b.id], strict=True)],
                 start,
