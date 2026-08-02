@@ -440,25 +440,33 @@ skipped on the fallback).
 
 ## 7. Refusal / policy invariant
 
-> ⚠ Invariant: the Analyst refuses to score, rank, or label places by safety, danger, or risk. This refusal is enforced in `app/assistant/agent.py` and is a core product invariant (see also `CLAUDE.md`).
+> ⚠ Invariant: the Analyst refuses to score, rank, or label places by safety, danger, or
+> risk. This refusal is enforced in `app/assistant/output_guard.py`, wired through
+> `app/assistant/agent.py`, and is a core product invariant (see also `CLAUDE.md`).
 
 **Mechanism**
 
-The deterministic guard in `app/assistant/agent.py` runs on **both** the incoming user text
-and the model's final answer, via `_contains_safety_ranking`. It is built from three
-cooperating compiled patterns rather than one:
+The deterministic guard in `app/assistant/output_guard.py`, wired by
+`app/assistant/agent.py`, runs on **both** the incoming user text and the model's final answer,
+via `contains_safety_ranking`. Its core lexical guard is built from three cooperating compiled
+patterns rather than one:
 
-- `_UNAMBIGUOUS_SAFETY_PATTERN` — terms that on their own signal a safety-ranking ask
+- `UNAMBIGUOUS_SAFETY_PATTERN` — terms that on their own signal a safety-ranking ask
   (`safe`/`unsafe`/`dangerous`/`risky`, `crime-free`, the `rank`/`rate`/`score` verb arms
   followed by a place noun through an optional determiner run, the `mal + place-noun`
-  compound, and a Spanish mirror of each arm — `seguridad`/`peligroso`/`riesgo`,
-  `clasificar`/`calificar` + place noun, `barrio malo`, etc.). A hit here trips the guard on
-  its own.
-- `_AMBIGUOUS_TERM_PATTERN` — colloquial/adjectival terms that also have benign senses
+  compound, a Spanish mirror of each arm — `seguridad`/`peligroso`/`riesgo`,
+  `clasificar`/`calificar` + place noun, `barrio malo` — and narrow unambiguous French
+  safety/ranking constructions). A hit here trips the guard on its own.
+- `AMBIGUOUS_TERM_PATTERN` — colloquial/adjectival terms that also have benign senses
   (`sketchy`/`shady`/`dodgy`/`ghetto`; Spanish `seguro` as "I'm sure", `tranquilo` as
   "calm"; `avoid`/`evitar`). These trip **only** when...
-- `_PLACE_CONTEXT_PATTERN` — deictics + place nouns in English and Spanish — also matches the
-  same message.
+- `PLACE_CONTEXT_PATTERN` — deictics + place nouns in English, Spanish, and the narrow French
+  vocabulary — also matches the same message.
+
+Separate tightly anchored patterns catch proxy judgments that omit the ordinary safety
+lexicon: numeric scales (`2/10` when framed as a rating), star ratings, uppercase letter grades,
+and recommendations or choices explicitly about where to live. Their anchors preserve neutral
+incident ratios/rates, Category D, map-star references, and ordinary product choices.
 
 The input gate runs `_contains_safety_ranking` against the current request. If the immediately
 preceding user request was refused, an ambiguous follow-up inherits it; only an explicit,
@@ -479,14 +487,14 @@ Word-boundary anchors keep legitimate substrings (`safely`, `Safeway`, `incident
 allowed count framing (`which area has the most crime`) from false-triggering, and the
 ambiguous-term gating avoids proper-noun false positives (`Shady Grove Ave`, `Warsaw Ghetto`).
 
-**Additional output-side guards.** Two further patterns run **only** on the model's answer
-(never on user input, where the terms are too common to gate on):
+**Additional guards.** Presence matching runs on both input and output; broader ranking prose
+runs only on model output:
 
-- `_PRESENCE_CLAIM_PATTERN` / `_claims_user_presence` — enforces the invariant's third prong
+- `PRESENCE_CLAIM_PATTERN` plus `SPANISH_PRESENCE_CLAIM_PATTERN` / `claims_user_presence` — enforces the invariant's third prong
   (never claim the user was present at an incident): a first/second-person subject tied to a
   victimization word, or a presence/witness word followed by an incident noun, is replaced with
   `_PRESENCE_REDIRECT`. Also runs on input to short-circuit "was I present at…" asks.
-- `_OUTPUT_RANKING_PROSE_PATTERN` / `_output_ranks_places` — catches place-ranking / livability
+- `OUTPUT_RANKING_PROSE_PATTERN` / `ranks_places` — catches place-ranking / livability
   prose that carries no banned safety word and so slips `_contains_safety_ranking`: *"a bad area
   to live"*, *"the worst of the three"*, *"a high-crime area"*, *"I wouldn't recommend living
   here"*, *"a rough neighborhood"*. Anchored to place nouns / living context so neutral count
@@ -505,8 +513,9 @@ lexicon:
   serve every answer from the deterministic `summaries.py` path — which is a larger change
   (it removes the model's free-text `type:"final"` answers) gated on a product decision and
   live-model routing validation.
-- **Non-English/Spanish and obfuscation.** Other languages (non-Latin scripts especially) and
-  homoglyph/letter-spacing tricks are out of the current lexicon.
+- **Language breadth and obfuscation.** French coverage is intentionally narrow; other
+  languages (non-Latin scripts especially), novel euphemisms, terse unlabeled rating shorthand,
+  lowercase grades, and homoglyph/letter-spacing tricks remain outside deterministic coverage.
 
 ---
 

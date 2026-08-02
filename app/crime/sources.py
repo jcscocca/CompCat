@@ -25,6 +25,9 @@ class CrimeSource:
     dataset_attr: str  # Settings attribute holding this source's Socrata dataset id
     mapper: Callable[[dict[str, Any]], CrimeIncidentData]
     date_field: str  # Socrata column used for $order / $where windowing
+    # Unique Socrata row identifier paired with date_field for keyset pagination. Domain IDs
+    # are insufficient here: 911 has multiple responding-unit rows per CAD event number.
+    cursor_id_field: str
     data_floor: Callable[[date | None], date]  # resolves the earliest ingest date for a run
     # When True the data_floor is a *rolling* window (not fixed history): ingest must also purge
     # stored rows that have fallen below the current floor, or the layer silently outgrows its
@@ -38,6 +41,7 @@ CRIME_SOURCES: dict[str, CrimeSource] = {
         dataset_attr="socrata_dataset_id",
         mapper=crime_incident_from_mapping,
         date_field="offense_date",
+        cursor_id_field=":id",
         data_floor=crime_data_floor,
     ),
     SOURCE_SPD_ARRESTS: CrimeSource(
@@ -45,6 +49,7 @@ CRIME_SOURCES: dict[str, CrimeSource] = {
         dataset_attr="socrata_arrests_dataset_id",
         mapper=arrest_from_mapping,
         date_field="arrest_occurred_date_time",
+        cursor_id_field=":id",
         data_floor=crime_data_floor,
     ),
     SOURCE_SPD_911: CrimeSource(
@@ -52,6 +57,7 @@ CRIME_SOURCES: dict[str, CrimeSource] = {
         dataset_attr="socrata_calls_dataset_id",
         mapper=call_from_mapping,
         date_field="cad_event_original_time_queued",
+        cursor_id_field=":id",
         data_floor=calls_data_floor,
         rolling_window=True,
     ),

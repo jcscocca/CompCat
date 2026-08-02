@@ -162,6 +162,7 @@ beforeEach(() => {
   // doesn't inherit prior-test state; clear all storage so the persisted
   // `compcat.selection` key never leaks between tests.
   localStorage.clear();
+  sessionStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   // jsdom has no scrollIntoView; the rail's focus-card effect calls it. Fresh stub per test.
   Element.prototype.scrollIntoView = vi.fn();
@@ -171,6 +172,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   localStorage.removeItem("compcat.theme");
+  sessionStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   window.innerWidth = 1024;
   // A ?view= URL or captured fly sequence must never leak into the next test, even when
@@ -225,8 +227,9 @@ describe("MapWorkspace", () => {
       analysis_start_date: "2025-01-01",
       analysis_end_date: "2025-10-27",
     })));
-    expect(screen.getByRole("button", { name: /arrests/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /911 calls/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Data layer: Reported incidents" }));
+    expect(screen.getByRole("button", { name: "Arrests — No data loaded" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "911 calls — No data loaded" })).toBeDisabled();
   });
 
   it("uses header actions for desktop width and collapse, then restores the prior width", async () => {
@@ -667,6 +670,11 @@ describe("MapWorkspace", () => {
 
     fireEvent.click(within(banner).getByRole("button", { name: "Dismiss" }));
     await waitFor(() => expect(screen.queryByText(SESSION_EXPIRED_MESSAGE)).not.toBeInTheDocument());
+
+    // Dismissing one failed request must not permanently hide the same honest warning when
+    // a later viewport request fails with identical copy.
+    fireEvent.click(screen.getByTestId("fire-viewport"));
+    expect(await screen.findByText(new RegExp(SESSION_EXPIRED_MESSAGE.slice(0, 20), "i"))).toBeInTheDocument();
   });
 
   it("shows the session message when saving a searched address 401s", async () => {
@@ -720,8 +728,8 @@ describe("MapWorkspace", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    // The turn completes and the bridge applies its effect without bouncing to the
-    // Compare view — the composer stays put. (Card-content assertions land in Task 6.)
+    // The turn completes and the bridge applies its effect without bouncing to a legacy
+    // comparison view—the composer stays put while the result is carried by a thread card.
     await screen.findByText("Compared Alpha and Bravo.");
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
     expect(screen.queryByRole("tabpanel", { name: "Compare" })).not.toBeInTheDocument();
@@ -751,8 +759,7 @@ describe("MapWorkspace", () => {
     await screen.findByText("Alpha");
     fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "analyze Alpha" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    // The turn completes without bouncing to the Compare view — the composer stays put.
-    // (Card-content assertions land in Task 6.)
+    // The turn completes without bouncing to a legacy comparison view—the composer stays put.
     await screen.findByText("Analyzed Alpha.");
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
     expect(screen.queryByRole("tabpanel", { name: "Compare" })).not.toBeInTheDocument();
@@ -1116,7 +1123,7 @@ describe("MapWorkspace", () => {
   });
 
   it("wide viewport: the layer toggle mounts in the top bar", async () => {
-    window.innerWidth = 1200;
+    window.innerWidth = 1440;
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
 
@@ -1126,6 +1133,23 @@ describe("MapWorkspace", () => {
     const group = screen.getByRole("group", { name: "Data layer" });
     expect(group.closest(".mc-topbar")).not.toBeNull();
     expect(group.closest(".mc-workspace-panel")).toBeNull();
+  });
+
+  it("at exactly 1280px uses the compact desktop header without switching to a sheet", async () => {
+    window.innerWidth = 1280;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+
+    const { container } = render(<MapWorkspace />);
+    await screen.findByText("Home");
+
+    expect(container.querySelector(".mc-frame")).toHaveClass("is-compact-desktop");
+    expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-open");
+    expect(container.querySelector(".mc-grabber")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-topbar .mc-layertoggle")).not.toBeInTheDocument();
+    expect(container.querySelector(".mc-topbar .mc-status")).not.toBeInTheDocument();
+    // The non-duplicated filter remains reachable in the panel.
+    expect(screen.getByRole("button", { name: "Data layer: Reported incidents" }).closest(".mc-workspace-panel")).not.toBeNull();
   });
 
   it("legacy 1-point analyze share link auto-runs and lands as a local card on the rail", async () => {
@@ -1188,7 +1212,7 @@ describe("MapWorkspace", () => {
     // The tool effect's refetchSummary is the only observable completion signal here (this
     // mock emits no token event) — it fires once the bridge applies the effect.
     await waitFor(() => expect(getDashboardSummary).toHaveBeenCalledTimes(3));
-    // No view switch: the composer stays on the rail. (Card-content assertions land in Task 6.)
+    // No view switch: the composer stays on the rail while the result is carried by a card.
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
     expect(screen.queryByRole("tabpanel", { name: "Compare" })).not.toBeInTheDocument();
     expect(comparePlaces).not.toHaveBeenCalled();
@@ -1226,6 +1250,9 @@ describe("MapWorkspace", () => {
     vi.mocked(deleteAllPlaces).mockImplementation(async () => {
       serverPlaces = [];
     });
+    sessionStorage.setItem("compcat.search.recent", JSON.stringify([
+      { label: "Pike Place Market", latitude: 47.6097, longitude: -122.3331, source: "nominatim" },
+    ]));
 
     render(<MapWorkspace />);
     await screen.findByText("Home");
@@ -1241,6 +1268,7 @@ describe("MapWorkspace", () => {
       expect(deleteAllPlaces).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole("dialog", { name: "Clear all pins?" })).not.toBeInTheDocument();
     });
+    expect(sessionStorage.getItem("compcat.search.recent")).toBeNull();
     await waitFor(() => {
       const last = canvasCaptures[canvasCaptures.length - 1]!;
       expect(last.places).toEqual([]);
@@ -1530,10 +1558,8 @@ describe("MapWorkspace", () => {
   it("resolves a queued place id from an assistant compare_places refetch without leaving the rail", async () => {
     // compare-by-name: the backend creates the unsaved place and returns its id, so the
     // bridge's replace queues an id that data.places can't resolve yet. The tool effect's
-    // own summary refetch delivers it. (This used to also assert the applied comparison
-    // pane survived the resolve-append; that's only observable via the Compare tab, which
-    // assistant flows no longer switch to — pane-survival coverage returns with the
-    // AnalysisCard render in Task 6.)
+    // own summary refetch delivers it. Comparison-card persistence is covered separately;
+    // this regression stays focused on resolving the queued identity without leaving the rail.
     const pike: Place = { ...home, id: "p9", display_label: "Pike Street", latitude: 47.63, longitude: -122.35 };
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
@@ -1660,7 +1686,7 @@ describe("MapWorkspace", () => {
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
   });
 
-  // --- Slice 3 Task 6: cards in the thread + follow-up chips + width toggle + export base ---
+  // --- Thread cards, follow-up chips, width toggle, and run-scoped export ---
 
   // The frozen result the assistant analyze flow emits, with a window that DIFFERS from the
   // live current-year default so the frozen-vs-live distinction is observable.
@@ -1800,7 +1826,7 @@ describe("MapWorkspace", () => {
     );
   });
 
-  // --- Slice 4 Task 4: presence badges → focus-card + fit-on-analysis ---
+  // --- Presence badges, focused cards, and fit-on-analysis ---
 
   const badge = (place_id: string, label: string) => ({
     place_id, label, run_id: "run-1", settings_fingerprint: "fp0123456789",
@@ -1980,7 +2006,7 @@ describe("MapWorkspace", () => {
     expect(screen.queryByText("Search radius → 1000 m")).not.toBeInTheDocument();
   });
 
-  // --- Slice 5 Task 2: deterministic place-added offers + auto-run audit ---
+  // --- Deterministic place-added offers and auto-run behavior ---
 
   it("offers to pull reports after a pin save, firing no analysis of its own", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
@@ -2178,6 +2204,45 @@ describe("MapWorkspace", () => {
       place_ids: [],
       points,
     }));
+  });
+
+  it("keeps assistant point-backed results out of persistent and selectable place chips", async () => {
+    const points = [
+      { latitude: 47.606, longitude: -122.332, label: "Assistant point A" },
+      { latitude: 47.612, longitude: -122.319, label: "Assistant point B" },
+    ];
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({
+        event: "tool",
+        data: {
+          tool_name: "compare_places",
+          result: {
+            place_ids: [],
+            points,
+            settings_used: {
+              radius_m: 250,
+              analysis_start_date: "2024-01-01",
+              analysis_end_date: "2024-12-31",
+              layer: "reported",
+            },
+            comparison: makeSiteComparison("Assistant point A", "Assistant point B"),
+          },
+        },
+      });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "Compare two points" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(screen.queryByRole("checkbox", { name: "Assistant point A" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Assistant point B" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show Assistant point [AB] on map — Unsaved/ })).not.toBeInTheDocument();
   });
 
   it("promotes a point-backed result to result-aware context after its place is saved", async () => {
@@ -2396,7 +2461,7 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("button", { name: /pull reports near/i })).not.toBeInTheDocument();
   });
 
-  // --- Slice 7 Task 2: rehomed run/copy-link/export controls ---
+  // --- Context-strip run, copy-link, and export controls ---
 
   it("ContextStrip Run analysis uses dashboard APIs for a single saved place", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });

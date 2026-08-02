@@ -43,8 +43,8 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
 
-  # Base images. The app image (python:3.11-slim + node:22-slim builder) and the ops
-  # sidecar (alpine:3.22) are pinned, so without this they only move when someone
+  # Base-image tags. The app image (python:3.14-slim + node:26-slim builder) and the ops
+  # sidecar (alpine:3.24) are version-selected but mutable, so without this they only move when someone
   # remembers to bump them — which is how a deployed image quietly accumulates CVEs.
   - package-ecosystem: "docker"
     directory: "/"

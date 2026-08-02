@@ -12,11 +12,14 @@ CONTENT_SECURITY_POLICY = "; ".join(
         "frame-ancestors 'none'",
         "frame-src 'none'",
         "form-action 'self'",
-        "script-src 'self' https://static.cloudflareinsights.com",
+        # Keep browser execution first-party. Cloudflare may inject its optional Web
+        # Analytics tag at the edge, so excluding that origin here is also a deploy-safe
+        # backstop when the dashboard toggle is changed independently of the app release.
+        "script-src 'self'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob: https://*.basemaps.cartocdn.com",
+        "img-src 'self' data: blob:",
         "font-src 'self'",
-        "connect-src 'self' https://*.basemaps.cartocdn.com",
+        "connect-src 'self'",
         "worker-src 'self' blob:",
         "manifest-src 'self'",
     )

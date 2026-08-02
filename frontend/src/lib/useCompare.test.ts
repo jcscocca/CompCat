@@ -86,6 +86,40 @@ describe("useCompare unified run", () => {
     expect(onSummariesRefreshed).not.toHaveBeenCalled();
   });
 
+  it("rejects a reversed date range before calling any analysis endpoint", async () => {
+    const setError = vi.fn();
+    const { result } = renderHook(() => useCompare({
+      entries: [A, B],
+      analysis: { ...analysis, startDate: "2024-02-01", endDate: "2024-01-31" },
+      setError,
+    }));
+
+    await act(async () => { await result.current.run(); });
+
+    expect(setError).toHaveBeenCalledWith("Start date must be on or before end date.");
+    expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
+    expect(getIncidentDetails).not.toHaveBeenCalled();
+    expect(comparePlaces).not.toHaveBeenCalled();
+    expect(analyzePlaces).not.toHaveBeenCalled();
+  });
+
+  it("rejects a window longer than the backend cap before calling any endpoint", async () => {
+    const setError = vi.fn();
+    const { result } = renderHook(() => useCompare({
+      entries: [A, B],
+      analysis: { ...analysis, startDate: "2018-01-01", endDate: "2026-08-01" },
+      setError,
+    }));
+
+    await act(async () => { await result.current.run(); });
+
+    expect(setError).toHaveBeenCalledWith("Date range must be 3000 days or fewer.");
+    expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
+    expect(getIncidentDetails).not.toHaveBeenCalled();
+    expect(comparePlaces).not.toHaveBeenCalled();
+    expect(analyzePlaces).not.toHaveBeenCalled();
+  });
+
   it("does not fire onSummariesRefreshed when the place_ids refresh rejects", async () => {
     mock(analyzePlaces).mockRejectedValueOnce(new Error("boom"));
     const onSummariesRefreshed = vi.fn();

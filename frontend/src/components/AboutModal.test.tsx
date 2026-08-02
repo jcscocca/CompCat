@@ -81,6 +81,9 @@ describe("AboutModal", () => {
     );
     expect(screen.getByText(/normalized address you typed and the returned coordinates/i)).toBeInTheDocument();
     expect(screen.getByText(/cache is shared across visitors.*about 30 days/i)).toBeInTheDocument();
+    expect(screen.getByText(/five recent address selections/i)).toHaveTextContent(
+      /labels and exact coordinates.*tab's session storage.*Clear recent searches.*Clear all/i,
+    );
     expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
   });
 

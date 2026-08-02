@@ -1,8 +1,9 @@
 # Postgres soak testing (H2)
 
-Sustained-load validation of the **real Postgres deploy** on the ThinkPad. CI only ever
-exercises SQLite, and `scripts/live_smoke.py` is a single fast pass — neither catches the
-failure modes that only show up over hours under concurrency: connection-pool leaks,
+Sustained-load validation of the **real Postgres deploy** on the ThinkPad. CI includes a
+Postgres migration and foreign-key smoke lane, while `scripts/live_smoke.py` is a single fast
+pass; neither catches the failure modes that only show up over hours under concurrency:
+connection-pool leaks,
 sessions stuck idle-in-transaction, latency drift from plan flips or table bloat, lock
 contention, and cache pressure. The soak harness drives the deploy hard and watches both the
 client-side latency and the server-side Postgres internals.

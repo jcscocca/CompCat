@@ -92,10 +92,16 @@ automatically once the api is healthy** (skip with `-SkipIngest`; staleness wind
 `-FreshnessMaxAgeDays`, default 14) — so normally there is nothing to run by hand.
 
 For an ad-hoc pull outside the start script, one call per layer does the whole job —
-`mode=backfill` resolves the start date from the stored watermark and pages through
-Socrata internally with retry/backoff (the same invocation the public instance's nightly
-sidecar uses, `deploy/ingest-daily.sh`). All three are safe to re-run: the watermark
-advances or no-ops.
+`mode=backfill` resolves the start date from a floor-clamped overlap before the stored watermark
+and pages through Socrata internally with retry/backoff (the same invocation the public
+instance's nightly sidecar uses, `deploy/ingest-daily.sh`). The overlap defaults to 14 days
+(`MCA_SOCRATA_RECONCILIATION_DAYS`) so late-published rows and recent upstream corrections are
+reconciled; an explicit `start_date` is not widened (the source floor still applies). Paging uses
+a composite source-date/Socrata-`:id`
+cursor, so it cannot strand rows when more than one page shares a timestamp or when several
+911 responding-unit rows share one CAD event number. All three are safe to
+re-run: existing composite source/incident IDs are updated from the latest upstream values
+(without changing local row IDs), while genuinely new IDs are inserted.
 
 ```bash
 TOKEN=$(grep '^MCA_ADMIN_INGEST_TOKEN=' .env.deploy | cut -d= -f2)
@@ -108,7 +114,7 @@ done
 
 > If the ingest fails with a TLS/certificate error, the slim image is missing CA roots —
 > add `RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates`
-> to the `python:3.11-slim` stage of the `Dockerfile` and rebuild.
+> to the `python:3.14-slim` stage of the `Dockerfile` and rebuild.
 
 **The three layers.** `seattle_spd_crime` (reported incidents, 2018 floor) is the primary
 layer. `seattle_spd_arrests` (2018 floor) is the enforcement-activity layer — rows carry a
@@ -179,8 +185,8 @@ Notes:
 
 The `/uploads` surface (import a Google Timeline / CSV / GeoJSON / GPX location history into
 saved places) is gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`. It is **enabled** in
-`.env.deploy.example` for this single-host trial; the endpoints 404 and the upload UI is
-hidden when it is false.
+`.env.deploy.example` for this single-host trial; `POST /uploads` returns 404 and the upload UI
+is hidden when it is false. Authenticated `DELETE /uploads` always remains available for erasure.
 
 - **What's stored:** raw points are discarded after clustering (`MCA_RAW_UPLOAD_RETENTION`
   stays `false`) — only the derived place clusters are kept. Users can delete their uploaded

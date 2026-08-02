@@ -65,25 +65,3 @@ export function fallbackMapStyle(theme: MapTheme): StyleSpecification {
     ],
   };
 }
-
-// Temporary escape hatch while the tile-artifact pipeline is being proven:
-// VITE_MAP_BASEMAP=carto restores the old Carto raster basemap. Delete once
-// the PMTiles pipeline has run on the deploy host.
-export function cartoRasterStyle(): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      carto: {
-        type: "raster",
-        tiles: [
-          "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-          "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        ],
-        tileSize: 256,
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      },
-    },
-    layers: [{ id: "carto", type: "raster", source: "carto" }],
-  };
-}

@@ -181,11 +181,12 @@ double-count the place's incidents for sector/city), equally negligible.
 
 ## 5. Partial-edge-month trim (dispersion input only)
 
-The default analysis window ("Jan 1 → today") almost always ends mid-month, and can start
-mid-month. A partial edge month has a **systematically depressed count** that would inflate the
-index-of-dispersion φ. `trim_partial_edge_months` (`app/analysis/exposure.py`) drops at most
-one leading bin (if the window starts after the 1st) and one trailing bin (if the window ends
-before the month's last day), never leaving fewer than two bins.
+The dashboard's initial current-year window ends at the active layer's `data_through` when
+freshness is available (otherwise today), and a user-selected window can start or end on any
+day. A partial edge month has a **systematically depressed count** that would inflate the
+index-of-dispersion φ. `trim_partial_edge_months` (`app/analysis/exposure.py`) drops at most one
+leading bin (if the window starts after the 1st) and one trailing bin (if the window ends before
+the month's last day), never leaving fewer than two bins.
 
 Crucially, **only the dispersion estimate uses the trimmed series.** The rate, the exposure
 `π·r²·days`, and the displayed monthly counts all use the full, untrimmed window. Trimming a

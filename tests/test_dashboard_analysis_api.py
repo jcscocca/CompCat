@@ -312,6 +312,43 @@ def test_dashboard_incidents_respects_limit_and_total_count(tmp_path):
     assert len(body["incidents"]) == 1
 
 
+def test_dashboard_incident_limit_returns_globally_nearest_row(tmp_path):
+    client = _client_with_places_and_crime(tmp_path)
+    places = client.get("/places").json()["places"]
+    session = get_sessionmaker()()
+    # Give the alphabetically later place a very close incident. The capped response promises
+    # the nearest matching rows, so place-label grouping must not win over distance.
+    later_place = next(place for place in places if place["display_label"] == "Library area")
+    session.add(
+        CrimeIncident(
+            id="incident-nearest",
+            external_incident_id="incident-nearest",
+            offense_start_utc=datetime(2024, 1, 12, tzinfo=UTC),
+            offense_category="PROPERTY",
+            latitude=later_place["latitude"],
+            longitude=later_place["longitude"],
+            source_dataset="seattle_spd_crime",
+        )
+    )
+    session.commit()
+    session.close()
+
+    response = client.post(
+        "/dashboard/incidents",
+        json={
+            "place_ids": [place["id"] for place in places],
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radii_m": [250],
+            "offense_category": "PROPERTY",
+            "limit": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["incidents"][0]["incident_id"] == "incident-nearest"
+
+
 def test_dashboard_compare_selected_places(tmp_path):
     client = _client_with_places_and_crime(tmp_path)
     places = client.get("/places").json()["places"]

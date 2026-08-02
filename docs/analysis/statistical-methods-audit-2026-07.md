@@ -7,6 +7,11 @@ epidemiology, and risk communication. Companion to
 [overdispersion-and-rate-intervals.md](overdispersion-and-rate-intervals.md) and
 [trend-indexing-method.md](trend-indexing-method.md).
 
+> **Point-in-time record.** The implementation and documentation-drift findings below describe
+> the named 2026-07-17 snapshot. As of the 2026-08-01 public-release cleanup, the §3.4 drift
+> items are resolved or explicitly archived; use the current analysis docs and
+> [`../architecture/`](../architecture/) as the source of truth.
+
 ## TL;DR
 
 CompCat's statistical core is unusually rigorous for a product of its size: overdispersion

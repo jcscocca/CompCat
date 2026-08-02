@@ -5,7 +5,11 @@ from urllib.parse import parse_qs, urlparse
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.crime.seattle_socrata import SeattleSocrataClient, crime_incident_from_mapping
+from app.crime.seattle_socrata import (
+    SeattleSocrataClient,
+    SocrataCursor,
+    crime_incident_from_mapping,
+)
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import CrimeIncident
@@ -36,7 +40,7 @@ def test_ingest_crime_incidents_upserts_by_external_id(tmp_path):
 
     result = ingest_crime_incidents(session, incidents)
 
-    assert result == {"inserted_count": 1, "skipped_count": 1}
+    assert result == {"inserted_count": 1, "updated_count": 0, "skipped_count": 1}
     session.close()
 
 
@@ -206,8 +210,16 @@ def test_socrata_client_builds_keyset_query(monkeypatch):
         def read(self):
             return json.dumps(
                 [
-                    {"offense_id": "1", "offense_date": "2026-04-01T00:00:00.000"},
-                    {"offense_id": "2", "offense_date": "2026-04-05T00:00:00.000"},
+                    {
+                        ":id": "row-1",
+                        "report_number": "fallback-report-1",
+                        "offense_date": "2026-04-01T00:00:00.000",
+                    },
+                    {
+                        ":id": "row-2",
+                        "offense_id": "2",
+                        "offense_date": "2026-04-05T00:00:00.000",
+                    },
                 ]
             ).encode("utf-8")
 
@@ -223,16 +235,32 @@ def test_socrata_client_builds_keyset_query(monkeypatch):
     incidents, next_cursor = client.fetch_page_keyset(since_iso="2026-04-01T00:00:00", limit=2)
 
     query = parse_qs(urlparse(captured["url"]).query)
-    assert query["$order"] == ["offense_date ASC"]  # forward keyset order
-    assert query["$where"] == ["offense_date >= '2026-04-01T00:00:00'"]
+    assert query["$select"] == ["*, :id"]
+    assert query["$order"] == ["offense_date ASC, :id ASC"]
+    assert query["$where"] == [
+        "offense_date >= '2026-04-01T00:00:00' and :id is not null"
+    ]
     assert "$offset" not in query  # keyset, not offset paging
     assert len(incidents) == 2
-    assert next_cursor == "2026-04-05T00:00:00.000"  # last row's raw date is the next cursor
+    assert incidents[0].external_incident_id == "fallback-report-1"
+    assert next_cursor == SocrataCursor(
+        date_value="2026-04-05T00:00:00.000", id_value="row-2"
+    )
+
+    client.fetch_page_keyset(
+        since_iso="2026-04-05T00:00:00.000", since_id="row-2", limit=2
+    )
+    where = parse_qs(urlparse(captured["url"]).query)["$where"]
+    assert where == [
+        "(offense_date > '2026-04-05T00:00:00.000' or "
+        "(offense_date = '2026-04-05T00:00:00.000' and :id > 'row-2')) "
+        "and :id is not null"
+    ]
 
     # since_iso below the floor (or None) clamps up to the source's data floor.
     client.fetch_page_keyset(since_iso=None, limit=2)
     where = parse_qs(urlparse(captured["url"]).query)["$where"]
-    assert where == ["offense_date >= '2018-01-01T00:00:00'"]
+    assert where == ["offense_date >= '2018-01-01T00:00:00' and :id is not null"]
 
 
 def test_ingest_sample_crime_uses_packaged_fixture(tmp_path, monkeypatch):
@@ -282,17 +310,18 @@ def test_ingest_crime_incidents_skips_missing_external_incident_ids(tmp_path):
 
     result = ingest_crime_incidents(session, incidents)
 
-    assert result == {"inserted_count": 1, "skipped_count": 2}
+    assert result == {"inserted_count": 1, "updated_count": 0, "skipped_count": 2}
     rows = session.scalars(select(CrimeIncident)).all()
     assert [row.external_incident_id for row in rows] == ["spd-keep"]
     session.close()
 
 
-def test_ingest_crime_incidents_skips_existing_external_incident_ids(tmp_path):
+def test_ingest_crime_incidents_updates_existing_external_incident_ids(tmp_path):
     create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
     session = get_sessionmaker()()
     session.add(
         CrimeIncident(
+            id="local-id-is-preserved",
             external_incident_id="spd-existing",
             offense_start_utc=datetime(2024, 1, 9, tzinfo=UTC),
             offense_category="PROPERTY",
@@ -308,7 +337,8 @@ def test_ingest_crime_incidents_skips_existing_external_incident_ids(tmp_path):
             CrimeIncidentData(
                 external_incident_id="spd-existing",
                 offense_start_utc=datetime(2024, 1, 10, tzinfo=UTC),
-                offense_category="PROPERTY",
+                offense_category="PERSON",
+                block_address="UPDATED BLOCK",
                 latitude=47.609,
                 longitude=-122.333,
             ),
@@ -322,11 +352,19 @@ def test_ingest_crime_incidents_skips_existing_external_incident_ids(tmp_path):
         ],
     )
 
-    assert result == {"inserted_count": 1, "skipped_count": 1}
+    assert result == {"inserted_count": 1, "updated_count": 1, "skipped_count": 0}
     external_ids = session.scalars(
         select(CrimeIncident.external_incident_id).order_by(CrimeIncident.external_incident_id)
     ).all()
     assert external_ids == ["spd-existing", "spd-new"]
+    updated = session.scalar(
+        select(CrimeIncident).where(CrimeIncident.external_incident_id == "spd-existing")
+    )
+    assert updated is not None
+    assert updated.id == "local-id-is-preserved"
+    assert updated.offense_start_utc == datetime(2024, 1, 10)
+    assert updated.offense_category == "PERSON"
+    assert updated.block_address == "UPDATED BLOCK"
     session.close()
 
 
@@ -350,7 +388,20 @@ def test_ingest_crime_incidents_skips_insert_conflicts_without_rolling_back_new_
     seed_session.close()
 
     session = sessionmaker()
-    monkeypatch.setattr(session, "scalar", lambda statement: None)
+    real_execute = session.execute
+    first_update = True
+
+    class _NoMatch:
+        rowcount = 0
+
+    def simulate_insert_race(statement, *args, **kwargs):
+        nonlocal first_update
+        if first_update and statement.is_update:
+            first_update = False
+            return _NoMatch()
+        return real_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "execute", simulate_insert_race)
     incidents = [
         CrimeIncidentData(
             external_incident_id="spd-race",
@@ -370,7 +421,7 @@ def test_ingest_crime_incidents_skips_insert_conflicts_without_rolling_back_new_
 
     result = ingest_crime_incidents(session, incidents)
 
-    assert result == {"inserted_count": 1, "skipped_count": 1}
+    assert result == {"inserted_count": 1, "updated_count": 1, "skipped_count": 0}
     session.close()
 
     verify_session = sessionmaker()
@@ -544,7 +595,7 @@ def test_admin_socrata_ingest_fetches_page_and_returns_ingestion_result(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"inserted_count": 1, "skipped_count": 0}
+    assert response.json() == {"inserted_count": 1, "updated_count": 0, "skipped_count": 0}
     assert calls == [
         {
             "base_url": "https://data.seattle.gov/resource",
@@ -556,6 +607,60 @@ def test_admin_socrata_ingest_fetches_page_and_returns_ingestion_result(
             "end_date": None,
         }
     ]
+
+
+def test_admin_socrata_ingest_applies_upstream_corrections(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCA_ADMIN_INGEST_TOKEN", "secret-token")
+    monkeypatch.delenv("SOCRATA_APP_TOKEN", raising=False)
+
+    def fake_fetch_page(self, limit, offset, start_date=None, end_date=None):
+        return [
+            CrimeIncidentData(
+                external_incident_id="spd-corrected",
+                offense_start_utc=datetime(2024, 1, 12, tzinfo=UTC),
+                offense_category="PERSON",
+                block_address="CORRECTED BLOCK",
+                latitude=47.62,
+                longitude=-122.35,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "app.api.routes_admin_crime.SeattleSocrataClient.fetch_page", fake_fetch_page
+    )
+    app = create_app(database_url=f"sqlite+pysqlite:///{tmp_path / 'mca.sqlite3'}")
+    session = get_sessionmaker()()
+    session.add(
+        CrimeIncident(
+            id="preserved-local-id",
+            source_dataset="seattle_spd_crime",
+            external_incident_id="spd-corrected",
+            offense_start_utc=datetime(2024, 1, 9, tzinfo=UTC),
+            offense_category="PROPERTY",
+            block_address="OLD BLOCK",
+        )
+    )
+    session.commit()
+    session.close()
+
+    response = TestClient(app).post(
+        "/admin/crime/ingest/socrata?limit=25&offset=0",
+        headers={"X-Admin-Token": "secret-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"inserted_count": 0, "updated_count": 1, "skipped_count": 0}
+    session = get_sessionmaker()()
+    corrected = session.scalar(
+        select(CrimeIncident).where(
+            CrimeIncident.external_incident_id == "spd-corrected"
+        )
+    )
+    assert corrected is not None
+    assert corrected.id == "preserved-local-id"
+    assert corrected.offense_category == "PERSON"
+    assert corrected.block_address == "CORRECTED BLOCK"
+    session.close()
 
 
 def test_admin_socrata_ingest_passes_date_window_to_client(tmp_path, monkeypatch):
@@ -760,7 +865,7 @@ def test_ingest_crime_incidents_keys_dedup_by_source(tmp_path):
         ),
     ]
     result = ingest_crime_incidents(session, incidents)
-    assert result == {"inserted_count": 2, "skipped_count": 1}
+    assert result == {"inserted_count": 2, "updated_count": 0, "skipped_count": 1}
     rows = session.scalars(
         select(CrimeIncident).where(CrimeIncident.external_incident_id == "shared-99")
     ).all()
@@ -773,7 +878,13 @@ def test_admin_socrata_ingest_source_arrests_uses_registry(tmp_path, monkeypatch
     calls = []
 
     def fake_fetch_page(self, limit, offset, start_date=None, end_date=None):
-        calls.append({"dataset_id": self.dataset_id, "date_field": self.date_field})
+        calls.append(
+            {
+                "dataset_id": self.dataset_id,
+                "date_field": self.date_field,
+                "cursor_id_field": self.cursor_id_field,
+            }
+        )
         return [
             CrimeIncidentData(
                 external_incident_id="arr-1",
@@ -796,8 +907,14 @@ def test_admin_socrata_ingest_source_arrests_uses_registry(tmp_path, monkeypatch
     )
 
     assert response.status_code == 200
-    assert response.json() == {"inserted_count": 1, "skipped_count": 0}
-    assert calls == [{"dataset_id": "9bjs-7a7w", "date_field": "arrest_occurred_date_time"}]
+    assert response.json() == {"inserted_count": 1, "updated_count": 0, "skipped_count": 0}
+    assert calls == [
+        {
+            "dataset_id": "9bjs-7a7w",
+            "date_field": "arrest_occurred_date_time",
+            "cursor_id_field": ":id",
+        }
+    ]
 
 
 def test_admin_socrata_ingest_rejects_unknown_source(tmp_path, monkeypatch):
@@ -820,7 +937,7 @@ def test_admin_socrata_backfill_scopes_watermark_to_source(tmp_path, monkeypatch
         captured["source_dataset"] = source_dataset
         return None
 
-    def fake_keyset(self, *, since_iso=None, end_date=None, limit=5000):
+    def fake_keyset(self, *, since_iso=None, since_id=None, end_date=None, limit=5000):
         return [], None
 
     monkeypatch.setattr(

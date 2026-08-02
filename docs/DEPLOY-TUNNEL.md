@@ -278,9 +278,10 @@ rate bucket per request. Same header, opposite treatment, because the trusted ho
 (the production overlay passes it as a build arg), so link previews come out with absolute URLs.
 It only takes effect on a build — which `start-public.ps1` always does.
 
-**Zone settings:** leave the Cloudflare zone at its defaults. Two worth knowing: *Always Use
-HTTPS* is on by default and should stay on; if you ever enable *Rocket Loader*, turn it back off —
-it rewrites script loading and can break the SPA.
+**Zone settings:** keep *Always Use HTTPS* on. Disable **Web Analytics** so Cloudflare does not
+inject a browser beacon; the app's `script-src 'self'` CSP is a backstop, not a substitute for
+the account setting. If you ever enable *Rocket Loader*, turn it back off — it rewrites script
+loading and can break the SPA.
 
 ---
 
@@ -292,15 +293,18 @@ pwsh -File scripts\public\start-public.ps1
 
 The script:
 
-1. Waits for the Docker engine, and fetches basemap tiles if they are missing.
-2. Builds and starts the stack with base + production + tunnel overlays and the `ops` profile
+1. Validates `.env.tunnel` against the fail-closed public posture before Docker starts: production
+   mode, secure cookies, rate limiting on, uploads/internal tier off, correct proxy trust, and
+   every required secret/token present without example placeholders.
+2. Waits for the Docker engine, and fetches basemap tiles if they are missing.
+3. Builds and starts the stack with base + production + tunnel overlays and the `ops` profile
    (`db`, `api`, `ingest-cron`, `cloudflared`) under the project name `compcat-public`. The image
    build receives `VITE_CANONICAL_ORIGIN` from `.env.tunnel`.
-3. Waits up to five minutes for `/health` — probed **inside** the api container, because this
+4. Waits up to five minutes for `/health` — probed **inside** the api container, because this
    stack publishes no host port at all.
-4. Mints a session, reads `/dashboard/freshness`, and backfills **each** layer that is missing or
+5. Mints a session, reads `/dashboard/freshness`, and backfills **each** layer that is missing or
    more than 14 days stale (`-SkipIngest` to skip; `-FreshnessMaxAgeDays` to change the window).
-5. Prints service status, the tunnel's registered connections, the project's volume names, and
+6. Prints service status, the tunnel's registered connections, the project's volume names, and
    the public URLs.
 
 It is idempotent: `git pull` then re-running it is the normal way to deploy a new commit.
@@ -420,7 +424,8 @@ Every item has an observable pass condition. Work through it before advertising 
    ```
    Pass: `compcat-public_mca-postgres` and `compcat-public_backups` exist and are **distinct**
    from `compcat_mca-postgres`. Then confirm the public site has no upload UI and
-   `https://compcat.app/uploads` 404s (personal uploads are off).
+   `/input-modes` omits `personal_timeline`. For an authenticated session, `POST /uploads`
+   returns 404; `DELETE /uploads` deliberately remains available for erasure.
 
 4. **Boot-guard negative test.** Prove the spend rail is armed on this machine, not just in CI:
    ```powershell
@@ -438,7 +443,7 @@ Every item has an observable pass condition. Work through it before advertising 
 5. **End-to-end over the real domain**, in a browser at `https://compcat.app` (not the LAN IP):
    - address lookup → a place renders with reported incident context;
    - analyze → the analysis card and baseline plot render;
-   - compare → two or more places rank with intervals;
+   - compare → two or more places are compared with intervals;
    - export → the CSV downloads and opens;
    - the map draws real basemap tiles (this exercises the PMTiles range requests through
      Cloudflare, which is the one heavy asset — see §8);
@@ -460,7 +465,8 @@ Every item has an observable pass condition. Work through it before advertising 
    to be in, and the fixed methodology caveat is the only occurrence of the word "risk" anywhere
    in the UI.
 
-8. **Only then**, add the live link to `README.md` and share it.
+8. **Only then**, record the deployed revision, verify the existing live link in `README.md`,
+   and share the release.
 
 ---
 
@@ -492,8 +498,9 @@ Then, off the machine:
 
 **Blast radius, stated plainly:** one compose project holding public SPD open data, anonymous
 ephemeral sessions, and the saved places those sessions created. There are no user accounts, no
-passwords, no payment data, and no personal location-history uploads
-(`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is false, so those endpoints 404). The **personal**
+passwords, no payment data, and no new personal location-history uploads
+(`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is false, so `POST /uploads` returns 404 while erasure
+remains available). The **personal**
 instance's database is a different volume in a different project and is not reachable from the
 tunnel at all. The credentials worth rotating are the tunnel token, the two LLM keys, the admin
 ingest token, the session secret, the hash salt, and the database password.
@@ -569,10 +576,11 @@ compose logs db
 ```
 
 **Data retention:** identical to the VPS path — the 03:50 sidecar job posts
-`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no session
-create/resume, analysis, place creation, or place update in `MCA_SESSION_DATA_RETENTION_DAYS` days
-(default 30, `0` disables) and evicts expired `geocode_cache` entries. Read-only returning visitors
-are preserved through the `session_activity` record. It never touches SPD incident data. See
+`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no recent
+session create/resume, analysis, place creation/update, upload, staging write, or stop creation in
+`MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables). It covers abandoned clusters of
+every origin and old upload metadata, and evicts expired `geocode_cache` entries. Read-only
+returning visitors are preserved through `session_activity`; SPD incident data is never touched. See
 [`DEPLOY-VPS.md`](DEPLOY-VPS.md#routine-operations) for the full description.
 
 **After a reboot:** Docker Desktop starts at login and `restart: unless-stopped` brings `db`,

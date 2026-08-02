@@ -78,6 +78,41 @@ describe("ContextStrip", () => {
     expect(screen.getByRole("dialog", { name: "Date range" })).toBeInTheDocument();
   });
 
+  it("rejects a reversed date range before changing the analysis and explains the error", () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
+
+    const start = screen.getByLabelText("Start date");
+    const end = screen.getByLabelText("End date");
+    expect(start).toHaveAttribute("max", analysis.endDate);
+    expect(end).toHaveAttribute("min", analysis.startDate);
+    fireEvent.change(start, { target: { value: "2026-08-01" } });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Start date must be on or before end date.");
+    expect(start).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("disables actions when given an invalid range from an external source", () => {
+    setup({ startDate: "2026-08-01", endDate: "2026-07-19" });
+    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /date range:/i })).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("blocks API-invalid long and far-future windows", () => {
+    const { onChange } = setup({ startDate: "2018-01-01", endDate: "2026-08-01" });
+    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("3000 days or fewer");
+
+    fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
+    const end = screen.getByLabelText("End date");
+    expect(end).toHaveAttribute("max");
+    fireEvent.change(end, { target: { value: "9999-12-31" } });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Dates must fall between");
+  });
+
   it("closes on Escape and restores focus to the active filter", () => {
     setup();
     const trigger = screen.getByRole("button", { name: "Search radius: 250 m" });

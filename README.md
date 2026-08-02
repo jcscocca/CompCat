@@ -5,6 +5,8 @@
 
 *CompCat — a pun on CompStat.*
 
+**Live public instance:** [compcat.app](https://compcat.app)
+
 CompCat is a privacy-first web app for exploring **reported Seattle SPD incident context**
 around the addresses you care about. Look up an address, pick a radius and date range, and
 CompCat shows how many reported incidents fall nearby, what kinds, and how candidate
@@ -26,9 +28,9 @@ and what that refusal cost).
 | ![CompCat dashboard, light theme](docs/images/dashboard-light.png) | ![CompCat dashboard, night theme](docs/images/dashboard-night.png) |
 
 Built with FastAPI + SQLAlchemy/Alembic, React + TypeScript + Vite, MapLibre over a
-self-hosted Seattle vector-tile extract, SQLite for dev / Postgres for deploy. The deployed
-app makes **zero third-party requests** — tiles, fonts, and geocoding are all self-hosted or
-proxied.
+self-hosted Seattle vector-tile extract, SQLite for dev / Postgres for deploy. During normal
+use the browser makes **zero third-party requests** — tiles and fonts are self-hosted, while
+geocoding and SPD ingestion are proxied or performed server-side.
 
 ## What it does
 
@@ -61,7 +63,7 @@ Analyze/Compare tabs.
 
 - **Place chips** — saved places appear as toggle chips at the top of the rail, each with an
   identity letter and color that matches its map pin. Click a chip to include or exclude a place;
-  click **+ Add** to open the manage-places dialog, where you can search, drop a pin, enter
+  click **Manage places** to open the dialog, where you can search, drop a pin, enter
   coordinates, paste a CSV, rename/remove places, and control export inclusion.
 - **Context strip** — the active dates, radius, offense category, and data layer stay visible
   above Tabby's composer. Each value is directly selectable and opens a compact anchored
@@ -93,7 +95,8 @@ context and will refuse to label a place as safe or unsafe.
 
 Under the hood free-text turns use an LLM planning call and a small tool set (`add_place`,
 `select_places`, `analyze_places`, `compare_places`, `update_filters`, `get_dashboard_summary`,
-`suggest_followups`). Chips and explicit rail controls use `POST /assistant/commands`, a
+`explain_result`, `suggest_followups`). Chips and explicit rail controls use
+`POST /assistant/commands`, a
 deterministic no-LLM path that shares the same streamed tool-event contract. If the LLM endpoint
 is unavailable, free text pauses but commands, filters, cards, badges, and exports keep working.
 
@@ -116,9 +119,11 @@ badges, and exports continue to work. See [Running the Analyst](#running-the-ana
    and `sensitivity_class`.
 
 A third mode, **Personal timeline upload** (Google Timeline JSON, raw point CSV, GeoJSON, GPX),
-is for internal demos and parser validation only. It is hidden unless you set
-`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`. Uploaded files are temporary input artifacts; the
-canonical product objects are stop visits, recurring place clusters, and context summaries.
+is for deliberate private/single-host use and parser validation. Shared public instances keep it
+hidden unless an operator explicitly sets `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`. Uploaded
+files are temporary input artifacts; the
+durable public-path product objects are recurring place clusters and context summaries. Raw
+points, stop visits, and the batch header survive only when raw retention is explicitly enabled.
 
 ## Statistical comparison
 
@@ -144,8 +149,11 @@ rate"; it must never call a place safe, unsafe, dangerous, or crime-preventing.
   to a coarse grid, including manually entered places.
 - In the default `tableau_safe` mode, home-like, work-like, health-like, religious-like, and
   explicitly suppressed clusters are excluded from exports.
-- Demo identity comes from the `X-Demo-User-Id` header (or `demo_user` when omitted) and is
-  hashed server-side with `MCA_USER_HASH_SALT`.
+- Public identity comes from a signed, anonymous session cookie and is hashed server-side with
+  `MCA_USER_HASH_SALT`. The `X-Demo-User-Id` fallback exists only on hidden internal endpoints.
+- Up to five recent searched labels and their exact coordinates are kept in this browser tab's
+  `sessionStorage`; they disappear when the tab session ends and can be cleared from search or
+  with **Clear all**. A legacy persistent-history key is deleted rather than migrated.
 - Raw uploaded points are discarded after clustering: the public personal-upload path keeps
   only the derived place clusters (the raw `StagingLocationObservation` points and per-visit
   `StopVisit` rows are deleted) unless `MCA_RAW_UPLOAD_RETENTION=true`.
@@ -156,21 +164,26 @@ Users can upload their own location history (Google Timeline JSON, CSV points, G
 GPX) so the dashboard shows reported-incident context around the places they actually go.
 
 This feature **ships disabled**. It is gated by `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS`, which
-**defaults to `false`** — with it off, the `POST`/`DELETE /uploads` endpoints return `404`, the
-`personal_timeline` input mode is not advertised, and **no upload UI is rendered anywhere**.
+**defaults to `false`** — with it off, `POST /uploads` returns `404`, the `personal_timeline`
+input mode is not advertised, and **no upload UI is rendered anywhere**. Authenticated
+`DELETE /uploads` remains available so disabling new uploads can never strand existing data.
 Enable it deliberately by setting `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS=true`.
 
-Retention: by default only the derived place clusters are kept — raw points and per-visit
-stops are discarded immediately after clustering (set `MCA_RAW_UPLOAD_RETENTION=true` to keep
-the raw points for re-clustering). The upload panel includes a consent gate and a
-"Delete my uploaded data" control that erases every uploaded artifact for the user.
+Retention: by default only the derived place clusters are kept — the batch header, raw points,
+and per-visit stops are discarded immediately after clustering (set
+`MCA_RAW_UPLOAD_RETENTION=true` to keep the import material for re-clustering). The upload panel
+includes a consent gate and a "Delete my uploaded data" control that erases every uploaded
+artifact for the user.
 
 **Roadmap (not yet implemented):** production authentication, encryption at rest, and per-user
 tenant isolation.
 
 ## Quick start
 
-Requirements: Python 3.11+, Node 20.19+ (or 22.12+), and optionally Docker.
+Requirements: Python 3.11+ for local development, a Node version accepted by
+`frontend/package.json` (currently `^22.22.2 || ^24.15.0 || >=26`), and optionally Docker.
+The production image runs Python 3.14; the Docker build in CI verifies the pinned Python 3.11
+dependency resolution against that runtime.
 
 ```bash
 make install        # create .venv and install the app with dev extras
@@ -239,7 +252,8 @@ To use a hosted model instead of a local endpoint, set `MCA_LLM_PROVIDER=anthrop
 (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI's API — both via their official SDKs.
 See `.env.example` for the full set of knobs.
 
-Without an LLM endpoint the dashboard still works; the Analyst panel is simply disabled.
+Without an LLM endpoint the dashboard still works. Free-text planning pauses, while Tabby's
+deterministic command chips, filters, cards, badges, and exports remain available.
 
 ### Running with Postgres/PostGIS
 
@@ -291,6 +305,7 @@ salt/secret and forces secure cookies.
 | `MCA_CRIME_RADII_M` | `[250,500,1000]` | Default analysis radii in meters. |
 | `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL; HTTPS is required and credentials/query strings are rejected. |
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
+| `MCA_SOCRATA_RECONCILIATION_DAYS` | `14` | Days before each source's stored watermark revisited by automatic backfills to reconcile late rows and corrections (`0` disables overlap; maximum `365`). Explicit `start_date` requests are not widened (the existing source floor still applies). |
 | `SOCRATA_APP_TOKEN` | _unset_ | Optional Socrata app token for higher rate limits. |
 | `MCA_LLM_PROVIDER` | `openai` | Analyst backend: `openai` (OpenAI-compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK). `MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently. |
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL (provider `openai`). |
@@ -311,8 +326,9 @@ data through the admin endpoint.
 
 ## Developer reference
 
-The dashboard drives the API for you, and FastAPI publishes interactive docs at `/docs`
-(Swagger UI) and `/openapi.json`. The public endpoints are grouped below.
+The dashboard drives the API for you. In local/development mode FastAPI publishes interactive
+docs at `/docs` (Swagger UI) and `/openapi.json`; production disables both surfaces. The public
+endpoints are grouped below.
 
 For internal architecture — system overview, data model, the full API contract, the assistant
 design, and the roadmap — see [`docs/`](docs/README.md).
@@ -323,15 +339,16 @@ design, and the roadmap — see [`docs/`](docs/README.md).
 
 | Group | Endpoints |
 | --- | --- |
-| Health | `GET /health` |
-| Sessions | `POST /sessions` |
+| Health | `GET /health` · hidden monitoring probe `GET /health/data` |
+| Sessions | `POST /sessions` · `DELETE /sessions` |
 | Input modes | `GET /input-modes` |
-| Places | `GET /places` · `POST /places` · `POST /places/bulk` · `PATCH /places/{id}` · `DELETE /places/{id}` |
+| Places | `GET /places` · `POST /places` · `DELETE /places` · `POST /places/bulk` · `PATCH /places/{id}` · `DELETE /places/{id}` |
 | Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` · `POST /dashboard/neighborhood` · `GET /dashboard/trends` · `GET /dashboard/freshness` · `GET /dashboard/beats` · `GET /dashboard/mcpp` · `POST /dashboard/incident-points` · `GET /dashboard/geocode` |
 | Analyst | `POST /assistant/chat` · `POST /assistant/commands` (Server-Sent Events) |
 | Statistical analysis (internal) | `POST /internal/analysis/sites/compare` · `GET /internal/analysis/comparisons/{id}` |
-| Exports | `GET /exports/tableau/place-summary.csv` (optional `run_id`) |
-| Crime data | `POST /internal/crime/ingest/sample` · `POST /internal/crime/summarize` · `POST /admin/crime/ingest/socrata` |
+| Uploads | `POST /uploads` (feature-gated) · `DELETE /uploads` (always available for erasure) |
+| Exports | `GET /exports/analysis.csv` (required `run_id`) · `GET /exports/tableau/place-summary.csv` (optional `run_id`) |
+| Crime/maintenance | `POST /internal/crime/ingest/sample` · `POST /internal/crime/summarize` · `POST /admin/crime/ingest/socrata` · hidden `POST /admin/maintenance/retention-sweep` |
 | Internal/demo | `POST /internal/imports` · `GET /internal/imports/{id}` · `POST /internal/imports/{id}/normalize` |
 
 A minimal end-to-end flow with `curl`:

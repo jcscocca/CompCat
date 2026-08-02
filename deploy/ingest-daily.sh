@@ -1,6 +1,7 @@
 #!/bin/sh
 # Triggers the app's existing admin Socrata ingest once per layer, sequentially. All the hard
-# parts (watermark, paging, retry/backoff, rolling-window purge) live in the endpoint; this
+# parts (floor-clamped watermark overlap, paging, retry/backoff, rolling-window purge) live in
+# the endpoint; this
 # script only fires it and makes failures legible in `docker logs`.
 #
 # Sequential on purpose: overlapping Socrata paging loops would fight for the same rate limit.

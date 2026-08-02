@@ -50,15 +50,15 @@ score, or rate places or areas; no personal safety or risk scores* — and those
 plus a `POLICY_CAVEATS` list, enter the model's context every turn. That is the soft layer: a
 request, and requests are not guarantees, least of all from a small model on a laptop.
 
-The guarantee is deterministic code in `app/assistant/agent.py`. `_contains_safety_ranking`
-is built from three cooperating compiled patterns rather than one, because a single pattern
-cannot be both broad and precise:
+The guarantee is deterministic code in `app/assistant/output_guard.py`, wired into
+`app/assistant/agent.py`. `contains_safety_ranking` starts with three cooperating compiled
+patterns because a single pattern cannot be both broad and precise:
 
 | Pattern | What it holds | Trips on its own? |
 |---|---|---|
-| `_UNAMBIGUOUS_SAFETY_PATTERN` | Terms that signal a ranking ask alone — *safe*, *dangerous*, *risky*, … — plus the *rank*/*rate*/*score* verb arms followed by a place noun through an optional determiner run, and a Spanish mirror of each (`peligroso`, `clasificar` + place noun, `mal barrio`, …) | Yes |
-| `_AMBIGUOUS_TERM_PATTERN` | Colloquial place-character terms that also have benign senses: *sketchy*, *shady*, *avoid*, `seguro`, … | Only alongside ↓ |
-| `_PLACE_CONTEXT_PATTERN` | Deictics and place nouns in both languages: *here*, *block*, *downtown*, `barrio`, … | — |
+| `UNAMBIGUOUS_SAFETY_PATTERN` | Terms that signal a ranking ask alone — *safe*, *dangerous*, *risky*, … — plus *rank*/*rate*/*score* + place, Spanish mirrors (`peligroso`, `clasificar`, `mal barrio`, …), and narrow unambiguous French constructions | Yes |
+| `AMBIGUOUS_TERM_PATTERN` | Colloquial place-character terms that also have benign senses: *sketchy*, *shady*, *avoid*, `seguro`, accented French `sûr`, … | Only alongside ↓ |
+| `PLACE_CONTEXT_PATTERN` | Deictics and place nouns in English, Spanish, and the narrow French vocabulary: *here*, *block*, `barrio`, `quartier`, … | — |
 
 The split exists because the colloquial terms are also proper nouns and ordinary adjectives.
 Gating them on co-occurring place context lets a question about an address on Shady Grove Ave
@@ -68,6 +68,11 @@ the allowed count framing "which area has the most crime". Event and offense
 descriptors — *violent*, *threatening*, *menacing* — are deliberately excluded from the whole
 guard. They describe incidents, which is exactly what the product reports; they do not rank
 places.
+
+Rating proxies get their own narrow patterns: explicit numeric scales, stars, uppercase letter
+grades, and recommendations or choices specifically about where to live. The context anchors
+are load-bearing: `2 of 10 reported incidents`, Category D, map stars, and “choose this filter”
+remain ordinary incident/product language.
 
 The guard runs on both sides of the model. On input, it checks the current request and treats an
 ambiguous continuation of an immediately refused safety or presence request as part of that
@@ -80,7 +85,7 @@ instead. On output, the same predicate re-runs against the model's own answer, s
 that slips past the input side and provokes banned-lexicon output is still caught on the way
 out.
 
-`_PRESENCE_CLAIM_PATTERN` enforces the invariant's third prong — never assert the user was at
+`PRESENCE_CLAIM_PATTERN` and its Spanish counterpart enforce the invariant's third prong — never assert the user was at
 an incident — and runs on both sides too: it matches a first- or second-person subject tied to
 a victimization word, or to a presence/witness word followed by an incident noun, catching the
 model asserting it *and* the user asking for it ("was I present at any of these incidents?"
@@ -118,8 +123,9 @@ place word still reaches the model. An unnecessary refusal is an annoyance the u
 around. A missed one is the product doing the thing it says it never does.
 
 The scope limit is recorded rather than hidden. The deterministic guard covers English and
-Spanish only; other languages, non-Latin scripts especially, fall back to the prompt layer and
-the holdback guard. Closing that needs language-agnostic classification, and it sits in
+Spanish plus a deliberately narrow French slice; other languages, non-Latin scripts especially,
+fall back to the prompt layer and the holdback guard. Terse unlabeled rating shorthand and novel
+euphemisms are also an open class. Closing that needs language-agnostic classification, and it sits in
 `docs/ROADMAP.md` under "Open — invariant risk" beside the over-refusal decision. The durable
 structural fix is on the record and also unbuilt: stop the model authoring user-facing prose at
 all, make it strictly classify, and serve every answer from the deterministic summary path —
@@ -234,16 +240,17 @@ by omission.
 
 Personal location upload has the highest stakes of anything here, so I made it ship disabled
 rather than merely warned about: `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` defaults to false, and
-with it off the upload endpoints return 404, the input mode isn't advertised, and no upload UI
-renders anywhere. A default nobody has to notice is worth more than a caution nobody reads.
+with it off `POST /uploads` returns 404, the input mode isn't advertised, and no upload UI
+renders anywhere. Authenticated deletion remains available so disabling intake cannot block
+erasure. A default nobody has to notice is worth more than a caution nobody reads.
 Enabled, the pipeline keeps only what it needs: raw points and per-visit stop rows are deleted
 after clustering unless retention is explicitly turned on, there is a consent gate, and a
 delete control erases every uploaded artifact for the user.
 
 What is missing is stated too: no production authentication, no encryption at rest, no per-user
-tenant isolation — the README's "what it does not do" list says so plainly. CompCat goes public
-as a showcase rather than an operated service, and a privacy posture that quietly omits its own
-gaps is marketing.
+tenant isolation — the README's "what it does not do" list says so plainly. CompCat is now an
+operated public release, but not a system for private accounts or sensitive multi-tenant data;
+a privacy posture that quietly omits those gaps would be marketing.
 
 ## What refusing buys
 

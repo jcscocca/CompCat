@@ -21,12 +21,15 @@ from app.main import create_app
 from app.models import (
     AnalysisRun,
     GeocodeCache,
+    ImportBatch,
     PlaceCluster,
     PlaceCrimeSummary,
     SessionActivity,
+    StagingLocationObservation,
     StatisticalComparison,
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
+    StopVisit,
 )
 from app.normalization.clusters import CLUSTER_METHOD
 from app.services.direct_places_service import DIRECT_CLUSTER_METHOD
@@ -254,7 +257,10 @@ def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
         "statistical_comparisons": 1,
         "analysis_runs": 1,
         "place_crime_summaries": 1,
+        "stop_visits": 0,
+        "staging_location_observations": 0,
         "place_clusters": 1,
+        "import_batches": 0,
         "geocode_cache": 0,
         "session_activity": 0,
     }
@@ -269,9 +275,9 @@ def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
     session.close()
 
 
-def test_sweep_never_touches_upload_derived_clusters(tmp_path):
-    # Upload-derived clusters have their own delete path (public_upload_service); the sweep
-    # must not reach into personal-upload data even when it is older than the window.
+def test_sweep_removes_all_abandoned_cluster_origins(tmp_path):
+    # Manual, point-upload, and direct-import clusters are all session-owned data. Once the
+    # identity is dormant and no live child references them, the retention window applies.
     session = _session(tmp_path, "uploads")
     upload_cluster = _cluster(OLD, method=CLUSTER_METHOD)
     direct_cluster = _cluster(OLD, method=DIRECT_CLUSTER_METHOD)
@@ -283,10 +289,61 @@ def test_sweep_never_touches_upload_derived_clusters(tmp_path):
 
     counts = sweep_retention(session, get_settings(), now=NOW)
 
-    assert counts["place_clusters"] == 1
-    assert session.get(PlaceCluster, upload_id) is not None
-    assert session.get(PlaceCluster, direct_id) is not None
+    assert counts["place_clusters"] == 3
+    assert session.get(PlaceCluster, upload_id) is None
+    assert session.get(PlaceCluster, direct_id) is None
     assert session.get(PlaceCluster, manual_id) is None
+    session.close()
+
+
+def test_sweep_removes_abandoned_retained_upload_rows_in_fk_order(tmp_path):
+    session = _session(tmp_path, "retained-upload")
+    cluster = _cluster(OLD, method=CLUSTER_METHOD, owner="user-upload-gone")
+    batch = ImportBatch(
+        user_id_hash="user-upload-gone",
+        source_type="google_timeline",
+        original_filename="timeline.json",
+        file_hash_sha256="a" * 64,
+        parser_version="test-1",
+        uploaded_at=OLD,
+    )
+    session.add_all([cluster, batch])
+    session.flush()
+    session.add_all(
+        [
+            StagingLocationObservation(
+                import_id=batch.id,
+                user_id_hash="user-upload-gone",
+                source_record_type="placeVisit",
+                source_record_hash="old-row",
+                created_at=OLD,
+            ),
+            StopVisit(
+                import_id=batch.id,
+                user_id_hash="user-upload-gone",
+                place_cluster_id=cluster.id,
+                start_time_utc=OLD - timedelta(hours=1),
+                end_time_utc=OLD,
+                duration_minutes=60,
+                centroid_latitude=47.61,
+                centroid_longitude=-122.33,
+                source_basis="source_stop",
+                created_at=OLD,
+            ),
+        ]
+    )
+    session.commit()
+
+    counts = sweep_retention(session, get_settings(), now=NOW)
+
+    assert counts["stop_visits"] == 1
+    assert counts["staging_location_observations"] == 1
+    assert counts["place_clusters"] == 1
+    assert counts["import_batches"] == 1
+    assert _count(session, StopVisit) == 0
+    assert _count(session, StagingLocationObservation) == 0
+    assert _count(session, PlaceCluster) == 0
+    assert _count(session, ImportBatch) == 0
     session.close()
 
 

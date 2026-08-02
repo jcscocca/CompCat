@@ -16,6 +16,19 @@ export const FOCUS_CHROME_MIN = 240;
 // Viewports at/below this width render the workspace panel as a bottom sheet.
 // Must match the `@media (max-width:760px)` breakpoint in styles/mapWorkspace.css.
 export const MOBILE_MAX_WIDTH = 760;
+// At this viewport width and below, keep desktop panel mechanics but shed the duplicated
+// topbar filters/status. The panel's ContextStrip remains the complete control surface.
+// This boundary is JS-owned (see isCompactDesktopViewport); do not pair it with a CSS media
+// query or 1280px can take opposite branches in the DOM and stylesheet.
+export const COMPACT_DESKTOP_MAX_WIDTH = 1280;
+
+export function isMobileViewport(width: number): boolean {
+  return width <= MOBILE_MAX_WIDTH;
+}
+
+export function isCompactDesktopViewport(width: number): boolean {
+  return !isMobileViewport(width) && width <= COMPACT_DESKTOP_MAX_WIDTH;
+}
 
 export type DrawerPreset = "default" | "wide";
 

@@ -6,15 +6,24 @@ from app.crime.seattle_socrata import (
     SeattleSocrataClient,
     _safe_soql_field,
     _safe_soql_timestamp,
+    _soql_string_literal,
 )
 
 
 def test_safe_soql_field_accepts_registry_columns():
-    for field in ("offense_date", "arrest_occurred_date_time", "cad_event_original_time_queued"):
+    for field in (
+        "offense_date",
+        "arrest_occurred_date_time",
+        "cad_event_original_time_queued",
+        ":id",
+    ):
         assert _safe_soql_field(field) == field
 
 
-@pytest.mark.parametrize("bad", ["offense_date; drop", "a' or '1'='1", "date field", "", "1col"])
+@pytest.mark.parametrize(
+    "bad",
+    ["offense_date; drop", "a' or '1'='1", "date field", "", "1col", ":updated_at"],
+)
 def test_safe_soql_field_rejects_injection_shapes(bad):
     with pytest.raises(ValueError, match="Unsafe SoQL field name"):
         _safe_soql_field(bad)
@@ -31,12 +40,31 @@ def test_safe_soql_timestamp_rejects_injection_shapes(bad):
         _safe_soql_timestamp(bad)
 
 
+def test_soql_string_literal_escapes_apostrophes():
+    assert _soql_string_literal("A'42") == "'A''42'"
+
+
+@pytest.mark.parametrize("bad", ["row\nnext", "row\x00next", "row\x7fnext"])
+def test_soql_string_literal_rejects_control_characters(bad):
+    with pytest.raises(ValueError, match="Unsafe SoQL string literal"):
+        _soql_string_literal(bad)
+
+
 def test_client_rejects_unsafe_date_field_at_construction():
     with pytest.raises(ValueError, match="Unsafe SoQL field name"):
         SeattleSocrataClient(
             base_url="https://data.seattle.gov/resource",
             dataset_id="tazs-3rd5",
             date_field="offense_date' --",
+        )
+
+
+def test_client_rejects_unsafe_cursor_id_field_at_construction():
+    with pytest.raises(ValueError, match="Unsafe SoQL field name"):
+        SeattleSocrataClient(
+            base_url="https://data.seattle.gov/resource",
+            dataset_id="tazs-3rd5",
+            cursor_id_field=":id) DESC",
         )
 
 

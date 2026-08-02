@@ -34,6 +34,24 @@ from app.response_security import ResponseSecurityMiddleware
 logger = logging.getLogger(__name__)
 
 
+class OptionalStaticFiles(StaticFiles):
+    """Static files whose source directory may be provisioned after app startup.
+
+    Starlette's ``check_dir=False`` defers its directory check until the first request;
+    it does not disable that check.  The PMTiles artifact is intentionally optional, so
+    an absent directory must behave like an absent file rather than raising at runtime.
+    Existing non-directory paths and other configuration errors remain loud.
+    """
+
+    async def check_config(self) -> None:
+        try:
+            await super().check_config()
+        except RuntimeError:
+            if self.directory is not None and not Path(self.directory).exists():
+                return
+            raise
+
+
 def log_posture_warnings(settings: Settings) -> None:
     """Loud boot-time warnings for prod-like postures that are one env var away from real
     exposure. Warn, never block — both toggles have legitimate single-host uses."""
@@ -140,11 +158,11 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(exports_router)
     app.include_router(analysis_router)
     # Self-hosted basemap tiles (see docs/superpowers/specs/2026-07-04-map-ui-overhaul-design.md).
-    # check_dir=False: the artifact is fetched out-of-band (make fetch-tiles); missing file
-    # is a plain 404 and the frontend falls back to a flat basemap.
+    # The artifact is fetched out-of-band (make fetch-tiles). OptionalStaticFiles makes a
+    # missing directory or file a plain 404 so the frontend can fall back to a flat basemap.
     app.mount(
         "/tiles",
-        StaticFiles(directory=get_settings().tiles_dir, check_dir=False),
+        OptionalStaticFiles(directory=get_settings().tiles_dir, check_dir=False),
         name="tiles",
     )
     mount_dashboard(app)

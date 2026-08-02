@@ -259,14 +259,17 @@ scripts/prod/start-compcat.sh
 
 The script:
 
-1. Builds and starts the stack with the base + production overlays and the `ops` profile
+1. Validates `.env.prod` against the fail-closed public posture before Docker starts: production
+   mode, secure cookies, rate limiting on, uploads/internal tier off, correct proxy trust, and
+   required secrets present without example placeholders.
+2. Builds and starts the stack with the base + production overlays and the `ops` profile
    (`db`, `api`, `caddy`, `ingest-cron`). The image build receives `VITE_CANONICAL_ORIGIN` from
    `.env.prod`, so link previews come out with absolute URLs.
-2. Waits up to five minutes for `/health` — probed **inside** the api container, because the
+3. Waits up to five minutes for `/health` — probed **inside** the api container, because the
    production overlay publishes no app port on the host.
-3. Mints a session and reads `/dashboard/freshness`.
-4. Runs the ingest sidecar's own nightly script if reported data is missing or older than 14 days.
-5. Prints service status and the public URLs.
+4. Mints a session and reads `/dashboard/freshness`.
+5. Runs the ingest sidecar's own nightly script if reported data is missing or older than 14 days.
+6. Prints service status and the public URLs.
 
 It is idempotent: re-running it is the normal way to deploy a new commit.
 
@@ -440,7 +443,7 @@ Every item has an observable pass condition. Work through it before advertising 
 4. **End-to-end over the real domain**, in a browser at `https://compcat.app`:
    - address lookup → a place renders with reported incident context;
    - analyze → the analysis card and baseline plot render;
-   - compare → two or more addresses rank with intervals;
+   - compare → two or more addresses are compared with intervals;
    - export → the CSV downloads and opens;
    - Tabby answers a free-text question, and shows the offline panel when you temporarily remove
      the LLM keys and restart;
@@ -463,7 +466,8 @@ Every item has an observable pass condition. Work through it before advertising 
    incident context* only: nothing scores a place, nothing ranks places as good or bad to be in, and
    the fixed methodology caveat is the only occurrence of the word "risk" anywhere in the UI.
 
-8. **Only then**, add the live link to `README.md` and share it.
+8. **Only then**, record the deployed revision, verify the existing live link in `README.md`,
+   and share the release.
 
 ---
 
@@ -491,9 +495,10 @@ Then, off the box:
 
 **Blast radius, stated plainly:** one box holding public SPD open data, anonymous ephemeral
 sessions, and the saved places those sessions created. There are no user accounts, no passwords, no
-payment data, and no personal location-history uploads (`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is
-false, so those endpoints 404). The credentials worth rotating are the two LLM keys, the admin
-ingest token, the session secret, the hash salt, and the database password.
+payment data, and no new personal location-history uploads
+(`MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is false, so `POST /uploads` returns 404 while erasure
+remains available). The credentials worth rotating are the two LLM keys, the admin ingest token,
+the session secret, the hash salt, and the database password.
 
 ---
 
@@ -520,19 +525,21 @@ entered-place clusters, analysis runs, crime summaries, statistical comparisons 
 options/pairwise children — outlive an individual window. Every create/resume upserts a
 one-way `session_activity` record, so a returning read-only visitor counts as active. The
 03:50 sidecar job posts
-`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no
-create/resume, analysis, place creation, or place update in
-`MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep), in foreign-key
-order and bounded batches, and evicts `geocode_cache` entries past their own
-`MCA_GEOCODER_CACHE_TTL_DAYS`. It never touches personal-upload clusters — those have their own
-delete path — nor SPD incident data. A persistent integrity failure returns 5xx, which makes
-the sidecar's `curl --fail` job fail visibly. The sweep runs after the backup, so each night's
-dump still contains what that night removed.
+`/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no recent
+create/resume, analysis, place creation/update, upload, staging write, or stop creation in
+`MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep), in foreign-key order
+and bounded batches. This includes abandoned clusters of every origin and old upload metadata;
+active parents referenced by retained summaries or stops are preserved. It also evicts
+`geocode_cache` entries past `MCA_GEOCODER_CACHE_TTL_DAYS`. It never touches SPD incident data.
+A persistent integrity failure returns 5xx, which makes the sidecar's `curl --fail` job fail
+visibly. The sweep runs after the backup, so each night's dump still contains what that night
+removed.
 
 > Migration note: `0014_retention_indexes` creates plain (non-CONCURRENT) indexes and
 > `0015_session_activity` creates the activity table/index. Fine
 > on a fresh or small database; if you ever apply it after months of accumulated data,
-> expect the indexed tables to be write-locked for the build's duration. To run it by hand and read the per-table row counts:
+> expect the indexed tables to be write-locked for the build's duration. To run it by hand and
+> read the per-table row counts:
 
 ```bash
 compose exec ingest-cron /bin/sh /etc/ingest/retention.sh

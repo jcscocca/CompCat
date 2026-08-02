@@ -25,6 +25,8 @@ def normalize_import(
     import_id: str,
     user_id_hash: str,
     settings: Settings,
+    *,
+    commit: bool = True,
 ) -> dict[str, int]:
     batch = session.get(ImportBatch, import_id)
     if batch is None or batch.user_id_hash != user_id_hash:
@@ -91,7 +93,10 @@ def normalize_import(
     session.add_all([_stop_model(stop) for stop in stops])
     session.add_all([_cluster_model(cluster) for cluster in clusters])
     batch.status = "normalized"
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     return {"stop_visit_count": len(stops), "place_cluster_count": len(clusters)}
 
 

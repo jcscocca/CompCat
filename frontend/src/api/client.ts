@@ -295,15 +295,26 @@ async function streamAssistantSse(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawTerminalEvent = false;
+  const onEvent = (event: AssistantStreamEvent) => {
+    if (event.event === "done" || event.event === "error") sawTerminalEvent = true;
+    handlers.onEvent(event);
+  };
 
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    buffer = flushAssistantEvents(buffer, handlers.onEvent);
+    buffer = flushAssistantEvents(buffer, onEvent);
   }
   buffer += decoder.decode();
-  flushAssistantEvents(buffer, handlers.onEvent, true);
+  flushAssistantEvents(buffer, onEvent, true);
+  // A clean transport EOF is not proof that an assistant turn completed. Proxies and
+  // upstreams can truncate an SSE body while still leaving the HTTP response at 200; treating
+  // that as success strands a partial answer in the thread with no retry/error affordance.
+  if (!sawTerminalEvent) {
+    throw new Error("Assistant stream ended before a terminal event.");
+  }
 }
 
 export function streamAssistantChat(
@@ -366,9 +377,10 @@ function emitAssistantEvent(block: string, onEvent: (event: AssistantStreamEvent
       data = JSON.parse(dataLines.join("\n"));
     } catch {
       // Skip a malformed token frame rather than aborting the rest of the stream, but
-      // never drop a terminal frame: surface error/done with empty data so the user is
-      // not left with neither an answer nor an error.
-      if (eventName !== "error" && eventName !== "done") return;
+      // preserve a malformed error as a generic terminal failure. A malformed done frame
+      // is not proof of successful completion: drop it so EOF triggers the truncation guard.
+      if (eventName !== "error") return;
+      data = { message: "Assistant stream returned a malformed error event." };
     }
   }
   onEvent({ event: eventName, data } as AssistantStreamEvent);

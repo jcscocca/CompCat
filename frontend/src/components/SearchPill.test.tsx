@@ -13,11 +13,13 @@ beforeEach(() => {
   vi.useFakeTimers();
   search.mockReset().mockResolvedValue([RESULT]);
   localStorage.clear();
+  sessionStorage.clear();
 });
 afterEach(() => {
   vi.runAllTimers();
   vi.useRealTimers();
   cleanup();
+  sessionStorage.clear();
 });
 
 describe("SearchPill", () => {

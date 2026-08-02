@@ -36,12 +36,12 @@ const noun = incidentNoun("reported");
 
 afterEach(cleanup);
 
-function renderCard(place: NeighborhoodPlace = homePlace) {
+function renderCard(place: NeighborhoodPlace = homePlace, windowLabel = "2026-01-01 – 2026-06-30") {
   return render(
     <PlaceContextCard
       place={place}
       index={0}
-      windowLabel="2026-01-01 – 2026-06-30"
+      windowLabel={windowLabel}
       noun={noun}
       domainMax={6}
     />,
@@ -68,7 +68,15 @@ describe("PlaceContextCard", () => {
   it("renders the temporal profile with the travel-window callout", () => {
     renderCard();
     expect(screen.getByText(/When reported incidents occurred/i)).toBeInTheDocument();
+    expect(screen.getByText(/Hour and day profiles use the selected window: 2026-01-01 – 2026-06-30/)).toBeInTheDocument();
     expect(screen.getByText(/of the 40 reported incidents with a recorded time/)).toBeInTheDocument();
+  });
+
+  it("labels monthly bars with the exact window and discloses partial boundary months", () => {
+    renderCard(homePlace, "2026-01-15 – 2026-06-12");
+
+    expect(screen.getByRole("img", { name: /Calendar-month counts within the selected window \(2026-01-15 – 2026-06-12\)/ })).toBeInTheDocument();
+    expect(screen.getByText(/The first and last buckets are partial calendar months/)).toBeInTheDocument();
   });
 
   it("provides exact hour and day values through keyboard-operable tables", () => {

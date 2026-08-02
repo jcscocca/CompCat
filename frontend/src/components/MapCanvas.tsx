@@ -4,7 +4,7 @@ import { Protocol } from "pmtiles";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { circlePolygonCoords } from "../lib/geodesy";
-import { incidentCountForPlace } from "../lib/incidentSummaries";
+import { hasIncidentSummaryForAnalysis, incidentCountForPlace } from "../lib/incidentSummaries";
 import type { IncidentNoun } from "../lib/layerCopy";
 import {
   BEATS_SOURCE,
@@ -17,10 +17,10 @@ import {
   registerDataLayers,
   RINGS_SOURCE,
 } from "../lib/mapLayers";
-import { buildMapStyle, cartoRasterStyle, fallbackMapStyle, type MapTheme, TILES_URL } from "../lib/mapStyle";
+import { buildMapStyle, fallbackMapStyle, type MapTheme, TILES_URL } from "../lib/mapStyle";
 import type { PlaceIdentity } from "../lib/placeIdentity";
 import type { IncidentFeatureCollection } from "../lib/useIncidentPoints";
-import type { BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
+import type { AnalysisSettings, BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
 
 const SEATTLE: [number, number] = [-122.3321, 47.6062]; // [lng, lat]
 
@@ -74,10 +74,10 @@ export function markerKindFor(
   place: Place,
   selectedIds: Set<string>,
   summary: DashboardSummary | null,
-  radiusM: number,
+  analysis: AnalysisSettings,
 ): MarkerKind {
-  const analyzedAtRadius = summary?.crime_summaries.some((entry) => entry.radius_m === radiusM) ?? false;
-  if (incidentCountForPlace(summary, place.id, radiusM) !== null) {
+  const analyzedInScope = hasIncidentSummaryForAnalysis(summary, analysis, selectedIds);
+  if (incidentCountForPlace(summary, place.id, analysis, selectedIds) !== null) {
     return "analyzed";
   }
   // Ephemeral ad-hoc entries are never analyzable: no "low" state, no radius ring
@@ -85,7 +85,7 @@ export function markerKindFor(
   if (place.inferred_place_type === "adhoc_entry") {
     return selectedIds.has(place.id) ? "selected" : "default";
   }
-  if (analyzedAtRadius && selectedIds.has(place.id)) {
+  if (analyzedInScope && selectedIds.has(place.id)) {
     return "low";
   }
   if (selectedIds.has(place.id)) {
@@ -104,19 +104,19 @@ export function ringsGeoJSON(
   places: Place[],
   selectedIds: Set<string>,
   summary: DashboardSummary | null,
-  radiusM: number,
+  analysis: AnalysisSettings,
 ): { type: "FeatureCollection"; features: RingFeature[] } {
   const features: RingFeature[] = [];
   for (const place of places) {
     if (place.latitude === null || place.longitude === null) continue;
-    const kind = markerKindFor(place, selectedIds, summary, radiusM);
+    const kind = markerKindFor(place, selectedIds, summary, analysis);
     if (kind !== "analyzed" && kind !== "low") continue;
     features.push({
       type: "Feature",
       properties: { kind },
       geometry: {
         type: "Polygon",
-        coordinates: [circlePolygonCoords(place.latitude, place.longitude, radiusM)],
+        coordinates: [circlePolygonCoords(place.latitude, place.longitude, analysis.radiusM)],
       },
     });
   }
@@ -142,7 +142,7 @@ type Props = {
   draft: DraftPin | null;
   addPinMode: boolean;
   summary: DashboardSummary | null;
-  radiusM: number;
+  analysis: AnalysisSettings;
   flyTo: LatLng | null;
   beats: BeatFeatureCollection | null;
   highlightBeats: string[];
@@ -167,7 +167,7 @@ export function MapCanvas({
   draft,
   addPinMode,
   summary,
-  radiusM,
+  analysis,
   flyTo,
   beats,
   highlightBeats,
@@ -226,19 +226,16 @@ export function MapCanvas({
     let cancelled = false;
     async function init() {
       ensurePmtilesProtocol();
-      const useCarto = import.meta.env.VITE_MAP_BASEMAP === "carto";
-      const available = useCarto
-        ? true
-        : await fetch(TILES_URL, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
+      const available = await fetch(TILES_URL, { method: "HEAD" })
+        .then((response) => response.ok)
+        .catch(() => false);
       if (cancelled || !containerRef.current) return;
-      tilesMissingRef.current = !useCarto && !available;
-      setTilesMissing(!useCarto && !available);
+      tilesMissingRef.current = !available;
+      setTilesMissing(!available);
       themeRef.current = theme;
-      const style = useCarto
-        ? cartoRasterStyle()
-        : available
-          ? buildMapStyle(theme, window.location.origin)
-          : fallbackMapStyle(theme);
+      const style = available
+        ? buildMapStyle(theme, window.location.origin)
+        : fallbackMapStyle(theme);
       let map: maplibregl.Map;
       try {
         map = new maplibregl.Map({
@@ -340,7 +337,6 @@ export function MapCanvas({
     const map = mapRef.current;
     if (!map || !mapReady || themeRef.current === theme) return;
     themeRef.current = theme;
-    if (import.meta.env.VITE_MAP_BASEMAP === "carto") return; // escape hatch stays light-only
     // diff:false is load-bearing. maplibre-gl v6 implements setSprite/setGlyphs as diff
     // operations (v5 rejected them as unimplemented and rebuilt the style from scratch), so
     // the default diffing path now applies a theme swap in place — and leaves the canvas a
@@ -363,8 +359,8 @@ export function MapCanvas({
     markerElsRef.current.clear();
     for (const place of places) {
       if (place.latitude === null || place.longitude === null) continue;
-      const kind = markerKindFor(place, selectedIds, summary, radiusM);
-      const count = incidentCountForPlace(summary, place.id, radiusM);
+      const kind = markerKindFor(place, selectedIds, summary, analysis);
+      const count = incidentCountForPlace(summary, place.id, analysis, selectedIds);
       const el = document.createElement("div");
       el.className = "mc-pin-icon";
       const markerButton = document.createElement("button");
@@ -411,20 +407,20 @@ export function MapCanvas({
       el.removeAttribute("role");
       markersRef.current.push(marker);
     }
-  }, [places, selectedIds, summary, radiusM, draft, mapReady, identityByPlaceId, badgedPlaceIds]);
+  }, [places, selectedIds, summary, analysis, draft, mapReady, identityByPlaceId, badgedPlaceIds]);
 
   useEffect(() => {
     for (const [id, el] of markerElsRef.current) {
       el.classList.toggle("is-pulsing", id === pulsePlaceId);
     }
-  }, [pulsePlaceId, places, selectedIds, summary, radiusM, draft, mapReady, identityByPlaceId, badgedPlaceIds]);
+  }, [pulsePlaceId, places, selectedIds, summary, analysis, draft, mapReady, identityByPlaceId, badgedPlaceIds]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const source = map.getSource(RINGS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    source?.setData(ringsGeoJSON(places, selectedIds, summary, radiusM));
-  }, [places, selectedIds, summary, radiusM, mapReady, styleEpoch]);
+    source?.setData(ringsGeoJSON(places, selectedIds, summary, analysis));
+  }, [places, selectedIds, summary, analysis, mapReady, styleEpoch]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -443,6 +439,16 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    // A viewport/filter refresh replaces the point collection even when the layer noun stays
+    // the same. Close any card selected from the prior collection so stale record details do
+    // not linger after its source dots have been cleared or replaced.
+    const popup = incidentPopupRef.current;
+    incidentPopupRef.current = null;
+    popup?.remove();
+    selectedIncidentIdRef.current = null;
+    if (map.getLayer(INCIDENT_SELECTED_LAYER)) {
+      map.setFilter(INCIDENT_SELECTED_LAYER, incidentSelectionFilter(null));
+    }
     (map.getSource(INCIDENTS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
       incidentPoints ?? EMPTY_FC,
     );

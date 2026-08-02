@@ -124,6 +124,26 @@ def test_arrest_sentinel_never_appears_even_with_huge_bbox(tmp_path) -> None:
     )
     assert result["returned_count"] == 1
     assert result["points"][0]["id"] == "inc-1"
+    assert result["unmappable_citywide_count"] == 1
+    session.close()
+
+
+def test_partial_null_coordinate_is_disclosed_as_unmappable(tmp_path) -> None:
+    session = _session(tmp_path)
+    session.add(
+        _incident(1, source_dataset="seattle_spd_arrests", longitude=None)
+    )
+    session.commit()
+
+    result = incident_points(
+        session,
+        bounds=MapBounds(**BOUNDS),
+        layer="arrests",
+        **DATES,
+    )
+
+    assert result["total_count"] == 0
+    assert result["unmappable_citywide_count"] == 1
     session.close()
 
 

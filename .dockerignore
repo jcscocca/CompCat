@@ -1,4 +1,6 @@
 .git
+.env*
+!.env*.example
 .venv
 .pytest_cache
 .ruff_cache
@@ -13,3 +15,7 @@ app/static/dashboard
 __pycache__
 app/data/tiles
 .tools
+.agents
+.claude
+.Codex
+.codex

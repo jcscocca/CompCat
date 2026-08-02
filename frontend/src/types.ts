@@ -31,6 +31,22 @@ export type CrimeSummary = {
   nearest_incident_m: number | null;
   incidents_per_visit: number | null;
   incidents_per_hour_dwell: number | null;
+  /** Provenance for the persisted aggregate row. Absent only on older API responses. */
+  analysis_run_id?: string | null;
+  layer?: LayerKey | null;
+};
+
+export type PersistedAnalysisScope = {
+  run_id: string;
+  /** Null means a legacy run predating selected-place provenance. */
+  place_ids: string[] | null;
+  radii_m: number[] | null;
+  analysis_start_date: string;
+  analysis_end_date: string;
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  nibrs_group: string | null;
+  layer: LayerKey;
 };
 
 export type IncidentDetail = {
@@ -118,6 +134,8 @@ export type DashboardSummary = {
   crime_summaries: CrimeSummary[];
   analysis: {
     available_radii_m: number[];
+    /** Exact metadata for the run that owns crime_summaries. Older servers omit it. */
+    persisted_scope?: PersistedAnalysisScope | null;
   };
   exports: {
     tableau_place_summary_csv: string;

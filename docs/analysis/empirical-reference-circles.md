@@ -389,9 +389,10 @@ of Seattle:
   changes; and
 - moving or filtering incident points must not change the reference-center frame.
 
-### 8.6 Review
+### 8.6 Continuing validation
 
-Before launch, review the method and user-facing copy with:
+As a post-release validation follow-up—not an unrecorded launch gate—review the method and
+user-facing copy with:
 
 - a spatial statistician or quantitative criminologist;
 - Seattle community users who understand what question the comparison needs to answer; and

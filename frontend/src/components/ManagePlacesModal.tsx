@@ -5,17 +5,19 @@ import { BulkPlaceEntry } from "./BulkPlaceEntry";
 import { Notice } from "./Notice";
 import { PersonalUpload } from "./PersonalUpload";
 import { PlaceForm } from "./PlaceForm";
-import { incidentCountForPlace } from "../lib/incidentSummaries";
+import { hasIncidentSummaryForAnalysis, incidentCountForPlace } from "../lib/incidentSummaries";
 import { isSensitive } from "../lib/sensitivity";
-import type { DashboardSummary, Place, PlaceCreate } from "../types";
+import type { AnalysisSettings, DashboardSummary, Place, PlaceCreate } from "../types";
 
 export type ManageView = "manage" | "manual" | "import" | "upload";
 
 type Props = {
   places: Place[];
   selectedIds: Set<string>;
+  /** Full current analysis list, including ad-hoc coordinate ids. */
+  analysisPlaceIds: Set<string>;
   summary: DashboardSummary | null;
-  radiusM: number;
+  analysis: AnalysisSettings;
   addPinMode: boolean;
   search: ReactNode;
   initialView: ManageView;
@@ -60,8 +62,9 @@ function pinSvg(selected: boolean) {
 export function ManagePlacesModal({
   places,
   selectedIds,
+  analysisPlaceIds,
   summary,
-  radiusM,
+  analysis,
   addPinMode,
   search,
   initialView,
@@ -83,7 +86,7 @@ export function ManagePlacesModal({
   );
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const analyzedAtRadius = summary?.crime_summaries.some((entry) => entry.radius_m === radiusM) ?? false;
+  const analyzedInScope = hasIncidentSummaryForAnalysis(summary, analysis, analysisPlaceIds);
   const modalRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const renameActionRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -255,8 +258,8 @@ export function ManagePlacesModal({
                 <ul className="mc-list" aria-label="Saved places">
                   {places.map((place) => {
                     const selected = selectedIds.has(place.id);
-                    const count = incidentCountForPlace(summary, place.id, radiusM);
-                    const low = count === null && analyzedAtRadius && selected;
+                    const count = incidentCountForPlace(summary, place.id, analysis, analysisPlaceIds);
+                    const low = count === null && analyzedInScope && selected;
                     const confirmingRemove = confirmingRemoveId === place.id;
                     const editingPlace = editing?.id === place.id;
                     return (
@@ -317,7 +320,7 @@ export function ManagePlacesModal({
                         <span>Include in export</span>
                       </label>
                       <div className="right">
-                        {count !== null ? <span className="cnt">{count} {summary?.layer === "calls" ? "calls" : summary?.layer === "arrests" ? "arr." : "inc."}</span> : null}
+                        {count !== null ? <span className="cnt">{count} {analysis.layer === "calls" ? "calls" : analysis.layer === "arrests" ? "arr." : "inc."}</span> : null}
                         {low ? <span className="cnt low">Low data</span> : null}
                       </div>
                       <div className="mc-place-actions">

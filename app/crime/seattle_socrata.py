@@ -4,6 +4,7 @@ import csv
 import json
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date
 from io import StringIO
 from pathlib import Path
@@ -27,7 +28,9 @@ _SOQL_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}:\d{2}(\.\d+
 
 
 def _safe_soql_field(field: str) -> str:
-    if not _SOQL_FIELD_RE.match(field):
+    # Socrata's immutable, per-row system identifier is the one permitted pseudo-column.
+    # Other colon-prefixed system fields are deliberately not accepted.
+    if field != ":id" and not _SOQL_FIELD_RE.match(field):
         raise ValueError(f"Unsafe SoQL field name: {field!r}")
     return field
 
@@ -36,6 +39,17 @@ def _safe_soql_timestamp(value: str) -> str:
     if not _SOQL_TIMESTAMP_RE.match(value):
         raise ValueError(f"Unsafe SoQL timestamp literal: {value!r}")
     return value
+
+
+def _soql_string_literal(value: str) -> str:
+    """Quote a source-owned cursor value for SoQL.
+
+    SoQL string literals use SQL-style doubled apostrophes. Reject control characters so a
+    malformed upstream identifier cannot create a multi-line or otherwise ambiguous query.
+    """
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("Unsafe SoQL string literal")
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _safe_socrata_base_url(value: str) -> str:
@@ -81,6 +95,14 @@ def floor_start_date(start_date: date | None, floor: date = CRIME_DATA_FLOOR) ->
     return start_date
 
 
+@dataclass(frozen=True)
+class SocrataCursor:
+    """Exclusive composite keyset position in the source's configured sort order."""
+
+    date_value: str
+    id_value: str
+
+
 class SeattleSocrataClient:
     def __init__(
         self,
@@ -90,6 +112,7 @@ class SeattleSocrataClient:
         *,
         mapper: Callable[[dict[str, Any]], CrimeIncidentData] | None = None,
         date_field: str = "offense_date",
+        cursor_id_field: str = ":id",
         data_floor: date = CRIME_DATA_FLOOR,
     ) -> None:
         self.base_url = _safe_socrata_base_url(base_url)
@@ -97,6 +120,7 @@ class SeattleSocrataClient:
         self.app_token = app_token
         self.mapper = mapper or crime_incident_from_mapping
         self.date_field = _safe_soql_field(date_field)
+        self.cursor_id_field = _safe_soql_field(cursor_id_field)
         self.data_floor = data_floor
 
     def _fetch_rows(self, query_params: dict[str, Any]) -> list[dict[str, Any]]:
@@ -130,29 +154,57 @@ class SeattleSocrataClient:
         self,
         *,
         since_iso: str | None = None,
+        since_id: str | None = None,
         end_date: date | None = None,
         limit: int = 5000,
-    ) -> tuple[list[CrimeIncidentData], str | None]:
-        """Keyset page forward through the window, ordered by ``date_field`` ASC.
+    ) -> tuple[list[CrimeIncidentData], SocrataCursor | None]:
+        """Keyset page forward through the window in stable date/Socrata-row-ID order.
 
-        Returns the mapped incidents plus the raw ``date_field`` value of the last row (the next
-        cursor), or ``None`` when the page is short (the window is exhausted). Paging by a
-        monotonic date cursor with an inclusive ``>=`` lower bound — instead of a numeric
-        ``$offset`` — is stable under concurrent inserts: new rows land at future dates *ahead*
-        of the cursor and never shift the portion already walked, so no row is skipped. The
-        inclusive bound re-reads the boundary date's rows, which the ingest dedupe absorbs.
+        ``since_iso`` without ``since_id`` remains supported for callers starting from a date
+        watermark; that first boundary is inclusive. Once a page is returned, the cursor pairs
+        the last row's date with its unique Socrata ``:id``; subsequent bounds are exclusive.
+        This advances through arbitrarily many rows sharing one timestamp without offset drift.
         """
         floor_iso = f"{self.data_floor.isoformat()}T00:00:00"
         if since_iso is None or since_iso < floor_iso:
             since_iso = floor_iso
-        where = f"{self.date_field} >= '{_safe_soql_timestamp(since_iso)}'"
+            since_id = None
+        safe_timestamp = _safe_soql_timestamp(since_iso)
+        if since_id is None:
+            where = f"{self.date_field} >= '{safe_timestamp}'"
+        else:
+            safe_id = _soql_string_literal(since_id)
+            where = (
+                f"({self.date_field} > '{safe_timestamp}' or "
+                f"({self.date_field} = '{safe_timestamp}' and "
+                f"{self.cursor_id_field} > {safe_id}))"
+            )
         if end_date is not None:
             where += f" and {self.date_field} <= '{end_date.isoformat()}T23:59:59'"
+        # Socrata's :id is unique and non-null per source row. It remains distinct from the
+        # domain external ID used for ingest dedupe; this matters for 911 data, where multiple
+        # responding-unit rows intentionally share one CAD event number.
+        where += f" and {self.cursor_id_field} is not null"
         rows = self._fetch_rows(
-            {"$limit": limit, "$order": f"{self.date_field} ASC", "$where": where}
+            {
+                "$limit": limit,
+                # SODA's default projection omits system columns even when they appear in
+                # $order/$where. Request the immutable row id explicitly so a full page can
+                # always produce the next composite cursor. Verified across all three Seattle
+                # source datasets; `*` retains the domain fields consumed by each mapper.
+                "$select": f"*, {self.cursor_id_field}",
+                "$order": f"{self.date_field} ASC, {self.cursor_id_field} ASC",
+                "$where": where,
+            }
         )
         incidents = [self.mapper(row) for row in rows]
-        next_cursor = _first(rows[-1], self.date_field) if len(rows) == limit else None
+        next_cursor = None
+        if len(rows) == limit:
+            cursor_date = _first(rows[-1], self.date_field)
+            cursor_id = _first(rows[-1], self.cursor_id_field)
+            if cursor_date is None or cursor_id is None:
+                raise ValueError("Socrata keyset row is missing its configured cursor fields")
+            next_cursor = SocrataCursor(date_value=str(cursor_date), id_value=str(cursor_id))
         return incidents, next_cursor
 
 

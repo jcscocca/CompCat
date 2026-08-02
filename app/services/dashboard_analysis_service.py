@@ -341,8 +341,8 @@ def _incident_detail_rows(
     return sorted(
         rows,
         key=lambda row: (
-            str(row["place_label"]).lower(),
             float(row["distance_m"]),
+            str(row["place_label"]).lower(),
             str(row["occurred_at"] or row["reported_at"] or ""),
             str(row["incident_id"]),
         ),

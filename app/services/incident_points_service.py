@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, time
 from typing import Any
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dashboard_schemas import (
@@ -90,6 +90,14 @@ def incident_points(
         CrimeIncident.longitude >= west,
         CrimeIncident.longitude <= east,
     )
+    # SPD uses both null coordinates and (-1, -1) for records whose public location cannot
+    # be mapped. The Seattle viewport clamp keeps the sentinel off the map; count it here so
+    # the completeness disclosure does not silently treat those rows as located.
+    unmappable_predicate = or_(
+        CrimeIncident.latitude.is_(None),
+        CrimeIncident.longitude.is_(None),
+        and_(CrimeIncident.latitude == -1.0, CrimeIncident.longitude == -1.0),
+    )
 
     def spatial(statement: Select) -> Select:
         return statement.where(spatial_predicate)
@@ -116,7 +124,7 @@ def incident_points(
                 .filter(
                     and_(
                         CrimeIncident.source_dataset.in_(sources),
-                        CrimeIncident.latitude.is_(None),
+                        unmappable_predicate,
                     )
                 )
                 .label("unmappable_citywide_count"),

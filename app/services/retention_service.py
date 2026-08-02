@@ -2,10 +2,11 @@
 
 A CompCat session is an anonymous 24h token whose expiry SLIDES within a signed
 absolute-age ceiling. Row age alone cannot distinguish "abandoned" from "long-lived":
-the sweep keys on the OWNING IDENTITY instead. An identity is live if it has created or
-resumed a session, run an analysis, created a place, or updated a place inside the
-retention window. Everything belonging to identities silent for the whole window is
-removed on the window set by MCA_SESSION_DATA_RETENTION_DAYS (0 disables).
+the sweep keys on the OWNING IDENTITY instead. An identity is live if it has recently
+created or resumed a session, run an analysis, created or updated a place, uploaded a
+batch, written staging rows, or created stops. Everything belonging to identities silent
+for the whole window is removed on the window set by
+MCA_SESSION_DATA_RETENTION_DAYS (0 disables), including clusters of every origin.
 
 Deletes run in bounded batches so a large backlog cannot hold a single long transaction
 open against the production database, and children go before parents because the
@@ -23,15 +24,17 @@ from app.config import Settings
 from app.models import (
     AnalysisRun,
     GeocodeCache,
+    ImportBatch,
     PlaceCluster,
     PlaceCrimeSummary,
     SessionActivity,
+    StagingLocationObservation,
     StatisticalComparison,
     StatisticalComparisonOption,
     StatisticalPairwiseResult,
+    StopVisit,
     utc_now,
 )
-from app.services.manual_place_service import MANUAL_CLUSTER_METHOD
 
 DEFAULT_BATCH_SIZE = 5000
 
@@ -51,7 +54,7 @@ def _delete_in_batches(session: Session, model, condition, batch_size: int) -> i
 
 
 def _active_identities(cutoff: datetime) -> Any:
-    """Identities with a recent visit, analysis, place creation, or place update."""
+    """Identities with recent session, analysis, place, import, staging, or stop activity."""
     return select(
         union(
             select(SessionActivity.user_id_hash).where(
@@ -60,6 +63,11 @@ def _active_identities(cutoff: datetime) -> Any:
             select(AnalysisRun.user_id_hash).where(AnalysisRun.created_at >= cutoff),
             select(PlaceCluster.user_id_hash).where(PlaceCluster.created_at >= cutoff),
             select(PlaceCluster.user_id_hash).where(PlaceCluster.updated_at >= cutoff),
+            select(ImportBatch.user_id_hash).where(ImportBatch.uploaded_at >= cutoff),
+            select(StagingLocationObservation.user_id_hash).where(
+                StagingLocationObservation.created_at >= cutoff
+            ),
+            select(StopVisit.user_id_hash).where(StopVisit.created_at >= cutoff),
         ).subquery()
     )
 
@@ -78,7 +86,10 @@ def sweep_retention(
         "statistical_comparisons": 0,
         "analysis_runs": 0,
         "place_crime_summaries": 0,
+        "stop_visits": 0,
+        "staging_location_observations": 0,
         "place_clusters": 0,
+        "import_batches": 0,
         "geocode_cache": 0,
         "session_activity": 0,
     }
@@ -119,15 +130,35 @@ def sweep_retention(
         counts["place_crime_summaries"] = _delete_in_batches(
             session, PlaceCrimeSummary, abandoned(PlaceCrimeSummary), batch_size
         )
-        # Manual (entered-place) clusters only. Upload-derived clusters belong to the
-        # personal-upload delete path, and an expired cluster that a surviving summary
-        # still points at stays until that summary ages out — the FK has no cascade.
+        counts["stop_visits"] = _delete_in_batches(
+            session, StopVisit, abandoned(StopVisit), batch_size
+        )
+        counts["staging_location_observations"] = _delete_in_batches(
+            session,
+            StagingLocationObservation,
+            abandoned(StagingLocationObservation),
+            batch_size,
+        )
+        # All cluster origins are session-owned. By this point abandoned summaries and stop
+        # visits are gone; the NOT IN guards preserve any parent still referenced by a live row.
         counts["place_clusters"] = _delete_in_batches(
             session,
             PlaceCluster,
-            (PlaceCluster.cluster_method == MANUAL_CLUSTER_METHOD)
-            & abandoned(PlaceCluster)
-            & PlaceCluster.id.not_in(select(PlaceCrimeSummary.place_cluster_id)),
+            abandoned(PlaceCluster)
+            & PlaceCluster.id.not_in(select(PlaceCrimeSummary.place_cluster_id))
+            # A retained raw upload may still reference its cluster through a StopVisit.
+            # Keep that parent until the visit is eligible too.
+            & PlaceCluster.id.not_in(
+                select(StopVisit.place_cluster_id).where(
+                    StopVisit.place_cluster_id.is_not(None)
+                )
+            ),
+            batch_size,
+        )
+        counts["import_batches"] = _delete_in_batches(
+            session,
+            ImportBatch,
+            (ImportBatch.uploaded_at < cutoff) & ImportBatch.user_id_hash.not_in(active),
             batch_size,
         )
         counts["session_activity"] = _delete_in_batches(

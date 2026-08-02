@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import { clampWidth, drawerMax, DRAWER_DEFAULT, DRAWER_MIN } from "./drawer";
+import { clampWidth, drawerMax, DRAWER_DEFAULT, DRAWER_MIN, isCompactDesktopViewport, isMobileViewport } from "./drawer";
 
 function setViewport(width: number) {
   Object.defineProperty(window, "innerWidth", { value: width, configurable: true, writable: true });
@@ -27,6 +27,17 @@ describe("drawer math", () => {
     expect(clampWidth(100)).toBe(DRAWER_MIN);
     expect(clampWidth(5000)).toBe(drawerMax());
     expect(clampWidth(512.6)).toBe(513);
+  });
+});
+
+describe("viewport mode boundaries", () => {
+  it("gives each exact boundary to one mode", () => {
+    expect(isMobileViewport(760)).toBe(true);
+    expect(isCompactDesktopViewport(760)).toBe(false);
+    expect(isMobileViewport(761)).toBe(false);
+    expect(isCompactDesktopViewport(761)).toBe(true);
+    expect(isCompactDesktopViewport(1280)).toBe(true);
+    expect(isCompactDesktopViewport(1281)).toBe(false);
   });
 });
 

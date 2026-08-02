@@ -11,22 +11,24 @@ the roadmap live under [`docs/`](docs/README.md) — start there before changing
 
 CompCat reports *reported incident context*. It MUST NOT score safety, rank places as
 safe/unsafe/dangerous, or claim a user was present at an incident. The assistant refuses
-safety-score requests by design (`app/assistant/agent.py`). Keep this true in code and
-copy.
+safety-score requests by design (`app/assistant/output_guard.py`, wired through
+`app/assistant/agent.py`). Keep this true in code and copy.
 
 ## API tiers
 
 - **Public** (in OpenAPI, require a real session via `required_public_user_hash`):
-  `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/exports/tableau/*`, and
-  `/uploads` (personal data upload — additionally gated by `public_enable_personal_uploads`,
-  off by default, so it 404s until enabled). The React UI (`frontend/src/api/client.ts`)
-  calls only this tier.
+  `/sessions`, `/places*`, `/dashboard/*`, `/assistant/chat`, `/assistant/commands`,
+  `/exports/tableau/*`, `/exports/analysis.csv`, and
+  `/uploads` (personal data upload — new `POST` requests are additionally gated by
+  `public_enable_personal_uploads`, off by default, while authenticated `DELETE` remains
+  available for erasure). The React UI (`frontend/src/api/client.ts`) calls only this tier.
 - **Internal** (`/internal/...`, `include_in_schema=False`, allow the demo-identity
   fallback `current_user_hash`): everything the UI does not call —
   `/internal/analysis/*`, `/internal/imports*`, `/internal/crime/*`,
   `/internal/places`, `/internal/exports/*`. Do not re-expose these on bare public paths;
   `tests/test_internal_surface.py` enforces this.
-- **Admin**: `/admin/crime/ingest/socrata` is guarded by the `X-Admin-Token` header
+- **Admin**: `/admin/crime/ingest/socrata` and the schema-hidden
+  `/admin/maintenance/retention-sweep` are guarded by the `X-Admin-Token` header
   (`MCA_ADMIN_INGEST_TOKEN`).
 
 ## Assistant LLM

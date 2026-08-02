@@ -159,6 +159,25 @@ def test_violation_completed_across_split_still_trips() -> None:
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    "parts",
+    [
+        ["I'd give it a ", "2/", "10 overall."],
+        ["My rating is ", "★★", "☆☆☆."],
+        ["This neighborhood earns a ", "D", " grade."],
+    ],
+)
+def test_proxy_rating_completed_across_split_still_trips(parts: list[str]) -> None:
+    from app.assistant.output_guard import output_guard_redirect
+
+    async def run() -> None:
+        with pytest.raises(StreamGuardTripped):
+            async for _chunk in guarded_stream(_deltas(parts), output_guard_redirect):
+                pass
+
+    asyncio.run(run())
+
+
 def test_violation_in_final_partial_word_trips_on_end_scan() -> None:
     # The stream ends mid-word; only the post-loop full-text scan can see it.
     def check(text: str) -> str | None:

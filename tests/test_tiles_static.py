@@ -65,6 +65,30 @@ def test_missing_tiles_file_is_404_not_boot_failure(tmp_path, monkeypatch) -> No
     assert client.get("/health").status_code == 200
 
 
+def test_missing_tiles_directory_is_404_not_runtime_error(tmp_path, monkeypatch) -> None:
+    missing_dir = tmp_path / "not-provisioned"
+    client = _client(missing_dir, monkeypatch)
+
+    assert client.head("/tiles/seattle.pmtiles").status_code == 404
+    assert (
+        client.get(
+            "/tiles/seattle.pmtiles", headers={"Range": "bytes=0-6"}
+        ).status_code
+        == 404
+    )
+    # Tile provisioning is optional; its absence must not affect the public app.
+    assert client.get("/health").status_code == 200
+
+    missing_dir.mkdir()
+    (missing_dir / "seattle.pmtiles").write_bytes(b"PMTiles-test-payload")
+    assert (
+        client.get(
+            "/tiles/seattle.pmtiles", headers={"Range": "bytes=0-6"}
+        ).status_code
+        == 206
+    )
+
+
 def test_built_dashboard_serves_basemap_glyphs_and_sprites(tmp_path, monkeypatch) -> None:
     # Vite copies frontend/public/basemaps-assets/ into the built dashboard dir; the
     # map style requests them at /basemaps-assets/. The vite dev server masks a missing

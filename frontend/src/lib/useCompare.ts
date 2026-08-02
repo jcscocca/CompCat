@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 
 import { analyzePlaces, comparePlaces, friendlyMessageOr, getIncidentDetails, getNeighborhoodAnalysis } from "../api/client";
 import type { AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
+import { analysisDateRangeError } from "./analysisDateRange";
 import type { AddressEntry } from "./useAddressList";
 
 export interface CompareController {
@@ -70,6 +71,11 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
 
   async function run() {
     if (entries.length < 1) return;
+    const dateError = analysisDateRangeError(analysis.startDate, analysis.endDate);
+    if (dateError) {
+      setError(dateError);
+      return;
+    }
     setError("");
     setRunning(true);
     const version = versionRef.current + 1;

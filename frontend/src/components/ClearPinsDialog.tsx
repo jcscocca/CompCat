@@ -85,7 +85,7 @@ export function ClearPinsDialog({
         </div>
         <h2 id="clear-pins-title">Clear all pins?</h2>
         <p id="clear-pins-description">{removalCopy(savedPlaceCount, hasUnsavedPins)}</p>
-        <p id="clear-pins-history">This cannot be undone. Previous result cards will remain in your Tabby conversation.</p>
+        <p id="clear-pins-history">This also clears recent address searches from this tab. This cannot be undone. Previous result cards will remain in your Tabby conversation.</p>
         {error ? <p className="mc-inline-error" role="alert">{error}</p> : null}
         <div className="mc-clear-pins-actions">
           <button type="button" className="mc-place-action" disabled={busy} onClick={onCancel}>Cancel</button>

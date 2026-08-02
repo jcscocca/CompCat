@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     socrata_arrests_dataset_id: str = "9bjs-7a7w"
     socrata_calls_dataset_id: str = "33kz-ixgy"
     socrata_app_token: str | None = Field(default=None, validation_alias="SOCRATA_APP_TOKEN")
+    # Incremental backfills revisit this many days before each source's newest stored incident.
+    # That bounded overlap reconciles late-published rows and upstream corrections without
+    # re-walking the full dataset nightly. Explicit start_date requests are not widened. 0 keeps
+    # strict watermark behavior; the upper bound prevents an accidental near-full nightly scan.
+    socrata_reconciliation_days: int = Field(default=14, ge=0, le=365)
     # Data-recency threshold for the monitoring probe GET /health/data: a layer whose newest
     # incident date lags more than this many days is reported stale (503) so an external monitor
     # catches a dead ingest cron, a broken admin token, or an upstream Socrata outage. A lag of

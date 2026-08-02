@@ -1,7 +1,7 @@
 # Install OpenAI GPT-OSS 120B for the PERSONAL ThinkPad llama-swap instance.
 #
 # The default target is the user's existing model library:
-#   C:\Users\jacob\AI Models\Library\OpenAI\gpt-oss-120b
+#   $env:USERPROFILE\AI Models\Library\OpenAI\gpt-oss-120b
 #
 # This installer is intentionally separate from start-compcat.ps1. The model is about
 # 59 GiB and should be downloaded once, explicitly, rather than during normal app startup.

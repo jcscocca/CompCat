@@ -19,6 +19,9 @@ app/data/tiles/
 frontend/public/basemaps-assets/
 .tools/
 .claude/
+.agents/
+.Codex/
+.codex/
 soak-out/
 assistant-eval-results/
 *.db
