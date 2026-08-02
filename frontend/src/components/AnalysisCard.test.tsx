@@ -28,7 +28,8 @@ vi.mock("../api/client", () => ({
 function opt(id: string, label: string, count: number, rate: number): SiteComparisonOption {
   return { id, label, geometry_type: "place_buffer", radius_m: 250, incident_count: count, exposure: 1, exposure_unit: "square_km_days", incident_rate: rate };
 }
-function pair(a: string, b: string, decision: SiteDecisionClass, winner: string | null, ratio: number): SitePairwiseResult {
+function pair(a: string, b: string, decision: SiteDecisionClass, winner: string | null, otherMultiple: number): SitePairwiseResult {
+  const ratio = otherMultiple > 0 ? 1 / otherMultiple : 0;
   return {
     id: `${a}-${b}`, option_a_id: a, option_a_label: a, option_b_id: b, option_b_label: b,
     winner_option_id: winner, winner_label: winner, decision_class: decision, method: "quasipoisson",
@@ -185,7 +186,8 @@ describe("AnalysisCard", () => {
     expect(screen.getByText("Comparison")).toBeInTheDocument();
     const callout = screen.getByTestId("compare-callout");
     expect(callout).toHaveTextContent("Pike");
-    expect(callout).toHaveTextContent(/lowest/);
+    expect(callout).toHaveTextContent(/lower reported incident rate/);
+    expect(callout).not.toHaveTextContent(/lowest|every other/);
   });
 
   it("renders comparison, neighborhood trends, and incident details together when expanded", async () => {

@@ -18,6 +18,18 @@ describe("CompareVerdict", () => {
     expect(screen.getByText(/statistically lower than every other/i)).toBeInTheDocument();
   });
 
+  it("clear: uses comparative wording for exactly two places", () => {
+    const { container } = render(
+      <CompareVerdict
+        callout={{ ...base, loweredCount: 1, otherCount: 1 }}
+        noun={incidentNoun("reported")}
+      />,
+    );
+    expect(container).toHaveTextContent(/has the lower reported incident rate/i);
+    expect(container).toHaveTextContent(/statistically lower than the other place/i);
+    expect(container).not.toHaveTextContent(/lowest|every other/i);
+  });
+
   it("partial: says lower than N of the M others", () => {
     render(<CompareVerdict callout={{ ...base, kind: "partial", loweredCount: 1, otherCount: 3 }} noun={incidentNoun("reported")} />);
     expect(screen.getByText(/lower than 1 of the 3 other places/i)).toBeInTheDocument();
@@ -36,6 +48,17 @@ describe("CompareVerdict", () => {
     expect(screen.getByText(/no statistically clear difference/i)).toBeInTheDocument();
   });
 
+  it("none: uses between-two wording for exactly two places", () => {
+    const { container } = render(
+      <CompareVerdict
+        callout={{ ...base, kind: "none", loweredCount: 0, otherCount: 1 }}
+        noun={incidentNoun("reported")}
+      />,
+    );
+    expect(container).toHaveTextContent(/between these two places at this sample size/i);
+    expect(container).not.toHaveTextContent(/across|none of the gaps/i);
+  });
+
   it("none: attributes the gaps to sample size, not to normality", () => {
     const { container } = render(<CompareVerdict callout={{ ...base, kind: "none" }} noun={incidentNoun("reported")} />);
     expect(container.textContent).toContain("none of the gaps are statistically clear at this sample size.");
@@ -45,6 +68,17 @@ describe("CompareVerdict", () => {
   it("inconclusive: leads with the caveat text", () => {
     render(<CompareVerdict callout={{ ...base, kind: "inconclusive" }} noun={incidentNoun("reported")} />);
     expect(screen.getByText(/not enough data here/i)).toBeInTheDocument();
+  });
+
+  it("inconclusive: uses between-two wording for exactly two places", () => {
+    const { container } = render(
+      <CompareVerdict
+        callout={{ ...base, kind: "inconclusive", loweredCount: 0, otherCount: 1 }}
+        noun={incidentNoun("reported")}
+      />,
+    );
+    expect(container).toHaveTextContent(/comparison between these two places/i);
+    expect(container).not.toHaveTextContent(/comparison across these places/i);
   });
 
   it("uses the layer noun (911 calls)", () => {
