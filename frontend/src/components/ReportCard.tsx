@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { getAnalysisReport, getTrends } from "../api/client";
 import { buildReportZip, downloadBlob, jsonBlob, printableBlob, reportFilename, trendCsvBlob, trendFilename } from "../lib/reportExport";
+import { reportOverlapExplanation } from "../lib/reportOverlap";
 import type { AnalysisReport, AnalysisSettings, LayerKey, NeighborhoodAnalysis } from "../types";
 import { ReportReferencePlot } from "./ReportReferencePlot";
 import { TrendSection } from "./TrendSection";
@@ -55,6 +56,7 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
   const [exportError, setExportError] = useState("");
   const mismatch = scopeMismatch(report, workspaceAnalysis);
   const overview = report.sections.overview;
+  const overlapExplanation = reportOverlapExplanation(report);
   const maxPlaceCount = Math.max(1, ...report.sections.place_context.map((place) => place.record_count));
   const hasTrendContext = Boolean(neighborhood?.places.some((place) =>
     place.baselines?.some((baseline) => baseline.kind === "mcpp"),
@@ -162,9 +164,14 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
       <div className="mc-report-overview">
         <div className="mc-report-total"><span>Unique source records</span><strong>{overview.unique_source_record_count}</strong><small>Unique-source-record basis</small></div>
         <div className="mc-report-facts">
-          <div><span>Per-place memberships</span><strong>{overview.membership_count}</strong></div>
           <div><span>Latest recorded event</span><strong>{report.scope.latest_recorded_event_date ?? "Not available"}</strong></div>
         </div>
+        {overlapExplanation ? (
+          <div className="mc-report-overlap" role="note">
+            <strong>{overlapExplanation.headline}</strong>
+            <span>{overlapExplanation.detail}</span>
+          </div>
+        ) : null}
         <p className="mc-report-provenance-line">
           Generated {formatDateTime(report.generated_at)} · Source row last ingested {formatDateTime(report.scope.latest_row_ingested_at)}
         </p>

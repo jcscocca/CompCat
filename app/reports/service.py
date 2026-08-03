@@ -30,6 +30,7 @@ from app.reports.schemas import (
     ReportComparisonSection,
     ReportExportPolicy,
     ReportFilters,
+    ReportOverlapSummary,
     ReportOverviewSection,
     ReportPairwiseComparison,
     ReportPlaceContext,
@@ -179,7 +180,15 @@ def create_analysis_report(
     )
 
     limited_rows = rows[: request.record_limit]
-    unique_source_record_count = len({str(row["incident_id"]) for row in rows})
+    memberships_by_source = Counter(str(row["incident_id"]) for row in rows)
+    unique_source_record_count = len(memberships_by_source)
+    overlap_summary = ReportOverlapSummary(
+        shared_source_record_count=sum(
+            membership_count > 1 for membership_count in memberships_by_source.values()
+        ),
+        additional_membership_count=len(rows) - unique_source_record_count,
+        maximum_places_per_record=max(memberships_by_source.values(), default=0),
+    )
     records = _report_records(
         limited_rows,
         selection_id_by_internal=selection_id_by_internal,
@@ -230,6 +239,7 @@ def create_analysis_report(
                 counting_unit=profile.counting_unit,
                 unique_source_record_count=unique_source_record_count,
                 membership_count=len(rows),
+                overlap_summary=overlap_summary,
                 returned_record_count=len(records),
                 record_limit=request.record_limit,
                 records_truncated=len(rows) > request.record_limit,

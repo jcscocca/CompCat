@@ -960,10 +960,12 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-report-overview{display:grid;grid-template-columns:minmax(130px,.8fr) 1.4fr;gap:12px;padding:15px 17px}
 .mc-report-total{display:flex;flex-direction:column;justify-content:center;min-height:100px;padding:14px;border-radius:10px;background:var(--report-accent);color:white}
 .mc-report-total span,.mc-report-total small{font-size:10px}.mc-report-total strong{font:700 39px/1 Georgia,serif;margin:4px 0}
-.mc-report-facts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.mc-report-facts{display:grid;grid-template-columns:1fr;gap:7px}
 .mc-report-facts>div{min-width:0;display:flex;flex-direction:column;justify-content:center;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-raised)}
 .mc-report-facts span{display:block;margin-bottom:3px;font-size:9px;letter-spacing:.03em;text-transform:uppercase;color:var(--text-dim)}
 .mc-report-facts strong{display:block;font-size:11px;line-height:1.35;color:var(--text-strong);overflow-wrap:anywhere}
+.mc-report-overlap{grid-column:1/-1;display:grid;gap:3px;padding:10px 12px;border-left:3px solid var(--report-accent);border-radius:0 8px 8px 0;background:var(--report-soft);font-size:11px;line-height:1.45}
+.mc-report-overlap strong{color:var(--text-strong)}.mc-report-overlap span{color:var(--text-dim)}
 .mc-report-provenance-line{grid-column:1/-1;margin:-4px 1px 0;font-size:9.5px;line-height:1.4;color:var(--text-dim)}
 .mc-report-compact-places{display:grid;gap:8px;padding:0 17px 16px}.mc-report-compact-places>div,.mc-report-bar{display:grid;grid-template-columns:minmax(90px,1fr) 1.6fr 35px;gap:9px;align-items:center;font-size:11px}.mc-report-compact-places i,.mc-report-bar i{height:7px;border-radius:8px;background:var(--surface-sunken);overflow:hidden}.mc-report-compact-places b,.mc-report-bar b{display:block;height:100%;border-radius:8px;background:var(--report-accent)}
 .mc-report-compact-places p{margin:4px 0 0;font-size:11px;line-height:1.45;color:var(--text-dim)}
