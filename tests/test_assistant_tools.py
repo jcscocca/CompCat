@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from app.assistant.tools import AssistantClarification, AssistantToolError, execute_tool
+from app.crime.seattle_socrata import calls_data_floor
 from app.db import get_sessionmaker
 from app.geocoding.providers import GeocodeHit
 from app.main import create_app
@@ -63,29 +64,52 @@ def _session_with_place_and_crime(tmp_path):
 
 def test_analyze_places_honors_the_active_layer(tmp_path):
     session, user_hash = _session_with_place_and_crime(tmp_path)
+    calls_floor = calls_data_floor()
+    call_date = calls_floor + timedelta(days=11)
     # A 911 call at the same spot as the reported crime, so the layers are distinguishable.
     session.add(
         CrimeIncident(
             id="call-1",
             external_incident_id="call-1",
             source_dataset="seattle_spd_911",
-            offense_start_utc=datetime(2024, 1, 12, tzinfo=UTC),
+            offense_start_utc=datetime(
+                call_date.year,
+                call_date.month,
+                call_date.day,
+                tzinfo=UTC,
+            ),
             offense_subcategory="DISTURBANCE - OTHER",
             latitude=47.6101,
             longitude=-122.3301,
         )
     )
     session.commit()
-    window = {
+    selection = {
         "place_ids": ["place-1"],
-        "analysis_start_date": "2024-01-01",
-        "analysis_end_date": "2024-01-31",
         "radii_m": [250],
     }
     try:
-        calls = execute_tool(session, user_hash, "analyze_places", {**window, "layer": "calls"})
+        calls = execute_tool(
+            session,
+            user_hash,
+            "analyze_places",
+            {
+                **selection,
+                "analysis_start_date": (calls_floor - timedelta(days=31)).isoformat(),
+                "analysis_end_date": (calls_floor + timedelta(days=30)).isoformat(),
+                "layer": "calls",
+            },
+        )
         reported = execute_tool(
-            session, user_hash, "analyze_places", {**window, "layer": "reported"}
+            session,
+            user_hash,
+            "analyze_places",
+            {
+                **selection,
+                "analysis_start_date": "2024-01-01",
+                "analysis_end_date": "2024-01-31",
+                "layer": "reported",
+            },
         )
     finally:
         session.close()
@@ -93,8 +117,40 @@ def test_analyze_places_honors_the_active_layer(tmp_path):
     calls_ids = {i["incident_id"] for i in calls["result"]["incidents"]["incidents"]}
     assert calls_ids == {"call-1"}
     assert calls["result"]["settings_used"]["layer"] == "calls"
+    assert calls["result"]["report"]["profile"]["report_title"] == "911 Call Activity Report"
+    assert calls["result"]["report"]["sections"]["comparison"] is None
+    assert calls["result"]["report"]["scope"]["effective_start_date"] == calls_floor.isoformat()
     reported_ids = {i["incident_id"] for i in reported["result"]["incidents"]["incidents"]}
     assert reported_ids == {"incident-1"}
+    assert (
+        reported["result"]["report"]["profile"]["report_title"]
+        == "Reported Incident Context Report"
+    )
+
+
+def test_analyze_places_keeps_non_report_results_when_window_is_outside_coverage(tmp_path):
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    calls_floor = calls_data_floor()
+    try:
+        result = execute_tool(
+            session,
+            user_hash,
+            "analyze_places",
+            {
+                "place_ids": ["place-1"],
+                "radii_m": [250],
+                "analysis_start_date": (calls_floor - timedelta(days=60)).isoformat(),
+                "analysis_end_date": (calls_floor - timedelta(days=1)).isoformat(),
+                "layer": "calls",
+            },
+        )["result"]
+    finally:
+        session.close()
+
+    assert result["report"] is None
+    assert result["analysis"] is not None
+    assert result["neighborhood"] is not None
+    assert result["incidents"] is not None
 
 
 def test_analyze_places_rejects_unknown_layer(tmp_path):

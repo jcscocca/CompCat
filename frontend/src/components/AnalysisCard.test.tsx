@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalysisCard, categoryCounts } from "./AnalysisCard";
 import type {
   AnalysisCardData,
+  AnalysisReport,
   BaselineEntry,
   IncidentDetail,
   IncidentDetailsResponse,
@@ -119,6 +120,81 @@ function analyzeCard(over: Partial<AnalysisCardData> = {}): AnalysisCardData {
     ...over,
   };
 }
+
+function canonicalReport(): AnalysisReport {
+  const references = [
+    reference("mcpp", "Test Hill MCPP"),
+    reference("sector", "Sector M"),
+    reference("city", "Citywide"),
+  ].map((row) => ({
+    ...row,
+    counting_unit: "reported_offense_record",
+    counting_basis: "per_place_membership" as const,
+  }));
+  return {
+    report_id: "report-1",
+    schema_version: "1.0",
+    method_version: "analysis-report-v1",
+    profile: {
+      profile_version: "1.0",
+      layer: "reported",
+      report_title: "Reported Incident Context Report",
+      source_dataset: "seattle_spd_crime",
+      counting_unit: "reported_offense_record",
+      counting_unit_label: "Reported-offense record",
+      record_noun_singular: "reported incident record",
+      record_noun_plural: "reported incident records",
+      primary_time_field: "occurred_at",
+      primary_time_label: "Recorded time",
+      secondary_time_field: null,
+      secondary_time_label: null,
+      subtype_field: "offense_subcategory",
+      subtype_label: "Offense subcategory",
+      supported_filters: [],
+      capabilities: { reference_context: true, modeled_comparison: true, contextual_trend: false },
+      disclosures: ["Reported records do not establish personal presence or personal risk."],
+    },
+    selection_kind: "single_place",
+    comparison_mode: "none",
+    status: "complete",
+    generated_at: "2026-08-02T18:00:00Z",
+    scope: {
+      layer: "reported",
+      source_dataset: "seattle_spd_crime",
+      counting_unit: "reported_offense_record",
+      requested_start_date: "2025-01-01",
+      requested_end_date: "2025-10-27",
+      effective_start_date: "2025-01-01",
+      effective_end_date: "2025-10-27",
+      available_start_date: "2008-01-01",
+      latest_recorded_event_date: "2025-10-27",
+      latest_row_ingested_at: "2026-08-02T17:00:00Z",
+      confirmed_data_through: null,
+      radius_m: 250,
+      filters: { offense_category: null, offense_subcategory: null, arrest_offense_description: null, call_type: null, nibrs_group: null },
+    },
+    selection: [{ selection_id: "selection-1", label: "Downtown Seattle", latitude: 47.6, longitude: -122.33 }],
+    sections: {
+      overview: { counting_unit: "reported_offense_record", unique_counting_basis: "unique_source_records", membership_counting_basis: "per_place_membership", unique_source_record_count: 3, membership_count: 3, returned_record_count: 0, record_limit: 100, records_truncated: false },
+      place_context: [{
+        selection_id: "selection-1",
+        label: "Downtown Seattle",
+        counting_unit: "reported_offense_record",
+        counting_basis: "per_place_membership",
+        record_count: 3,
+        type_mix: [{ counting_unit: "reported_offense_record", counting_basis: "per_place_membership", label: "Theft", count: 3, share: 1 }],
+        temporal: { counting_unit: "reported_offense_record", counting_basis: "per_place_membership", hour_counts: Array(24).fill(0), dow_counts: [1, 0, 1, 0, 1, 0, 0], monthly_counts: { "2025-01": 1, "2025-03": 2 }, with_primary_time: 3, without_primary_time: 0 },
+        coordinate_coverage: null,
+        reference_context: references,
+      }],
+      comparison: null,
+      records: { counting_unit: "reported_offense_record", counting_basis: "per_place_membership", total_membership_count: 3, returned_count: 0, limit: 100, truncated: false, records: [] },
+    },
+    section_statuses: [],
+    disclosures: ["Reported records do not establish personal presence or personal risk."],
+    export_policy: { artifact_coordinate_decimals: 3, exact_coordinates_in_artifact: false, includes_owner_hash: false, includes_internal_place_ids: false, persisted_server_side: true, privacy_policy_checked_at: "2026-08-02T18:00:00Z", download_revalidation: "block_if_saved_place_deleted_or_sensitive" },
+  };
+}
 function compareCard(over: Partial<AnalysisCardData> = {}): AnalysisCardData {
   return {
     runId: "run-2",
@@ -159,6 +235,55 @@ describe("categoryCounts", () => {
 });
 
 describe("AnalysisCard", () => {
+  it("keeps the full reference distribution and broader rolling-average trend in canonical reports", async () => {
+    const { container } = render(
+      <AnalysisCard
+        card={analyzeCard({ report: canonicalReport() })}
+        expanded
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Reference position" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Test Hill MCPP: target 3; median 3/ })).toBeInTheDocument();
+    expect(
+      [...container.querySelectorAll(".mc-report-reference-readout")].filter((row) =>
+        row.textContent?.includes("68% of comparable circles had fewer reported incident records"),
+      ),
+    ).toHaveLength(3);
+    expect(screen.getAllByText(/Monte Carlo · 2,500 draws · ±2.0 points/)).toHaveLength(4);
+    expect(screen.getByText(/Broader neighborhood context · outside the 250 m report scope/)).toBeInTheDocument();
+    expect(await screen.findByTestId("trend-chart")).toBeInTheDocument();
+    expect(screen.getByText("12-month average")).toBeInTheDocument();
+    expect(screen.getByText(/Neighborhood-level trend \(Test Hill\) — wider than your radius/)).toBeInTheDocument();
+    expect(screen.queryByText("View monthly data")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Export"));
+    expect(screen.getByRole("menuitem", { name: "Neighborhood trend CSV · Test Hill" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["arrests", "No eligible-location reference distribution for arrests", "enforcement activity"],
+    ["calls", "No eligible-location reference distribution for 911 calls", "requests for service"],
+  ] as const)("explains why %s reports stay descriptive", (layer, title, detail) => {
+    const report = canonicalReport();
+    report.scope.layer = layer;
+    report.profile.layer = layer;
+    report.profile.capabilities.reference_context = false;
+    report.sections.place_context[0].reference_context = [];
+    render(
+      <AnalysisCard
+        card={analyzeCard({ report })}
+        expanded
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+    expect(screen.getByText(title)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(detail))).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Reference position" })).not.toBeInTheDocument();
+  });
+
   it("labels a frozen card that no longer matches the live scope as previous analysis", () => {
     const { container } = render(
       <AnalysisCard card={analyzeCard()} expanded={false} historical onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />,

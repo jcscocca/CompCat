@@ -23,6 +23,7 @@ from app.api.routes_input_modes import router as input_modes_router
 from app.api.routes_places import router as places_router
 from app.api.routes_public_dashboard import router as public_dashboard_router
 from app.api.routes_public_places import router as public_places_router
+from app.api.routes_reports import router as reports_router
 from app.api.routes_sessions import router as sessions_router
 from app.api.routes_uploads import router as uploads_router
 from app.config import Settings, get_settings
@@ -85,9 +86,7 @@ def _install_validation_error_handler(app: FastAPI) -> None:
         body = json.dumps(
             {"detail": jsonable_encoder(exc.errors())}, ensure_ascii=True, default=str
         )
-        return Response(
-            content=body, status_code=422, media_type="application/json"
-        )
+        return Response(content=body, status_code=422, media_type="application/json")
 
 
 def mount_dashboard(app: FastAPI) -> None:
@@ -154,6 +153,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.include_router(admin_maintenance_router)
     app.include_router(dashboard_router)
     app.include_router(public_dashboard_router)
+    app.include_router(reports_router)
     app.include_router(assistant_router)
     app.include_router(exports_router)
     app.include_router(analysis_router)

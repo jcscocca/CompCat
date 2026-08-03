@@ -55,6 +55,8 @@ using Python 3.11, then build the image.
 - `CrimeIncident` — SPD reported-incident rows ingested from Seattle Socrata
 - `PlaceCrimeSummary`, `AnalysisRun` — per-place crime tallies and the run metadata that groups
   them; each new saved-place run records its ordered selection for run-owned exports
+- `AnalysisReportSnapshot` — owned immutable canonical report payload for saved-place reports;
+  exact place IDs stay in a private revalidation envelope and ad-hoc reports are not persisted
 - `StatisticalComparison`, `StatisticalComparisonOption`, `StatisticalPairwiseResult` — persisted statistical comparison results
 - `GeocodeCache` — TTL-bounded cache keyed by `(provider, query_normalized)`
 

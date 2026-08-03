@@ -312,6 +312,14 @@ def test_analysis_export_uses_current_detail_fields_and_selected_places(tmp_path
     assert response.headers["content-disposition"] == (
         'attachment; filename="compcat-analysis.csv"'
     )
+    assert response.headers["deprecation"] == "true"
+    assert response.headers["sunset"] == "Tue, 01 Sep 2026 00:00:00 GMT"
+    assert response.headers["link"] == (
+        '</dashboard/reports>; rel="successor-version"'
+    )
+    assert response.headers["warning"] == (
+        '299 - "Legacy reference-circle CSV; use layer-aware reports"'
+    )
     reader = csv.DictReader(StringIO(response.text))
     rows = list(reader)
     assert {row["place_label"] for row in rows} == {"Selected zero-count place"}

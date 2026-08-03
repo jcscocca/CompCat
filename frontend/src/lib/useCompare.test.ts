@@ -8,10 +8,11 @@ vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
   analyzePlaces: vi.fn().mockResolvedValue({ summary_count: 1, analysis_run_id: "run-1" }),
   comparePlaces: vi.fn().mockResolvedValue({ id: "cmp" } as unknown),
+  createAnalysisReport: vi.fn().mockResolvedValue({ report_id: null } as unknown),
   getIncidentDetails: vi.fn().mockResolvedValue({ incidents: [], total_count: 0, returned_count: 0, radius_m: 250 } as unknown),
   getNeighborhoodAnalysis: vi.fn().mockResolvedValue({ places: [] } as unknown),
 }));
-import { analyzePlaces, comparePlaces, getIncidentDetails, getNeighborhoodAnalysis, SESSION_EXPIRED_MESSAGE } from "../api/client";
+import { analyzePlaces, comparePlaces, createAnalysisReport, getIncidentDetails, getNeighborhoodAnalysis, SESSION_EXPIRED_MESSAGE } from "../api/client";
 
 const analysis = { startDate: "2024-01-01", endDate: "2024-01-31", radiusM: 250, offenseCategory: "", layer: "reported" as const };
 const A = { latitude: 47.61, longitude: -122.34, label: "A" };
@@ -148,30 +149,30 @@ describe("useCompare unified run", () => {
     expect(setError).not.toHaveBeenCalledWith("Unable to run this analysis. Try again.");
   });
 
-  it("N≥2 compare failure sets the error and clears the comparison", async () => {
+  it("a legacy compare-slice failure does not fail the canonical report", async () => {
     mock(comparePlaces).mockRejectedValueOnce(new Error("boom"));
     const setError = vi.fn();
     const { result } = renderHook(() => useCompare({ entries: [A, B], analysis, setError }));
     await act(async () => { await result.current.run(); });
     expect(result.current.comparison).toBeNull();
-    expect(setError).toHaveBeenCalledWith("Unable to run this analysis. Try again.");
+    expect(setError).not.toHaveBeenCalledWith("Unable to run this analysis. Try again.");
   });
 
   // A dead session / rate limit is actionable in a way the generic run error is not.
   it("surfaces a status-mapped failure instead of the generic run error", async () => {
-    mock(comparePlaces).mockRejectedValueOnce(new Error(SESSION_EXPIRED_MESSAGE));
+    mock(createAnalysisReport).mockRejectedValueOnce(new Error(SESSION_EXPIRED_MESSAGE));
     const setError = vi.fn();
     const { result } = renderHook(() => useCompare({ entries: [A, B], analysis, setError }));
     await act(async () => { await result.current.run(); });
     expect(setError).toHaveBeenCalledWith(SESSION_EXPIRED_MESSAGE);
   });
 
-  it("N=1 neighborhood failure sets the error (it is the primary payload)", async () => {
+  it("N=1 neighborhood failure degrades when the canonical report succeeds", async () => {
     mock(getNeighborhoodAnalysis).mockRejectedValueOnce(new Error("boom"));
     const setError = vi.fn();
     const { result } = renderHook(() => useCompare({ entries: [A], analysis, setError }));
     await act(async () => { await result.current.run(); });
-    expect(setError).toHaveBeenCalledWith("Unable to run this analysis. Try again.");
+    expect(setError).not.toHaveBeenCalledWith("Unable to run this analysis. Try again.");
   });
 
   it("invalidate clears every result slice including runPoints", async () => {
@@ -182,7 +183,19 @@ describe("useCompare unified run", () => {
     expect(result.current.neighborhood).toBeNull();
     expect(result.current.incidents).toBeNull();
     expect(result.current.analysisRunId).toBeNull();
+    expect(result.current.report).toBeNull();
     expect(result.current.runPoints).toBeNull();
+  });
+
+  it("uses saved ids only when every entry is saved, otherwise transient points", async () => {
+    const saved = renderHook(() => useCompare({ entries: [SAVED_A, B], analysis, setError: vi.fn() }));
+    await act(async () => { await saved.result.current.run(); });
+    expect(createAnalysisReport).toHaveBeenLastCalledWith(expect.objectContaining({ place_ids: ["p1", "p2"] }));
+
+    const mixed = renderHook(() => useCompare({ entries: [A, B], analysis, setError: vi.fn() }));
+    await act(async () => { await mixed.result.current.run(); });
+    expect(createAnalysisReport).toHaveBeenLastCalledWith(expect.objectContaining({ points: expect.any(Array) }));
+    expect(mock(createAnalysisReport).mock.calls.at(-1)?.[0].place_ids).toBeUndefined();
   });
 
   it("applyAssistant(comparison) replaces the pane and clears the other slices", async () => {

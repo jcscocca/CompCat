@@ -521,12 +521,14 @@ compose logs db
 
 **Data retention:** a CompCat session is an anonymous token with a sliding 24-hour window and a
 signed absolute ceiling (`MCA_SESSION_ABSOLUTE_MAX_DAYS`, default 30). Rows an analysis writes —
-entered-place clusters, analysis runs, crime summaries, statistical comparisons and their
-options/pairwise children — outlive an individual window. Every create/resume upserts a
-one-way `session_activity` record, so a returning read-only visitor counts as active. The
+entered-place clusters, analysis runs, immutable report snapshots, crime summaries, statistical
+comparisons and their options/pairwise children — outlive an individual window. Every
+create/resume upserts a one-way `session_activity` record, so a returning read-only visitor
+counts as active. The
 03:50 sidecar job posts
 `/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no recent
-create/resume, analysis, place creation/update, upload, staging write, or stop creation in
+create/resume, analysis/report creation, place creation/update, upload, staging write, or stop
+creation in
 `MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables the sweep), in foreign-key order
 and bounded batches. This includes abandoned clusters of every origin and old upload metadata;
 active parents referenced by retained summaries or stops are preserved. It also evicts

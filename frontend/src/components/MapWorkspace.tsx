@@ -14,7 +14,7 @@ import { buildRerunArgs, followupChipsFor, type FollowupChip } from "../lib/foll
 import { offerForPlaces, type SavedPlaceRef } from "../lib/offers";
 import { clampWidth, DRAWER_DETAIL, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, isCompactDesktopViewport, isMobileViewport, snapHeightPx } from "../lib/drawer";
 import { geocodingProvider } from "../lib/geocoding";
-import { cardFromCompareResults, cardWithSavedPlaceIds } from "../lib/localCard";
+import { cardWithSavedPlaceIds } from "../lib/localCard";
 import { incidentNoun } from "../lib/layerCopy";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { clearRecentPlaces } from "../lib/searchHistory";
@@ -316,28 +316,35 @@ export function MapWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAutoRun, list.entries, activeLayerAvailable, data.freshnessLoaded]);
 
-  // Synthesize an armed client-side run into the rail's one live quick-report card once its
-  // results land. Keyed on the result slices (not `running`): it can't fire on the arming
-  // commit — the slices are unchanged there — and fires exactly when useCompare commits a
-  // payload, sidestepping batching that can collapse running false→true→false without a
-  // committed true render. pendingCardRef gates a single update (cleared once a card is
-  // produced; StrictMode's double-run and any re-fire find it disarmed). A fully-failed run
-  // leaves both slices null, so the effect never fires and nothing lands. useCompare writes
-  // all slices in one batch, so reading incidents alongside neighborhood here is safe.
+  // Freeze the canonical report into the thread. The legacy slices stay attached only as a
+  // compatibility fallback for cards produced before this migration; the report renderer and
+  // every new export read `report` exclusively.
   useEffect(() => {
-    if (!pendingCardRef.current) return;
-    const card = cardFromCompareResults({
+    if (!pendingCardRef.current || !compare.report) return;
+    const savedPlaceIds = list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id));
+    const card: AnalysisCardData = {
+      kind: compare.report.selection_kind === "multi_place" ? "compare" : "analyze",
+      placeIds: savedPlaceIds,
+      points: savedPlaceIds.length === list.entries.length
+        ? undefined
+        : list.entries.map(({ latitude, longitude, label }) => ({ latitude, longitude, label })),
+      runId: compare.analysisRunId,
+      settings: {
+        radius_m: compare.report.scope.radius_m,
+        analysis_start_date: compare.report.scope.effective_start_date,
+        analysis_end_date: compare.report.scope.effective_end_date,
+        offense_category: compare.report.scope.filters.offense_category,
+        offense_subcategory: compare.report.scope.filters.offense_subcategory
+          ?? compare.report.scope.filters.arrest_offense_description
+          ?? compare.report.scope.filters.call_type,
+        nibrs_group: compare.report.scope.filters.nibrs_group,
+        layer: compare.report.scope.layer,
+      },
       comparison: compare.comparison,
       neighborhood: compare.neighborhood,
       incidents: compare.incidents,
-      analysis,
-      placeIds: list.entries.map((e) => e.savedPlaceId).filter((id): id is string => Boolean(id)),
-      points: list.entries.some((entry) => !entry.savedPlaceId)
-        ? list.entries.map(({ latitude, longitude, label }) => ({ latitude, longitude, label }))
-        : undefined,
-      runId: compare.analysisRunId,
-    });
-    if (!card) return;
+      report: compare.report,
+    };
     const shouldExpand = pendingCardExpandRef.current;
     pendingCardRef.current = false;
     pendingCardExpandRef.current = false;
@@ -358,7 +365,7 @@ export function MapWorkspace() {
       fitCard(card);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compare.comparison, compare.neighborhood, compare.analysisRunId]);
+  }, [compare.report]);
 
   function invalidateAnalysisContext() {
     // Any context invalidation cancels a pending auto-run card: if the armed run failed
@@ -1108,6 +1115,10 @@ export function MapWorkspace() {
               onShowData={handleDirectReportRun}
               showDataBusy={compare.running}
               showDataDisabled={!activeLayerAvailable || list.entries.length === 0}
+              coverageAdjustment={compare.coverageAdjustment}
+              onUseAvailableDates={() => void compare.run(true)}
+              workspaceAnalysis={analysis}
+              onRerunReport={handleDirectReportRun}
               hasPlaces={data.places.length > 0 || list.entries.length > 0}
               onAction={handlePanelAction}
               followupChips={chipRow}

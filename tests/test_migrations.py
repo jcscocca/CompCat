@@ -160,6 +160,60 @@ def test_statistical_alembic_migration_creates_comparison_tables(tmp_path, monke
     assert any(fk["referred_table"] == "statistical_comparisons" for fk in pairwise_fks)
 
 
+def test_analysis_report_snapshot_migration_is_reversible(tmp_path, monkeypatch):
+    db_path = tmp_path / "analysis-report-snapshots.sqlite3"
+    database_url = f"sqlite+pysqlite:///{db_path}"
+    monkeypatch.setenv("MCA_DATABASE_URL", database_url)
+    cfg = Config("alembic.ini")
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        assert "analysis_report_snapshots" in inspector.get_table_names()
+        assert {
+            "id",
+            "user_id_hash",
+            "schema_version",
+            "method_version",
+            "layer",
+            "selection_kind",
+            "comparison_mode",
+            "selected_place_ids_json",
+            "payload_json",
+            "privacy_policy_checked_at",
+            "created_at",
+        } == {
+            column["name"]
+            for column in inspector.get_columns("analysis_report_snapshots")
+        }
+        assert {
+            "ix_analysis_report_snapshots_user_id_hash",
+            "ix_analysis_report_snapshots_created_at",
+        }.issubset(
+            {
+                index["name"]
+                for index in inspector.get_indexes("analysis_report_snapshots")
+            }
+        )
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, "0017_exact_manual_coords")
+    engine = create_engine(database_url)
+    try:
+        assert "analysis_report_snapshots" not in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "head")
+    engine = create_engine(database_url)
+    try:
+        assert "analysis_report_snapshots" in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+
 def test_crime_filter_indexes_exist_after_migration(tmp_path, monkeypatch):
     db_path = tmp_path / "crime-filter-indexes.sqlite3"
     database_url = f"sqlite+pysqlite:///{db_path}"

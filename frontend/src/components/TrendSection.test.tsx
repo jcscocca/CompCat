@@ -122,6 +122,15 @@ describe("TrendSection", () => {
     expect(screen.getByText(/not verified events/)).toBeInTheDocument();
   });
 
+  it("places the series legend before the chart without an inline data table", async () => {
+    const { container } = renderSection({ neighborhood: neighborhood("Test Hill") });
+    const chart = await screen.findByTestId("trend-chart");
+    const legend = container.querySelector(".mc-trend-legend");
+    expect(legend).not.toBeNull();
+    expect(legend!.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector(".mc-chart-data")).not.toBeInTheDocument();
+  });
+
   it("offers a chip per MCPP and refetches on switch", async () => {
     renderSection({ neighborhood: neighborhood("Test Hill", "Ballard") });
     await screen.findByTestId("trend-chart");

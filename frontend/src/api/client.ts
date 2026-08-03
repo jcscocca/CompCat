@@ -1,4 +1,6 @@
 import type {
+  AnalysisReport,
+  AnalysisReportRequest,
   AssistantDashboardState,
   AnalysisPointPayload,
   AssistantMessage,
@@ -16,6 +18,17 @@ import type {
   SiteComparison,
   TrendsResponse,
 } from "../types";
+
+export class ReportCoverageAdjustmentError extends Error {
+  constructor(
+    public readonly availableStartDate: string,
+    public readonly requestedStartDate: string,
+    public readonly requestedEndDate: string,
+  ) {
+    super("This layer's available history starts after the requested date.");
+    this.name = "ReportCoverageAdjustmentError";
+  }
+}
 
 type AnalyzePlacesPayload = {
   place_ids?: string[];
@@ -148,6 +161,46 @@ export function getDashboardSummary(): Promise<DashboardSummary> {
 
 export function getDashboardFreshness(): Promise<DashboardFreshness> {
   return request("/dashboard/freshness");
+}
+
+export async function createAnalysisReport(payload: AnalysisReportRequest): Promise<AnalysisReport> {
+  let response: Response;
+  try {
+    response = await fetch("/dashboard/reports", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (cause) {
+    console.debug("report request network failure", cause);
+    throw new Error(SERVER_ERROR_MESSAGE);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as {
+      detail?: { code?: string; available_start_date?: string; requested_start_date?: string; requested_end_date?: string };
+    } | null;
+    console.debug("report request failed", response.status, body);
+    if (
+      response.status === 409
+      && body?.detail?.code === "date_coverage_adjustment_required"
+      && body.detail.available_start_date
+      && body.detail.requested_start_date
+      && body.detail.requested_end_date
+    ) {
+      throw new ReportCoverageAdjustmentError(
+        body.detail.available_start_date,
+        body.detail.requested_start_date,
+        body.detail.requested_end_date,
+      );
+    }
+    throw new Error(friendlyRequestError(response.status));
+  }
+  return response.json();
+}
+
+export function getAnalysisReport(reportId: string): Promise<AnalysisReport> {
+  return request(`/dashboard/reports/${encodeURIComponent(reportId)}`);
 }
 
 export function createPlace(payload: PlaceCreate): Promise<Place> {

@@ -192,6 +192,7 @@
 .mc-rail-wrap{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;}
 .mc-dock.mc-rail{flex:1;min-height:0;max-height:none;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
 .mc-dock.mc-rail .mc-dock-log{flex:1;min-height:0;max-height:none;overflow:auto;align-content:start;}
+.mc-dock.mc-rail .mc-dock-log>div:has(.mc-result-card){min-width:0;}
 .mc-dock.mc-rail.is-result-focused{gap:8px;}
 .mc-dock.mc-rail.is-result-focused .mc-dock-log{scroll-padding-block:8px;}
 .mc-dock.mc-rail.is-result-focused .mc-result-head{
@@ -899,10 +900,11 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 /* One-line clarifier under the plot; --text keeps it legible at this size (see contrast pass). */
 .mc-bplot-note{margin:6px 0 0;font-size:10.5px;line-height:1.4;color:var(--text);}
 .mc-bplot-withheld{margin:4px 0 0;font-size:10.5px;line-height:1.4;color:var(--text-dim);}
-.mc-trend{border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;gap:8px;}
+.mc-trend{min-width:0;border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr);gap:8px;}
 .mc-trend-title{margin:0;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);}
 .mc-trend-sub{margin:0;font-size:10.5px;color:var(--text-dim);}
 .mc-trend svg{width:100%;height:auto;display:block;}
+.mc-trend-chartwrap{min-width:0;}
 /* Neutral data marks — identical in both themes (product invariant, see below). */
 .mc-trend-raw,.mc-trend-rolling,.mc-trend-city{stroke-linejoin:round;stroke-linecap:round;}
 .mc-trend-raw{stroke:var(--trend-raw);stroke-width:1.5;}
@@ -932,6 +934,59 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-copy-status{font-size:12px;color:var(--text-dim);margin-top:2px;}
 .mc-copy-hint{margin:2px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
 .mc-places-expiry{margin:10px 0 0;font-size:12px;line-height:1.45;color:var(--text-dim);}
+
+/* Layer-aware report document. It intentionally reads more like a compact dossier than a
+   chat bubble; the layer tint makes switching Reported / Arrests / Calls unmistakable. */
+.mc-report-card{--report-accent:#176b50;--report-soft:rgba(23,107,80,.10);grid-template-columns:minmax(0,1fr);margin:10px 8px 16px;border:1px solid var(--border-strong);border-top:4px solid var(--report-accent);border-radius:12px;background:var(--surface);box-shadow:0 10px 28px rgba(28,45,38,.10);overflow:visible;color:var(--text);}
+.mc-report-card.is-arrests{--report-accent:#9a5c18;--report-soft:rgba(154,92,24,.11)}
+.mc-report-card.is-calls{--report-accent:#315f9f;--report-soft:rgba(49,95,159,.11)}
+.mc-report-card.is-historical{opacity:.91}
+.mc-report-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 17px 12px;background:linear-gradient(135deg,var(--report-soft),transparent 60%)}
+.mc-report-head h3{margin:3px 0 4px;font:700 20px/1.2 Georgia,serif;color:var(--text-strong)}
+.mc-report-head p{margin:0;color:var(--text-dim);font-size:12px;line-height:1.4}
+.mc-report-kicker{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--report-accent)}
+.mc-report-actions{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.mc-report-export{position:relative}
+.mc-report-export>summary{list-style:none;cursor:pointer;border:1px solid var(--control-border);border-radius:7px;padding:6px 9px;font-size:12px;font-weight:700;color:var(--text-strong);background:var(--surface)}
+.mc-report-export>summary::-webkit-details-marker{display:none}
+.mc-report-export[open]>summary{border-color:var(--report-accent)}
+.mc-report-export>div{position:absolute;right:0;top:calc(100% + 6px);z-index:30;display:grid;min-width:190px;padding:5px;border:1px solid var(--border-strong);border-radius:9px;background:var(--surface);box-shadow:0 12px 30px rgba(20,35,29,.18)}
+.mc-report-export button{border:0;border-radius:6px;background:transparent;color:var(--text-strong);padding:9px 10px;text-align:left;font:600 12px/1.2 inherit;cursor:pointer}
+.mc-report-export button:hover,.mc-report-export button:focus-visible{background:var(--report-soft)}
+.mc-report-scope{display:flex;gap:6px;flex-wrap:wrap;padding:0 17px 13px;border-bottom:1px solid var(--border)}
+.mc-report-scope span{border:1px solid color-mix(in srgb,var(--report-accent) 28%,var(--border));border-radius:999px;background:var(--report-soft);padding:4px 8px;font-size:10px;color:var(--text-strong)}
+.mc-report-mismatch,.mc-report-coverage{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 16px;padding:10px 12px;border:1px solid #c8913b;border-radius:9px;background:rgba(200,145,59,.12);font-size:12px}
+.mc-report-mismatch div{display:grid;gap:2px}.mc-report-mismatch span{color:var(--text-dim)}
+.mc-report-overview{display:grid;grid-template-columns:minmax(130px,.8fr) 1.4fr;gap:12px;padding:15px 17px}
+.mc-report-total{display:flex;flex-direction:column;justify-content:center;min-height:100px;padding:14px;border-radius:10px;background:var(--report-accent);color:white}
+.mc-report-total span,.mc-report-total small{font-size:10px}.mc-report-total strong{font:700 39px/1 Georgia,serif;margin:4px 0}
+.mc-report-facts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.mc-report-facts>div{min-width:0;display:flex;flex-direction:column;justify-content:center;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-raised)}
+.mc-report-facts span{display:block;margin-bottom:3px;font-size:9px;letter-spacing:.03em;text-transform:uppercase;color:var(--text-dim)}
+.mc-report-facts strong{display:block;font-size:11px;line-height:1.35;color:var(--text-strong);overflow-wrap:anywhere}
+.mc-report-provenance-line{grid-column:1/-1;margin:-4px 1px 0;font-size:9.5px;line-height:1.4;color:var(--text-dim)}
+.mc-report-compact-places{display:grid;gap:8px;padding:0 17px 16px}.mc-report-compact-places>div,.mc-report-bar{display:grid;grid-template-columns:minmax(90px,1fr) 1.6fr 35px;gap:9px;align-items:center;font-size:11px}.mc-report-compact-places i,.mc-report-bar i{height:7px;border-radius:8px;background:var(--surface-sunken);overflow:hidden}.mc-report-compact-places b,.mc-report-bar b{display:block;height:100%;border-radius:8px;background:var(--report-accent)}
+.mc-report-compact-places p{margin:4px 0 0;font-size:11px;line-height:1.45;color:var(--text-dim)}
+.mc-report-body{border-top:1px solid var(--border)}
+.mc-report-section{padding:17px;border-bottom:1px solid var(--border)}
+.mc-report-section>header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:13px}.mc-report-section>header span{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--report-accent);font-weight:800}.mc-report-section h4{margin:2px 0;font:700 17px/1.25 Georgia,serif;color:var(--text-strong)}.mc-report-section>header>strong{font-size:11px;text-align:right;color:var(--text-strong)}
+.mc-report-reference-plot{margin:0 0 18px;border-color:color-mix(in srgb,var(--report-accent) 34%,var(--border));background:color-mix(in srgb,var(--report-soft) 55%,var(--surface-raised))}
+.mc-report-reference-plot .mc-reference-head h5{margin:2px 0 0;font:700 16px/1.25 Georgia,serif;color:var(--text-strong)}
+.mc-report-section-eyebrow,.mc-report-observed-head>span,.mc-report-context-label>span{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--report-accent);font-weight:800}
+.mc-report-reference-readout{display:grid;gap:3px;font-size:10px;line-height:1.4;color:var(--text)}
+.mc-report-reference-readout strong{font-family:var(--f-mono);font-weight:650;color:var(--text-strong)}
+.mc-report-no-reference{display:grid;gap:3px;margin:0 0 15px;padding:10px 11px;border-left:3px solid var(--report-accent);border-radius:0 8px 8px 0;background:var(--report-soft);font-size:10.5px;line-height:1.4;color:var(--text-dim)}
+.mc-report-no-reference strong{font-size:11px;color:var(--text-strong)}
+.mc-report-observed-head{margin:2px 0 11px}.mc-report-observed-head h5{margin:2px 0 0;font:700 15px/1.25 Georgia,serif;color:var(--text-strong)}
+.mc-report-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.mc-report-grid h5{margin:0 0 8px;font-size:11px;color:var(--text-strong)}.mc-report-bar{grid-template-columns:minmax(90px,1.25fr) minmax(54px,1fr) 26px;margin:7px 0}.mc-report-bar span{white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.25}.mc-report-bar strong{text-align:right}
+.mc-report-reference{display:grid;grid-template-columns:minmax(110px,.7fr) 1.3fr;gap:5px 12px;margin-top:14px;padding:11px;border-left:3px solid var(--report-accent);border-radius:0 8px 8px 0;background:var(--report-soft);font-size:11px}.mc-report-reference small{grid-column:1/-1;color:var(--text-dim)}
+.mc-report-context-trend{background:color-mix(in srgb,var(--report-soft) 42%,var(--surface))}
+.mc-report-context-label{display:grid;gap:4px;margin-bottom:8px}.mc-report-context-label p{margin:0;font-size:10.5px;line-height:1.45;color:var(--text-dim)}
+.mc-report-context-trend>.mc-trend{margin-top:0;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--report-accent) 26%,var(--border))}
+.mc-report-comparison{background:var(--report-soft)}.mc-report-comparison>p{margin:8px 0;line-height:1.5}.mc-report-note{font-size:11px;color:var(--text-dim)}
+.mc-report-table-wrap{max-width:100%;overflow:auto;border:1px solid var(--border);border-radius:8px}.mc-report-table-wrap table{width:100%;border-collapse:collapse;font-size:10px}.mc-report-table-wrap th,.mc-report-table-wrap td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}.mc-report-table-wrap th{background:var(--surface-sunken);color:var(--text-strong)}
+.mc-report-disclosures{padding:14px 17px;background:var(--surface-sunken);font-size:10px;line-height:1.45;color:var(--text-dim)}.mc-report-disclosures p{margin:5px 0}
+@media(max-width:640px){.mc-report-head{display:grid}.mc-report-actions{justify-content:space-between}.mc-report-overview,.mc-report-grid{grid-template-columns:1fr}.mc-report-reference{grid-template-columns:1fr}.mc-report-facts{grid-template-columns:1fr 1fr}}
 
 /* Dark theme — token overrides only. Data-mark constants (--graphite/--slate/
    --slate-soft) are deliberately NOT overridden: the calm neutral marks stay

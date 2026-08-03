@@ -50,6 +50,16 @@ describe("TrendChart", () => {
     expect(container.textContent).toContain("2023");
   });
 
+  it("uses three distinct evenly spaced integer y-axis ticks for sparse counts", () => {
+    const sparse = MONTHS.map((_, index) => (index === 4 ? 1 : 0));
+    const { container } = render(
+      <TrendChart months={MONTHS} area={sparse} rolling={MONTHS.map(() => null)} citywide={null} />,
+    );
+    expect(
+      [...container.querySelectorAll(".mc-trend-y-tick")].map((tick) => tick.textContent),
+    ).toEqual(["0", "1", "2"]);
+  });
+
   it("shows a rounded readout row on hover", () => {
     render(<TrendChart months={MONTHS} area={AREA} rolling={ROLLING} citywide={CITY} />);
     const svg = screen.getByTestId("trend-chart");
@@ -65,24 +75,10 @@ describe("TrendChart", () => {
     expect(screen.queryByTestId("trend-readout")).not.toBeInTheDocument();
   });
 
-  it("provides every plotted value in a keyboard-operable data table", () => {
+  it("directs exact-value inspection to the report export instead of an inline table", () => {
     render(<TrendChart months={MONTHS} area={AREA} rolling={ROLLING} citywide={CITY} />);
-    const disclosure = screen.getByText("View monthly data");
-    fireEvent.click(disclosure);
-
-    const table = screen.getByRole("table", { name: "Monthly trend values" });
-    expect(table).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Month" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Monthly count" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "12-month average" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Citywide indexed" })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: "2021-07 10 — 11" })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: "2022-06 15 12 12" })).toBeInTheDocument();
-  });
-
-  it("omits the citywide column from the data table when that series is suppressed", () => {
-    render(<TrendChart months={MONTHS} area={AREA} rolling={ROLLING} citywide={null} />);
-    fireEvent.click(screen.getByText("View monthly data"));
-    expect(screen.queryByRole("columnheader", { name: "Citywide indexed" })).not.toBeInTheDocument();
+    expect(screen.queryByText("View monthly data")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByRole("img")).toHaveAccessibleName(/Exact values are available from the report Export menu/);
   });
 });

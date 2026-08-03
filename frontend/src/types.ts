@@ -224,6 +224,247 @@ export type SettingsUsed = {
   layer?: LayerKey;
 };
 
+export type ReportLayerProfile = {
+  profile_version: string;
+  layer: LayerKey;
+  report_title: string;
+  source_dataset: string;
+  counting_unit: string;
+  counting_unit_label: string;
+  record_noun_singular: string;
+  record_noun_plural: string;
+  primary_time_field: string;
+  primary_time_label: string;
+  secondary_time_field: string | null;
+  secondary_time_label: string | null;
+  subtype_field: string;
+  subtype_label: string;
+  supported_filters: string[];
+  capabilities: {
+    reference_context: boolean;
+    modeled_comparison: boolean;
+    contextual_trend: boolean;
+  };
+  disclosures: string[];
+};
+
+export type ReportFilters = {
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  arrest_offense_description: string | null;
+  call_type: string | null;
+  nibrs_group: string | null;
+};
+
+export type ReportScope = {
+  layer: LayerKey;
+  source_dataset: string;
+  counting_unit: string;
+  requested_start_date: string;
+  requested_end_date: string;
+  effective_start_date: string;
+  effective_end_date: string;
+  available_start_date: string;
+  latest_recorded_event_date: string | null;
+  latest_row_ingested_at: string | null;
+  confirmed_data_through: string | null;
+  radius_m: number;
+  filters: ReportFilters;
+};
+
+export type ReportSelection = {
+  selection_id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type ReportBreakdownRow = {
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  label: string;
+  count: number;
+  share: number;
+};
+
+export type ReportTemporalSection = {
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  hour_counts: number[];
+  dow_counts: number[];
+  monthly_counts: Record<string, number>;
+  with_primary_time: number;
+  without_primary_time: number;
+};
+
+export type ReportReferenceDistribution = {
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  kind: string;
+  label: string;
+  available: boolean;
+  adequacy_status: string;
+  sampling_frame: string;
+  sampling_frame_version: string;
+  computation: string | null;
+  geography_components: Record<string, unknown>[];
+  reference_center_count: number;
+  reference_draw_count: number;
+  monte_carlo_error: number | null;
+  covered_area_share: number;
+  effective_geographies: number;
+  target_count: number;
+  p10: number | null;
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+  p90: number | null;
+  share_below: number | null;
+  share_equal: number | null;
+  share_above: number | null;
+  midrank_percentile: number | null;
+  warnings: string[];
+};
+
+export type ReportPlaceContext = {
+  selection_id: string;
+  label: string;
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  record_count: number;
+  type_mix: ReportBreakdownRow[];
+  temporal: ReportTemporalSection;
+  coordinate_coverage: Record<string, unknown> | null;
+  reference_context: ReportReferenceDistribution[];
+};
+
+export type ReportComparisonOption = {
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  selection_id: string;
+  label: string;
+  record_count: number;
+  exposure: number;
+  exposure_unit: string;
+  record_rate: number;
+  rate_ci_lower: number | null;
+  rate_ci_upper: number | null;
+  rate_ci_method: string | null;
+};
+
+export type ReportPairwiseComparison = {
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  selection_a_id: string;
+  selection_a_label: string;
+  selection_b_id: string;
+  selection_b_label: string;
+  decision_class: string;
+  method: string;
+  record_count_a: number;
+  record_count_b: number;
+  rate_a: number;
+  rate_b: number;
+  rate_ratio: number;
+  ci_lower: number;
+  ci_upper: number;
+  p_value: number;
+  adjusted_p_value: number;
+  overdispersion_phi: number | null;
+  overdispersion_status: string;
+  minimum_data_status: string;
+  caveat_text: string;
+};
+
+export type ReportRecord = {
+  selection_id: string;
+  place_label: string;
+  counting_unit: string;
+  counting_basis: "per_place_membership";
+  source_dataset: string;
+  primary_time: string | null;
+  secondary_time: string | null;
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  arrest_offense_description: string | null;
+  call_type: string | null;
+  nibrs_group: string | null;
+  distance_m: number;
+  duplicate_across_places: boolean;
+};
+
+export type AnalysisReport = {
+  report_id: string | null;
+  schema_version: string;
+  method_version: string;
+  profile: ReportLayerProfile;
+  selection_kind: "single_place" | "multi_place";
+  comparison_mode: "none" | "descriptive" | "modeled";
+  status: "complete" | "partial" | "insufficient_data";
+  generated_at: string;
+  scope: ReportScope;
+  selection: ReportSelection[];
+  sections: {
+    overview: {
+      counting_unit: string;
+      unique_counting_basis: "unique_source_records";
+      membership_counting_basis: "per_place_membership";
+      unique_source_record_count: number;
+      membership_count: number;
+      returned_record_count: number;
+      record_limit: number;
+      records_truncated: boolean;
+    };
+    place_context: ReportPlaceContext[];
+    comparison: {
+      counting_unit: string;
+      counting_basis: "per_place_membership";
+      method_family: string;
+      decision_class: string;
+      summary_text: string;
+      caveat_text: string;
+      options: ReportComparisonOption[];
+      pairwise_results: ReportPairwiseComparison[];
+    } | null;
+    records: {
+      counting_unit: string;
+      counting_basis: "per_place_membership";
+      total_membership_count: number;
+      returned_count: number;
+      limit: number;
+      truncated: boolean;
+      records: ReportRecord[];
+    };
+  };
+  section_statuses: { section: string; state: "complete" | "omitted" | "failed" | "truncated"; reason: string | null }[];
+  disclosures: string[];
+  export_policy: {
+    artifact_coordinate_decimals: 3;
+    exact_coordinates_in_artifact: false;
+    includes_owner_hash: false;
+    includes_internal_place_ids: false;
+    persisted_server_side: boolean;
+    privacy_policy_checked_at: string;
+    download_revalidation: "block_if_saved_place_deleted_or_sensitive";
+  };
+};
+
+export type AnalysisReportRequest = {
+  place_ids?: string[];
+  points?: AnalysisPointPayload[];
+  analysis_start_date: string;
+  analysis_end_date: string;
+  radius_m: number;
+  offense_category?: string | null;
+  offense_subcategory?: string | null;
+  arrest_offense_description?: string | null;
+  call_type?: string | null;
+  nibrs_group?: string | null;
+  layer: LayerKey;
+  adjust_to_available_dates?: boolean;
+  record_limit?: number;
+};
+
 /** A frozen snapshot of an assistant-driven analyze/compare run, enough to render the
  * `analysis_card` thread item without touching live dashboard state. */
 export type AnalysisCardData = {
@@ -236,6 +477,9 @@ export type AnalysisCardData = {
   comparison: SiteComparison | null;
   neighborhood: NeighborhoodAnalysis | null;
   incidents: IncidentDetailsResponse | null;
+  /** Canonical layer-aware report. New producers always include this; legacy fields above
+   * remain only so cards already present during the migration can still render. */
+  report?: AnalysisReport;
 };
 
 /** A neutral presence descriptor for an analyzed place — server-described, never

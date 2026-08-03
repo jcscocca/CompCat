@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.api.dashboard_schemas import AnalysisPoint
-from app.schemas import PlaceClusterData
+from app.schemas import PlaceClusterData, new_id
 
 
 def point_clusters(points: Sequence[AnalysisPoint]) -> list[PlaceClusterData]:
@@ -14,6 +14,7 @@ def point_clusters(points: Sequence[AnalysisPoint]) -> list[PlaceClusterData]:
     for point in points:
         clusters.append(
             PlaceClusterData(
+                id=point.selection_id or new_id(),
                 user_id_hash="",
                 cluster_version="shared_view",
                 cluster_method="shared_view",

@@ -577,7 +577,8 @@ compose logs db
 
 **Data retention:** identical to the VPS path — the 03:50 sidecar job posts
 `/admin/maintenance/retention-sweep`, which deletes rows belonging to identities with no recent
-session create/resume, analysis, place creation/update, upload, staging write, or stop creation in
+session create/resume, analysis/report creation, place creation/update, upload, staging write, or
+stop creation in
 `MCA_SESSION_DATA_RETENTION_DAYS` days (default 30, `0` disables). It covers abandoned clusters of
 every origin and old upload metadata, and evicts expired `geocode_cache` entries. Read-only
 returning visitors are preserved through `session_activity`; SPD incident data is never touched. See

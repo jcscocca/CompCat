@@ -26,7 +26,11 @@ def export_analysis(
         content=content,
         media_type="text/csv",
         headers={
-            "Content-Disposition": 'attachment; filename="compcat-analysis.csv"'
+            "Content-Disposition": 'attachment; filename="compcat-analysis.csv"',
+            "Deprecation": "true",
+            "Sunset": "Tue, 01 Sep 2026 00:00:00 GMT",
+            "Link": '</dashboard/reports>; rel="successor-version"',
+            "Warning": '299 - "Legacy reference-circle CSV; use layer-aware reports"',
         },
     )
 

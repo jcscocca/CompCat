@@ -48,6 +48,7 @@ vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
   analyzePlaces: vi.fn(),
   comparePlaces: vi.fn(),
+  createAnalysisReport: vi.fn(),
   createBulkPlaces: vi.fn(),
   createPlace: vi.fn(),
   createSession: vi.fn(),
@@ -76,14 +77,14 @@ vi.mock("../lib/geocoding", async (importOriginal) => ({
 }));
 
 import { MapWorkspace } from "./MapWorkspace";
-import { analyzePlaces, comparePlaces, createBulkPlaces, createPlace, createSession, deleteAllPlaces, deletePlace, getBeatPolygons, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
+import { analyzePlaces, comparePlaces, createAnalysisReport, createBulkPlaces, createPlace, createSession, deleteAllPlaces, deletePlace, getBeatPolygons, getDashboardFreshness, getDashboardSummary, getIncidentDetails, getNeighborhoodAnalysis, streamAssistantChat, streamAssistantCommand, updatePlace } from "../api/client";
 import { getIncidentPoints, SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { assertValidPlaceCreate } from "../api/placeCreateContract";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { snapHeightPx } from "../lib/drawer";
 import { decodeView, encodeView } from "../lib/savedView";
 import { keyOf } from "../lib/useAddressList";
-import type { DashboardFreshness, DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
+import type { AnalysisReport, AnalysisReportRequest, DashboardFreshness, DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
 
 const home: Place = {
   id: "p1", display_label: "Home", latitude: 47.61, longitude: -122.33, visit_count: 5,
@@ -145,6 +146,52 @@ function makeNeighborhoodAnalysis(): NeighborhoodAnalysis {
   };
 }
 
+function makeAnalysisReport(payload: AnalysisReportRequest): AnalysisReport {
+  const selected = payload.points ?? (payload.place_ids ?? []).map((id) => {
+    const place = [home, work, pin9].find((item) => item.id === id) ?? home;
+    return { latitude: place.latitude as number, longitude: place.longitude as number, label: place.display_label };
+  });
+  const layer = payload.layer;
+  const profileByLayer = {
+    reported: { title: "Reported Incident Context Report", unit: "reported_offense_record", unitLabel: "Reported-offense record", singular: "reported incident record", plural: "reported incident records", source: "seattle_spd_crime", subtype: "offense_subcategory", subtypeLabel: "Offense subcategory" },
+    arrests: { title: "Arrest Activity Report", unit: "arrest_record", unitLabel: "Arrest record", singular: "arrest record", plural: "arrest records", source: "seattle_spd_arrests", subtype: "arrest_offense_description", subtypeLabel: "Arrest offense description" },
+    calls: { title: "911 Call Activity Report", unit: "deduplicated_cad_event", unitLabel: "Deduplicated CAD event", singular: "911 call event", plural: "911 call events", source: "seattle_spd_911", subtype: "call_type", subtypeLabel: "Call type" },
+  }[layer];
+  const selections = selected.map((point, index) => ({ selection_id: `selection-${index + 1}`, label: point.label, latitude: point.latitude, longitude: point.longitude }));
+  return {
+    report_id: payload.place_ids ? "report-test" : null,
+    schema_version: "1.0", method_version: "analysis-report-v1",
+    profile: {
+      profile_version: "1.0", layer, report_title: profileByLayer.title, source_dataset: profileByLayer.source,
+      counting_unit: profileByLayer.unit, counting_unit_label: profileByLayer.unitLabel,
+      record_noun_singular: profileByLayer.singular, record_noun_plural: profileByLayer.plural,
+      primary_time_field: "occurred_at", primary_time_label: "Recorded time", secondary_time_field: null, secondary_time_label: null,
+      subtype_field: profileByLayer.subtype, subtype_label: profileByLayer.subtypeLabel,
+      supported_filters: [], capabilities: { reference_context: layer === "reported", modeled_comparison: layer === "reported", contextual_trend: false }, disclosures: ["Records do not establish personal presence or personal risk."],
+    },
+    selection_kind: selections.length > 1 ? "multi_place" : "single_place",
+    comparison_mode: selections.length < 2 ? "none" : layer === "reported" ? "modeled" : "descriptive",
+    status: "complete", generated_at: "2026-08-02T18:00:00Z",
+    scope: {
+      layer, source_dataset: profileByLayer.source, counting_unit: profileByLayer.unit,
+      requested_start_date: payload.analysis_start_date, requested_end_date: payload.analysis_end_date,
+      effective_start_date: payload.analysis_start_date, effective_end_date: payload.analysis_end_date,
+      available_start_date: "2008-01-01", latest_recorded_event_date: payload.analysis_end_date,
+      latest_row_ingested_at: "2026-08-02T17:00:00Z", confirmed_data_through: null, radius_m: payload.radius_m,
+      filters: { offense_category: payload.offense_category ?? null, offense_subcategory: payload.offense_subcategory ?? null, arrest_offense_description: payload.arrest_offense_description ?? null, call_type: payload.call_type ?? null, nibrs_group: payload.nibrs_group ?? null },
+    },
+    selection: selections,
+    sections: {
+      overview: { counting_unit: profileByLayer.unit, unique_counting_basis: "unique_source_records", membership_counting_basis: "per_place_membership", unique_source_record_count: selections.length * 3, membership_count: selections.length * 3, returned_record_count: 0, record_limit: 100, records_truncated: false },
+      place_context: selections.map((selection) => ({ selection_id: selection.selection_id, label: selection.label, counting_unit: profileByLayer.unit, counting_basis: "per_place_membership", record_count: 3, type_mix: [], temporal: { counting_unit: profileByLayer.unit, counting_basis: "per_place_membership", hour_counts: Array(24).fill(0), dow_counts: Array(7).fill(0), monthly_counts: {}, with_primary_time: 0, without_primary_time: 3 }, coordinate_coverage: null, reference_context: [] })),
+      comparison: selections.length > 1 && layer === "reported" ? { counting_unit: profileByLayer.unit, counting_basis: "per_place_membership", method_family: "candidate_vs_alternatives_bh", decision_class: "descriptive_only", summary_text: "The modeled comparison is shown with its stated limits.", caveat_text: "Reported records are contextual evidence.", options: [], pairwise_results: [] } : null,
+      records: { counting_unit: profileByLayer.unit, counting_basis: "per_place_membership", total_membership_count: selections.length * 3, returned_count: 0, limit: 100, truncated: false, records: [] },
+    },
+    section_statuses: [], disclosures: ["Records do not establish personal presence or personal risk."],
+    export_policy: { artifact_coordinate_decimals: 3, exact_coordinates_in_artifact: false, includes_owner_hash: false, includes_internal_place_ids: false, persisted_server_side: Boolean(payload.place_ids), privacy_policy_checked_at: "2026-08-02T18:00:00Z", download_revalidation: "block_if_saved_place_deleted_or_sensitive" },
+  };
+}
+
 function makeSiteComparison(aLabel: string, bLabel: string): SiteComparison {
   const opt = (id: string, label: string, count: number, rate: number) => ({ id, label, geometry_type: "place_buffer", radius_m: 250, incident_count: count, exposure: 1, exposure_unit: "square_km_days", incident_rate: rate });
   const options = [opt("a", aLabel, 12, 3.9), opt("b", bLabel, 44, 14.3)];
@@ -167,6 +214,7 @@ beforeEach(() => {
   // jsdom has no scrollIntoView; the rail's focus-card effect calls it. Fresh stub per test.
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(getDashboardFreshness).mockResolvedValue(null as unknown as DashboardFreshness);
+  vi.mocked(createAnalysisReport).mockImplementation(async (payload) => makeAnalysisReport(payload));
 });
 afterEach(() => {
   cleanup();
@@ -576,7 +624,7 @@ describe("MapWorkspace", () => {
     });
     // Incident details render in the local card's expanded view on the rail.
     fireEvent.click(await screen.findByRole("button", { name: "View details" }));
-    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
   });
 
   it("fetches neighborhood analysis after analysis succeeds", async () => {
@@ -806,7 +854,7 @@ describe("MapWorkspace", () => {
       expect.objectContaining({ points: expect.any(Array) })));
     // The shared compare auto-run lands as a local card on the rail (not the legacy Compare
     // view): the card itself is the receipt, and — runId null — has no export link.
-    expect(await screen.findByTestId("compare-callout")).toBeInTheDocument();
+    expect(await screen.findByText("Reported Incident Context Report")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
     await waitFor(() => expect(fitToCaptures.length).toBeGreaterThan(0));
     const fit = fitToCaptures.at(-1) as {
@@ -883,7 +931,7 @@ describe("MapWorkspace", () => {
     expect(createPlace).not.toHaveBeenCalled();
     // The explicit report action opens the card directly; no second "View details" click.
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
     // A point-backed card can frame its frozen coordinates even though no dashboard Place
     // exists. A direct report preserves the 400px desktop panel, plus a 40px map gutter.
     const fit = fitToCaptures.at(-1) as {
@@ -1051,7 +1099,7 @@ describe("MapWorkspace", () => {
     // the automatic card behind as a second, historical "Previous analysis" card.
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(await screen.findByText("100 block of Main St")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
     expect(screen.queryByText("Previous analysis")).not.toBeInTheDocument();
   });
@@ -1348,12 +1396,12 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
-    expect(screen.getByText("Analysis result")).toBeInTheDocument();
+    expect(screen.getByText("Analysis report")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
-    expect(screen.getByText("Previous analysis")).toBeInTheDocument();
+    expect(screen.getByText("Previous report")).toBeInTheDocument();
     expect(document.querySelector(".mc-result-card")).toHaveClass("is-historical");
   });
 
@@ -1819,11 +1867,8 @@ describe("MapWorkspace", () => {
 
   it("the card export link carries the run-scoped run_id", async () => {
     await renderWithAnalyzeCard(analyzeCardResult({ analysis_run_id: "run-xyz" }));
-    const link = screen.getByRole("link", { name: "Export CSV" });
-    expect(link).toHaveAttribute(
-      "href",
-      "/exports/analysis.csv?run_id=run-xyz",
-    );
+    const link = screen.getByRole("link", { name: "Legacy reference-circle CSV" });
+    expect(link).toHaveAttribute("href", "/exports/analysis.csv?run_id=run-xyz");
   });
 
   // --- Presence badges, focused cards, and fit-on-analysis ---
@@ -2374,6 +2419,7 @@ describe("MapWorkspace", () => {
     // Both result slices reject, so the run settles with no payload (comparison/neighborhood null).
     vi.mocked(getNeighborhoodAnalysis).mockRejectedValue(new Error("boom"));
     vi.mocked(getIncidentDetails).mockRejectedValue(new Error("boom"));
+    vi.mocked(createAnalysisReport).mockRejectedValueOnce(new Error("boom"));
     geocodeSearch.mockResolvedValue([{ label: "123 Main St", latitude: 47.61, longitude: -122.34, source: "test" }]);
 
     render(<MapWorkspace />);
@@ -2399,6 +2445,7 @@ describe("MapWorkspace", () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
     vi.mocked(getNeighborhoodAnalysis).mockRejectedValue(new Error("boom"));
     vi.mocked(getIncidentDetails).mockRejectedValue(new Error("boom"));
+    vi.mocked(createAnalysisReport).mockRejectedValueOnce(new Error("boom"));
     vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
       handlers.onEvent({
         event: "tool",
@@ -2572,7 +2619,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     await screen.findByRole("dialog", { name: "Manage places" });
 
-    expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute("href", "/exports/current.csv");
+    expect(screen.getByRole("link", { name: "Export session data (Tableau CSV)" })).toHaveAttribute("href", "/exports/current.csv");
   });
 
   it("opens the About panel from the topbar and closes it on Escape", async () => {

@@ -4,7 +4,7 @@ This document covers the auth model, tier contracts, enforcement invariant, and 
 notes for the CompCat API. The live `/openapi.json` (and Swagger UI at `/docs`) is the
 field-level source of truth; this document covers rules and tier structure only.
 
-> Updated 2026-07-30 for the run-scoped analytical CSV export.
+> Updated 2026-08-02 for the canonical layer-aware analysis-report API.
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
@@ -95,6 +95,11 @@ which are unauthenticated or session-creating.
 | `/dashboard/incident-points` | POST | `app/api/routes_public_dashboard.py` | `DashboardIncidentPointsRequest` | `dict` (one feature per block-level coordinate with `record_count`; all-layer active-filter totals plus returned/total block-location counts; capped at 5,000 locations) |
 | `/dashboard/geocode` | GET | `app/api/routes_public_dashboard.py` | `?q=` query param | `list[GeocodeResultSchema]` |
 | `/dashboard/trends` | GET | `app/api/routes_public_dashboard.py` | `?mcpp=` (normalized, 404 unknown), `?layer=` (400 unknown), `?category=` | `dict` (raw zero-filled monthly `area_counts`/`citywide_counts`, last complete month, TTL-cached with a shared citywide entry; math: `docs/analysis/trend-indexing-method.md`) |
+| `/dashboard/report-profiles` | GET | `app/api/routes_reports.py` | — | `list[ReportLayerProfile]` (server-owned vocabulary and capabilities for reported incidents, arrests, and 911 calls) |
+| `/dashboard/reports` | POST | `app/api/routes_reports.py` | `AnalysisReportRequest` | Frozen `AnalysisReport`; saved-place selections persist an owned snapshot, while ad-hoc point selections return a nonpersistent DTO |
+| `/dashboard/reports/{report_id}` | GET | `app/api/routes_reports.py` | — | Owned saved report after current saved-place privacy revalidation; unknown/foreign is 404, deleted/sensitive selection is 409 |
+| `/dashboard/reports/{report_id}` | DELETE | `app/api/routes_reports.py` | — | 204; deletes one owned snapshot |
+| `/dashboard/reports` | DELETE | `app/api/routes_reports.py` | — | Deletes all snapshots owned by the current session identity |
 | `/assistant/chat` | POST | `app/api/routes_assistant.py` | `AssistantChatRequest` (`app/assistant/schemas.py`) | SSE stream (see §4) |
 | `/assistant/commands` | POST | `app/api/routes_assistant.py` | `AssistantCommandRequest` (fixed command enum) | SSE stream (no LLM; see §4) |
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
@@ -120,6 +125,13 @@ dates, radius, category, representable subfilters, and layer all match; legacy r
 that provenance fail closed until rerun. `/dashboard/freshness` returns coverage keyed by layer
 (`{"reported": {...}, "arrests": {...}, "calls": {...}}`) so the UI pill reflects the active
 layer.
+
+The canonical `/dashboard/reports` contract uses layer-native subtype vocabulary instead of
+exposing the overloaded storage column: `offense_subcategory` for reported incidents,
+`arrest_offense_description` for arrests, and `call_type` for 911 calls. Impossible
+cross-layer filter combinations fail validation. It accepts one radius and either an owned
+saved-place selection or inline points. Aggregate counts deduplicate source records across
+overlapping buffers; per-place and record sections count memberships and flag duplicates.
 
 `/dashboard/neighborhood` response payload. Each place carries
 `reference_comparisons`, ordered MCPP → sector → city. Every entry has:

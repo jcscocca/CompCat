@@ -39,7 +39,11 @@ export function TrendChart({ months, area, rolling, citywide, label }: TrendChar
     ...rolling.filter((v): v is number => v != null),
     ...(citywide ?? []),
   ];
-  const domainMax = Math.max(...provided, 1) * 1.05;
+  const valueMax = Math.max(...provided, 0);
+  // Count charts need distinct integer labels even when the data peaks at one or two.
+  // Rounding 0 / domainMax÷2 / domainMax independently produced labels such as
+  // 0, 1, 1. The next even integer gives us three evenly spaced count ticks.
+  const domainMax = Math.max(2, Math.ceil(valueMax / 2) * 2);
 
   const x = (i: number) => PAD_L + (n <= 1 ? 0 : (i / (n - 1)) * (W - PAD_L - PAD_R));
   const y = (v: number) => PAD_T + (1 - v / domainMax) * (H - PAD_T - PAD_B);
@@ -80,15 +84,15 @@ export function TrendChart({ months, area, rolling, citywide, label }: TrendChar
         viewBox={`0 0 ${W} ${H}`}
         data-testid="trend-chart"
         role="img"
-        aria-label={`Monthly volume${label ? ` for ${label}` : ""}${window ? `, ${window}` : ""}. Exact values are available in the data table that follows.`}
+        aria-label={`Monthly volume${label ? ` for ${label}` : ""}${window ? `, ${window}` : ""}. Exact values are available from the report Export menu.`}
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >
         {gridValues.map((v, i) => (
           <g key={i}>
             <line className="mc-trend-grid" x1={PAD_L} x2={W - PAD_R} y1={y(v)} y2={y(v)} />
-            <text className="mc-trend-tick" x={PAD_L - 4} y={y(v) + 3} textAnchor="end">
-              {Math.round(v)}
+            <text className="mc-trend-tick mc-trend-y-tick" x={PAD_L - 4} y={y(v) + 3} textAnchor="end">
+              {v}
             </text>
           </g>
         ))}
@@ -106,32 +110,6 @@ export function TrendChart({ months, area, rolling, citywide, label }: TrendChar
           <line className="mc-trend-cursor" x1={x(hover)} x2={x(hover)} y1={PAD_T} y2={H - PAD_B} />
         ) : null}
       </svg>
-      <details className="mc-chart-data">
-        <summary>View monthly data</summary>
-        <div className="mc-chart-data-wrap">
-          <table className="mc-chart-data-table">
-            <caption>Monthly trend values</caption>
-            <thead>
-              <tr>
-                <th scope="col">Month</th>
-                <th scope="col">Monthly count</th>
-                <th scope="col">12-month average</th>
-                {citywide ? <th scope="col">Citywide indexed</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((month, index) => (
-                <tr key={month}>
-                  <th scope="row">{month}</th>
-                  <td>{Math.round(area[index] ?? 0)}</td>
-                  <td>{rolling[index] == null ? "—" : Math.round(rolling[index] as number)}</td>
-                  {citywide ? <td>{Math.round(citywide[index] ?? 0)}</td> : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
     </div>
   );
 }
