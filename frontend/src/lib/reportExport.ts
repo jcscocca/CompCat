@@ -15,6 +15,14 @@ const SELECTED_LOCATION_HEADERS = [
   "selected_radius_m",
 ];
 
+const REPORT_FILTER_HEADERS = [
+  "offense_category_filter",
+  "offense_subcategory_filter",
+  "arrest_offense_description_filter",
+  "call_type_filter",
+  "nibrs_group_filter",
+];
+
 function primarySelection(report: AnalysisReport): ReportSelection {
   const selection = report.selection[0];
   if (!selection) throw new Error("Reports require at least one selected location.");
@@ -24,6 +32,16 @@ function primarySelection(report: AnalysisReport): ReportSelection {
 function selectedLocationValues(report: AnalysisReport): CsvValue[] {
   const selection = primarySelection(report);
   return [selection.label, selection.latitude, selection.longitude, report.scope.radius_m];
+}
+
+function reportFilterValues(report: AnalysisReport): CsvValue[] {
+  return [
+    report.scope.filters.offense_category,
+    report.scope.filters.offense_subcategory,
+    report.scope.filters.arrest_offense_description,
+    report.scope.filters.call_type,
+    report.scope.filters.nibrs_group,
+  ];
 }
 
 function escapeHtml(value: unknown): string {
@@ -52,6 +70,7 @@ const TREND_HEADERS = [
   ...SELECTED_LOCATION_HEADERS,
   "context_scope",
   "layer",
+  ...REPORT_FILTER_HEADERS,
   "category",
   "mcpp",
   "mcpp_label",
@@ -75,6 +94,7 @@ function trendRows(report: AnalysisReport, trends: TrendsResponse[]): CsvValue[]
       ...selectedLocation,
       "broader_neighborhood_outside_selected_radius",
       trend.layer,
+      ...reportFilterValues(report),
       trend.category,
       trend.mcpp,
       trend.mcpp_label,
@@ -101,6 +121,7 @@ function common(report: AnalysisReport): CsvValue[] {
     report.scope.counting_unit,
     report.scope.effective_start_date,
     report.scope.effective_end_date,
+    ...reportFilterValues(report),
     report.generated_at,
   ];
 }
@@ -114,6 +135,7 @@ const COMMON_HEADERS = [
   "counting_unit",
   "effective_start_date",
   "effective_end_date",
+  ...REPORT_FILTER_HEADERS,
   "generated_at",
 ];
 
@@ -217,6 +239,7 @@ export async function buildReportPackageFiles(
     selected_location_latitude_generalized: selectedLocation.latitude,
     selected_location_longitude_generalized: selectedLocation.longitude,
     selected_radius_m: report.scope.radius_m,
+    filters: report.scope.filters,
     selected_locations: report.selection.map((selection) => ({
       selection_id: selection.selection_id,
       label: selection.label,

@@ -20,7 +20,7 @@ function fixture(layer: LayerKey = "reported"): AnalysisReport {
       disclosures: ["Records do not establish personal presence."],
     },
     selection_kind: "multi_place", comparison_mode: layer === "reported" ? "modeled" : "descriptive", status: "complete", generated_at: "2026-08-02T18:00:00Z",
-    scope: { layer, source_dataset: source, counting_unit: unit, requested_start_date: "2025-01-01", requested_end_date: "2025-12-31", effective_start_date: "2025-01-01", effective_end_date: "2025-12-31", available_start_date: "2008-01-01", latest_recorded_event_date: "2025-12-30", latest_row_ingested_at: "2026-01-02T00:00:00Z", confirmed_data_through: null, radius_m: 250, filters: { offense_category: null, offense_subcategory: null, arrest_offense_description: null, call_type: null, nibrs_group: null } },
+    scope: { layer, source_dataset: source, counting_unit: unit, requested_start_date: "2025-01-01", requested_end_date: "2025-12-31", effective_start_date: "2025-01-01", effective_end_date: "2025-12-31", available_start_date: "2008-01-01", latest_recorded_event_date: "2025-12-30", latest_row_ingested_at: "2026-01-02T00:00:00Z", confirmed_data_through: null, radius_m: 250, filters: { offense_category: layer === "calls" ? null : "PROPERTY", offense_subcategory: layer === "reported" ? "PROPERTY" : null, arrest_offense_description: layer === "arrests" ? "DESCRIPTION" : null, call_type: layer === "calls" ? "DISTURBANCE" : null, nibrs_group: layer === "calls" ? null : "A" } },
     selection: [
       { selection_id: "selection-1", label: "=HYPERLINK(\"bad\")", latitude: 47.6, longitude: -122.332 },
       { selection_id: "selection-2", label: "Second <script>alert(1)</script>", latitude: 47.61, longitude: -122.33 },
@@ -65,8 +65,11 @@ describe("report exports", () => {
       "records.csv", "reference_context.csv", "report.json", "temporal.csv", "type_mix.csv",
     ]);
     const selectedLocationHeaders = "schema_version,method_version,selected_location,selected_location_latitude_generalized,selected_location_longitude_generalized,selected_radius_m";
+    const filterHeaders = "offense_category_filter,offense_subcategory_filter,arrest_offense_description_filter,call_type_filter,nibrs_group_filter";
     for (const name of ["overview.csv", "places.csv", "type_mix.csv", "temporal.csv", "records.csv", "reference_context.csv", "comparison.csv"]) {
-      expect(decodeReportFile(files[name]).split("\r\n")[0]).toContain(selectedLocationHeaders);
+      const header = decodeReportFile(files[name]).split("\r\n")[0];
+      expect(header).toContain(selectedLocationHeaders);
+      expect(header).toContain(filterHeaders);
     }
     expect(decodeReportFile(files["places.csv"])).toContain("'=HYPERLINK");
     const metadata = JSON.parse(decodeReportFile(files["metadata.json"]));
@@ -75,6 +78,13 @@ describe("report exports", () => {
       selected_location_latitude_generalized: 47.6,
       selected_location_longitude_generalized: -122.332,
       selected_radius_m: 250,
+      filters: {
+        offense_category: "PROPERTY",
+        offense_subcategory: "PROPERTY",
+        arrest_offense_description: null,
+        call_type: null,
+        nibrs_group: "A",
+      },
     });
     expect(metadata.selected_locations).toEqual([
       { selection_id: "selection-1", label: "=HYPERLINK(\"bad\")", latitude_generalized: 47.6, longitude_generalized: -122.332 },
@@ -98,8 +108,8 @@ describe("report exports", () => {
     const report = fixture();
     const files = await buildReportPackageFiles(report, [trend]);
     const csv = decodeReportFile(files["neighborhood_trends.csv"]);
-    expect(csv).toContain("selected_location,selected_location_latitude_generalized,selected_location_longitude_generalized,selected_radius_m,context_scope,layer");
-    expect(csv).toContain(",47.6,-122.332,250,broader_neighborhood_outside_selected_radius,reported,,PIONEER SQUARE,Pioneer Square,2026-01,3,");
+    expect(csv).toContain("selected_location,selected_location_latitude_generalized,selected_location_longitude_generalized,selected_radius_m,context_scope,layer,offense_category_filter,offense_subcategory_filter,arrest_offense_description_filter,call_type_filter,nibrs_group_filter,category");
+    expect(csv).toContain(",47.6,-122.332,250,broader_neighborhood_outside_selected_radius,reported,PROPERTY,PROPERTY,,,A,,PIONEER SQUARE,Pioneer Square,2026-01,3,");
     expect(csv.split("\r\n")).toHaveLength(15);
     expect(trendFilename(report, trend)).toBe("compcat-reported-hyperlink-bad-pioneer-square-neighborhood-trend-2026-08-02.csv");
     expect(await trendCsvBlob(report, trend).text()).toBe(csv);
