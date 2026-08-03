@@ -222,6 +222,30 @@ class AnalysisRun(Base):
     )
 
 
+class AnalysisReportSnapshot(Base):
+    """Owned immutable saved-place report payload.
+
+    Exact selected place ids stay in this server envelope for ownership/privacy
+    revalidation. They are not part of the public report JSON stored in payload_json.
+    """
+
+    __tablename__ = "analysis_report_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id_hash: Mapped[str] = mapped_column(Text, index=True)
+    schema_version: Mapped[str] = mapped_column(Text)
+    method_version: Mapped[str] = mapped_column(Text)
+    layer: Mapped[str] = mapped_column(Text)
+    selection_kind: Mapped[str] = mapped_column(Text)
+    comparison_mode: Mapped[str] = mapped_column(Text)
+    selected_place_ids_json: Mapped[str] = mapped_column(Text)
+    payload_json: Mapped[str] = mapped_column(Text)
+    privacy_policy_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, index=True
+    )
+
+
 class StatisticalComparison(Base):
     __tablename__ = "statistical_comparisons"
 

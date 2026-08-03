@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import (
+    AnalysisReportSnapshot,
     AnalysisRun,
     GeocodeCache,
     ImportBatch,
@@ -86,6 +87,21 @@ def _run(created_at: datetime, owner: str = "user-dormant") -> AnalysisRun:
         analysis_start_date=date(2026, 1, 1),
         analysis_end_date=date(2026, 6, 30),
         radii_m_json="[500]",
+        created_at=created_at,
+    )
+
+
+def _report(created_at: datetime, owner: str = "user-dormant") -> AnalysisReportSnapshot:
+    return AnalysisReportSnapshot(
+        user_id_hash=owner,
+        schema_version="1.0",
+        method_version="analysis-report-v1",
+        layer="reported",
+        selection_kind="single_place",
+        comparison_mode="none",
+        selected_place_ids_json="[]",
+        payload_json="{}",
+        privacy_policy_checked_at=created_at,
         created_at=created_at,
     )
 
@@ -239,6 +255,8 @@ def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
         [
             _summary(old_cluster.id, OLD),
             _summary(fresh_cluster.id, FRESH, owner="user-active"),
+            _report(OLD),
+            _report(FRESH, owner="user-active"),
             _run(OLD),
             _run(FRESH, owner="user-active"),
             _option(old_comparison.id, OLD),
@@ -252,6 +270,7 @@ def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
     counts = sweep_retention(session, get_settings(), now=NOW)
 
     assert counts == {
+        "analysis_report_snapshots": 1,
         "statistical_pairwise_results": 1,
         "statistical_comparison_options": 1,
         "statistical_comparisons": 1,
@@ -266,6 +285,7 @@ def test_sweep_deletes_expired_rows_and_keeps_recent_ones(tmp_path):
     }
     assert _count(session, PlaceCluster) == 1
     assert _count(session, PlaceCrimeSummary) == 1
+    assert _count(session, AnalysisReportSnapshot) == 1
     assert _count(session, AnalysisRun) == 1
     assert _count(session, StatisticalComparison) == 1
     assert _count(session, StatisticalComparisonOption) == 1

@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import type { AssistantCommandName } from "../api/client";
 import type { FollowupChip } from "../lib/followupChips";
 import type { ThreadItem } from "../lib/threadItems";
-import type { AnalysisCardData } from "../types";
+import type { AnalysisCardData, AnalysisSettings } from "../types";
 import { AnalysisCard } from "./AnalysisCard";
 import { TabbyAvatar } from "./TabbyAvatar";
 
@@ -28,6 +28,10 @@ type Props = {
   onShowData: () => void;
   showDataBusy?: boolean;
   showDataDisabled?: boolean;
+  coverageAdjustment?: string | null;
+  onUseAvailableDates?: () => void;
+  workspaceAnalysis?: AnalysisSettings;
+  onRerunReport?: () => void;
   /** False on a truly fresh session (no saved places, no ad-hoc list entries) — drives
    * which empty-state copy + chips render. */
   hasPlaces: boolean;
@@ -88,6 +92,10 @@ export function AssistantPanel({
   onShowData,
   showDataBusy = false,
   showDataDisabled = false,
+  coverageAdjustment,
+  onUseAvailableDates,
+  workspaceAnalysis,
+  onRerunReport,
   hasPlaces,
   onAction,
   followupChips,
@@ -240,6 +248,8 @@ export function AssistantPanel({
                   historical={currentCard !== undefined && currentCard !== item.card}
                   onExpandChange={(next) => onCardExpandChange(item.card, next)}
                   exportHrefBase={exportHrefBase}
+                  workspaceAnalysis={workspaceAnalysis}
+                  onRerun={onRerunReport}
                 />
               </div>
             );
@@ -313,6 +323,14 @@ export function AssistantPanel({
       ) : null}
 
       {errorLine ? <p className="mc-inline-error" role="alert">{errorLine}</p> : null}
+      {coverageAdjustment && onUseAvailableDates ? (
+        <div className="mc-report-coverage" role="status">
+          <span>Available records begin {coverageAdjustment}.</span>
+          <button type="button" className="mc-chip" onClick={onUseAvailableDates} disabled={showDataBusy}>
+            Use available dates
+          </button>
+        </div>
+      ) : null}
 
       {!resultFocused && hasPlaces ? (
         <div className="mc-direct-run">

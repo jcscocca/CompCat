@@ -127,6 +127,24 @@ def dashboard_freshness_by_layer(
     return result
 
 
+def analysis_report_freshness(
+    session: Session,
+    *,
+    layer: str,
+) -> dict[str, object]:
+    """Uncached source provenance frozen into a newly generated analysis report.
+
+    The existing payload calls its newest observed event ``data_through``. A report uses the
+    more precise ``latest_recorded_event_date`` name because this aggregate is not proof that
+    the source is complete through that day.
+    """
+    try:
+        sources = LAYERS[layer]
+    except KeyError:
+        raise ValueError(f"Unknown layer: {layer!r}") from None
+    return _compute_freshness_for_sources(session, sources)
+
+
 def ingest_sample_crime(session: Session) -> dict[str, int]:
     fixture_path = resources.files("app.data").joinpath("sample_crime.csv")
     incidents = load_crime_csv(fixture_path)

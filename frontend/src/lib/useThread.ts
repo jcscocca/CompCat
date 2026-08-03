@@ -1,13 +1,15 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { ThreadItem } from "./threadItems";
+import { loadReportHistory, saveReportHistory } from "./reportHistory";
 
 /** Session-scoped cap — the thread is not persisted, this just bounds memory/DOM. */
 export const THREAD_CAP = 200;
 type AnalysisCard = Extract<ThreadItem, { kind: "analysis_card" }>["card"];
 
 export function useThread() {
-  const [items, setItems] = useState<ThreadItem[]>([]);
+  const [items, setItems] = useState<ThreadItem[]>(loadReportHistory);
+  useEffect(() => saveReportHistory(items), [items]);
   const append = useCallback((item: ThreadItem) => {
     setItems((current) => {
       const next = [...current, item];

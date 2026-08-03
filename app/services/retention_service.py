@@ -3,9 +3,9 @@
 A CompCat session is an anonymous 24h token whose expiry SLIDES within a signed
 absolute-age ceiling. Row age alone cannot distinguish "abandoned" from "long-lived":
 the sweep keys on the OWNING IDENTITY instead. An identity is live if it has recently
-created or resumed a session, run an analysis, created or updated a place, uploaded a
-batch, written staging rows, or created stops. Everything belonging to identities silent
-for the whole window is removed on the window set by
+created or resumed a session, run an analysis, saved a report, created or updated a place,
+uploaded a batch, written staging rows, or created stops. Everything belonging to identities
+silent for the whole window is removed on the window set by
 MCA_SESSION_DATA_RETENTION_DAYS (0 disables), including clusters of every origin.
 
 Deletes run in bounded batches so a large backlog cannot hold a single long transaction
@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import (
+    AnalysisReportSnapshot,
     AnalysisRun,
     GeocodeCache,
     ImportBatch,
@@ -54,13 +55,16 @@ def _delete_in_batches(session: Session, model, condition, batch_size: int) -> i
 
 
 def _active_identities(cutoff: datetime) -> Any:
-    """Identities with recent session, analysis, place, import, staging, or stop activity."""
+    """Identities with recent session, analysis/report, place, or upload activity."""
     return select(
         union(
             select(SessionActivity.user_id_hash).where(
                 SessionActivity.last_seen_at >= cutoff
             ),
             select(AnalysisRun.user_id_hash).where(AnalysisRun.created_at >= cutoff),
+            select(AnalysisReportSnapshot.user_id_hash).where(
+                AnalysisReportSnapshot.created_at >= cutoff
+            ),
             select(PlaceCluster.user_id_hash).where(PlaceCluster.created_at >= cutoff),
             select(PlaceCluster.user_id_hash).where(PlaceCluster.updated_at >= cutoff),
             select(ImportBatch.user_id_hash).where(ImportBatch.uploaded_at >= cutoff),
@@ -81,6 +85,7 @@ def sweep_retention(
 ) -> dict[str, int]:
     now = now or utc_now()
     counts = {
+        "analysis_report_snapshots": 0,
         "statistical_pairwise_results": 0,
         "statistical_comparison_options": 0,
         "statistical_comparisons": 0,
@@ -102,6 +107,12 @@ def sweep_retention(
         def abandoned(model) -> Any:
             return (model.created_at < cutoff) & model.user_id_hash.not_in(active)
 
+        counts["analysis_report_snapshots"] = _delete_in_batches(
+            session,
+            AnalysisReportSnapshot,
+            abandoned(AnalysisReportSnapshot),
+            batch_size,
+        )
         expired_comparisons = select(StatisticalComparison.id).where(
             abandoned(StatisticalComparison)
         )

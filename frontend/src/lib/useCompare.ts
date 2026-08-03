@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 
-import { analyzePlaces, comparePlaces, friendlyMessageOr, getIncidentDetails, getNeighborhoodAnalysis } from "../api/client";
-import type { AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
+import { analyzePlaces, comparePlaces, createAnalysisReport, friendlyMessageOr, getIncidentDetails, getNeighborhoodAnalysis, ReportCoverageAdjustmentError } from "../api/client";
+import type { AnalysisReport, AnalysisSettings, IncidentDetailsResponse, NeighborhoodAnalysis, SiteComparison } from "../types";
 import { analysisDateRangeError } from "./analysisDateRange";
 import type { AddressEntry } from "./useAddressList";
 
@@ -15,11 +15,15 @@ export interface CompareController {
   incidents: IncidentDetailsResponse | null;
   /** Owned saved-place run backing an export. Null for ad-hoc or mixed point lists. */
   analysisRunId: string | null;
+  /** Frozen, layer-aware report contract used by the pane and all new exports. */
+  report: AnalysisReport | null;
+  /** Earliest usable start when the server requires an explicit coverage adjustment. */
+  coverageAdjustment: string | null;
   /** Snapshot of the points the last run was computed from (expansion coords, letters).
    * Set after every run — even a fully failed one — so consumers must gate result
    * regions on the data slices (comparison/neighborhood), not on runPoints. */
   runPoints: AddressEntry[] | null;
-  run: () => Promise<void>;
+  run: (adjustToAvailableDates?: boolean) => Promise<void>;
   /** Drop in-flight + current results (list or analysis controls changed). */
   invalidate: () => void;
   /** Apply analyst-provided slices directly (no re-fetch). The applied slice becomes the
@@ -56,6 +60,8 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
   const [neighborhood, setNeighborhood] = useState<NeighborhoodAnalysis | null>(null);
   const [incidents, setIncidents] = useState<IncidentDetailsResponse | null>(null);
   const [analysisRunId, setAnalysisRunId] = useState<string | null>(null);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [coverageAdjustment, setCoverageAdjustment] = useState<string | null>(null);
   const [runPoints, setRunPoints] = useState<AddressEntry[] | null>(null);
   const versionRef = useRef(0);
 
@@ -65,11 +71,13 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
     setNeighborhood(null);
     setIncidents(null);
     setAnalysisRunId(null);
+    setReport(null);
+    setCoverageAdjustment(null);
     setRunPoints(null);
     setRunning(false);
   }
 
-  async function run() {
+  async function run(adjustToAvailableDates = false) {
     if (entries.length < 1) return;
     const dateError = analysisDateRangeError(analysis.startDate, analysis.endDate);
     if (dateError) {
@@ -77,6 +85,7 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
       return;
     }
     setError("");
+    setCoverageAdjustment(null);
     setRunning(true);
     const version = versionRef.current + 1;
     versionRef.current = version;
@@ -90,9 +99,21 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
       layer: analysis.layer,
     };
     const analyzePayload = { points, ...shared, radii_m: [analysis.radiusM] };
+    const allSaved = savedIds.length === snapshot.length;
+    const reportPayload = {
+      ...(allSaved ? { place_ids: savedIds } : { points }),
+      analysis_start_date: analysis.startDate,
+      analysis_end_date: analysis.endDate,
+      radius_m: analysis.radiusM,
+      layer: analysis.layer,
+      offense_category: analysis.layer === "calls" ? null : analysis.offenseCategory || null,
+      adjust_to_available_dates: adjustToAvailableDates,
+      record_limit: 100,
+    };
     const wantCompare = snapshot.length >= 2;
 
-    const [neighborhoodResult, incidentsResult, compareResult, summariesResult] = await Promise.allSettled([
+    const [reportResult, neighborhoodResult, incidentsResult, compareResult, summariesResult] = await Promise.allSettled([
+      createAnalysisReport(reportPayload),
       getNeighborhoodAnalysis(analyzePayload),
       getIncidentDetails(analyzePayload),
       wantCompare
@@ -104,6 +125,7 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
     ]);
 
     if (versionRef.current === version) {
+      setReport(reportResult.status === "fulfilled" ? reportResult.value : null);
       setNeighborhood(neighborhoodResult.status === "fulfilled" ? neighborhoodResult.value : null);
       setIncidents(incidentsResult.status === "fulfilled" ? incidentsResult.value : null);
       setComparison(compareResult.status === "fulfilled" ? compareResult.value : null);
@@ -115,9 +137,16 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
           : null,
       );
       setRunPoints(snapshot);
-      const primary = wantCompare ? compareResult : neighborhoodResult;
+      const primary = reportResult;
       // An expired session / rate limit says something the generic run error can't.
-      if (primary.status === "rejected") setError(friendlyMessageOr(primary.reason, RUN_ERROR));
+      if (primary.status === "rejected") {
+        if (primary.reason instanceof ReportCoverageAdjustmentError) {
+          setCoverageAdjustment(primary.reason.availableStartDate);
+          setError(`This layer's available history starts ${primary.reason.availableStartDate}. Use available dates to continue.`);
+        } else {
+          setError(friendlyMessageOr(primary.reason, RUN_ERROR));
+        }
+      }
       if (summariesResult.status === "fulfilled" && summariesResult.value !== null) onSummariesRefreshed?.();
       setRunning(false);
     }
@@ -141,6 +170,8 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
     }
     setRunPoints(null);
     setAnalysisRunId(null);
+    setReport(null);
+    setCoverageAdjustment(null);
     setRunning(false);
   }
 
@@ -150,6 +181,8 @@ export function useCompare({ entries, analysis, setError, onSummariesRefreshed }
     neighborhood,
     incidents,
     analysisRunId,
+    report,
+    coverageAdjustment,
     runPoints,
     run,
     invalidate,

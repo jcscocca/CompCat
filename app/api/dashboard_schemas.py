@@ -52,6 +52,15 @@ class AnalysisPoint(BaseModel):
     latitude: float
     longitude: float
     label: str = Field(min_length=1, max_length=120)
+    # Optional report-safe identity for a point that must survive several analysis service
+    # calls in one canonical report. Existing callers omit it and retain generated ids.
+    selection_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=40,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        exclude=True,
+    )
 
     @model_validator(mode="after")
     def within_seattle(self) -> AnalysisPoint:
@@ -138,6 +147,9 @@ class DashboardAnalyzeRequest(AnalysisWindow):
     def exactly_one_selection(self) -> DashboardAnalyzeRequest:
         if (self.place_ids is None) == (self.points is None):
             raise ValueError("provide exactly one of place_ids or points")
+        point_ids = [point.selection_id for point in self.points or [] if point.selection_id]
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("point selection_id values must be unique")
         return self
 
     @field_validator("radii_m")
@@ -166,6 +178,9 @@ class DashboardCompareRequest(AnalysisWindow):
     def exactly_one_selection(self) -> DashboardCompareRequest:
         if (self.place_ids is None) == (self.points is None):
             raise ValueError("provide exactly one of place_ids or points")
+        point_ids = [point.selection_id for point in self.points or [] if point.selection_id]
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("point selection_id values must be unique")
         return self
 
     @field_validator("layer")

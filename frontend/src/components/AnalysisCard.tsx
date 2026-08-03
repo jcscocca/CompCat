@@ -2,7 +2,7 @@ import { memo } from "react";
 import { titleCase } from "../lib/addressLabel";
 import { toCompareVerdict } from "../lib/compareVerdict";
 import { countNoun, incidentNoun, resultCaveat } from "../lib/layerCopy";
-import type { AnalysisCardData, IncidentDetailsResponse, LayerKey } from "../types";
+import type { AnalysisCardData, AnalysisSettings, IncidentDetailsResponse, LayerKey } from "../types";
 import { plotDomainMax } from "./BaselineIntervalPlot";
 import { CompareRankedList } from "./CompareRankedList";
 import { CompareRateNumberLine } from "./CompareRateNumberLine";
@@ -12,6 +12,7 @@ import { MethodsAppendix } from "./MethodsAppendix";
 import { PlaceContextCard } from "./PlaceContextCard";
 import { referenceSummary } from "./ReferenceCirclePlot";
 import { TrendSection } from "./TrendSection";
+import { ReportCard } from "./ReportCard";
 
 type Props = {
   card: AnalysisCardData;
@@ -19,6 +20,8 @@ type Props = {
   historical?: boolean;
   onExpandChange: (expanded: boolean) => void;
   exportHrefBase: string;
+  workspaceAnalysis?: AnalysisSettings;
+  onRerun?: () => void;
 };
 
 /** Aggregate the frozen incident list by offense category, mirroring the expanded
@@ -41,7 +44,10 @@ function totalIncidentCount(card: AnalysisCardData): number | null {
   return null;
 }
 
-function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, exportHrefBase }: Props) {
+function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, exportHrefBase, workspaceAnalysis, onRerun }: Props) {
+  if (card.report) {
+    return <ReportCard report={card.report} neighborhood={card.neighborhood} expanded={expanded} historical={historical} workspaceAnalysis={workspaceAnalysis} onExpandChange={onExpandChange} onRerun={onRerun} />;
+  }
   const layer: LayerKey = card.settings.layer ?? "reported";
   const noun = incidentNoun(layer);
   const caveat = resultCaveat(noun);
@@ -83,7 +89,7 @@ function AnalysisCardImpl({ card, expanded, historical = false, onExpandChange, 
         <div className="mc-result-actions">
           {card.runId ? (
             <a className="mc-result-export" href={`${exportHrefBase}?run_id=${card.runId}`} download>
-              Export CSV
+              Legacy reference-circle CSV
             </a>
           ) : null}
           <button type="button" className="mc-result-toggle" aria-expanded={expanded} onClick={() => onExpandChange(!expanded)}>
@@ -181,6 +187,8 @@ function cardPropsEqual(a: Props, b: Props): boolean {
     a.card === b.card &&
     a.expanded === b.expanded &&
     a.historical === b.historical &&
+    a.workspaceAnalysis === b.workspaceAnalysis &&
+    a.onRerun === b.onRerun &&
     a.exportHrefBase === b.exportHrefBase
   );
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, time
 from math import cos, radians
@@ -160,11 +161,57 @@ def incident_details_for_places(
             "incidents": [],
             "returned_count": 0,
             "total_count": 0,
+            "unique_source_record_count": 0,
             "limit": limit,
             "radius_m": None,
         }
 
     radius_m = radii_m[0]
+    rows = incident_memberships_for_places(
+        session=session,
+        user_id_hash=user_id_hash,
+        place_ids=place_ids,
+        points=points,
+        radius_m=radius_m,
+        analysis_start_date=analysis_start_date,
+        analysis_end_date=analysis_end_date,
+        offense_category=offense_category,
+        offense_subcategory=offense_subcategory,
+        nibrs_group=nibrs_group,
+        sources=sources,
+    )
+    limited_rows = rows[:limit]
+    unique_source_record_count = len({str(row["incident_id"]) for row in rows})
+    return {
+        "incidents": limited_rows,
+        "returned_count": len(limited_rows),
+        "total_count": len(rows),
+        "unique_source_record_count": unique_source_record_count,
+        "limit": limit,
+        "radius_m": radius_m,
+    }
+
+
+def incident_memberships_for_places(
+    *,
+    session: Session,
+    user_id_hash: str,
+    place_ids: list[str] | None,
+    points: list[AnalysisPoint] | None,
+    radius_m: int,
+    analysis_start_date: date,
+    analysis_end_date: date,
+    offense_category: str | None,
+    offense_subcategory: str | None,
+    nibrs_group: str | None,
+    sources: Sequence[str] | None = None,
+) -> list[dict[str, object]]:
+    """Return every source-record × place-buffer membership for a report.
+
+    A source record inside overlapping selected buffers appears more than once. The stable
+    internal incident id is retained only for reconciliation; report serializers remove it.
+    """
+    validate_date_range(analysis_start_date, analysis_end_date)
     clusters = _resolve_clusters(session, user_id_hash, place_ids, points)
     incidents = _filtered_incidents(
         session,
@@ -178,14 +225,10 @@ def incident_details_for_places(
         sources=sources,
     )
     rows = _incident_detail_rows(clusters, incidents, radius_m)
-    limited_rows = rows[:limit]
-    return {
-        "incidents": limited_rows,
-        "returned_count": len(limited_rows),
-        "total_count": len(rows),
-        "limit": limit,
-        "radius_m": radius_m,
-    }
+    occurrences = Counter(str(row["incident_id"]) for row in rows)
+    for row in rows:
+        row["duplicate_across_places"] = occurrences[str(row["incident_id"])] > 1
+    return rows
 
 
 def _resolve_clusters(

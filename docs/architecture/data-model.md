@@ -1,6 +1,6 @@
-SQLAlchemy/Alembic schema for CompCat's FastAPI backend: 12 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, statistical comparison, and infrastructure.
+SQLAlchemy/Alembic schema for CompCat's FastAPI backend: 13 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, analysis reports, statistical comparison, and infrastructure.
 
-> Updated 2026-07-31 for exact manual-place coordinates and export-only generalization.
+> Updated 2026-08-02 for owned immutable analysis-report snapshots.
 
 ---
 
@@ -61,6 +61,7 @@ is the union of all beats (area = sum of the beat area CSV).
 | Entity | Table | Purpose | Key columns |
 |---|---|---|---|
 | `AnalysisRun` | `analysis_runs` | Records the parameters of one dashboard analysis invocation. `place_ids_json` stores the ordered saved-place selection for run-owned artifacts, including places with zero matching incidents; it is nullable for pre-`0016` rows and stateless point analyses do not create runs. | `analysis_start_date`, `analysis_end_date`, `radii_m_json`, `place_ids_json`, `offense_category`, `offense_subcategory`, `nibrs_group`, `layer` |
+| `AnalysisReportSnapshot` | `analysis_report_snapshots` | Owned immutable canonical report payload for an all-saved-place report. Exact selected place IDs remain only in the server envelope for ownership and privacy revalidation; the public payload uses report-safe selection IDs and generalized coordinates. Ad-hoc point reports are never stored. | `schema_version`, `method_version`, `layer`, `selection_kind`, `comparison_mode`, `selected_place_ids_json`, `payload_json`, `privacy_policy_checked_at`, `created_at` |
 
 ### Statistics
 
@@ -77,7 +78,7 @@ is the union of all beats (area = sum of the beat area CSV).
 | `GeocodeCache` | `geocode_cache` | Deduplicates geocoder calls. Unique on `(provider, query_normalized)`. | `provider`, `query_normalized`, `results_json` |
 | `SessionActivity` | `session_activity` | Last successful public session create/resume for retention activity; stores only the one-way identity hash, never a raw session id or token. | `user_id_hash` (primary key), `last_seen_at` (indexed) |
 
-Total: **12 tables** matching all 12 `__tablename__` declarations in `app/models.py`.
+Total: **13 tables** matching all 13 `__tablename__` declarations in `app/models.py`.
 
 ---
 
@@ -105,7 +106,8 @@ retention:
   `Settings.require_production_secret_overrides` validator enforces this at startup.
 
 The retention sweep treats an identity as active when any of these is recent:
-`SessionActivity.last_seen_at`, `AnalysisRun.created_at`, `PlaceCluster.created_at` or
+`SessionActivity.last_seen_at`, `AnalysisRun.created_at`, `AnalysisReportSnapshot.created_at`,
+`PlaceCluster.created_at` or
 `PlaceCluster.updated_at`, `ImportBatch.uploaded_at`, `StagingLocationObservation.created_at`,
 or `StopVisit.created_at`. Abandoned upload rows and clusters of every origin are removed in
 foreign-key order. Abandoned `SessionActivity` rows are pruned after their user data, and a
@@ -183,7 +185,7 @@ and location labels. Exports remain generalized.
 
 ## 5. Migrations
 
-Alembic manages the Postgres production schema; 17 migration scripts live in
+Alembic manages the Postgres production schema; 18 migration scripts live in
 `alembic/versions/`:
 
 | File | Content |
@@ -205,6 +207,7 @@ Alembic manages the Postgres production schema; 17 migration scripts live in
 | `0015_session_activity.py` | Creates `session_activity` with a hash primary key and indexed `last_seen_at`, and indexes `place_clusters.updated_at` for the active-identity union; downgrade reverses both. |
 | `0016_analysis_run_places.py` | Adds nullable `analysis_runs.place_ids_json`; new runs record their selected saved-place IDs so run exports retain zero-count selections, while old runs fall back to attached summaries. |
 | `0017_exact_manual_coords.py` | Backfills manual-place display coordinates from their exact stored centroids. |
+| `0018_analysis_report_snapshots.py` | Adds owned immutable canonical report snapshots plus owner and retention-age indexes. |
 
 **Dual bootstrap path** (`app/db.init_db`):
 

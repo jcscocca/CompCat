@@ -86,13 +86,6 @@ export function TrendSection({ neighborhood, layer, category }: TrendSectionProp
     ];
     body = (
       <>
-        <TrendChart
-          months={data.months}
-          area={data.area_counts}
-          rolling={rolling}
-          citywide={city}
-          label={data.mcpp_label}
-        />
         <div className="mc-trend-legend">
           <span>
             <i className="mc-trend-sw raw" />
@@ -109,6 +102,13 @@ export function TrendSection({ neighborhood, layer, category }: TrendSectionProp
             </span>
           ) : null}
         </div>
+        <TrendChart
+          months={data.months}
+          area={data.area_counts}
+          rolling={rolling}
+          citywide={city}
+          label={data.mcpp_label}
+        />
         {notes.map((note) => (
           <p key={note} className="mc-trend-note">
             {note}

@@ -31,6 +31,8 @@ from app.config import get_settings
 from app.crime.sources import sources_for_layer
 from app.geocoding.providers import build_provider
 from app.models import PlaceCluster
+from app.reports.schemas import AnalysisReportRequest
+from app.reports.service import create_analysis_report
 from app.services.dashboard_analysis_service import (
     analyze_selected_places,
     compare_selected_places,
@@ -44,6 +46,34 @@ from app.services.neighborhood_service import neighborhood_analysis_for_places
 # consumes them to populate the panes); 100 rows was ~50KB per turn — heavy over the
 # demo tunnel. The UI already shows "Showing nearest N of M" when capped.
 AGENT_INCIDENT_LIMIT = 30
+
+
+def _report_request(
+    args: AnalyzePlacesArgs | ComparePlacesByNameArgs | ExplainResultArgs,
+    *,
+    place_ids: list[str],
+    points: list[AnalysisPoint] | None,
+    radius_m: int,
+) -> AnalysisReportRequest:
+    layer_filters: dict[str, str | None] = {}
+    if args.layer == "reported":
+        layer_filters["offense_subcategory"] = args.offense_subcategory
+    elif args.layer == "arrests":
+        layer_filters["arrest_offense_description"] = args.offense_subcategory
+    else:
+        layer_filters["call_type"] = args.offense_subcategory
+    return AnalysisReportRequest(
+        place_ids=place_ids or None,
+        points=points,
+        radius_m=radius_m,
+        analysis_start_date=args.analysis_start_date,
+        analysis_end_date=args.analysis_end_date,
+        offense_category=args.offense_category if args.layer != "calls" else None,
+        nibrs_group=args.nibrs_group if args.layer != "calls" else None,
+        layer=args.layer,
+        record_limit=AGENT_INCIDENT_LIMIT,
+        **layer_filters,
+    )
 
 # These legacy exposure fields remain in the storage/export schema for compatibility, but the
 # public product no longer presents them and the assistant must not receive them through any
@@ -441,6 +471,16 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
         limit=AGENT_INCIDENT_LIMIT,
         sources=sources,
     )
+    report = create_analysis_report(
+        session,
+        user_id_hash=user_id_hash,
+        request=_report_request(
+            args,
+            place_ids=resolved.place_ids,
+            points=points,
+            radius_m=radius_m,
+        ),
+    )
     settings_used = _settings_used(args, radius_m)
     return {
         "place_ids": resolved.place_ids,
@@ -449,6 +489,7 @@ def _analyze_places(session: Session, user_id_hash: str, args: AnalyzePlacesArgs
         "analysis": analysis,
         "neighborhood": neighborhood,
         "incidents": incidents,
+        "report": report.model_dump(mode="json"),
         "matched": resolved.matched,
         "created": resolved.created,
         "unresolved": resolved.unresolved,
@@ -535,6 +576,16 @@ def _compare_places(
         limit=AGENT_INCIDENT_LIMIT,
         sources=sources,
     )
+    report = create_analysis_report(
+        session,
+        user_id_hash=user_id_hash,
+        request=_report_request(
+            args,
+            place_ids=resolved.place_ids,
+            points=points,
+            radius_m=args.radius_m,
+        ),
+    )
     settings_used = _settings_used(args, args.radius_m)
     return {
         "place_ids": resolved.place_ids,
@@ -543,6 +594,7 @@ def _compare_places(
         "comparison": comparison,
         "neighborhood": neighborhood,
         "incidents": incidents,
+        "report": report.model_dump(mode="json"),
         "matched": resolved.matched,
         "created": resolved.created,
         "unresolved": resolved.unresolved,
@@ -604,6 +656,17 @@ def _explain_result(
             sources=sources,
             persist=False,
         )
+    report = create_analysis_report(
+        session,
+        user_id_hash=user_id_hash,
+        request=_report_request(
+            args,
+            place_ids=place_ids,
+            points=points,
+            radius_m=args.radius_m,
+        ),
+        persist_snapshot=False,
+    )
     return {
         "kind": args.kind,
         "place_ids": place_ids,
@@ -619,6 +682,7 @@ def _explain_result(
         },
         "neighborhood": neighborhood,
         "comparison": comparison,
+        "report": report.model_dump(mode="json"),
     }
 
 

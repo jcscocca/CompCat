@@ -69,23 +69,39 @@ def test_analyze_places_honors_the_active_layer(tmp_path):
             id="call-1",
             external_incident_id="call-1",
             source_dataset="seattle_spd_911",
-            offense_start_utc=datetime(2024, 1, 12, tzinfo=UTC),
+            offense_start_utc=datetime(2024, 8, 12, tzinfo=UTC),
             offense_subcategory="DISTURBANCE - OTHER",
             latitude=47.6101,
             longitude=-122.3301,
         )
     )
     session.commit()
-    window = {
+    selection = {
         "place_ids": ["place-1"],
-        "analysis_start_date": "2024-01-01",
-        "analysis_end_date": "2024-01-31",
         "radii_m": [250],
     }
     try:
-        calls = execute_tool(session, user_hash, "analyze_places", {**window, "layer": "calls"})
+        calls = execute_tool(
+            session,
+            user_hash,
+            "analyze_places",
+            {
+                **selection,
+                "analysis_start_date": "2024-08-01",
+                "analysis_end_date": "2024-08-31",
+                "layer": "calls",
+            },
+        )
         reported = execute_tool(
-            session, user_hash, "analyze_places", {**window, "layer": "reported"}
+            session,
+            user_hash,
+            "analyze_places",
+            {
+                **selection,
+                "analysis_start_date": "2024-01-01",
+                "analysis_end_date": "2024-01-31",
+                "layer": "reported",
+            },
         )
     finally:
         session.close()
@@ -93,8 +109,14 @@ def test_analyze_places_honors_the_active_layer(tmp_path):
     calls_ids = {i["incident_id"] for i in calls["result"]["incidents"]["incidents"]}
     assert calls_ids == {"call-1"}
     assert calls["result"]["settings_used"]["layer"] == "calls"
+    assert calls["result"]["report"]["profile"]["report_title"] == "911 Call Activity Report"
+    assert calls["result"]["report"]["sections"]["comparison"] is None
     reported_ids = {i["incident_id"] for i in reported["result"]["incidents"]["incidents"]}
     assert reported_ids == {"incident-1"}
+    assert (
+        reported["result"]["report"]["profile"]["report_title"]
+        == "Reported Incident Context Report"
+    )
 
 
 def test_analyze_places_rejects_unknown_layer(tmp_path):

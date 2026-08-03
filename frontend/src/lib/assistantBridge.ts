@@ -1,5 +1,6 @@
 import type {
   AnalysisCardData,
+  AnalysisReport,
   AnalysisPointPayload,
   AnalysisSettings,
   AssistantToolEffect,
@@ -56,6 +57,20 @@ function asSettingsUsed(value: unknown): SettingsUsed | undefined {
   return isRecord(value) ? (value as SettingsUsed) : undefined;
 }
 
+function asReport(value: unknown): AnalysisReport | undefined {
+  if (
+    isRecord(value)
+    && isRecord(value.profile)
+    && isRecord(value.scope)
+    && isRecord(value.sections)
+    && Array.isArray(value.selection)
+    && typeof value.generated_at === "string"
+  ) {
+    return value as unknown as AnalysisReport;
+  }
+  return undefined;
+}
+
 function asPoints(value: unknown): AnalysisPointPayload[] {
   if (!Array.isArray(value)) return [];
   return value.filter(
@@ -93,6 +108,7 @@ export function interpretToolResult(data: {
       const neighborhood = asNeighborhood(result.neighborhood);
       const incidents = asIncidents(result.incidents);
       const badges = asBadges(result.badges);
+      const report = asReport(result.report);
       return {
         ...(points.length === 0 ? { selection: { mode: "replace" as const, ids: placeIds } } : {}),
         settings: settingsFrom(asSettingsUsed(result.settings_used)),
@@ -110,6 +126,7 @@ export function interpretToolResult(data: {
           comparison,
           neighborhood,
           incidents,
+          ...(report ? { report } : {}),
         },
       };
     }
@@ -119,6 +136,7 @@ export function interpretToolResult(data: {
       const neighborhood = asNeighborhood(result.neighborhood);
       const incidents = asIncidents(result.incidents);
       const badges = asBadges(result.badges);
+      const report = asReport(result.report);
       return {
         ...(points.length === 0 ? { selection: { mode: "replace" as const, ids: placeIds } } : {}),
         settings: settingsFrom(asSettingsUsed(result.settings_used)),
@@ -135,6 +153,7 @@ export function interpretToolResult(data: {
           comparison: null,
           neighborhood,
           incidents,
+          ...(report ? { report } : {}),
         },
       };
     }
