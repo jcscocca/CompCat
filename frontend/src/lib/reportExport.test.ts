@@ -10,7 +10,7 @@ function fixture(layer: LayerKey = "reported"): AnalysisReport {
   const subtype = layer === "reported" ? "offense_subcategory" : layer === "arrests" ? "arrest_offense_description" : "call_type";
   const title = layer === "reported" ? "Reported Incident Context Report" : layer === "arrests" ? "Arrest Activity Report" : "911 Call Activity Report";
   const report = {
-    report_id: "report-1", schema_version: "1.0", method_version: "analysis-report-v1",
+    report_id: "report-1", schema_version: "1.1", method_version: "analysis-report-v1",
     profile: {
       profile_version: "1.0", layer, report_title: title, source_dataset: source, counting_unit: unit,
       counting_unit_label: unit, record_noun_singular: "record", record_noun_plural: "records",
@@ -26,7 +26,7 @@ function fixture(layer: LayerKey = "reported"): AnalysisReport {
       { selection_id: "selection-2", label: "Second <script>alert(1)</script>", latitude: 47.61, longitude: -122.33 },
     ],
     sections: {
-      overview: { counting_unit: unit, unique_counting_basis: "unique_source_records", membership_counting_basis: "per_place_membership", unique_source_record_count: 3, membership_count: 4, returned_record_count: 2, record_limit: 100, records_truncated: false },
+      overview: { counting_unit: unit, unique_counting_basis: "unique_source_records", membership_counting_basis: "per_place_membership", unique_source_record_count: 3, membership_count: 4, overlap_summary: { shared_source_record_count: 1, additional_membership_count: 1, maximum_places_per_record: 2 }, returned_record_count: 2, record_limit: 100, records_truncated: false },
       place_context: ["selection-1", "selection-2"].map((selection_id, index) => ({ selection_id, label: index ? "Second <script>alert(1)</script>" : "=HYPERLINK(\"bad\")", counting_unit: unit, counting_basis: "per_place_membership", record_count: 2, type_mix: [{ counting_unit: unit, counting_basis: "per_place_membership", label: index ? "Other" : "+SUM(1,1)", count: 2, share: 1 }], temporal: { counting_unit: unit, counting_basis: "per_place_membership", hour_counts: Array(24).fill(0), dow_counts: [1, 0, 0, 0, 1, 0, 0], monthly_counts: { "2025-01": 2 }, with_primary_time: 2, without_primary_time: 0 }, coordinate_coverage: null, reference_context: layer === "reported" ? [{ counting_unit: unit, counting_basis: "per_place_membership", kind: "beat", label: "Beat reference", available: true, adequacy_status: "adequate", sampling_frame: "beat", sampling_frame_version: "1", computation: null, geography_components: [], reference_center_count: 10, reference_draw_count: 100, monte_carlo_error: null, covered_area_share: 1, effective_geographies: 1, target_count: 2, p10: 0, p25: 1, median: 2, p75: 3, p90: 4, share_below: .4, share_equal: .1, share_above: .5, midrank_percentile: .45, warnings: [] }] : [] })),
       comparison: layer === "reported" ? { counting_unit: unit, counting_basis: "per_place_membership", method_family: "candidate_vs_alternatives_bh", decision_class: "no_clear_difference", summary_text: "No clear modeled difference.", caveat_text: "Context only.", options: [], pairwise_results: [{ counting_unit: unit, counting_basis: "per_place_membership", selection_a_id: "selection-1", selection_a_label: "First", selection_b_id: "selection-2", selection_b_label: "Second", decision_class: "no_clear_difference", method: "quasipoisson", record_count_a: 2, record_count_b: 2, rate_a: 1, rate_b: 1, rate_ratio: 1, ci_lower: .5, ci_upper: 2, p_value: .8, adjusted_p_value: .8, overdispersion_phi: 1, overdispersion_status: "ok", minimum_data_status: "met", caveat_text: "Context only." }] } : null,
       records: { counting_unit: unit, counting_basis: "per_place_membership", total_membership_count: 2, returned_count: 2, limit: 100, truncated: false, records: [{ selection_id: "selection-1", place_label: "=HYPERLINK(\"bad\")", counting_unit: unit, counting_basis: "per_place_membership", source_dataset: source, primary_time: "2025-01-02T10:00:00Z", secondary_time: null, offense_category: layer === "calls" ? null : "THEFT", offense_subcategory: layer === "reported" ? "PROPERTY" : null, arrest_offense_description: layer === "arrests" ? "DESCRIPTION" : null, call_type: layer === "calls" ? "DISTURBANCE" : null, nibrs_group: null, distance_m: 42, duplicate_across_places: false }] },
@@ -71,6 +71,8 @@ describe("report exports", () => {
       expect(header).toContain(selectedLocationHeaders);
       expect(header).toContain(filterHeaders);
     }
+    expect(decodeReportFile(files["overview.csv"]).split("\r\n")[0]).toContain("shared_source_record_count,additional_membership_count,maximum_places_per_record");
+    expect(decodeReportFile(files["overview.csv"])).toContain(",3,per_place_membership,4,1,1,2,2,false");
     expect(decodeReportFile(files["places.csv"])).toContain("'=HYPERLINK");
     const metadata = JSON.parse(decodeReportFile(files["metadata.json"]));
     expect(metadata).toMatchObject({
@@ -84,6 +86,11 @@ describe("report exports", () => {
         arrest_offense_description: null,
         call_type: null,
         nibrs_group: "A",
+      },
+      overlap_summary: {
+        shared_source_record_count: 1,
+        additional_membership_count: 1,
+        maximum_places_per_record: 2,
       },
     });
     expect(metadata.selected_locations).toEqual([
@@ -120,6 +127,8 @@ describe("report exports", () => {
     expect(html).toContain("Primary selected location: =HYPERLINK(&quot;bad&quot;)");
     expect(html).toContain("generalized coordinates 47.600, -122.332");
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("1 source record falls within both selected radii.");
+    expect(html).toContain("individual place totals add up to 4 memberships");
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).not.toContain("owner_hash");
     expect(reportFilename(fixture(), "zip")).toBe("compcat-reported-hyperlink-bad-plus-1-report-2026-08-02.zip");

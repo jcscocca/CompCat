@@ -133,7 +133,7 @@ function canonicalReport(): AnalysisReport {
   }));
   return {
     report_id: "report-1",
-    schema_version: "1.0",
+    schema_version: "1.1",
     method_version: "analysis-report-v1",
     profile: {
       profile_version: "1.0",
@@ -175,7 +175,7 @@ function canonicalReport(): AnalysisReport {
     },
     selection: [{ selection_id: "selection-1", label: "Downtown Seattle", latitude: 47.6, longitude: -122.33 }],
     sections: {
-      overview: { counting_unit: "reported_offense_record", unique_counting_basis: "unique_source_records", membership_counting_basis: "per_place_membership", unique_source_record_count: 3, membership_count: 3, returned_record_count: 0, record_limit: 100, records_truncated: false },
+      overview: { counting_unit: "reported_offense_record", unique_counting_basis: "unique_source_records", membership_counting_basis: "per_place_membership", unique_source_record_count: 3, membership_count: 3, overlap_summary: { shared_source_record_count: 0, additional_membership_count: 0, maximum_places_per_record: 1 }, returned_record_count: 0, record_limit: 100, records_truncated: false },
       place_context: [{
         selection_id: "selection-1",
         label: "Downtown Seattle",
@@ -235,6 +235,38 @@ describe("categoryCounts", () => {
 });
 
 describe("AnalysisCard", () => {
+  it("hides redundant memberships for one place and explains overlap for two", () => {
+    const single = canonicalReport();
+    const { rerender } = render(
+      <AnalysisCard card={analyzeCard({ report: single })} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />,
+    );
+    expect(screen.queryByText("Per-place memberships")).not.toBeInTheDocument();
+    expect(screen.queryByText(/selected radii/)).not.toBeInTheDocument();
+
+    const multi = canonicalReport();
+    multi.selection_kind = "multi_place";
+    multi.selection.push({ selection_id: "selection-2", label: "Second", latitude: 47.601, longitude: -122.331 });
+    multi.sections.place_context.push({
+      ...multi.sections.place_context[0],
+      selection_id: "selection-2",
+      label: "Second",
+      record_count: 1,
+    });
+    multi.sections.overview.unique_source_record_count = 3;
+    multi.sections.overview.membership_count = 4;
+    multi.sections.overview.overlap_summary = {
+      shared_source_record_count: 1,
+      additional_membership_count: 1,
+      maximum_places_per_record: 2,
+    };
+    rerender(
+      <AnalysisCard card={analyzeCard({ report: multi })} expanded={false} onExpandChange={() => {}} exportHrefBase={EXPORT_BASE} />,
+    );
+    expect(screen.getByText("1 source record falls within both selected radii.")).toBeInTheDocument();
+    expect(screen.getByText(/individual place totals add up to 4 memberships/)).toBeInTheDocument();
+    expect(screen.queryByText("Per-place memberships")).not.toBeInTheDocument();
+  });
+
   it("keeps the full reference distribution and broader rolling-average trend in canonical reports", async () => {
     const { container } = render(
       <AnalysisCard

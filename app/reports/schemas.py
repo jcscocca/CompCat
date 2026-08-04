@@ -14,7 +14,7 @@ from app.api.dashboard_schemas import (
 )
 from app.crime.sources import LAYER_ARRESTS, LAYER_CALLS, LAYER_REPORTED, LAYERS
 
-REPORT_SCHEMA_VERSION = "1.0"
+REPORT_SCHEMA_VERSION = "1.1"
 REPORT_METHOD_VERSION = "analysis-report-v1"
 REPORT_PROFILE_VERSION = "1.0"
 
@@ -154,6 +154,12 @@ class ReportSelection(BaseModel):
     longitude: float
 
 
+class ReportOverlapSummary(BaseModel):
+    shared_source_record_count: int = Field(ge=0)
+    additional_membership_count: int = Field(ge=0)
+    maximum_places_per_record: int = Field(ge=0)
+
+
 class ReportOverviewSection(BaseModel):
     counting_unit: str
     unique_counting_basis: Literal[CountingBasis.UNIQUE_SOURCE_RECORDS] = (
@@ -164,9 +170,35 @@ class ReportOverviewSection(BaseModel):
     )
     unique_source_record_count: int = Field(ge=0)
     membership_count: int = Field(ge=0)
+    overlap_summary: ReportOverlapSummary | None = None
     returned_record_count: int = Field(ge=0)
     record_limit: int = Field(ge=1)
     records_truncated: bool
+
+    @model_validator(mode="after")
+    def validate_overlap_summary(self) -> ReportOverviewSection:
+        if self.membership_count < self.unique_source_record_count:
+            raise ValueError("membership_count cannot be less than unique_source_record_count")
+        if self.overlap_summary is None:
+            return self
+        overlap = self.overlap_summary
+        if overlap.additional_membership_count != (
+            self.membership_count - self.unique_source_record_count
+        ):
+            raise ValueError("additional memberships must reconcile overview counts")
+        if overlap.shared_source_record_count > self.unique_source_record_count:
+            raise ValueError("shared source records cannot exceed unique source records")
+        expected_minimum_max = 0 if self.unique_source_record_count == 0 else 1
+        if overlap.maximum_places_per_record < expected_minimum_max:
+            raise ValueError("maximum places per record is inconsistent with the record count")
+        if overlap.shared_source_record_count == 0 and (
+            overlap.additional_membership_count != 0
+            or overlap.maximum_places_per_record > expected_minimum_max
+        ):
+            raise ValueError("overlap summary reports memberships without shared source records")
+        if overlap.shared_source_record_count > 0 and overlap.maximum_places_per_record < 2:
+            raise ValueError("shared source records require at least two place memberships")
+        return self
 
 
 class ReportBreakdownRow(BaseModel):

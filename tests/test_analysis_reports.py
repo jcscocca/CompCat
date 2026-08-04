@@ -135,6 +135,11 @@ def test_call_report_is_descriptive_nonpersistent_and_uses_surface_vocabulary(tm
         "membership_counting_basis": "per_place_membership",
         "unique_source_record_count": 1,
         "membership_count": 1,
+        "overlap_summary": {
+            "shared_source_record_count": 0,
+            "additional_membership_count": 0,
+            "maximum_places_per_record": 1,
+        },
         "returned_record_count": 1,
         "record_limit": 100,
         "records_truncated": False,
@@ -228,13 +233,17 @@ def test_report_overlap_distinguishes_unique_records_from_place_memberships(tmp_
     assert report["comparison_mode"] == "modeled"
     assert report["sections"]["overview"]["unique_source_record_count"] == 1
     assert report["sections"]["overview"]["membership_count"] == 2
+    assert report["sections"]["overview"]["overlap_summary"] == {
+        "shared_source_record_count": 1,
+        "additional_membership_count": 1,
+        "maximum_places_per_record": 2,
+    }
     assert [place["record_count"] for place in report["sections"]["place_context"]] == [1, 1]
     assert all(
         record["duplicate_across_places"] for record in report["sections"]["records"]["records"]
     )
     assert report["sections"]["comparison"]["method_family"] == ("candidate_vs_alternatives_bh")
     assert len(report["sections"]["comparison"]["pairwise_results"]) == 1
-
     user_hash = public_user_hash(client.cookies.get("mca_session"))
     assert user_hash is not None
     with get_sessionmaker()() as session:
@@ -244,6 +253,110 @@ def test_report_overlap_distinguishes_unique_records_from_place_memberships(tmp_
         assert first_id not in snapshot.payload_json
         assert second_id not in snapshot.payload_json
         assert user_hash not in snapshot.payload_json
+
+
+def test_report_overlap_counts_shared_records_separately_from_extra_memberships(tmp_path):
+    _, client = _client(tmp_path, "three-way-overlap")
+    place_ids = [
+        _place(client, "First", 47.6090, -122.3330),
+        _place(client, "Second", 47.6091, -122.3331),
+        _place(client, "Third", 47.6092, -122.3332),
+    ]
+    with get_sessionmaker()() as session:
+        session.add(
+            _incident(
+                incident_id="reported-three-way-overlap",
+                source_dataset="seattle_spd_crime",
+                observed_at=datetime(2024, 1, 10, 8, 0, tzinfo=UTC),
+                latitude=47.6091,
+                longitude=-122.3331,
+                subcategory="THEFT",
+            )
+        )
+        session.commit()
+
+    response = client.post("/dashboard/reports", json=_reported_request(place_ids))
+
+    assert response.status_code == 200
+    overview = response.json()["sections"]["overview"]
+    assert overview["unique_source_record_count"] == 1
+    assert overview["membership_count"] == 3
+    assert overview["overlap_summary"] == {
+        "shared_source_record_count": 1,
+        "additional_membership_count": 2,
+        "maximum_places_per_record": 3,
+    }
+
+
+def test_report_overlap_summary_is_shared_by_descriptive_layers(tmp_path):
+    _, client = _client(tmp_path, "descriptive-overlap")
+    points = [
+        {"label": "First", "latitude": 47.6090, "longitude": -122.3330},
+        {"label": "Second", "latitude": 47.6092, "longitude": -122.3332},
+    ]
+    with get_sessionmaker()() as session:
+        session.add_all(
+            [
+                _incident(
+                    incident_id="arrest-overlap",
+                    source_dataset="seattle_spd_arrests",
+                    observed_at=datetime(2024, 1, 10, 8, 0, tzinfo=UTC),
+                    latitude=47.6091,
+                    longitude=-122.3331,
+                    subcategory="SHOPLIFTING",
+                ),
+                _incident(
+                    incident_id="call-overlap",
+                    source_dataset="seattle_spd_911",
+                    observed_at=datetime(2026, 7, 10, 8, 0, tzinfo=UTC),
+                    latitude=47.6091,
+                    longitude=-122.3331,
+                    subcategory="DISTURBANCE",
+                ),
+            ]
+        )
+        session.commit()
+
+    requests = [
+        {
+            "points": points,
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radius_m": 250,
+            "layer": "arrests",
+        },
+        {
+            "points": points,
+            "analysis_start_date": "2026-07-01",
+            "analysis_end_date": "2026-07-31",
+            "radius_m": 250,
+            "layer": "calls",
+        },
+    ]
+
+    for request in requests:
+        response = client.post("/dashboard/reports", json=request)
+        assert response.status_code == 200
+        assert response.json()["sections"]["overview"]["overlap_summary"] == {
+            "shared_source_record_count": 1,
+            "additional_membership_count": 1,
+            "maximum_places_per_record": 2,
+        }
+
+
+def test_legacy_report_without_overlap_summary_remains_valid(tmp_path):
+    _, client = _client(tmp_path, "legacy-overlap-contract")
+    place_id = _place(client, "Legacy", 47.6090, -122.3330)
+    response = client.post("/dashboard/reports", json=_reported_request([place_id]))
+    assert response.status_code == 200
+    payload = response.json()
+    payload["schema_version"] = "1.0"
+    payload["sections"]["overview"].pop("overlap_summary")
+
+    validated = AnalysisReport.model_validate(payload)
+
+    assert validated.schema_version == "1.0"
+    assert validated.sections.overview.overlap_summary is None
 
 
 def test_saved_report_is_owned_revalidated_and_deletable(tmp_path):

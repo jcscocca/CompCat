@@ -411,6 +411,11 @@ export type AnalysisReport = {
       membership_counting_basis: "per_place_membership";
       unique_source_record_count: number;
       membership_count: number;
+      overlap_summary?: {
+        shared_source_record_count: number;
+        additional_membership_count: number;
+        maximum_places_per_record: number;
+      } | null;
       returned_record_count: number;
       record_limit: number;
       records_truncated: boolean;
