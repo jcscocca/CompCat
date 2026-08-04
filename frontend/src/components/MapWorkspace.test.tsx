@@ -1188,6 +1188,11 @@ describe("MapWorkspace", () => {
     window.innerWidth = 375;
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    vi.mocked(getDashboardFreshness).mockResolvedValue({
+      reported: { incident_count: 386, earliest: "2018-01-01", data_through: "2025-10-27", last_ingested_at: "2026-07-20" },
+      arrests: { incident_count: 0, earliest: null, data_through: null, last_ingested_at: null },
+      calls: { incident_count: 0, earliest: null, data_through: null, last_ingested_at: null },
+    });
 
     render(<MapWorkspace />);
     await screen.findByText("Home");
@@ -1195,6 +1200,9 @@ describe("MapWorkspace", () => {
     const group = screen.getByRole("group", { name: "Data layer" });
     expect(group.closest(".mc-workspace-panel")).not.toBeNull();
     expect(group.closest(".mc-topbar")).toBeNull();
+    const freshness = await screen.findByText("Data through Oct 27, 2025");
+    expect(freshness.closest(".mc-sheet-head")).toBeNull();
+    expect(freshness.closest(".mc-ctx-metadata")).not.toBeNull();
   });
 
   it("wide viewport: the layer toggle mounts in the top bar", async () => {

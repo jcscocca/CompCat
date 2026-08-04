@@ -879,10 +879,13 @@ export function MapWorkspace() {
   const exportHrefBase = data.analysisExportHref.split("?")[0];
 
   // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
+  const freshnessIndicator = (
+    <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
+  );
   const layerControls = (
     <>
       <LayerToggle layer={analysis.layer} availability={layerAvailability} counts={incidentLayer.layerTotals} onChange={(layer) => handleAnalysisChange({ layer, offenseCategory: "" })} />
-      <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
+      {!isMobile ? freshnessIndicator : null}
     </>
   );
   const paneIsWide = drawer.widthPx >= clampWidth(DRAWER_WIDE);
@@ -1139,6 +1142,7 @@ export function MapWorkspace() {
                   runDisabled={list.entries.length === 0 || !activeLayerAvailable}
                   layerAvailability={layerAvailability}
                   locationControls={locationControls}
+                  metadata={isMobile ? freshnessIndicator : undefined}
                   onCopyLink={handleCopyLink}
                   copyDisabled={list.entries.length === 0}
                 />

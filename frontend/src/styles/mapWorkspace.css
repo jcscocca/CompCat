@@ -219,6 +219,9 @@
 .mc-ctx-summary.is-open{border-color:var(--accent);}
 .mc-ctx-summary-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .mc-ctx-summary-label{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.055em;text-transform:uppercase;color:var(--text-strong);}
+.mc-ctx-metadata{min-width:0;color:var(--text-dim);}
+.mc-ctx-metadata .mc-status{padding:0;border:0;border-radius:0;background:transparent;color:var(--text-dim);font-size:10px;}
+.mc-ctx-metadata .mc-freshness-detail{right:0;}
 .mc-ctx-filter-icon{color:var(--accent-deep);}
 .mc-ctx-locations{display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
 .mc-ctx-locations-label{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);}
