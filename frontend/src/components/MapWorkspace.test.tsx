@@ -576,6 +576,33 @@ describe("MapWorkspace", () => {
     expect(container.querySelector(".mc-draft-overlay")).not.toBeInTheDocument();
   });
 
+  it("narrow viewport: shows the compact map count only while the sheet is at the bar snap", async () => {
+    window.innerWidth = 400;
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(getIncidentPoints).mockResolvedValue({
+      points: [], returned_count: 42, total_count: 42, returned_location_count: 18,
+      total_location_count: 18, layer_totals: { reported: 42, arrests: 0, calls: 0 },
+      unmappable_citywide_count: 6, limit: 5000,
+    });
+
+    const { container } = render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+    fireEvent.click(screen.getByTestId("fire-viewport"));
+    await waitFor(() => expect(getIncidentPoints).toHaveBeenCalled());
+
+    expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-half");
+    expect(screen.queryByRole("button", { name: /42 reported incidents · 18 blocks/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Drop a pin on the map" }));
+    expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-bar");
+    expect(screen.getByRole("button", { name: /42 reported incidents · 18 blocks/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("fire-map-click"));
+    expect(container.querySelector(".mc-workspace-panel")).toHaveClass("is-half");
+    expect(screen.queryByRole("button", { name: /42 reported incidents · 18 blocks/i })).toBeNull();
+  });
+
   it("runs analysis for a selected place", async () => {
     const window = currentYearAnalysisWindow();
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
