@@ -795,12 +795,12 @@ export function MapWorkspace() {
   // Focus mode is a desktop side-panel concept — force it off on mobile (the bottom sheet).
   const isFocus = !isMobile && !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
 
-  // The compact map-count pill is visible only at the peek snap. The map key rides above it
-  // there, then follows the raised sheet when it moves to half. At full there is no map left
-  // to key, so its position is capped at the half snap before CSS hides it.
+  // The compact map-count pill is visible only at the peek snap, just above attribution.
+  // The map key rides above the pill there, then follows the raised sheet when it moves to
+  // half. At full there is no map left to key, so CSS hides it.
   const mapKeyBottomPx = Math.max(
     snapHeightPx(drawer.snap === "full" ? "half" : drawer.snap, window.innerHeight) + 12,
-    182,
+    220,
   );
 
   // The open map key is a dismissible overlay, so Escape closes it and hands focus back to

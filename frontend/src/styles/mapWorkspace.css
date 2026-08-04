@@ -664,8 +664,8 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
   .mc-frame.is-sheet-full .mc-banner:not(.mc-banner-warn){display:none;}
   .mc-frame.is-sheet-full .mc-banner-warn,
   .mc-frame.is-sheet-full .mc-error{top:calc(env(safe-area-inset-top) + 8px);max-width:calc(100vw - 32px);}
-  .mc-disclosure{left:calc(env(safe-area-inset-left) + 12px);bottom:calc(env(safe-area-inset-bottom) + 132px);max-width:calc(100vw - 76px);}
-  .mc-disclosure-details{width:min(380px,calc(100vw - 24px));}
+  .mc-disclosure{left:calc(env(safe-area-inset-left) + 12px);bottom:calc(env(safe-area-inset-bottom) + 168px);max-width:calc(100vw - 24px);}
+  .mc-disclosure-details{width:min(380px,calc(100vw - 76px));}
 
   /* Workspace panel becomes a bottom sheet: full width, height-driven, flex column. */
   .mc-workspace-panel{
