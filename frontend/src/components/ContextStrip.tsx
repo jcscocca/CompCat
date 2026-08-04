@@ -29,6 +29,9 @@ type Props = {
   /** Saved-place selection belongs to the analysis context, so it is composed into
    * this single control instead of living in a second toolbar at the top of the rail. */
   locationControls?: ReactNode;
+  /** Secondary context that belongs with the filters instead of competing with the
+   * primary layer selector in the workspace header. */
+  metadata?: ReactNode;
   /** Copies the share link and reports success/failure (the caller owns the URL + the
    * clipboard write); the strip only owns the transient status note. */
   onCopyLink?: () => Promise<boolean> | boolean;
@@ -61,6 +64,7 @@ export function ContextStrip({
   runDisabled,
   layerAvailability,
   locationControls,
+  metadata,
   onCopyLink,
   copyDisabled,
 }: Props) {
@@ -157,6 +161,7 @@ export function ContextStrip({
             </svg>
             Analysis filters
           </span>
+          {metadata ? <div className="mc-ctx-metadata">{metadata}</div> : null}
         </div>
 
         {locationControls ? (

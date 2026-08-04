@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IncidentDisclosure } from "./IncidentDisclosure";
@@ -20,6 +20,25 @@ describe("IncidentDisclosure", () => {
     expect(chip).toHaveTextContent("42 incidents across 18 block locations in current map view");
     expect(chip).toHaveTextContent("Records mapped to the same block are shown as counted stacks.");
     expect(chip).toHaveTextContent("+6 citywide with redacted location — in beat stats only.");
+  });
+
+  it("keeps the map chrome compact and opens the full explanation on demand", () => {
+    render(<IncidentDisclosure returnedCount={42} totalCount={42} returnedLocationCount={18} totalLocationCount={18} unmappableCitywideCount={6} limit={5000} />);
+
+    const toggle = screen.getByRole("button", { name: /42 incidents · 18 blocks\. show map count details/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("region", { name: "Map count details" })).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const details = screen.getByRole("region", { name: "Map count details" });
+    expect(details).toHaveTextContent("42 incidents across 18 block locations in current map view");
+    expect(details).toHaveTextContent("Records mapped to the same block are shown as counted stacks.");
+    expect(details).toHaveTextContent("+6 citywide with redacted location — in beat stats only.");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Map count details" })).toBeNull();
+    expect(toggle).toHaveFocus();
   });
 
   it("discloses location-level truncation when the cap bites", () => {

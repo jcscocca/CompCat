@@ -795,14 +795,12 @@ export function MapWorkspace() {
   // Focus mode is a desktop side-panel concept — force it off on mobile (the bottom sheet).
   const isFocus = !isMobile && !drawer.collapsed && window.innerWidth - drawer.widthPx < FOCUS_CHROME_MIN;
 
-  // The rest of the bottom-left map chrome is pinned clear of the sheet's peek snap only, so
-  // it disappears under a raised sheet. The map key instead rides above whichever snap is
-  // live. The 240 floor clears the incident chip, which is pinned at +164 px and runs to
-  // ~217 px when its citywide-redaction clause wraps. Capped at the half snap: at full there
-  // is no map left to key. Read back by the CSS as --mapkey-bottom to size the overlay.
+  // The compact map-count pill is visible only at the peek snap, just above attribution.
+  // The map key rides above the pill there, then follows the raised sheet when it moves to
+  // half. At full there is no map left to key, so CSS hides it.
   const mapKeyBottomPx = Math.max(
     snapHeightPx(drawer.snap === "full" ? "half" : drawer.snap, window.innerHeight) + 12,
-    240,
+    220,
   );
 
   // The open map key is a dismissible overlay, so Escape closes it and hands focus back to
@@ -881,10 +879,13 @@ export function MapWorkspace() {
   const exportHrefBase = data.analysisExportHref.split("?")[0];
 
   // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
+  const freshnessIndicator = (
+    <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
+  );
   const layerControls = (
     <>
       <LayerToggle layer={analysis.layer} availability={layerAvailability} counts={incidentLayer.layerTotals} onChange={(layer) => handleAnalysisChange({ layer, offenseCategory: "" })} />
-      <DataFreshness freshness={data.freshness} layer={analysis.layer} loaded={data.freshnessLoaded} />
+      {!isMobile ? freshnessIndicator : null}
     </>
   );
   const paneIsWide = drawer.widthPx >= clampWidth(DRAWER_WIDE);
@@ -1028,15 +1029,17 @@ export function MapWorkspace() {
             </button>
             <MapLegend layer={analysis.layer} id="mc-map-legend" hidden={!mapKeyOpen} />
           </div>
-          <IncidentDisclosure
-          returnedCount={incidentLayer.returnedCount}
-          totalCount={incidentLayer.totalCount}
-          returnedLocationCount={incidentLayer.returnedLocationCount}
-          totalLocationCount={incidentLayer.totalLocationCount}
-          unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
-          limit={incidentLayer.limit}
-          itemNoun={incidentNoun(analysis.layer)}
-          />
+          {!isMobile || drawer.snap === "bar" ? (
+            <IncidentDisclosure
+              returnedCount={incidentLayer.returnedCount}
+              totalCount={incidentLayer.totalCount}
+              returnedLocationCount={incidentLayer.returnedLocationCount}
+              totalLocationCount={incidentLayer.totalLocationCount}
+              unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
+              limit={incidentLayer.limit}
+              itemNoun={incidentNoun(analysis.layer)}
+            />
+          ) : null}
 
           {data.error && data.places.length === 0 && list.entries.length === 0 && !pinDraft.draft ? (
           <p className="mc-error" role="alert">
@@ -1139,6 +1142,7 @@ export function MapWorkspace() {
                   runDisabled={list.entries.length === 0 || !activeLayerAvailable}
                   layerAvailability={layerAvailability}
                   locationControls={locationControls}
+                  metadata={isMobile ? freshnessIndicator : undefined}
                   onCopyLink={handleCopyLink}
                   copyDisabled={list.entries.length === 0}
                 />
