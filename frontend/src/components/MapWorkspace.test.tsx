@@ -398,13 +398,14 @@ describe("MapWorkspace", () => {
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
-    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("400px");
+    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("720px");
     expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
     expect(screen.queryByText("Analysis filters")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("400px");
     expect(screen.getByRole("button", { name: "Show me the data" })).toBeInTheDocument();
     expect(screen.getByText("Analysis filters")).toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
@@ -960,13 +961,13 @@ describe("MapWorkspace", () => {
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
     // A point-backed card can frame its frozen coordinates even though no dashboard Place
-    // exists. A direct report preserves the 400px desktop panel, plus a 40px map gutter.
+    // exists. A direct report expands to the 720px detail width, plus a 40px map gutter.
     const fit = fitToCaptures.at(-1) as {
       points: { lat: number; lng: number }[];
       padding: { top: number; right: number; bottom: number; left: number };
     };
     expect(fit.points).toEqual([{ lat: 47.61, lng: -122.34 }]);
-    expect(fit.padding).toEqual({ top: 90, left: 40, right: 440, bottom: 40 });
+    expect(fit.padding).toEqual({ top: 90, left: 40, right: 760, bottom: 40 });
   });
 
   it("lets a later search recenter supersede the last chip fly", async () => {

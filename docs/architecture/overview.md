@@ -1,7 +1,7 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Updated 2026-08-01 for layer-explicit incident-map labels, neighborhood-scale clustering,
-> the direct report action, public-runtime hardening, and the WCAG 2.2 Level AA frontend contract.
+> Updated 2026-08-04 for layer-explicit incident-map labels, neighborhood-scale clustering,
+> the auto-expanding direct report action, public-runtime hardening, and the WCAG 2.2 Level AA frontend contract.
 
 ---
 
@@ -149,8 +149,8 @@ The Tabby rail's **Show me the data** action does not call an assistant endpoint
 
 On desktop, explicitly opening a collapsed analysis card's detailed pane temporarily grows the
 Tabby rail to at least 720 px (without shrinking an already wider user width); collapsing the
-card restores the previous width. A direct Quick report preserves the reader's existing desktop
-width while entering the same result-focused layout. The card also refits the map from its frozen saved-place or ad-hoc coordinates,
+card restores the previous width. A direct Quick report enters that same readable-width,
+result-focused layout automatically. The card also refits the map from its frozen saved-place or ad-hoc coordinates,
 using the active rail width as camera padding; nearby locations therefore zoom in together while
 spread-out locations remain in frame. Mobile uses the full-height sheet snap instead. The full
 map key stays behind a compact toggle at every viewport width and disappears in the narrow

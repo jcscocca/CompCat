@@ -352,15 +352,14 @@ export function MapWorkspace() {
     localCardRef.current = card;
     setCurrentCard(card);
     if (shouldExpand) {
-      // A direct report becomes the rail's primary document without changing a desktop width
-      // the reader already chose. Mobile still needs the full sheet; fit before raising it so
-      // the map is framed correctly when the sheet comes back down. In both cases, focus the
-      // card explicitly so the report opens at its heading rather than inheriting chat's
+      // A direct report becomes the rail's primary document and needs the same readable width
+      // as a card opened with View details. Mobile still needs the map fit before the sheet is
+      // raised so the locations are framed correctly when it comes back down. Focus the card
+      // explicitly so the report opens at its heading rather than inheriting chat's
       // stick-to-bottom behavior.
-      setExpandedCard(card);
+      if (isMobile) fitCard(card);
+      expandCard(card);
       setFocusCard({ card });
-      fitCard(card);
-      if (isMobile) onSnap("full");
     } else {
       fitCard(card);
     }
