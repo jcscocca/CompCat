@@ -47,6 +47,12 @@ contract.
 - Each visible analysis-filter value is a named disclosure button. Every non-modal anchored
   picker closes on outside pointer input or Escape, and option pickers close immediately on
   selection; Escape and option selection restore focus to the originating filter.
+- Radius suggestions remain keyboard-operable shortcuts, while the labeled custom-radius field
+  accepts any value from 100 m through 1 km and exposes validation errors in the same dialog.
+  Date presets are ordinary buttons and resolve against the currently active end date.
+- Assistant-applied filter changes are announced as deterministic status receipts. Their
+  one-time Undo control restores the prior scope without relying on the temporary visual
+  highlight, which is disabled when reduced motion is requested.
 - Modal dialogs move focus inside on open, contain both forward and reverse Tab navigation,
   close with Escape, and restore focus to their trigger.
 - Mobile sheet dragging has a keyboard/tap toggle. Desktop drawer resizing has arrow, Home,

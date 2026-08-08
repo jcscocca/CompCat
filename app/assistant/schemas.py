@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.analysis.radius import MAX_ANALYSIS_RADIUS_M, MIN_ANALYSIS_RADIUS_M
 from app.api.dashboard_schemas import AnalysisPoint
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ MAX_MESSAGES_PER_REQUEST = 200
 # where an unbounded list overflows SQL bind parameters.
 MAX_SELECTED_PLACES = 25  # the UI tops out at 10 saved places plus ad-hoc pins
 MAX_PLACE_ID_CHARS = 64  # ids are uuids (36)
-MAX_RADII = 3  # Settings.crime_radii_m only ever offers three
+MAX_RADII = 3  # The product exposes at most three suggested radii per analysis request.
 MAX_FILTER_CHARS = 80
 
 
@@ -46,7 +47,9 @@ class AssistantDashboardState(BaseModel):
     )
     analysis_start_date: date | None = None
     analysis_end_date: date | None = None
-    radii_m: list[Annotated[int, Field(gt=0, le=5000)]] = Field(
+    radii_m: list[
+        Annotated[int, Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M)]
+    ] = Field(
         default_factory=list, max_length=MAX_RADII
     )
     offense_category: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
@@ -97,7 +100,7 @@ class AssistantResultContext(BaseModel):
     )
     analysis_start_date: date
     analysis_end_date: date
-    radius_m: int = Field(gt=0, le=5000)
+    radius_m: int = Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M)
     offense_category: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
     offense_subcategory: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)
     nibrs_group: str | None = Field(default=None, max_length=MAX_FILTER_CHARS)

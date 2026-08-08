@@ -16,6 +16,7 @@ import { clampWidth, DRAWER_DETAIL, DRAWER_RAIL, DRAWER_WIDE, FOCUS_CHROME_MIN, 
 import { geocodingProvider } from "../lib/geocoding";
 import { cardWithSavedPlaceIds } from "../lib/localCard";
 import { incidentNoun } from "../lib/layerCopy";
+import { categoryLabel } from "../lib/offenseCategories";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { clearRecentPlaces } from "../lib/searchHistory";
 import { decodeView, encodeView } from "../lib/savedView";
@@ -46,6 +47,64 @@ import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
 import type { AnalysisCardData, AnalysisSettings, AssistantDashboardState, BadgeDescriptor, BeatFeatureCollection, GeocodeResult, LatLng, LayerKey, MapBounds, Place, PlaceCreate } from "../types";
+
+const ANALYSIS_SETTING_KEYS: (keyof AnalysisSettings)[] = [
+  "startDate",
+  "endDate",
+  "radiusM",
+  "offenseCategory",
+  "layer",
+];
+
+function changedAnalysisFields(
+  current: AnalysisSettings,
+  patch: Partial<AnalysisSettings>,
+): (keyof AnalysisSettings)[] {
+  return ANALYSIS_SETTING_KEYS.filter(
+    (key) => patch[key] !== undefined && patch[key] !== current[key],
+  );
+}
+
+function previousAnalysisSettings(
+  current: AnalysisSettings,
+  fields: (keyof AnalysisSettings)[],
+): Partial<AnalysisSettings> {
+  const previous: Partial<AnalysisSettings> = {};
+  for (const field of fields) {
+    Object.assign(previous, { [field]: current[field] });
+  }
+  return previous;
+}
+
+function assistantSettingsReceipt(
+  current: AnalysisSettings,
+  patch: Partial<AnalysisSettings>,
+  fields: (keyof AnalysisSettings)[],
+): string {
+  const next = { ...current, ...patch };
+  if (fields.length === 1 && fields[0] === "radiusM") {
+    return `Tabby changed the radius from ${current.radiusM} m to ${next.radiusM} m.`;
+  }
+  if (fields.every((field) => field === "startDate" || field === "endDate")) {
+    return `Tabby changed the date range to ${next.startDate} – ${next.endDate}.`;
+  }
+  if (fields.length === 1 && fields[0] === "offenseCategory") {
+    return `Tabby changed the category to ${categoryLabel(next.offenseCategory, next.layer)}.`;
+  }
+  if (fields.length === 1 && fields[0] === "layer") {
+    return `Tabby changed the layer to ${incidentNoun(next.layer).plural}.`;
+  }
+  const labels = Array.from(new Set(fields.map((field) => {
+    if (field === "startDate" || field === "endDate") return "date range";
+    if (field === "radiusM") return "radius";
+    if (field === "offenseCategory") return "category";
+    return "layer";
+  })));
+  const joined = labels.length === 2
+    ? labels.join(" and ")
+    : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+  return `Tabby updated the ${joined}.`;
+}
 
 function pointsForCard(card: AnalysisCardData, places: Place[]): LatLng[] {
   if (card.points?.length) {
@@ -92,11 +151,20 @@ export function MapWorkspace() {
     const window = currentYearAnalysisWindow();
     return { startDate: window.analysis_start_date, endDate: window.analysis_end_date, radiusM: 250, offenseCategory: "", layer: "reported" };
   });
+  const [assistantUpdatedFields, setAssistantUpdatedFields] = useState<(keyof AnalysisSettings)[]>([]);
+  const assistantUpdateTimerRef = useRef<number | null>(null);
+  const assistantReceiptSequenceRef = useRef(0);
   const analysisEditedRef = useRef(Boolean(initialView));
   const [beats, setBeats] = useState<BeatFeatureCollection | null>(null);
   const [viewport, setViewport] = useState<MapBounds | null>(null);
 
   const data = useDashboardData();
+
+  useEffect(() => () => {
+    if (assistantUpdateTimerRef.current !== null) {
+      window.clearTimeout(assistantUpdateTimerRef.current);
+    }
+  }, []);
   const clearablePlaces = useMemo(
     () => data.places.filter((place) => place.inferred_place_type === "manual_place"),
     [data.places],
@@ -555,6 +623,7 @@ export function MapWorkspace() {
       return;
     }
     analysisEditedRef.current = true;
+    setAssistantUpdatedFields([]);
     invalidateAnalysisContext();
     setAnalysis((current) => ({ ...current, ...patch }));
   }
@@ -636,6 +705,25 @@ export function MapWorkspace() {
       setSharedBanner(false);
     }
     if (effect.settings) {
+      const changedFields = changedAnalysisFields(analysis, effect.settings);
+      if (changedFields.length > 0) {
+        const previous = previousAnalysisSettings(analysis, changedFields);
+        const receiptId = `filter-${++assistantReceiptSequenceRef.current}`;
+        thread.append({
+          kind: "receipt",
+          text: assistantSettingsReceipt(analysis, effect.settings, changedFields),
+          undo: { id: receiptId, settings: previous },
+        });
+        setAssistantUpdatedFields(changedFields);
+        if (assistantUpdateTimerRef.current !== null) {
+          window.clearTimeout(assistantUpdateTimerRef.current);
+        }
+        assistantUpdateTimerRef.current = window.setTimeout(
+          () => setAssistantUpdatedFields([]),
+          2400,
+        );
+      }
+      analysisEditedRef.current = true;
       setAnalysis((current) => ({ ...current, ...effect.settings }));
       // Assistant filter changes detach results like user edits do; analyze/compare
       // effects re-apply panes and badges right below.
@@ -773,7 +861,7 @@ export function MapWorkspace() {
     void turn.runCommand(label, command, args);
   }
 
-  // The quick-report button lives in Tabby's rail but bypasses the assistant command stream.
+  // The direct report action lives in Tabby's composer but bypasses the assistant command stream.
   // useCompare calls the public dashboard endpoints for saved and ad-hoc places alike, then
   // the completion effect freezes the returned slices into the same rich result card.
   function handleDirectReportRun() {
@@ -1128,6 +1216,10 @@ export function MapWorkspace() {
               expandedCard={expandedCard}
               currentCard={currentCard}
               onCardExpandChange={handleCardExpandChange}
+              onUndoSettings={(settings) => {
+                handleAnalysisChange(settings);
+                thread.append({ kind: "receipt", text: "Previous filters restored." });
+              }}
               focusCard={focusCard}
               exportHrefBase={exportHrefBase}
               paneActions={paneActions}
@@ -1137,13 +1229,12 @@ export function MapWorkspace() {
                   analysis={analysis}
                   availableRadii={data.availableRadii}
                   onChange={handleAnalysisChange}
-                  onRun={handleDirectReportRun}
-                  runDisabled={list.entries.length === 0 || !activeLayerAvailable}
                   layerAvailability={layerAvailability}
                   locationControls={locationControls}
                   metadata={isMobile ? freshnessIndicator : undefined}
                   onCopyLink={handleCopyLink}
                   copyDisabled={list.entries.length === 0}
+                  assistantUpdatedFields={assistantUpdatedFields}
                 />
               }
             />

@@ -81,7 +81,8 @@ Analysis parameters ("knobs") you may adjust when the user asks: pass only the c
 field(s) in "arguments" — everything you omit is filled from the current dashboard
 state, so never restate unchanged knobs.
 - Radius: analyze_places takes "radii_m", a list of meters (e.g. {"radii_m": [500]});
-  compare_places takes "radius_m", a single integer up to 5000 (e.g. {"radius_m": 500}).
+  compare_places takes "radius_m", a single integer from 100 through 1000
+  (e.g. {"radius_m": 400}). Suggested radii are shortcuts, not the only valid values.
 - Date window: "analysis_start_date" / "analysis_end_date" (YYYY-MM-DD). Resolve
   relative asks ("last 6 months") against the active window's end date in
   active_filters.

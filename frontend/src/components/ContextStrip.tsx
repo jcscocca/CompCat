@@ -5,6 +5,12 @@ import {
   analysisDateRangeError,
   maxAnalysisDate,
 } from "../lib/analysisDateRange";
+import { analysisDatePresetWindow, type AnalysisDatePreset } from "../lib/analysisDatePresets";
+import {
+  MAX_ANALYSIS_RADIUS_M,
+  MIN_ANALYSIS_RADIUS_M,
+  parseAnalysisRadius,
+} from "../lib/analysisRadius";
 import { incidentNoun, layerDisclosure } from "../lib/layerCopy";
 import { CATEGORIES, categoryLabel } from "../lib/offenseCategories";
 import type { AnalysisSettings, LayerKey } from "../types";
@@ -21,9 +27,6 @@ type Props = {
   analysis: AnalysisSettings;
   availableRadii: number[];
   onChange: (patch: Partial<AnalysisSettings>) => void;
-  /** Runs the direct dashboard analysis for the current places. */
-  onRun?: () => void;
-  runDisabled?: boolean;
   /** False means the freshness endpoint confirmed that this layer has no loaded rows. */
   layerAvailability?: Partial<Record<LayerKey, boolean>>;
   /** Saved-place selection belongs to the analysis context, so it is composed into
@@ -36,6 +39,9 @@ type Props = {
    * clipboard write); the strip only owns the transient status note. */
   onCopyLink?: () => Promise<boolean> | boolean;
   copyDisabled?: boolean;
+  /** Fields most recently changed by a Tabby tool call. They receive a short visual
+   * confirmation while the matching deterministic receipt is announced in the thread. */
+  assistantUpdatedFields?: (keyof AnalysisSettings)[];
 };
 
 function Chevron({ open }: { open: boolean }) {
@@ -60,13 +66,12 @@ export function ContextStrip({
   analysis,
   availableRadii,
   onChange,
-  onRun,
-  runDisabled,
   layerAvailability,
   locationControls,
   metadata,
   onCopyLink,
   copyDisabled,
+  assistantUpdatedFields = [],
 }: Props) {
   const [openMenu, setOpenMenu] = useState<FilterMenu | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -76,13 +81,17 @@ export function ContextStrip({
     category: null,
     layer: null,
   });
-  const radii = availableRadii.length > 0 ? availableRadii : [250, 500, 1000];
+  const radii = Array.from(new Set(availableRadii.length > 0 ? availableRadii : [250, 500, 1000]))
+    .filter((value) => value >= MIN_ANALYSIS_RADIUS_M && value <= MAX_ANALYSIS_RADIUS_M)
+    .sort((a, b) => a - b);
   const disclosure = layerDisclosure(analysis.layer);
   const showCategories = analysis.layer !== "calls";
   const activeCategoryLabel = categoryLabel(analysis.offenseCategory, analysis.layer);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyResetRef = useRef<number | null>(null);
   const [dateInputError, setDateInputError] = useState("");
+  const [radiusInput, setRadiusInput] = useState(String(analysis.radiusM));
+  const [radiusInputError, setRadiusInputError] = useState("");
   const currentDateError = analysisDateRangeError(analysis.startDate, analysis.endDate);
   const datesValid = currentDateError === null;
   const dateError = dateInputError || currentDateError || "";
@@ -95,6 +104,12 @@ export function ContextStrip({
   useEffect(() => {
     if (datesValid) setDateInputError("");
   }, [analysis.startDate, analysis.endDate, datesValid]);
+
+  useEffect(() => {
+    if (openMenu === "radius") return;
+    setRadiusInput(String(analysis.radiusM));
+    setRadiusInputError("");
+  }, [analysis.radiusM, openMenu]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -123,6 +138,10 @@ export function ContextStrip({
   }, [openMenu, showCategories]);
 
   function toggleMenu(menu: FilterMenu) {
+    if (menu === "radius" && openMenu !== "radius") {
+      setRadiusInput(String(analysis.radiusM));
+      setRadiusInputError("");
+    }
     setOpenMenu((current) => current === menu ? null : menu);
   }
 
@@ -151,6 +170,30 @@ export function ContextStrip({
     onChange({ [field]: value });
   }
 
+  function applyDatePreset(preset: AnalysisDatePreset) {
+    const window = analysisDatePresetWindow(preset, analysis.endDate);
+    if (!window) {
+      setDateInputError("Choose a valid end date before applying a preset.");
+      return;
+    }
+    setDateInputError("");
+    patchAndClose("dates", window);
+  }
+
+  function handleRadiusSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = parseAnalysisRadius(radiusInput);
+    if (parsed.meters === null) {
+      setRadiusInputError(parsed.error);
+      return;
+    }
+    setRadiusInputError("");
+    patchAndClose("radius", { radiusM: parsed.meters });
+  }
+
+  const datesUpdated = assistantUpdatedFields.includes("startDate")
+    || assistantUpdatedFields.includes("endDate");
+
   return (
     <div className="mc-ctx" ref={rootRef}>
       <div className={`mc-ctx-summary${openMenu ? " is-open" : ""}`}>
@@ -159,10 +202,11 @@ export function ContextStrip({
             <svg className="mc-ctx-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
-            Analysis filters
+            Tabby is using
           </span>
           {metadata ? <div className="mc-ctx-metadata">{metadata}</div> : null}
         </div>
+        <p className="mc-ctx-guidance">Change a filter here or tell Tabby what to use.</p>
 
         {locationControls ? (
           <div className="mc-ctx-locations">
@@ -173,7 +217,7 @@ export function ContextStrip({
 
         <div className="mc-ctx-summary-values" role="group" aria-label="Analysis filter controls">
           <div className="mc-ctx-filter-row">
-          <div className="mc-ctx-filter is-grow">
+          <div className={`mc-ctx-filter is-grow${datesUpdated ? " is-assistant-updated" : ""}`}>
             <button
               ref={(node) => { triggerRefs.current.dates = node; }}
               type="button"
@@ -192,6 +236,11 @@ export function ContextStrip({
             {openMenu === "dates" ? (
               <div id="mc-ctx-dates-menu" className="mc-ctx-popover mc-ctx-date-popover" role="dialog" aria-modal="false" aria-labelledby="mc-ctx-dates-title">
                 <strong id="mc-ctx-dates-title" className="mc-ctx-popover-title">Date range</strong>
+                <div className="mc-ctx-presets" aria-label="Date presets">
+                  <button type="button" onClick={() => applyDatePreset("30-days")}>Last 30 days</button>
+                  <button type="button" onClick={() => applyDatePreset("90-days")}>Last 90 days</button>
+                  <button type="button" onClick={() => applyDatePreset("year")}>This year</button>
+                </div>
                 <div className="mc-ctx-date-grid">
                   <label htmlFor="ctx-start-date">Start date</label>
                   <input id="ctx-start-date" type="date" className="mc-inp" value={analysis.startDate} min={ANALYSIS_MIN_DATE} max={analysis.endDate} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "mc-ctx-date-error" : undefined} onChange={(event) => handleDateChange("startDate", event.target.value)} />
@@ -202,7 +251,7 @@ export function ContextStrip({
             ) : null}
           </div>
 
-          <div className="mc-ctx-filter">
+          <div className={`mc-ctx-filter is-align-end${assistantUpdatedFields.includes("radiusM") ? " is-assistant-updated" : ""}`}>
             <button
               ref={(node) => { triggerRefs.current.radius = node; }}
               type="button"
@@ -219,7 +268,7 @@ export function ContextStrip({
             {openMenu === "radius" ? (
               <div id="mc-ctx-radius-menu" className="mc-ctx-popover" role="dialog" aria-modal="false" aria-labelledby="mc-ctx-radius-title">
                 <strong id="mc-ctx-radius-title" className="mc-ctx-popover-title">Search radius</strong>
-                <div className="mc-ctx-option-list">
+                <div className="mc-ctx-radius-suggestions" aria-label="Suggested radii">
                   {radii.map((value) => {
                     const selected = analysis.radiusM === value;
                     return (
@@ -230,6 +279,27 @@ export function ContextStrip({
                     );
                   })}
                 </div>
+                <form className="mc-ctx-radius-custom" onSubmit={handleRadiusSubmit}>
+                  <label htmlFor="mc-ctx-radius-input">Custom radius</label>
+                  <div>
+                    <input
+                      id="mc-ctx-radius-input"
+                      className="mc-inp"
+                      value={radiusInput}
+                      inputMode="decimal"
+                      aria-invalid={Boolean(radiusInputError)}
+                      aria-describedby="mc-ctx-radius-hint"
+                      onChange={(event) => {
+                        setRadiusInput(event.target.value);
+                        if (radiusInputError) setRadiusInputError("");
+                      }}
+                    />
+                    <button type="submit">Apply</button>
+                  </div>
+                  <small id="mc-ctx-radius-hint" className={radiusInputError ? "is-error" : undefined}>
+                    {radiusInputError || "100 m–1 km · try 400 m, 0.4 km, or ¼ mile"}
+                  </small>
+                </form>
               </div>
             ) : null}
           </div>
@@ -237,7 +307,7 @@ export function ContextStrip({
 
           <div className="mc-ctx-filter-row">
           {showCategories ? (
-            <div className="mc-ctx-filter is-category">
+            <div className={`mc-ctx-filter is-category${assistantUpdatedFields.includes("offenseCategory") ? " is-assistant-updated" : ""}`}>
               <button
                 ref={(node) => { triggerRefs.current.category = node; }}
                 type="button"
@@ -271,7 +341,7 @@ export function ContextStrip({
             </div>
           ) : null}
 
-          <div className="mc-ctx-filter is-layer is-align-end is-grow">
+          <div className={`mc-ctx-filter is-layer is-align-end is-grow${assistantUpdatedFields.includes("layer") ? " is-assistant-updated" : ""}`}>
             <button
               ref={(node) => { triggerRefs.current.layer = node; }}
               type="button"
@@ -317,7 +387,6 @@ export function ContextStrip({
         {dateError ? <p id="mc-ctx-date-error" className="mc-ctx-date-error" role="alert">{dateError}</p> : null}
 
         <div className="mc-ctx-actions">
-          <button type="button" className="mc-cta" disabled={runDisabled || !onRun || !datesValid} onClick={() => onRun?.()}>Run analysis</button>
           <button type="button" className="mc-link-copy" disabled={copyDisabled || !onCopyLink || !datesValid} onClick={() => void handleCopyLink()}>Copy link</button>
         </div>
       </div>

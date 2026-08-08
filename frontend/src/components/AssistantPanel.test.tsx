@@ -87,6 +87,23 @@ describe("AssistantPanel", () => {
     expect(screen.getByTestId("ctx-slot")).toBeInTheDocument();
   });
 
+  it("offers a one-time undo for a Tabby filter receipt", () => {
+    const onUndoSettings = vi.fn();
+    setup({
+      items: [{
+        kind: "receipt",
+        text: "Tabby changed the radius from 250 m to 400 m.",
+        undo: { id: "filter-1", settings: { radiusM: 250 } },
+      }],
+      onUndoSettings,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(onUndoSettings).toHaveBeenCalledWith({ radiusM: 250 });
+    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+    expect(screen.getByText("Restored")).toBeInTheDocument();
+  });
+
   it("submit calls onSend with trimmed text and clears the input", () => {
     const { onSend } = setup();
     const textarea = screen.getByLabelText("Analyst message");
@@ -104,23 +121,24 @@ describe("AssistantPanel", () => {
     expect(onSend).toHaveBeenCalledWith("What's on file around here?");
   });
 
-  it("keeps a direct Show me the data action on the Tabby panel", () => {
+  it("keeps one direct report action attached to the shared context and composer", () => {
     const { onShowData } = setup();
-    const button = screen.getByRole("button", { name: "Show me the data" });
-    expect(button.closest(".mc-direct-run")).toHaveTextContent("Quick report");
+    const button = screen.getByRole("button", { name: "Run report" });
+    expect(button.closest(".mc-context-composer")).toContainElement(screen.getByLabelText("Analyst message"));
+    expect(screen.queryByText("Quick report")).not.toBeInTheDocument();
     fireEvent.click(button);
     expect(onShowData).toHaveBeenCalledTimes(1);
   });
 
   it("shows report progress without disabling Tabby's offline fallback", () => {
     const { rerender } = setup({ offline: true });
-    expect(screen.getByRole("button", { name: "Show me the data" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Run report" })).toBeEnabled();
 
     rerender({ showDataBusy: true });
-    expect(screen.getByRole("button", { name: "Building report…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Building…" })).toBeDisabled();
 
     rerender({ showDataBusy: false, showDataDisabled: true });
-    expect(screen.getByRole("button", { name: "Show me the data" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run report" })).toBeDisabled();
   });
 
   it("offline disables the composer and prompt chip but keeps command chips live", () => {
@@ -194,14 +212,14 @@ describe("AssistantPanel", () => {
     });
 
     expect(document.querySelector(".mc-rail")).toHaveClass("is-result-focused");
-    expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run report" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Widen to 500 m" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("ctx-slot")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
 
     rerender({ expandedCard: null });
     expect(document.querySelector(".mc-rail")).not.toHaveClass("is-result-focused");
-    expect(screen.getByRole("button", { name: "Show me the data" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run report" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Widen to 500 m" })).toBeInTheDocument();
     expect(screen.getByTestId("ctx-slot")).toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
@@ -312,7 +330,7 @@ describe("AssistantPanel", () => {
       setup({ hasPlaces: false });
       expect(screen.queryByRole("button", { name: "Compare my places" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "What's near this pin?" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Run report" })).not.toBeInTheDocument();
     });
 
     it("disables action chips while busy but keeps them live while offline", () => {
@@ -339,7 +357,7 @@ describe("AssistantPanel", () => {
     const { rerender } = setup();
     expect(screen.getByLabelText("Analyst message")).toHaveAttribute(
       "placeholder",
-      "Ask Tabby about a place or result…",
+      "Ask Tabby about these places or change a filter…",
     );
     rerender({ offline: true });
     expect(screen.getByLabelText("Analyst message")).toHaveAttribute("placeholder", "Tabby is offline");

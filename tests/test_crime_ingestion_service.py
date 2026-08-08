@@ -277,8 +277,10 @@ def test_ingest_sample_crime_uses_packaged_fixture(tmp_path, monkeypatch):
         result = ingest_sample_crime(session)
 
     assert result == {"inserted_count": 0}
-    assert "/app/data/" in str(captured["path"])
-    assert captured["path"].name == "sample_crime.csv"
+    fixture_path = captured["path"]
+    assert fixture_path.parent.name == "data"
+    assert fixture_path.parent.parent.name == "app"
+    assert fixture_path.name == "sample_crime.csv"
 
 
 def test_ingest_crime_incidents_skips_missing_external_incident_ids(tmp_path):

@@ -132,6 +132,10 @@ exposing the overloaded storage column: `offense_subcategory` for reported incid
 cross-layer filter combinations fail validation. It accepts one radius and either an owned
 saved-place selection or inline points. Aggregate counts deduplicate source records across
 overlapping buffers; per-place and record sections count memberships and flag duplicates.
+Dashboard, report, persisted-analysis, assistant-state, and assistant-tool schemas share one
+inclusive radius contract: 100 through 1000 meters. Configured radii are UI suggestions inside
+that range, not the only accepted values, so a request such as 400 meters is valid throughout
+the public and assistant paths.
 
 `/dashboard/neighborhood` response payload. Each place carries
 `reference_comparisons`, ordered MCPP → sector → city. Every entry has:

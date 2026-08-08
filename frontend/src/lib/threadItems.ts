@@ -1,4 +1,4 @@
-import type { AssistantMessage, AssistantResultContext } from "../types";
+import type { AnalysisSettings, AssistantMessage, AssistantResultContext } from "../types";
 import type { AnalysisCardData } from "./assistantBridge";
 
 /** One entry in the Tabby rail. Only user/tabby text round-trips to the LLM;
@@ -7,7 +7,12 @@ import type { AnalysisCardData } from "./assistantBridge";
 export type ThreadItem =
   | { kind: "user_text"; text: string }
   | { kind: "tabby_text"; text: string }
-  | { kind: "receipt"; text: string }
+  | {
+      kind: "receipt";
+      text: string;
+      /** Filter receipts may offer one local undo. They never round-trip to the LLM. */
+      undo?: { id: string; settings: Partial<AnalysisSettings> };
+    }
   | { kind: "notice"; text: string }
   | { kind: "analysis_card"; card: AnalysisCardData };
 

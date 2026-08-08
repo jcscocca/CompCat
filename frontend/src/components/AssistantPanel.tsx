@@ -50,6 +50,8 @@ type Props = {
   focusCard?: { card: AnalysisCardData } | null;
   exportHrefBase: string;
   contextStrip?: ReactNode;
+  /** Applies the previous shared context from a deterministic assistant-change receipt. */
+  onUndoSettings?: (settings: Partial<AnalysisSettings>) => void;
   /** Desktop-only pane controls live with the pane identity instead of in a separate
    * size-mode strip. Mobile continues to use the bottom-sheet grabber. */
   paneActions?: ReactNode;
@@ -106,11 +108,13 @@ export function AssistantPanel({
   focusCard,
   exportHrefBase,
   contextStrip,
+  onUndoSettings,
   paneActions,
   errorLine,
 }: Props) {
   const [input, setInput] = useState("");
   const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
+  const [usedUndoIds, setUsedUndoIds] = useState<Set<string>>(new Set());
   // Card wrapper elements keyed by their index in displayItems, for scroll-to-card.
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
   const logRef = useRef<HTMLDivElement>(null);
@@ -218,7 +222,23 @@ export function AssistantPanel({
             );
           }
           if (item.kind === "receipt") {
-            return <div key={index} className="mc-dock-msg is-receipt">{item.text}</div>;
+            const undoUsed = item.undo ? usedUndoIds.has(item.undo.id) : false;
+            return (
+              <div key={index} className="mc-dock-msg is-receipt">
+                <span>{item.text}</span>
+                {item.undo && onUndoSettings && !undoUsed ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUndoSettings(item.undo!.settings);
+                      setUsedUndoIds((current) => new Set([...current, item.undo!.id]));
+                    }}
+                  >
+                    Undo
+                  </button>
+                ) : undoUsed ? <small>Restored</small> : null}
+              </div>
+            );
           }
           if (item.kind === "notice") {
             return (
@@ -332,42 +352,37 @@ export function AssistantPanel({
         </div>
       ) : null}
 
-      {!resultFocused && hasPlaces ? (
-        <div className="mc-direct-run">
-          <div>
-            <strong>Quick report</strong>
-            <span>Use the selected places and filters—no message needed.</span>
-          </div>
-          <button
-            type="button"
-            className="mc-cta"
-            disabled={showDataDisabled || showDataBusy}
-            onClick={onShowData}
-          >
-            {showDataBusy ? "Building report…" : "Show me the data"}
-          </button>
-        </div>
-      ) : null}
-
-      {!resultFocused ? contextStrip : null}
-
-      {!resultFocused && offline ? <p className="mc-rail-offline">{OFFLINE_COMPOSER_HINT}</p> : null}
-
       {!resultFocused ? (
-        <form className="mc-dock-form" onSubmit={handleSubmit}>
-          <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
-          <textarea
-            id="assistant-message"
-            value={input}
-            rows={2}
-            disabled={offline}
-            placeholder={offline ? "Tabby is offline" : "Ask Tabby about a place or result…"}
-            onChange={(event) => setInput(event.target.value)}
-          />
-          <button type="submit" disabled={busy || offline || !input.trim()}>
-            Send
-          </button>
-        </form>
+        <div className="mc-context-composer">
+          {contextStrip}
+          {offline ? <p className="mc-rail-offline">{OFFLINE_COMPOSER_HINT}</p> : null}
+          <form className="mc-dock-form" onSubmit={handleSubmit}>
+            <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
+            <textarea
+              id="assistant-message"
+              value={input}
+              rows={2}
+              disabled={offline}
+              placeholder={offline ? "Tabby is offline" : "Ask Tabby about these places or change a filter…"}
+              onChange={(event) => setInput(event.target.value)}
+            />
+            <div className="mc-dock-form-actions">
+              {hasPlaces ? (
+                <button
+                  type="button"
+                  className="mc-run-report"
+                  disabled={showDataDisabled || showDataBusy}
+                  onClick={onShowData}
+                >
+                  {showDataBusy ? "Building…" : "Run report"}
+                </button>
+              ) : null}
+              <button type="submit" disabled={busy || offline || !input.trim()}>
+                Send
+              </button>
+            </div>
+          </form>
+        </div>
       ) : null}
     </div>
   );

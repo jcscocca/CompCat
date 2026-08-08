@@ -65,11 +65,12 @@ Analyze/Compare tabs.
   identity letter and color that matches its map pin. Click a chip to include or exclude a place;
   click **Manage places** to open the dialog, where you can search, drop a pin, enter
   coordinates, paste a CSV, rename/remove places, and control export inclusion.
-- **Context strip** — the active dates, radius, offense category, and data layer stay visible
-  above Tabby's composer. Each value is directly selectable and opens a compact anchored
-  picker; no separate edit mode is required. The strip also keeps the run and copy-link
-  actions visible, including a share link containing the exact locations and filters for the
-  current analysis.
+- **Tabby context + composer** — the active places, dates, radius, offense category, and data
+  layer appear together under **Tabby is using**, directly attached to the message composer.
+  Each value opens a compact anchored picker, while the radius picker also accepts custom
+  values from 100 m through 1 km (`400 m`, `0.4 km`, `¼ mile`, and similar inputs). Date
+  presets resolve against the active analysis window. The same state drives chat and the
+  single **Run report** action; the copy-link action preserves the exact locations and filters.
 - **Inline analysis cards** — one selected place compares its count with empirical
   equal-radius circles centered on eligible Seattle street segments; two or more also produce
   the separate place-to-place statistical comparison. Expanding a card reveals MCPP, sector,
@@ -90,8 +91,10 @@ required by Nominatim's usage policy). The browser never calls the geocoder dire
 
 The Analyst panel is an optional chat assistant — **Tabby**, CompCat's case-desk analyst — that
 answers questions about your dashboard data. It is grounded in what you currently have selected
-(places, date range, radii, and offense filters) and is policy-constrained: it reports incident
-context and will refuse to label a place as safe or unsafe.
+(places, date range, radius, and offense filters) and is policy-constrained: it reports incident
+context and will refuse to label a place as safe or unsafe. Filter requests made in chat update
+the visible controls, leave a deterministic receipt with a one-time Undo action, and use the
+same 100 m–1 km radius contract as direct input.
 
 Under the hood free-text turns use an LLM planning call and a small tool set (`add_place`,
 `select_places`, `analyze_places`, `compare_places`, `update_filters`, `get_dashboard_summary`,
@@ -302,7 +305,7 @@ salt/secret and forces secure cookies.
 | `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` | `false` | Surface the personal timeline upload mode (internal/demo). |
 | `MCA_RAW_UPLOAD_RETENTION` | `false` | Keep raw uploads instead of deleting them after normalization. |
 | `MCA_ADMIN_INGEST_TOKEN` | _unset_ | Token required by the admin Socrata ingest endpoint. No default anywhere, including Compose: while unset the endpoint rejects every request. The formerly-shipped `local-admin-token` is still rejected at boot in production. |
-| `MCA_CRIME_RADII_M` | `[250,500,1000]` | Default analysis radii in meters. |
+| `MCA_CRIME_RADII_M` | `[250,500,1000]` | Suggested analysis radii in meters; each value must be from 100 through 1000. Users may enter any radius inside that range. |
 | `MCA_SOCRATA_BASE_URL` | `https://data.seattle.gov/resource` | Seattle open-data base URL; HTTPS is required and credentials/query strings are rejected. |
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
 | `MCA_SOCRATA_RECONCILIATION_DAYS` | `14` | Days before each source's stored watermark revisited by automatic backfills to reconcile late rows and corrections (`0` disables overlap; maximum `365`). Explicit `start_date` requests are not widened (the existing source floor still applies). |

@@ -5,12 +5,16 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.analysis.radius import MAX_ANALYSIS_RADIUS_M, MIN_ANALYSIS_RADIUS_M
 from app.crime.sources import LAYER_REPORTED, LAYERS
 
-DashboardRadiusMeters = Annotated[int, Field(gt=0, le=5000)]
+DashboardRadiusMeters = Annotated[
+    int,
+    Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M),
+]
 
 # Every analysis endpoint fans out over radii x date-window, so both are capped: the
-# product offers three radii (config.crime_radii_m) and the UI only ever sends one, and
+# product suggests three radii (config.crime_radii_m), accepts one custom value, and
 # ~8 years of window is far past the SPD dataset's useful span. Without these an
 # unauthenticated-cheap POST can request an arbitrarily expensive scan.
 MAX_ANALYSIS_RADII = 3

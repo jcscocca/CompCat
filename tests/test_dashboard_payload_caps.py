@@ -35,10 +35,23 @@ def test_analyze_accepts_the_three_product_radii(tmp_path):
     assert response.status_code == 200
 
 
+def test_analyze_accepts_a_custom_radius_inside_the_product_range(tmp_path):
+    client = _client(tmp_path)
+    response = client.post("/dashboard/analyze", json=_analyze_body(radii_m=[400]))
+    assert response.status_code == 200
+
+
+def test_analyze_rejects_radii_outside_the_place_context_range(tmp_path):
+    client = _client(tmp_path)
+    for radius in (99, 1001):
+        response = client.post("/dashboard/analyze", json=_analyze_body(radii_m=[radius]))
+        assert response.status_code == 422, radius
+
+
 def test_analyze_rejects_a_fourth_radius(tmp_path):
     client = _client(tmp_path)
     response = client.post(
-        "/dashboard/analyze", json=_analyze_body(radii_m=[250, 500, 1000, 2000])
+        "/dashboard/analyze", json=_analyze_body(radii_m=[100, 250, 500, 1000])
     )
     assert response.status_code == 422
 
@@ -87,6 +100,23 @@ def test_compare_rejects_an_oversized_date_span(tmp_path):
         },
     )
     assert response.status_code == 422
+
+
+def test_compare_accepts_a_custom_400_meter_radius(tmp_path):
+    client = _client(tmp_path)
+    response = client.post(
+        "/dashboard/compare",
+        json={
+            "points": [
+                {"latitude": 47.6094, "longitude": -122.3334, "label": "A"},
+                {"latitude": 47.6206, "longitude": -122.3206, "label": "B"},
+            ],
+            "analysis_start_date": "2024-01-01",
+            "analysis_end_date": "2024-01-31",
+            "radius_m": 400,
+        },
+    )
+    assert response.status_code == 200
 
 
 def test_incident_points_rejects_an_oversized_date_span(tmp_path):

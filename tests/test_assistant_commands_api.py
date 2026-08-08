@@ -132,6 +132,16 @@ def test_commands_tool_error_carries_code(session_client):
     assert error["data"]["message"]
 
 
+def test_commands_reject_a_radius_beyond_one_kilometer(session_client):
+    response = session_client.post(
+        "/assistant/commands",
+        json={"command": "update_filters", "arguments": {"radius_m": 1001}},
+    )
+    events = parse_sse(response.text)
+    error = next(e for e in events if e["event"] == "error")
+    assert error["data"]["code"] == "tool_error"
+
+
 def test_commands_clarification_streams_as_token(session_client):
     response = session_client.post("/assistant/commands", json={"command": "update_filters"})
     events = parse_sse(response.text)

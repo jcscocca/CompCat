@@ -74,7 +74,8 @@ def test_site_comparison_api_returns_overview_and_analytical_payload(tmp_path):
     assert payload["analytical"]["label"] == "Analytical"
     assert payload["overview"]["decision_class"] == "statistically_lower"
     assert "safe" not in payload["overview"]["summary_text"].lower()
-    assert payload["overview"]["options"][0]["geometry_metadata"] == {
+    options_by_id = {option["id"]: option for option in payload["overview"]["options"]}
+    assert options_by_id["site-a"]["geometry_metadata"] == {
         "center": {"latitude": 47.6116, "longitude": -122.3372},
         "radius_m": 250,
     }
@@ -85,8 +86,12 @@ def test_site_comparison_api_returns_overview_and_analytical_payload(tmp_path):
         headers={"X-Demo-User-Id": "analysis-user@example.com"},
     )
     assert lookup.status_code == 200
-    assert lookup.json()["id"] == payload["id"]
-    assert lookup.json()["overview"]["options"][1]["geometry_metadata"] == {
+    lookup_payload = lookup.json()
+    assert lookup_payload["id"] == payload["id"]
+    lookup_options_by_id = {
+        option["id"]: option for option in lookup_payload["overview"]["options"]
+    }
+    assert lookup_options_by_id["site-b"]["geometry_metadata"] == {
         "center": {"latitude": 47.6205, "longitude": -122.3493},
         "radius_m": 250,
     }

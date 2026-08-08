@@ -902,6 +902,6 @@ def test_analyze_places_bounds_the_radii_list():
         "analysis_start_date": "2026-01-01",
         "analysis_end_date": "2026-06-30",
     }
-    for radii in ([10**9], [5001], [0], [-250], [50, 100, 150, 200, 250, 300, 350, 400]):
+    for radii in ([10**9], [1001], [99], [0], [-250], [100, 150, 200, 250]):
         with pytest.raises(AssistantToolError):
             execute_tool(None, "user-hash", "analyze_places", {**base, "radii_m": radii})
