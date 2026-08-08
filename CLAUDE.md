@@ -41,10 +41,16 @@ The assistant backend is selectable via `MCA_LLM_PROVIDER` (client module
 - `openai_native` — OpenAI's own API via the official SDK (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`).
 - `anthropic` — Claude via the official SDK (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`).
 
-`MCA_LLM_FALLBACK_PROVIDER` picks the optional failover backend independently, so any pair
-composes (e.g. Claude primary + local fallback). If the active backend is unreachable, only the
-chat panel is affected — the rest of the app works. (The old LocalAgent gateway and its
-`MCA_LOCALAGENT_BASE_URL` env var have been retired.)
+Failover is a chain of up to three slots, each chosen independently, so any combination composes
+(e.g. Claude primary + Groq fallback + OpenAI third): `MCA_LLM_PROVIDER` →
+`MCA_LLM_FALLBACK_PROVIDER` → `MCA_LLM_THIRD_PROVIDER`. The third slot is empty by default, its
+key is never inherited from `MCA_LLM_API_KEY`, and a slot resolving to a backend already in the
+chain is dropped. If the active backend is unreachable, only the chat panel is affected — the rest
+of the app works. (The old LocalAgent gateway and its `MCA_LOCALAGENT_BASE_URL` env var have been
+retired.)
+
+Provider selection is fixed at boot (`get_settings()` is `@lru_cache`d) and there is no UI or API
+to switch backends — changing one means editing env and restarting.
 
 ## Verification gate
 

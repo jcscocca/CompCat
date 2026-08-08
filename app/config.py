@@ -97,18 +97,34 @@ class Settings(BaseSettings):
     llm_fallback_base_url: str = ""
     llm_fallback_model: str = ""
     llm_fallback_disable_thinking: bool = False
+    # Optional third endpoint, tried only after the fallback has also failed. Same
+    # OpenAI-compatible activation rule as the fallback (base URL and model both set).
+    llm_third_base_url: str = ""
+    llm_third_model: str = ""
+    llm_third_disable_thinking: bool = False
 
     # Bearer token for hosted OpenAI-compatible endpoints (e.g. Groq). Empty = no
     # Authorization header (the LAN llama-swap path). Fallback inherits the primary
     # key unless overridden.
     llm_api_key: str = ""
     llm_fallback_api_key: str = ""
+    # The third slot deliberately does NOT inherit llm_api_key. Inheritance is only safe
+    # while both slots share a vendor; a three-backend chain spans three of them, so a
+    # silent inherit would put one vendor's key in another vendor's Authorization header.
+    # Unset here means the slot is keyless, not "borrow the primary's key".
+    llm_third_api_key: str = ""
 
     # Assistant LLM backend selection. "openai" = any OpenAI-compatible endpoint (the local
     # llama-swap default, or a hosted host like Groq); "anthropic" = Claude via the official
     # SDK. Primary and fallback are chosen independently, so either side can be Claude.
     llm_provider: Literal["openai", "openai_native", "anthropic"] = "openai"
     llm_fallback_provider: Literal["openai", "openai_native", "anthropic"] = "openai"
+    # Third backend in the failover chain, chosen independently of the two above. Empty
+    # (the default) means there is no third slot at all — it cannot default to "openai"
+    # the way the fallback does, because the fallback's own gate is its base URL and model
+    # being set, and the key-based providers here activate on a key that may already be
+    # serving another slot.
+    llm_third_provider: Literal["", "openai", "openai_native", "anthropic"] = ""
     # Claude (Anthropic) credentials + model, used whenever either provider is "anthropic".
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
@@ -239,6 +255,7 @@ class Settings(BaseSettings):
             for name, value in (
                 ("MCA_LLM_API_KEY", self.llm_api_key),
                 ("MCA_LLM_FALLBACK_API_KEY", self.llm_fallback_api_key),
+                ("MCA_LLM_THIRD_API_KEY", self.llm_third_api_key),
                 ("MCA_OPENAI_API_KEY", self.openai_api_key),
                 ("MCA_ANTHROPIC_API_KEY", self.anthropic_api_key),
             )

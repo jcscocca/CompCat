@@ -406,7 +406,8 @@ prompt requires all of these qualifiers to survive the rewrite.
 | Env var | Default | Purpose |
 |---|---|---|
 | `MCA_LLM_PROVIDER` | `openai` | Primary backend: `openai` (compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK) |
-| `MCA_LLM_FALLBACK_PROVIDER` | `openai` | Backend for the optional failover slot (chosen independently) |
+| `MCA_LLM_FALLBACK_PROVIDER` | `openai` | Backend for the second slot in the chain (chosen independently) |
+| `MCA_LLM_THIRD_PROVIDER` | `""` | Backend for the optional third slot, tried after the fallback. Empty = no third backend (it cannot default to `openai` the way the fallback does — the fallback's own gate is its base URL and model being set) |
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | Primary endpoint (provider `openai`) |
 | `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent in each request (provider `openai`) |
 | `MCA_LLM_TIMEOUT_S` | `120` | OpenAI-compatible read timeout; streamed calls still have a separate 300-second overall ceiling |
@@ -414,15 +415,33 @@ prompt requires all of these qualifiers to survive the rewrite.
 | `MCA_LLM_FALLBACK_BASE_URL` | `""` | Second endpoint; the `openai` fallback activates only when this and `MCA_LLM_FALLBACK_MODEL` are both set |
 | `MCA_LLM_FALLBACK_MODEL` | `""` | Model for the fallback endpoint |
 | `MCA_LLM_FALLBACK_DISABLE_THINKING` | `false` | Suppress thinking on the fallback model |
+| `MCA_LLM_THIRD_BASE_URL` / `MCA_LLM_THIRD_MODEL` | `""` / `""` | Third endpoint; the `openai` third slot activates only when both are set |
+| `MCA_LLM_THIRD_API_KEY` | `""` | Bearer token for the third slot. Unlike `MCA_LLM_FALLBACK_API_KEY` it does **not** fall back to `MCA_LLM_API_KEY`: a three-backend chain spans three vendors, so inheriting would put one vendor's credential in another's `Authorization` header |
+| `MCA_LLM_THIRD_DISABLE_THINKING` | `false` | Suppress thinking on the third model |
 | `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | `""` / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`) |
 | `MCA_ANTHROPIC_DISABLE_THINKING` | `true` | Disable Claude thinking so it doesn't consume the token budget; set false for `claude-fable-5` |
 | `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | `""` / `gpt-4o` | OpenAI credentials + model (provider `openai_native`); `MCA_OPENAI_BASE_URL` optional |
 | `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward temperature; set false for reasoning models (o-series / gpt-5) |
 
 The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_assistant_llm_client`
-on each request, which selects the primary and fallback backends from `MCA_LLM_PROVIDER` /
-`MCA_LLM_FALLBACK_PROVIDER` (a key-based backend without its key raises on the primary and is
-skipped on the fallback).
+on each request. `_failover_chain` assembles the primary (`MCA_LLM_PROVIDER`) followed by each
+configured slot in order — `MCA_LLM_FALLBACK_PROVIDER`, then `MCA_LLM_THIRD_PROVIDER` — and wraps
+them in `FailoverLlmClient`; a primary with no usable slot is returned bare. A key-based backend
+without its key raises on the primary and is skipped (with a warning) on any later slot.
+
+Two properties are worth stating because they are easy to assume otherwise:
+
+- **Slots are independent, not sequential prerequisites.** An unconfigured fallback does not
+  disable the third slot; the chain simply becomes primary → third.
+- **Duplicate backends are dropped.** `anthropic` and `openai_native` read one shared credential
+  family across every slot, so naming the same provider twice resolves to the same endpoint.
+  `_backend_identity` (class, base URL, model) detects that and skips the repeat, which keeps a
+  chain from spending two attempts failing the same way against one rate-limited upstream.
+
+Selection is process-wide and fixed at boot: `get_settings()` is `@lru_cache`d, so although the
+client is rebuilt per request it is rebuilt from the same frozen `Settings`. Changing any provider
+requires a restart, and there is deliberately no runtime or user-facing switch — on a public
+instance, letting a caller choose the backend would be an unmetered-spend surface.
 
 > ⚠ Invariant: when the LLM endpoint is offline or returns no content during the **planning**
 > call, `LlmUnavailable` causes an `error` SSE event with a user-readable message. One narrow
