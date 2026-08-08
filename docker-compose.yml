@@ -57,9 +57,17 @@ services:
       MCA_LLM_FALLBACK_DISABLE_THINKING: "${MCA_LLM_FALLBACK_DISABLE_THINKING:-false}"
       MCA_LLM_API_KEY: ${MCA_LLM_API_KEY:-}
       MCA_LLM_FALLBACK_API_KEY: ${MCA_LLM_FALLBACK_API_KEY:-}
-      # Backend selection + first-class SDK providers (Claude / OpenAI).
+      # Optional third slot, tried after the fallback. Its key is never inherited from
+      # MCA_LLM_API_KEY — a three-backend chain spans three vendors.
+      MCA_LLM_THIRD_BASE_URL: ${MCA_LLM_THIRD_BASE_URL:-}
+      MCA_LLM_THIRD_MODEL: ${MCA_LLM_THIRD_MODEL:-}
+      MCA_LLM_THIRD_DISABLE_THINKING: "${MCA_LLM_THIRD_DISABLE_THINKING:-false}"
+      MCA_LLM_THIRD_API_KEY: ${MCA_LLM_THIRD_API_KEY:-}
+      # Backend selection + first-class SDK providers (Claude / OpenAI). The third slot
+      # defaults to empty, i.e. no third backend at all.
       MCA_LLM_PROVIDER: ${MCA_LLM_PROVIDER:-openai}
       MCA_LLM_FALLBACK_PROVIDER: ${MCA_LLM_FALLBACK_PROVIDER:-openai}
+      MCA_LLM_THIRD_PROVIDER: ${MCA_LLM_THIRD_PROVIDER:-}
       MCA_ANTHROPIC_API_KEY: ${MCA_ANTHROPIC_API_KEY:-}
       MCA_ANTHROPIC_MODEL: ${MCA_ANTHROPIC_MODEL:-claude-sonnet-5}
       MCA_ANTHROPIC_DISABLE_THINKING: "${MCA_ANTHROPIC_DISABLE_THINKING:-true}"

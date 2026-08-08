@@ -147,56 +147,124 @@ def _build_primary(settings: Settings) -> AssistantLlmClient:
     )
 
 
-def _build_fallback(settings: Settings) -> AssistantLlmClient | None:
-    """The optional failover backend. Key-based backends (anthropic, openai_native) activate
-    whenever their key is set; the OpenAI-compatible fallback keeps its original gate — both
-    base URL and model configured."""
-    provider = settings.llm_fallback_provider
+def _build_slot(
+    settings: Settings,
+    *,
+    provider: str,
+    base_url: str,
+    model: str,
+    api_key: str,
+    disable_thinking: bool,
+    setting_name: str,
+) -> AssistantLlmClient | None:
+    """One non-primary slot in the failover chain. Key-based backends (anthropic,
+    openai_native) activate whenever their key is set; the OpenAI-compatible backend keeps
+    its original gate — both base URL and model configured. An empty provider is the
+    explicit "no such slot" case. Returning None simply shortens the chain; it is never
+    fatal, because a missing failover leaves the primary serving on its own."""
+    if not provider:
+        return None
     if provider == "anthropic":
         if settings.anthropic_api_key:
             return _require_anthropic(settings)
         logger.warning(
-            "llm_fallback_provider is 'anthropic' but MCA_ANTHROPIC_API_KEY is unset; "
-            "assistant failover is disabled."
+            "%s is 'anthropic' but MCA_ANTHROPIC_API_KEY is unset; that failover slot "
+            "is disabled.",
+            setting_name,
         )
         return None
     if provider == "openai_native":
         if settings.openai_api_key:
             return _require_openai_native(settings)
         logger.warning(
-            "llm_fallback_provider is 'openai_native' but MCA_OPENAI_API_KEY is unset; "
-            "assistant failover is disabled."
+            "%s is 'openai_native' but MCA_OPENAI_API_KEY is unset; that failover slot "
+            "is disabled.",
+            setting_name,
         )
         return None
-    base_url = settings.llm_fallback_base_url.strip()
-    model = settings.llm_fallback_model.strip()
+    base_url = base_url.strip()
+    model = model.strip()
     if not (base_url and model):
         return None
     extra_body, supports_structured_output, structured_extra_body = _openai_compatible_options(
         base_url,
         model,
-        settings.llm_fallback_disable_thinking,
+        disable_thinking,
     )
     return OpenAiLlmClient(
         base_url=base_url,
         model=model,
         timeout_s=settings.llm_timeout_s,
         extra_body=extra_body,
-        api_key=settings.effective_llm_fallback_api_key,
+        api_key=api_key,
         include_stream_usage=settings.assistant_token_budget_per_day > 0,
         supports_structured_output=supports_structured_output,
         structured_extra_body=structured_extra_body,
     )
 
 
+def _backend_identity(client: AssistantLlmClient) -> tuple[str, str, str]:
+    """What makes two chain entries the same upstream. Anthropic and openai_native clients
+    carry no per-slot credentials — they read one shared key family — so class, base URL and
+    model fully identify the endpoint a slot would call."""
+    return (
+        type(client).__name__,
+        getattr(client, "base_url", ""),
+        getattr(client, "model", ""),
+    )
+
+
+def _failover_chain(settings: Settings) -> list[AssistantLlmClient]:
+    """The primary followed by each configured slot, in the order they are tried.
+
+    Duplicates are dropped. The key-based providers share one credential family across every
+    slot, so naming the same provider twice resolves to the same endpoint — queuing it behind
+    itself would spend a second attempt failing exactly the way the first one did, and on a
+    rate-limited backend it would burn the retry budget for no added resilience.
+    """
+    chain = [_build_primary(settings)]
+    for client in (
+        _build_slot(
+            settings,
+            provider=settings.llm_fallback_provider,
+            base_url=settings.llm_fallback_base_url,
+            model=settings.llm_fallback_model,
+            api_key=settings.effective_llm_fallback_api_key,
+            disable_thinking=settings.llm_fallback_disable_thinking,
+            setting_name="llm_fallback_provider",
+        ),
+        _build_slot(
+            settings,
+            provider=settings.llm_third_provider,
+            base_url=settings.llm_third_base_url,
+            model=settings.llm_third_model,
+            api_key=settings.llm_third_api_key,
+            disable_thinking=settings.llm_third_disable_thinking,
+            setting_name="llm_third_provider",
+        ),
+    ):
+        if client is None:
+            continue
+        identity = _backend_identity(client)
+        if any(identity == _backend_identity(existing) for existing in chain):
+            logger.warning(
+                "Assistant failover slot resolves to a backend already in the chain (%s); "
+                "skipping the duplicate.",
+                identity,
+            )
+            continue
+        chain.append(client)
+    return chain
+
+
 def build_assistant_llm_client(settings: Settings) -> AssistantLlmClient:
     """Build the assistant LLM client: the primary backend (OpenAI-compatible or Claude),
-    wrapped in automatic failover to a second backend when one is configured."""
-    primary = _build_primary(settings)
-    fallback = _build_fallback(settings)
-    if fallback is not None:
-        return FailoverLlmClient([primary, fallback])
-    return primary
+    wrapped in automatic failover to each additional backend configured, tried in order.
+    A primary with no usable failover slot is returned bare rather than wrapped."""
+    chain = _failover_chain(settings)
+    if len(chain) == 1:
+        return chain[0]
+    return FailoverLlmClient(chain)
 
 
 @router.post("/assistant/chat")

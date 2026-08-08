@@ -21,6 +21,7 @@ def _settings(**overrides):
     base = {
         "llm_provider": "openai",
         "llm_fallback_provider": "openai",
+        "llm_third_provider": "",
         "llm_base_url": "http://primary:8080/v1",
         "llm_model": "gemma",
         "llm_timeout_s": 120.0,
@@ -28,8 +29,12 @@ def _settings(**overrides):
         "llm_fallback_base_url": "",
         "llm_fallback_model": "",
         "llm_fallback_disable_thinking": False,
+        "llm_third_base_url": "",
+        "llm_third_model": "",
+        "llm_third_disable_thinking": False,
         "llm_api_key": "",
         "llm_fallback_api_key": "",
+        "llm_third_api_key": "",
         "anthropic_api_key": "",
         "anthropic_model": "claude-sonnet-5",
         "anthropic_disable_thinking": True,
@@ -245,6 +250,148 @@ def test_openai_native_base_url_threads_through() -> None:
     )
     assert isinstance(client, OpenAiNativeLlmClient)
     assert client.base_url == "https://proxy.example/v1"
+
+
+def test_third_slot_is_off_by_default() -> None:
+    client = build_assistant_llm_client(
+        _settings(llm_fallback_base_url="http://fb:8080/v1", llm_fallback_model="qwen")
+    )
+    assert isinstance(client, FailoverLlmClient)
+    assert len(client.clients) == 2
+
+
+def test_three_backends_chain_in_configured_order() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_provider="anthropic",
+            anthropic_api_key="sk-ant-x",
+            llm_fallback_base_url="https://api.groq.com/openai/v1",
+            llm_fallback_model="openai/gpt-oss-120b",
+            llm_fallback_api_key="gsk_groq",
+            llm_third_provider="openai_native",
+            openai_api_key="sk-oai-x",
+        )
+    )
+    assert isinstance(client, FailoverLlmClient)
+    primary, fallback, third = client.clients
+    assert isinstance(primary, AnthropicLlmClient)
+    assert isinstance(fallback, OpenAiLlmClient)
+    assert isinstance(third, OpenAiNativeLlmClient)
+
+
+def test_third_slot_activates_without_a_fallback() -> None:
+    # Slots are independent: an unconfigured fallback does not block the third.
+    client = build_assistant_llm_client(
+        _settings(llm_third_provider="anthropic", anthropic_api_key="sk-ant-x")
+    )
+    assert isinstance(client, FailoverLlmClient)
+    primary, third = client.clients
+    assert isinstance(primary, OpenAiLlmClient)
+    assert isinstance(third, AnthropicLlmClient)
+
+
+def test_third_openai_slot_needs_both_base_url_and_model() -> None:
+    client = build_assistant_llm_client(
+        _settings(llm_third_provider="openai", llm_third_base_url="http://third:8080/v1")
+    )
+    assert isinstance(client, OpenAiLlmClient)
+
+
+def test_third_slot_key_is_not_inherited_from_primary() -> None:
+    # Unlike the fallback slot, the third never borrows MCA_LLM_API_KEY — a three-backend
+    # chain spans three vendors, so inheriting would cross-post one vendor's credential.
+    client = build_assistant_llm_client(
+        _settings(
+            llm_api_key="gsk_primary",
+            llm_third_provider="openai",
+            llm_third_base_url="http://third:8080/v1",
+            llm_third_model="qwen",
+        )
+    )
+    assert isinstance(client, FailoverLlmClient)
+    assert [c.api_key for c in client.clients] == ["gsk_primary", ""]
+
+
+def test_third_slot_uses_its_own_key() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_api_key="gsk_primary",
+            llm_third_provider="openai",
+            llm_third_base_url="http://third:8080/v1",
+            llm_third_model="qwen",
+            llm_third_api_key="sk-third",
+        )
+    )
+    assert [c.api_key for c in client.clients] == ["gsk_primary", "sk-third"]
+
+
+def test_duplicate_key_based_backend_is_dropped() -> None:
+    # anthropic in two slots resolves to one endpoint (one shared key family), so the
+    # chain must not queue it behind itself.
+    client = build_assistant_llm_client(
+        _settings(
+            llm_provider="anthropic",
+            anthropic_api_key="sk-ant-x",
+            llm_third_provider="anthropic",
+        )
+    )
+    assert isinstance(client, AnthropicLlmClient)
+
+
+def test_duplicate_openai_endpoint_is_dropped() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_fallback_base_url="http://fb:8080/v1",
+            llm_fallback_model="qwen",
+            llm_third_provider="openai",
+            llm_third_base_url="http://fb:8080/v1",
+            llm_third_model="qwen",
+        )
+    )
+    assert isinstance(client, FailoverLlmClient)
+    assert len(client.clients) == 2
+
+
+def test_same_host_different_model_is_not_a_duplicate() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_fallback_base_url="http://fb:8080/v1",
+            llm_fallback_model="qwen",
+            llm_third_provider="openai",
+            llm_third_base_url="http://fb:8080/v1",
+            llm_third_model="gemma",
+        )
+    )
+    assert [c.model for c in client.clients] == ["gemma", "qwen", "gemma"]
+
+
+def test_third_anthropic_without_key_is_skipped() -> None:
+    client = build_assistant_llm_client(_settings(llm_third_provider="anthropic"))
+    assert isinstance(client, OpenAiLlmClient)
+
+
+def test_third_slot_timeout_and_thinking_thread_through() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_timeout_s=240.0,
+            llm_third_provider="openai",
+            llm_third_base_url="http://third:8080/v1",
+            llm_third_model="qwen",
+            llm_third_disable_thinking=True,
+        )
+    )
+    third = client.clients[1]
+    assert third.timeout_s == 240.0
+    assert third.extra_body == _NO_THINK
+
+
+def test_invalid_third_provider_is_rejected() -> None:
+    from pydantic import ValidationError
+
+    from app.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, llm_third_provider="claude")
 
 
 def test_invalid_provider_is_rejected() -> None:

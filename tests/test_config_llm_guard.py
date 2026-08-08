@@ -28,6 +28,7 @@ def _settings(**env) -> Settings:
     [
         ("llm_api_key", "MCA_LLM_API_KEY"),
         ("llm_fallback_api_key", "MCA_LLM_FALLBACK_API_KEY"),
+        ("llm_third_api_key", "MCA_LLM_THIRD_API_KEY"),
         ("openai_api_key", "MCA_OPENAI_API_KEY"),
         ("anthropic_api_key", "MCA_ANTHROPIC_API_KEY"),
     ],
