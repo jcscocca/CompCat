@@ -384,7 +384,7 @@ describe("MapWorkspace", () => {
     // A manual save waits for the user, then the report runs through dashboard APIs without
     // sending an assistant command.
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
 
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalled());
     expect(analyzePlaces).toHaveBeenCalledWith(expect.objectContaining({
@@ -399,15 +399,15 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
     expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("720px");
-    expect(screen.queryByRole("button", { name: "Show me the data" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Analysis filters")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run report" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Tabby is using")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("400px");
-    expect(screen.getByRole("button", { name: "Show me the data" })).toBeInTheDocument();
-    expect(screen.getByText("Analysis filters")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run report" })).toBeInTheDocument();
+    expect(screen.getByText("Tabby is using")).toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
 
@@ -439,7 +439,7 @@ describe("MapWorkspace", () => {
     // Importing waits for the user; the report then compares the selected points directly.
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
 
     await waitFor(() => expect(comparePlaces).toHaveBeenCalled());
     expect(comparePlaces).toHaveBeenCalledWith(expect.objectContaining({
@@ -945,7 +945,7 @@ describe("MapWorkspace", () => {
     // The lookup drops a draft pin on the map (via previewSearch) and flies to it.
     expect(await screen.findByTestId("draft-pin")).toBeInTheDocument();
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
     // The explicit report action runs the inline-points path; no place is saved, so the
     // place_ids summary-refresh pass is skipped entirely.
     await waitFor(() => {
@@ -1121,7 +1121,7 @@ describe("MapWorkspace", () => {
     await screen.findByRole("button", { name: "View details" });
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
 
     // The explicit report replaces that live quick report and expands it. It must not leave
     // the automatic card behind as a second, historical "Previous analysis" card.
@@ -1531,7 +1531,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(await screen.findByRole("option", { name: "123 Main St" }));
 
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
 
     // Places arrive after the lookup edit; the restore greet must not fire a second run.
@@ -1730,10 +1730,17 @@ describe("MapWorkspace", () => {
       analysis_end_date: window.analysis_end_date,
     }));
 
-    // The update_filters effect updates the matching direct filter without adding a
-    // duplicate transcript line or leaving the rail.
+    // The update_filters effect updates and highlights the shared control, replacing the
+    // generated summary with one deterministic, undoable receipt.
     await waitFor(() => expect(screen.getByRole("button", { name: /search radius: 500 m/i })).toBeInTheDocument());
-    expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
+    expect(screen.getByText("Tabby changed the radius from 250 m to 500 m.")).toBeInTheDocument();
+    expect(screen.queryByText("Updated the filters: radius 500 m.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /search radius: 500 m/i }).closest(".mc-ctx-filter"))
+      .toHaveClass("is-assistant-updated");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("button", { name: /search radius: 250 m/i })).toBeInTheDocument();
+    expect(screen.getByText("Previous filters restored.")).toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
 
@@ -2102,7 +2109,7 @@ describe("MapWorkspace", () => {
     fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "Home" } });
     fireEvent.click(screen.getByRole("button", { name: /save pin/i }));
 
-    // The quick-report action and Tabby's deterministic offer remain available together
+    // The direct-report action and Tabby's deterministic offer remain available together
     // in the same rail after saving.
     expect(await screen.findByText("Saved Home. Want me to pull what's on file nearby?")).toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
@@ -2435,7 +2442,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(await screen.findByRole("option", { name: "123 Main St" }));
 
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
     expect(createPlace).not.toHaveBeenCalled();
     expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1);
@@ -2463,7 +2470,7 @@ describe("MapWorkspace", () => {
     fireEvent.change(screen.getByRole("combobox", { name: /search address or place/i }), { target: { value: "123 Main" } });
     fireEvent.click(await screen.findByRole("option", { name: "123 Main St" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Show me the data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
     // Both payload slices reject; wait for the run to have fired and settled.
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getIncidentDetails).toHaveBeenCalledTimes(1));
@@ -2544,9 +2551,9 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("button", { name: /pull reports near/i })).not.toBeInTheDocument();
   });
 
-  // --- Context-strip run, copy-link, and export controls ---
+  // --- Shared composer run, copy-link, and export controls ---
 
-  it("ContextStrip Run analysis uses dashboard APIs for a single saved place", async () => {
+  it("the composer Run report action uses dashboard APIs for a single saved place", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
     vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 1 });
@@ -2556,7 +2563,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    const runButton = screen.getByRole("button", { name: "Run analysis" });
+    const runButton = screen.getByRole("button", { name: "Run report" });
     await waitFor(() => expect(runButton).toBeEnabled());
     fireEvent.click(runButton);
 
@@ -2571,7 +2578,7 @@ describe("MapWorkspace", () => {
     expect(streamAssistantCommand).not.toHaveBeenCalled();
   });
 
-  it("ContextStrip Run analysis uses dashboard APIs for 2+ saved places", async () => {
+  it("the composer Run report action uses dashboard APIs for 2+ saved places", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home, work]));
     vi.mocked(analyzePlaces).mockResolvedValue({ summary_count: 2 });
@@ -2582,8 +2589,8 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Run analysis" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Run report" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
 
     await waitFor(() => expect(comparePlaces).toHaveBeenCalled());
     const window = currentYearAnalysisWindow();
@@ -2599,14 +2606,14 @@ describe("MapWorkspace", () => {
     expect(streamAssistantCommand).not.toHaveBeenCalled();
   });
 
-  it("ContextStrip Run analysis is disabled with no saved places", async () => {
+  it("hides Run report when there are no places", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
 
     render(<MapWorkspace />);
     await screen.findByText(/point me at a place/i);
 
-    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Run report" })).not.toBeInTheDocument();
   });
 
   it("ContextStrip Copy link writes the share URL and flashes Copied", async () => {

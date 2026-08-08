@@ -1,5 +1,6 @@
 import type { LayerKey } from "../types";
 import { isValidAnalysisDateRange } from "./analysisDateRange";
+import { MAX_ANALYSIS_RADIUS_M, MIN_ANALYSIS_RADIUS_M } from "./analysisRadius";
 
 export interface ViewPoint {
   latitude: number;
@@ -60,7 +61,11 @@ export function decodeView(param: string): SavedView | null {
     const points = wire.pts.map((p: unknown) => readWirePoint(p));
     if (points.some((p: ViewPoint | null) => p === null)) return null;
     const radiusM = Number(wire.r);
-    if (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 5000) return null;
+    if (
+      !Number.isFinite(radiusM)
+      || radiusM < MIN_ANALYSIS_RADIUS_M
+      || radiusM > MAX_ANALYSIS_RADIUS_M
+    ) return null;
     const startDate = String(wire.s);
     const endDate = String(wire.e);
     if (!isValidAnalysisDateRange(startDate, endDate)) return null;

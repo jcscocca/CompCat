@@ -1,6 +1,6 @@
 Reference for the CompCat Analyst — the optional chat assistant that is grounded in the user's current dashboard data and answers questions about reported SPD incident context.
 
-> Updated 2026-08-01 for the Tabby rail visual refresh.
+> Updated 2026-08-08 for the unified context/composer and flexible radius controls.
 
 ## Persona — "Tabby, case desk"
 
@@ -18,12 +18,13 @@ full-illustration welcome card for empty threads, and a Tabby-specific composer 
 elements remain decorative or explicitly labeled so the accessible heading and controls do not
 depend on the mascot art.
 
-Tabby remains the workspace rail, but a user is not required to chat with it. Once a place is
-selected, a persistent **Show me the data** action in the same rail calls the public dashboard
-endpoints directly and opens the resulting frozen `AnalysisCard` without another details click.
-That client-generated quick report is a single live card: rerunning replaces it rather than
-stacking a duplicate historical card. Assistant-produced cards, conversation, command chips,
-and the composer remain available around that direct path.
+Tabby remains the workspace rail, but a user is not required to chat with it. The **Tabby is
+using** context and the composer form one visual unit so the scope shared by direct controls and
+chat stays explicit. Once a place is selected, the form's **Run report** action calls the public
+dashboard endpoints directly and opens the resulting frozen `AnalysisCard` without another
+details click. That client-generated report is a single live card: rerunning replaces it rather
+than stacking a duplicate historical card. Assistant-produced cards, conversation, command
+chips, and the composer remain available around that direct path.
 
 ---
 
@@ -245,9 +246,11 @@ The single-planning-call architecture executes at most one tool per turn, so the
 
 Small local models frequently emit a `tool_call` with empty or partial `arguments`. `_tool_arguments` in `app/assistant/agent.py` backfills the dashboard state (selected place IDs, date range, radii, offense filters) for the five *selection tools* (`run_place_analysis`, `compare_places`, `get_neighborhood_analysis`, `get_incident_details`, `analyze_places`). Model-provided values override the backfilled defaults.
 
-Two deterministic language backstops run before validation. Explicit meter asks (`radius to
-500`, `radius = 500`, `750 m`, `750 meters`) fill an omitted radius for selection tools and
-`update_filters`; relative date asks continue to resolve against the active window's end date.
+Two deterministic language backstops run before validation. Explicit radius asks accept meters,
+kilometers, feet, or miles, including decimals and common fractions (`radius to 400`, `0.4 km`,
+`1300 feet`, `¼ mile`). They convert to a whole-meter radius and fill an omitted argument for
+selection tools and `update_filters`; tool validation enforces the shared 100 m–1 km range.
+Relative date asks continue to resolve against the active window's end date.
 If the model supplies a deictic query such as “this place” or “the selected places” and it does
 not resolve as a saved label, analysis/compare falls back to the active, backfilled place IDs.
 An explicit named query that fails resolution does **not** silently analyze the current
@@ -278,7 +281,7 @@ The agent influences the Tabby rail and map by emitting `tool` SSE events. The f
 - **`compare_places`** → replaces the selection, updates settings, and freezes comparison + neighborhood + incident data into one inline comparison card so its expanded view retains baseline, trend, and incident-detail parity; it also attaches neutral run badges and refreshes the summary.
 - **`add_place`** → appends the new place ID to the selection (`mode: "add"`) and sets `refetchSummary: true`.
 - **`select_places`** → updates the selection with the mode returned by the tool (`replace`, `add`, or `clear`).
-- **`update_filters`** → applies the validated patch through the same client-owned settings reducer used by the context strip and appends a deterministic receipt.
+- **`update_filters`** → applies the validated patch through the same client-owned settings reducer used by the context strip, briefly highlights affected controls, and appends a deterministic receipt with a one-time Undo action. A settings-only turn suppresses redundant generated narration.
 - **`explain_result`, `get_dashboard_summary`, `suggest_followups`, and unknown tools** → return
   `null` (no pane change).
 
@@ -307,7 +310,7 @@ the user changes the live dashboard. The server never trusts cached result evide
 
 When any live selection entry is unsaved, the browser sends the complete selection as bounded
 inline points rather than dropping those entries or persisting them. Analysis and comparison
-tools use the existing stateless points path, so Tabby sees the same pins as the quick-report
+tools use the existing stateless points path, so Tabby sees the same pins as the direct-report
 card while saved-only selections retain their owned-ID/export behavior.
 
 Visit counts, dwell fields, and their derived incident-rate fields are deliberately excluded

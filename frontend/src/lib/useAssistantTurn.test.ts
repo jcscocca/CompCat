@@ -161,14 +161,14 @@ describe("useAssistantTurn", () => {
     expect(append).toHaveBeenCalledWith({ kind: "tabby_text", text: "Analyzed Home." });
   });
 
-  it("a chat turn commits its reply even when a settings tool ran", async () => {
+  it("suppresses a settings-only chat summary because the shared context shows a receipt", async () => {
     vi.mocked(streamAssistantChat).mockImplementation(async (_p, { onEvent }) => {
       onEvent({ event: "tool", data: { tool_name: "update_filters", arguments: {}, result: {} } });
       onEvent({ event: "token", data: { delta: "Done." } });
     });
     const { hook, append } = setup();
     await act(() => hook.result.current.sendChat("widen the radius"));
-    expect(append).toHaveBeenCalledWith({ kind: "tabby_text", text: "Done." });
+    expect(append).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "tabby_text" }));
   });
 
   it("a thrown fetch on chat appends OFFLINE_MESSAGE and sets offline", async () => {

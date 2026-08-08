@@ -42,7 +42,8 @@ describe("savedView", () => {
       }));
     expect(decodeView(withRadius("abc"))).toBeNull(); // NaN would poison the number line
     expect(decodeView(withRadius(0))).toBeNull(); // non-positive
-    expect(decodeView(withRadius(99999))).toBeNull(); // beyond the 5000 m cap
+    expect(decodeView(withRadius(1001))).toBeNull(); // beyond the 1 km cap
+    expect(decodeView(withRadius(99))).toBeNull(); // below the 100 m floor
     expect(decodeView(withRadius(250))?.radiusM).toBe(250); // a valid radius still decodes
   });
 

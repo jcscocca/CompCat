@@ -17,6 +17,7 @@ from app.analysis.beat_baselines import (
     load_beat_areas,
     load_beat_polygons,
 )
+from app.analysis.radius import MAX_ANALYSIS_RADIUS_M, MIN_ANALYSIS_RADIUS_M
 from app.api.dashboard_schemas import (
     MAX_ANALYSIS_SPAN_DAYS,
     MIN_ANALYSIS_DATE,
@@ -232,9 +233,11 @@ class AnalyzePlacesArgs(_BoundedWindowArgs):
     # Dates/filters inherit _BoundedWindowArgs (optional dates -> clarification path).
     # Bounded per item and in length, mirroring ComparePlacesByNameArgs.radius_m: this is
     # reachable straight from POST /assistant/commands with arbitrary arguments, where a
-    # 10^9 radius means a planet-sized bounding box and a long list multiplies the scan.
-    # The dashboard only ever offers three radii (Settings.crime_radii_m).
-    radii_m: list[Annotated[int, Field(gt=0, le=5000)]] = Field(
+    # A huge radius means a region-sized bounding box and a long list multiplies the scan.
+    # The UI suggests three common radii but accepts any integer in the product range.
+    radii_m: list[
+        Annotated[int, Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M)]
+    ] = Field(
         default_factory=list, max_length=3
     )
     layer: str = "reported"
@@ -251,7 +254,9 @@ class ComparePlacesByNameArgs(_BoundedWindowArgs):
     place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     points: list[AnalysisPoint] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     # Dates/filters inherit _BoundedWindowArgs (optional window -> clarification path).
-    radius_m: int | None = Field(default=None, gt=0, le=5000)
+    radius_m: int | None = Field(
+        default=None, ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M
+    )
     layer: str = "reported"
 
     @model_validator(mode="after")
@@ -265,7 +270,7 @@ class ExplainResultArgs(_BoundedWindowArgs):
     kind: Literal["analyze", "compare"]
     place_ids: list[str] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
     points: list[AnalysisPoint] = Field(default_factory=list, max_length=_MAX_TOOL_ITEMS)
-    radius_m: int = Field(gt=0, le=5000)
+    radius_m: int = Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M)
     layer: Literal["reported", "arrests", "calls"] = "reported"
 
     @model_validator(mode="after")
@@ -276,7 +281,9 @@ class ExplainResultArgs(_BoundedWindowArgs):
 
 
 class UpdateFiltersArgs(_BoundedWindowArgs):
-    radius_m: int | None = Field(default=None, ge=50, le=5000)
+    radius_m: int | None = Field(
+        default=None, ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M
+    )
     # "" or "ALL" clears to all-reported (echoed as None, matching _settings_used).
     # ALL exists because the chat path (_tool_arguments) strips "" from arguments.
     offense_category: Literal["", "ALL", "PROPERTY", "PERSON", "SOCIETY"] | None = None

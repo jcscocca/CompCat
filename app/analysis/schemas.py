@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.analysis.radius import MAX_ANALYSIS_RADIUS_M, MIN_ANALYSIS_RADIUS_M
 from app.schemas import new_id
 
 
@@ -64,7 +65,7 @@ class AnalysisSiteOption(BaseModel):
     label: str
     latitude: float
     longitude: float
-    radius_m: int = Field(gt=0, le=5000)
+    radius_m: int = Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M)
 
 
 class SiteComparisonRequest(BaseModel):

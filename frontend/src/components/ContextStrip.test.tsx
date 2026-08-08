@@ -18,18 +18,16 @@ afterEach(cleanup);
 
 function setup(overrides: Partial<AnalysisSettings> = {}) {
   const onChange = vi.fn();
-  const onRun = vi.fn();
   const result = render(
     <ContextStrip
       analysis={{ ...analysis, ...overrides }}
       availableRadii={[250, 500, 1000]}
       onChange={onChange}
-      onRun={onRun}
       layerAvailability={{ reported: true, arrests: true, calls: false }}
       locationControls={<div data-testid="location-controls">Saved location controls</div>}
     />,
   );
-  return { ...result, onChange, onRun };
+  return { ...result, onChange };
 }
 
 describe("ContextStrip", () => {
@@ -37,7 +35,8 @@ describe("ContextStrip", () => {
     const { container } = setup({ offenseCategory: "PROPERTY", layer: "arrests" });
     const summary = container.querySelector(".mc-ctx-summary");
 
-    expect(summary).toHaveTextContent("Analysis filters");
+    expect(summary).toHaveTextContent("Tabby is using");
+    expect(summary).toHaveTextContent("tell Tabby what to use");
     expect(summary).toHaveTextContent("Saved location controls");
     expect(screen.getByRole("button", { name: "Date range: 2026-01-01 – 2026-07-19" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Search radius: 250 m" })).toBeVisible();
@@ -60,6 +59,29 @@ describe("ContextStrip", () => {
     expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
   });
 
+  it("accepts a custom 400 m radius and normalizes kilometer input", () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
+    const input = screen.getByLabelText("Custom radius");
+
+    fireEvent.change(input, { target: { value: "0.4 km" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onChange).toHaveBeenCalledWith({ radiusM: 400 });
+    expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a custom radius inside the 100 m to 1 km product range", () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
+    fireEvent.change(screen.getByLabelText("Custom radius"), { target: { value: "1.2 km" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText("Choose a radius from 100 m to 1 km.")).toHaveClass("is-error");
+    expect(screen.getByLabelText("Custom radius")).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("opens only one filter popup at a time", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
@@ -76,6 +98,13 @@ describe("ContextStrip", () => {
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-03-01" } });
     expect(onChange).toHaveBeenCalledWith({ startDate: "2026-03-01" });
     expect(screen.getByRole("dialog", { name: "Date range" })).toBeInTheDocument();
+  });
+
+  it("applies rolling and year-to-date date presets", () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Last 30 days" }));
+    expect(onChange).toHaveBeenCalledWith({ startDate: "2026-06-20", endDate: "2026-07-19" });
   });
 
   it("rejects a reversed date range before changing the analysis and explains the error", () => {
@@ -95,14 +124,12 @@ describe("ContextStrip", () => {
 
   it("disables actions when given an invalid range from an external source", () => {
     setup({ startDate: "2026-08-01", endDate: "2026-07-19" });
-    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /date range:/i })).toHaveAttribute("aria-invalid", "true");
   });
 
   it("blocks API-invalid long and far-future windows", () => {
     const { onChange } = setup({ startDate: "2018-01-01", endDate: "2026-08-01" });
-    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent("3000 days or fewer");
 
     fireEvent.click(screen.getByRole("button", { name: /date range:/i }));
@@ -158,25 +185,24 @@ describe("ContextStrip", () => {
     expect(onChange).toHaveBeenCalledWith({ layer: "arrests", offenseCategory: "" });
   });
 
-  it("keeps Run analysis and Copy link immediately available", () => {
-    const { onRun } = setup();
+  it("leaves report execution to the shared composer and keeps Copy link available", () => {
+    setup();
     expect(screen.queryByRole("button", { name: /edit filters/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Run analysis" }));
-    expect(onRun).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /run (analysis|report)/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
   });
 
-  it("disables Run analysis when requested", () => {
+  it("highlights filters most recently updated by Tabby", () => {
     render(
       <ContextStrip
         analysis={analysis}
         availableRadii={[250, 500, 1000]}
         onChange={vi.fn()}
-        onRun={vi.fn()}
-        runDisabled
+        assistantUpdatedFields={["radiusM"]}
       />,
     );
-    expect(screen.getByRole("button", { name: "Run analysis" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Search radius: 250 m" }).closest(".mc-ctx-filter"))
+      .toHaveClass("is-assistant-updated");
   });
 
   it("copies the share link and discloses exact locations and recomputation", async () => {

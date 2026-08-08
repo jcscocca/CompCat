@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app.config import Settings
 
 
@@ -39,3 +42,10 @@ def test_assistant_token_budget_defaults_disabled() -> None:
 def test_assistant_token_budget_reads_the_env_var(monkeypatch) -> None:
     monkeypatch.setenv("MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY", "250000")
     assert Settings(_env_file=None).assistant_token_budget_per_day == 250000
+
+
+def test_suggested_analysis_radii_use_the_shared_product_bounds() -> None:
+    assert _settings(crime_radii_m=[100, 400, 1000]).crime_radii_m == [100, 400, 1000]
+    for radius in (99, 1001):
+        with pytest.raises(ValidationError):
+            _settings(crime_radii_m=[radius])

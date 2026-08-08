@@ -51,8 +51,8 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
       let errored = false;
       let errMessage = "";
       let errCode = "";
-      // A settings-only command turn (only update_filters ran) already has a receipt for
-      // its effect; suppress the duplicate summary bubble. Any other tool keeps the summary.
+      // A settings-only turn (only update_filters ran) already has a deterministic receipt
+      // beside the shared context; suppress the duplicate summary bubble for chat and commands.
       // (The command route emits at most one tool event per turn today — the &&= accumulation
       // is defensive for a future multi-tool route.)
       let sawTool = false;
@@ -94,7 +94,7 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
           }
         }, controller.signal);
         if (!live()) return;
-        if (!errored && text.trim() && !(kind === "command" && sawTool && settingsOnly)) {
+        if (!errored && text.trim() && !(sawTool && settingsOnly)) {
           append({ kind: "tabby_text", text: text.trim() });
         }
         if (errored) {

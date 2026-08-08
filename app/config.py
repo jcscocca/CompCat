@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.analysis.radius import MAX_ANALYSIS_RADIUS_M, MIN_ANALYSIS_RADIUS_M
 
 DEFAULT_USER_HASH_SALT = "local-demo-salt"
 DEFAULT_SESSION_SECRET = "local-dashboard-session-secret"
@@ -47,7 +49,9 @@ class Settings(BaseSettings):
     cluster_radius_m: float = 100
     minimum_cluster_visits: int = 3
     minimum_cluster_total_dwell_minutes: int = 60
-    crime_radii_m: list[int] = Field(default_factory=lambda: [250, 500, 1000])
+    crime_radii_m: list[
+        Annotated[int, Field(ge=MIN_ANALYSIS_RADIUS_M, le=MAX_ANALYSIS_RADIUS_M)]
+    ] = Field(default_factory=lambda: [250, 500, 1000])
     socrata_base_url: str = "https://data.seattle.gov/resource"
     socrata_dataset_id: str = "tazs-3rd5"
     socrata_arrests_dataset_id: str = "9bjs-7a7w"
