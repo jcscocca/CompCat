@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IncidentDisclosure } from "./IncidentDisclosure";
 import { incidentNoun } from "../lib/layerCopy";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("IncidentDisclosure", () => {
   it("renders nothing before the first fetch", () => {
@@ -71,5 +74,40 @@ describe("IncidentDisclosure", () => {
     render(<IncidentDisclosure returnedCount={0} totalCount={0} returnedLocationCount={0} totalLocationCount={0} unmappableCitywideCount={0} limit={5000} itemNoun={incidentNoun("arrests")} />);
     expect(screen.getByRole("status")).toHaveTextContent("No arrests in current map view");
     expect(screen.getByRole("status")).not.toHaveTextContent("block location");
+  });
+
+  it("does not flash refresh state for work that finishes before 400 ms", () => {
+    vi.useFakeTimers();
+    const view = render(<IncidentDisclosure returnedCount={10} totalCount={10} returnedLocationCount={4} totalLocationCount={4} unmappableCitywideCount={0} limit={5000} refreshing />);
+    const disclosure = view.container.querySelector(".mc-disclosure");
+    expect(screen.queryByText("Updating…")).toBeNull();
+    expect(disclosure).not.toHaveAttribute("aria-busy");
+
+    act(() => vi.advanceTimersByTime(399));
+    view.rerender(<IncidentDisclosure returnedCount={10} totalCount={10} returnedLocationCount={4} totalLocationCount={4} unmappableCitywideCount={0} limit={5000} refreshing={false} />);
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(screen.queryByText("Updating…")).toBeNull();
+    expect(disclosure).not.toHaveAttribute("aria-busy");
+  });
+
+  it("shows matching visual and accessibility state after a slow refresh", () => {
+    vi.useFakeTimers();
+    const view = render(<IncidentDisclosure returnedCount={10} totalCount={10} returnedLocationCount={4} totalLocationCount={4} unmappableCitywideCount={0} limit={5000} refreshing />);
+    act(() => vi.advanceTimersByTime(400));
+
+    expect(screen.getByText("Updating…")).toBeInTheDocument();
+    expect(view.container.querySelector(".mc-disclosure")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: /updating map data/i })).toBeInTheDocument();
+  });
+
+  it("keeps a failed refresh labeled as the previous view", () => {
+    render(<IncidentDisclosure returnedCount={10} totalCount={10} returnedLocationCount={4} totalLocationCount={4} unmappableCitywideCount={0} limit={5000} stale />);
+    expect(screen.getByText("Previous view")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: /previous map view; update failed/i });
+    fireEvent.click(toggle);
+    expect(screen.getByRole("region", { name: "Map count details" })).toHaveTextContent(
+      "Map data could not update; these counts reflect the previous map view.",
+    );
   });
 });

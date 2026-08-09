@@ -17,6 +17,10 @@ vi.mock("maplibre-gl", () => {
     }>();
     layers: Array<Record<string, unknown>> = [];
     layerHandlers: Record<string, Array<(arg?: unknown) => void>> = {};
+    scrollZoom = {
+      setZoomRate: vi.fn(),
+      setWheelZoomRate: vi.fn(),
+    };
     constructor(options?: Record<string, unknown>) {
       MockMap.last = this;
       MockMap.lastOptions = options ?? null;
@@ -180,6 +184,10 @@ type MockMapInstance = {
   setStyle: ReturnType<typeof vi.fn>;
   easeTo: ReturnType<typeof vi.fn>;
   fitBounds: ReturnType<typeof vi.fn>;
+  scrollZoom: {
+    setZoomRate: ReturnType<typeof vi.fn>;
+    setWheelZoomRate: ReturnType<typeof vi.fn>;
+  };
 };
 const MockedMap = maplibregl.Map as unknown as {
   last: MockMapInstance | null;
@@ -371,6 +379,13 @@ describe("ringsGeoJSON", () => {
 });
 
 describe("MapCanvas", () => {
+  it("slows the default trackpad and wheel zoom rates", async () => {
+    renderCanvas();
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    expect(MockedMap.last!.scrollZoom.setZoomRate).toHaveBeenCalledWith(1 / 180);
+    expect(MockedMap.last!.scrollZoom.setWheelZoomRate).toHaveBeenCalledWith(1 / 600);
+  });
+
   it("renders one marker element per place and reports clicks by id", async () => {
     const onMarkerClick = vi.fn();
     renderCanvas({ onMarkerClick });
@@ -658,6 +673,23 @@ describe("beat + incident layers", () => {
       incidentNoun: incidentNoun("reported"),
     }));
 
+    await waitFor(() => expect(document.body.querySelector(".mc-incident-card")).toBeNull());
+  });
+
+  it("keeps an incident popup open through camera movement until point data changes", async () => {
+    const view = renderCanvas({ incidentPoints: POINTS_FC });
+    await waitFor(() => expect(MockedMap.last).not.toBeNull());
+    MockedMap.last!.fireLayerClick("mc-incident-hit", {
+      properties: { id: "inc-1", offense_subcategory: "THEFT" },
+    });
+    expect(document.body.querySelector(".mc-incident-card")).not.toBeNull();
+
+    MockedMap.last!.fireMoveEnd();
+    expect(document.body.querySelector(".mc-incident-card")).not.toBeNull();
+
+    view.rerender(canvasElement({
+      incidentPoints: { type: "FeatureCollection", features: [] },
+    }));
     await waitFor(() => expect(document.body.querySelector(".mc-incident-card")).toBeNull());
   });
 

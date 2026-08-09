@@ -1,6 +1,6 @@
 Reference for the CompCat Analyst — the optional chat assistant that is grounded in the user's current dashboard data and answers questions about reported SPD incident context.
 
-> Updated 2026-08-08 for the unified context/composer and flexible radius controls.
+> Updated 2026-08-09 for the unified context/composer and meter-based radius controls.
 
 ## Persona — "Tabby, case desk"
 
@@ -246,10 +246,9 @@ The single-planning-call architecture executes at most one tool per turn, so the
 
 Small local models frequently emit a `tool_call` with empty or partial `arguments`. `_tool_arguments` in `app/assistant/agent.py` backfills the dashboard state (selected place IDs, date range, radii, offense filters) for the five *selection tools* (`run_place_analysis`, `compare_places`, `get_neighborhood_analysis`, `get_incident_details`, `analyze_places`). Model-provided values override the backfilled defaults.
 
-Two deterministic language backstops run before validation. Explicit radius asks accept meters,
-kilometers, feet, or miles, including decimals and common fractions (`radius to 400`, `0.4 km`,
-`1300 feet`, `¼ mile`). They convert to a whole-meter radius and fill an omitted argument for
-selection tools and `update_filters`; tool validation enforces the shared 100 m–1 km range.
+Two deterministic language backstops run before validation. Explicit whole-meter radius asks
+(`radius to 400`, `400 m`, `400 meters`) fill an omitted argument for selection tools and
+`update_filters`; tool validation enforces the shared 100–1,000 meter range.
 Relative date asks continue to resolve against the active window's end date.
 If the model supplies a deictic query such as “this place” or “the selected places” and it does
 not resolve as a saved label, analysis/compare falls back to the active, backfilled place IDs.

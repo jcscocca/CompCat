@@ -48,7 +48,8 @@ contract.
   picker closes on outside pointer input or Escape, and option pickers close immediately on
   selection; Escape and option selection restore focus to the originating filter.
 - Radius suggestions remain keyboard-operable shortcuts, while the labeled custom-radius field
-  accepts any value from 100 m through 1 km and exposes validation errors in the same dialog.
+  accepts any whole-meter value from 100 through 1,000 and exposes validation errors in the same
+  dialog.
   Date presets are ordinary buttons and resolve against the currently active end date.
 - Assistant-applied filter changes are announced as deterministic status receipts. Their
   one-time Undo control restores the prior scope without relying on the temporary visual

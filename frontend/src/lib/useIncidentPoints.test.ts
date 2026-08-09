@@ -118,6 +118,89 @@ describe("useIncidentPoints", () => {
     expect(fetchPoints.mock.calls[0][0].bounds.north).toBe(47.67);
   });
 
+  it("preserves a successful response during the longer viewport refresh", async () => {
+    const { result, rerender } = renderHook(
+      ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
+      { initialProps: { bounds: BOUNDS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.totalCount).toBe(1);
+
+    fetchPoints.mockResolvedValueOnce(response({ total_count: 2, returned_count: 2 }));
+    rerender({ bounds: { ...BOUNDS, north: 47.7 } });
+    expect(result.current.refreshing).toBe(true);
+    expect(result.current.totalCount).toBe(1);
+    expect(result.current.geojson.features).toHaveLength(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(699);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(1);
+    expect(result.current.totalCount).toBe(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(2);
+    expect(result.current.totalCount).toBe(2);
+    expect(result.current.refreshing).toBe(false);
+  });
+
+  it("collapses post-load viewport corrections into one 700 ms trailing request", async () => {
+    const { rerender } = renderHook(
+      ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
+      { initialProps: { bounds: BOUNDS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    rerender({ bounds: { ...BOUNDS, north: 47.66 } });
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    rerender({ bounds: { ...BOUNDS, north: 47.67 } });
+    await act(async () => {
+      vi.advanceTimersByTime(699);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(2);
+    expect(fetchPoints.mock.calls[1][0].bounds.north).toBe(47.67);
+  });
+
+  it("cancels a pending viewport timer when the semantic scope changes", async () => {
+    const { result, rerender } = renderHook(
+      ({ bounds, analysis }) => useIncidentPoints({ bounds, analysis }),
+      { initialProps: { bounds: BOUNDS, analysis: ANALYSIS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    rerender({ bounds: { ...BOUNDS, north: 47.7 }, analysis: ANALYSIS });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    rerender({ bounds: { ...BOUNDS, north: 47.7 }, analysis: { ...ANALYSIS, offenseCategory: "PERSON" } });
+    expect(result.current.totalCount).toBe(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(2);
+    expect(fetchPoints.mock.calls[1][0].offense_category).toBe("PERSON");
+  });
+
   it("clears reported dots and counts immediately when the layer changes", async () => {
     const { result, rerender } = renderHook(
       ({ analysis }) => useIncidentPoints({ bounds: BOUNDS, analysis }),
@@ -191,7 +274,7 @@ describe("useIncidentPoints", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("does not retain prior GeoJSON or counts when a later fetch fails", async () => {
+  it("retains and labels the previous view after a failed viewport refresh, then recovers", async () => {
     const { result, rerender } = renderHook(
       ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
       { initialProps: { bounds: BOUNDS } },
@@ -207,16 +290,84 @@ describe("useIncidentPoints", () => {
     fetchPoints.mockRejectedValueOnce(new Error("boom"));
     rerender({ bounds: { ...BOUNDS, north: 47.7 } });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(700);
     });
     expect(result.current.error).toBe("Incident pins could not load for this view.");
     expect(result.current.errorId).toBe(1);
+    expect(result.current.geojson.features).toHaveLength(1);
+    expect(result.current.totalCount).toBe(1);
+    expect(result.current.stale).toBe(true);
+    expect(result.current.refreshing).toBe(false);
+
+    fetchPoints.mockResolvedValueOnce(response({ total_count: 2, returned_count: 2 }));
+    rerender({ bounds: { ...BOUNDS, north: 47.71 } });
+    expect(result.current.stale).toBe(true);
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+    });
+    expect(result.current.totalCount).toBe(2);
+    expect(result.current.stale).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("treats a zero-result response as successful for viewport refresh timing", async () => {
+    fetchPoints.mockResolvedValueOnce(response({
+      points: [], returned_count: 0, total_count: 0,
+      returned_location_count: 0, total_location_count: 0,
+    }));
+    const { result, rerender } = renderHook(
+      ({ bounds }) => useIncidentPoints({ bounds, analysis: ANALYSIS }),
+      { initialProps: { bounds: BOUNDS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
     expect(result.current.geojson.features).toHaveLength(0);
-    expect(result.current.returnedCount).toBe(0);
+    expect(result.current.limit).toBe(5000);
+
+    rerender({ bounds: { ...BOUNDS, north: 47.7 } });
+    await act(async () => {
+      vi.advanceTimersByTime(699);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(1);
+    expect(result.current.limit).toBe(5000);
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a late older-generation response even when its promise ignores abort", async () => {
+    let resolveViewport: (value: IncidentPointsResponse) => void = () => {};
+    const { result, rerender } = renderHook(
+      ({ bounds, analysis }) => useIncidentPoints({ bounds, analysis }),
+      { initialProps: { bounds: BOUNDS, analysis: ANALYSIS } },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    fetchPoints.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveViewport = resolve;
+    }));
+    rerender({ bounds: { ...BOUNDS, north: 47.7 }, analysis: ANALYSIS });
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(2);
+
+    rerender({ bounds: { ...BOUNDS, north: 47.7 }, analysis: { ...ANALYSIS, layer: "arrests" } });
     expect(result.current.totalCount).toBe(0);
-    expect(result.current.totalLocationCount).toBe(0);
-    expect(result.current.layerTotals).toBeNull();
-    expect(result.current.limit).toBe(0);
+    await act(async () => {
+      resolveViewport(response({ total_count: 99, returned_count: 99 }));
+      await Promise.resolve();
+    });
+    expect(result.current.totalCount).toBe(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(fetchPoints).toHaveBeenCalledTimes(3);
   });
 
   it("assigns a new occurrence id when the same warning happens on a later request", async () => {
@@ -250,7 +401,7 @@ describe("useIncidentPoints", () => {
     fetchPoints.mockRejectedValueOnce(new Error(SESSION_EXPIRED_MESSAGE));
     rerender({ bounds: { ...BOUNDS, north: 47.7 } });
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(700);
     });
     expect(result.current.error).toBe(SESSION_EXPIRED_MESSAGE);
   });

@@ -93,7 +93,7 @@ clears the cookie.
 | Statistical analysis | `app/analysis/reference_circles.py` + `app/analysis/comparison.py` | Empirical equal-radius reference distributions for one-place context; separate exposure-adjusted quasi-Poisson/BH tests for user-selected place-to-place comparison |
 | Crime ingestion | `app/crime/` | `seattle_socrata.py` fetches from Socrata; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
 | Upload pipeline | `app/parsers/` + `app/normalization/` | Parsers (`google_timeline`, `gpx_points`, `csv_points`, `geojson_points`, `recurring_places`) normalize raw uploads into `StagingLocationObservation` rows |
-| Exports | `app/exports/` | `tableau.py` produces the legacy session-wide Tableau place summary; `analysis.py` flattens the current analytical detail view into a run-owned CSV with target counts, reference-circle distributions, adequacy, and method metadata |
+| Exports | `app/exports/` | `tableau.py` produces the legacy session-wide place summary; `analysis.py` flattens the current analytical detail view into a run-owned CSV with target counts, reference-circle distributions, adequacy, and method metadata |
 | Geocoding | `app/geocoding/providers.py` | `NominatimProvider` calls Nominatim; region-locked to the Seattle-metro viewbox (`MCA_GEOCODER_VIEWBOX`, bounded by default) |
 | Places | `app/places/schemas.py` + `app/services/manual_place_service.py` | Manual and bulk place creation/update/delete; `PlaceCluster` is the canonical record |
 | Services | `app/services/` | All business logic: `dashboard_analysis_service.py`, `analysis_service.py`, `crime_service.py`, `geocoding_service.py`, `export_service.py`, `import_service.py`, `normalization_service.py`, and others |
@@ -142,7 +142,7 @@ places, and exports one row per place/reference geography using the same values 
 the card. The export stamps both analysis-window dates directly from that immutable run, so
 the end date cannot disappear when the detail payload is recomputed. The retained
 polygon-density baseline fields are not part of this analytical export.
-The Manage Places footer retains the separate session-wide Tableau place-summary download.
+The Manage Places footer retains the separate session-wide place-summary CSV download.
 Both paths honor the per-place export privacy class.
 
 The Tabby rail's **Run report** action does not call an assistant endpoint. It sends the current address list and filters through `useCompare`, which calls the public dashboard analysis, neighborhood, incident-detail, and (for two or more places) comparison endpoints, then freezes the response into an expanded, result-focused `AnalysisCard` in the same rail. The report is focused at its heading and owns the rail's remaining height until it is collapsed; the context/composer, follow-up chips, and conversation then return. The rail keeps one live client-generated report card, so another direct run replaces that card instead of stacking a duplicate “previous analysis”; assistant-produced cards remain part of the conversation.
@@ -158,7 +158,7 @@ desktop locator-strip state.
 
 Tabby's conversational controls consume the assistant endpoints as Server-Sent Events streams. `streamAssistantChat` handles free-text, LLM-backed turns; `streamAssistantCommand` handles fixed, no-LLM commands from chips. Both feed `useAssistantTurn`, which serializes turns and dispatches structured tool effects into the rail.
 
-The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's **Tabby is using** context owns both saved-place selection and unsaved search/share points. Its visible date, radius, category, and layer pills are direct disclosure buttons with one anchored picker open at a time. Dates provide presets relative to the active end date; radius suggestions are shortcuts rather than an enum, and a custom value from 100 m through 1 km may be entered in meters, kilometers, feet, or miles. Manual edits and `update_filters` chat effects share the same reducer. Assistant edits briefly highlight the affected pills and add an undoable deterministic receipt; result cards are marked as previous analyses as soon as that context changes.
+The dashboard freshness response also drives the initial analysis context. Untouched sessions use the latest loaded calendar year, and layers confirmed to have no data are disabled instead of producing misleading zero-result analyses. The rail's **Tabby is using** context owns both saved-place selection and unsaved search/share points. Its visible date, radius, category, and layer pills are direct disclosure buttons with one anchored picker open at a time. Dates provide presets relative to the active end date; radius suggestions are shortcuts rather than an enum, and a custom whole-meter value from 100 through 1,000 may be entered. Manual edits and `update_filters` chat effects share the same reducer. Assistant edits briefly highlight the affected pills and add an undoable deterministic receipt; result cards are marked as previous analyses as soon as that context changes.
 
 The incident map deliberately distinguishes records from visible coordinates. The public
 source geography is reported at block level, so `/dashboard/incident-points` groups matching rows by
@@ -178,6 +178,16 @@ reports total/returned records and total/returned block locations, and the 5,000
 payload ceiling applies to locations ordered by their latest matching record. The same count
 query also returns current-viewport totals for all three layers, which the layer switch keeps
 visible so different source volumes cannot all appear to be “5,000.”
+
+Map navigation is decoupled from that endpoint's response time. MapLibre's trackpad and
+mouse-wheel rates are deliberately slower than its defaults (`1/180` and `1/600`) so small
+corrections do not over-zoom. The first valid viewport and any layer/date/category change
+use a 300 ms trailing request; later bounds-only changes in the same successful scope use
+700 ms. Bounds-only refreshes preserve the prior points and counts until the replacement
+commits atomically, while semantic scope changes clear immediately so old data is never
+relabeled. A slow refresh discloses `Updating…` after 400 ms. If a same-scope viewport update
+fails, the prior response remains usable but is persistently labeled `Previous view` until a
+refresh succeeds; initial or new-scope failures remain empty and surface the map warning.
 
 **Accessibility contract:** the React dashboard targets WCAG 2.2 Level AA. The page exposes
 a named `main` map workspace and a named complementary Tabby region; cards, dialogs, forms,
@@ -274,7 +284,7 @@ flowchart TD
         LLM["assistant/llm_client.py\nLLM backends: compat / OpenAI / Claude"]
         CRIME["crime/ summaries.py\nSocrata ingestion"]
         PARSE["parsers/ + normalization/\nUpload pipeline"]
-        EXP["exports/\nTableau CSV"]
+        EXP["exports/\nSession CSV"]
         GEO["geocoding/providers.py\nNominatim (Seattle-locked)"]
     end
 

@@ -4,7 +4,8 @@ import { friendlyMessageOr, getIncidentPoints } from "../api/client";
 import { isValidAnalysisDateRange } from "./analysisDateRange";
 import type { AnalysisSettings, IncidentPoint, IncidentPointsResponse, LayerKey, MapBounds } from "../types";
 
-const DEBOUNCE_MS = 300;
+const INITIAL_OR_SCOPE_DEBOUNCE_MS = 300;
+const VIEWPORT_DEBOUNCE_MS = 700;
 
 export type IncidentFeatureCollection = {
   type: "FeatureCollection";
@@ -56,13 +57,13 @@ function toGeoJSON(points: IncidentPoint[]): IncidentFeatureCollection {
 
 /**
  * Debounced, abortable viewport-driven fetch of incident points for the map dot layer.
- * Mirrors useAddressSearch's debounce+abort mechanics: a ~300 ms trailing debounce on
- * bounds/analysis changes, an AbortController per request, and signal.aborted guards so a
- * superseded request never writes its result. bounds === null holds off the first fetch
- * until the map reports a viewport. radiusM is intentionally excluded from the dep array —
- * the dot layer does not depend on radius. Each GeoJSON feature is one block-level coordinate
- * with a record_count, so co-located records stay visible after client clustering ends. Emits
- * record and location counts for the coverage chip.
+ * Initial and semantic-scope requests retain the 300 ms cadence; bounds-only refreshes after
+ * a successful response wait 700 ms and keep that response visible until its replacement
+ * arrives. One timer/controller lane plus a request-generation guard prevents an older scope
+ * from committing after a newer change. bounds === null holds off the first fetch until the
+ * map reports a viewport. radiusM is intentionally excluded from the dep array — the dot
+ * layer does not depend on radius. Each GeoJSON feature is one block-level coordinate with a
+ * record_count, so co-located records stay visible after client clustering ends.
  */
 export function useIncidentPoints({
   bounds,
@@ -79,32 +80,56 @@ export function useIncidentPoints({
   // A repeated failure may have identical copy but represents a new request and deserves a
   // fresh warning. Consumers use this occurrence id instead of permanently dismissing by text.
   const [errorId, setErrorId] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stale, setStale] = useState(false);
   const errorSequenceRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scopeKeyRef = useRef<string | null>(null);
+  const hasSuccessfulResponseRef = useRef(false);
+  const requestGenerationRef = useRef(0);
 
   const { startDate, endDate, offenseCategory, layer } = analysis;
+  const scopeKey = JSON.stringify([startDate, endDate, offenseCategory, layer, enabled]);
 
   useEffect(() => {
+    const scopeChanged = scopeKeyRef.current !== null && scopeKeyRef.current !== scopeKey;
+    scopeKeyRef.current = scopeKey;
+    requestGenerationRef.current += 1;
+    const requestGeneration = requestGenerationRef.current;
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    abortRef.current?.abort();
+    abortRef.current = null;
+
     if (!bounds || !enabled || !isValidAnalysisDateRange(startDate, endDate)) {
-      abortRef.current?.abort();
+      hasSuccessfulResponseRef.current = false;
       setGeojson(EMPTY);
       setCounts(emptyCounts());
       setError(null);
+      setRefreshing(false);
+      setStale(false);
       return undefined;
     }
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
+
+    const preservePriorResponse = !scopeChanged && hasSuccessfulResponseRef.current;
+    if (!preservePriorResponse) {
+      // Semantic-scope changes must never relabel the prior scope's dots or counts.
+      hasSuccessfulResponseRef.current = false;
+      setGeojson(EMPTY);
+      setCounts(emptyCounts());
+      setStale(false);
     }
-    abortRef.current?.abort();
+    setError(null);
+    setRefreshing(true);
+
     const controller = new AbortController();
     abortRef.current = controller;
-    // The visible noun and filters switch immediately. Keeping the previous response during
-    // debounce/refetch would relabel old dots and counts as the new layer/window/category.
-    setGeojson(EMPTY);
-    setCounts(emptyCounts());
-    setError(null);
     timerRef.current = setTimeout(() => {
+      timerRef.current = null;
       getIncidentPoints(
         {
           bounds,
@@ -116,7 +141,8 @@ export function useIncidentPoints({
         controller.signal,
       )
         .then((response: IncidentPointsResponse) => {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted || requestGeneration !== requestGenerationRef.current) return;
+          hasSuccessfulResponseRef.current = true;
           setGeojson(toGeoJSON(response.points));
           setCounts({
             returned: response.returned_count,
@@ -128,27 +154,35 @@ export function useIncidentPoints({
             limit: response.limit,
           });
           setError(null);
+          setRefreshing(false);
+          setStale(false);
         })
         .catch((cause: unknown) => {
-          if (controller.signal.aborted) return;
-          // Stay empty on failure: an empty disclosure plus an explicit warning is more honest
-          // than showing the previous scope under the newly selected labels.
-          setGeojson(EMPTY);
-          setCounts(emptyCounts());
+          if (controller.signal.aborted || requestGeneration !== requestGenerationRef.current) return;
+          if (preservePriorResponse) {
+            // Keep the last same-scope response on a transient viewport failure, but mark it
+            // as belonging to the previous view until a later refresh succeeds.
+            setStale(true);
+          } else {
+            hasSuccessfulResponseRef.current = false;
+            setGeojson(EMPTY);
+            setCounts(emptyCounts());
+            setStale(false);
+          }
           setError(friendlyMessageOr(cause, "Incident pins could not load for this view."));
           errorSequenceRef.current += 1;
           setErrorId(errorSequenceRef.current);
+          setRefreshing(false);
         });
-    }, DEBOUNCE_MS);
+    }, preservePriorResponse ? VIEWPORT_DEBOUNCE_MS : INITIAL_OR_SCOPE_DEBOUNCE_MS);
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
       controller.abort();
     };
-  }, [bounds, startDate, endDate, offenseCategory, layer, enabled]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
+  }, [bounds, startDate, endDate, offenseCategory, layer, enabled, scopeKey]);
 
   return {
     geojson,
@@ -161,5 +195,7 @@ export function useIncidentPoints({
     limit: counts.limit,
     error,
     errorId,
+    refreshing,
+    stale,
   };
 }

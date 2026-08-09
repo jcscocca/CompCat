@@ -640,49 +640,16 @@ _RADIUS_TOOLS = frozenset(SELECTION_TOOLS) | {"update_filters"}
 _RELATIVE_WINDOW_PATTERN = re.compile(
     r"\b(?:last|past)\s+(?:(\d{1,3})\s+)?(day|week|month|year)s?\b", re.IGNORECASE
 )
-_RADIUS_AMOUNT = r"(?:\d+\s*/\s*\d+|\d+(?:\.\d+)?|\.\d+|[¼½¾])"
-_RADIUS_UNIT = (
-    r"(?:m|meters?|metres?|km|kilometers?|kilometres?|ft|feet|foot|mi|miles?)"
-)
 _RADIUS_AFTER_LABEL_PATTERN = re.compile(
-    rf"\bradius\s*(?:(?:to|of)\s*|=\s*)?({_RADIUS_AMOUNT})"
-    rf"(?:\s*({_RADIUS_UNIT}))?\b",
+    r"\bradius\s*(?:(?:to|of)\s*|=\s*)?(\d{2,5})"
+    r"(?:\s*(?:m|meters?|metres?))?"
+    r"(?!\s*(?:km|kilometers?|kilometres?|ft|feet|foot|mi|miles?)\b)\b",
     re.IGNORECASE,
 )
 _RADIUS_WITH_UNIT_PATTERN = re.compile(
-    rf"(?<!\w)({_RADIUS_AMOUNT})\s*({_RADIUS_UNIT})\b",
+    r"\b(\d{2,5})\s*(?:m|meters?|metres?)\b",
     re.IGNORECASE,
 )
-
-_RADIUS_UNIT_MULTIPLIERS = {
-    "m": 1.0,
-    "meter": 1.0,
-    "meters": 1.0,
-    "metre": 1.0,
-    "metres": 1.0,
-    "km": 1000.0,
-    "kilometer": 1000.0,
-    "kilometers": 1000.0,
-    "kilometre": 1000.0,
-    "kilometres": 1000.0,
-    "ft": 0.3048,
-    "foot": 0.3048,
-    "feet": 0.3048,
-    "mi": 1609.344,
-    "mile": 1609.344,
-    "miles": 1609.344,
-}
-
-
-def _radius_amount(raw: str) -> float | None:
-    fractions = {"¼": 0.25, "½": 0.5, "¾": 0.75}
-    if raw in fractions:
-        return fractions[raw]
-    if "/" in raw:
-        numerator, denominator = (part.strip() for part in raw.split("/", maxsplit=1))
-        divisor = float(denominator)
-        return float(numerator) / divisor if divisor > 0 else None
-    return float(raw)
 
 
 def _with_explicit_radius(
@@ -701,11 +668,7 @@ def _with_explicit_radius(
         match = _RADIUS_WITH_UNIT_PATTERN.search(user_text or "")
     if match is None:
         return arguments
-    amount = _radius_amount(match.group(1))
-    if amount is None or amount <= 0:
-        return arguments
-    unit = (match.group(2) or "m").lower()
-    radius = int(amount * _RADIUS_UNIT_MULTIPLIERS[unit] + 0.5)
+    radius = int(match.group(1))
     value: int | list[int] = radius if target == "radius_m" else [radius]
     return {**arguments, target: value}
 

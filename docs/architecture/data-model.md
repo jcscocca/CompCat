@@ -174,7 +174,7 @@ Personal-upload snapping is performed by `app/normalization/geo.snap_to_grid(lat
 the center can change a small-radius analysis. Migration `0017` restores full stored centroids
 to `display_*` for existing manual rows.
 
-Tableau exports have a separate privacy boundary: `app/exports/tableau.py` snaps every included
+Place-summary exports have a separate privacy boundary: `app/exports/tableau.py` snaps every included
 coordinate to the same three-decimal grid even when a manual place is exact in the app.
 
 ⚠ **Invariant:** Exact personal-upload centroids remain internal. Manual-place API responses and

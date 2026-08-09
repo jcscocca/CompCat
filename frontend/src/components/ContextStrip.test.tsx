@@ -59,27 +59,31 @@ describe("ContextStrip", () => {
     expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
   });
 
-  it("accepts a custom 400 m radius and normalizes kilometer input", () => {
+  it("accepts a custom whole-meter radius", () => {
     const { onChange } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
-    const input = screen.getByLabelText("Custom radius");
+    const input = screen.getByLabelText("Custom radius (meters)");
 
-    fireEvent.change(input, { target: { value: "0.4 km" } });
+    expect(input).toHaveAttribute("type", "number");
+    expect(input).toHaveAttribute("min", "100");
+    expect(input).toHaveAttribute("max", "1000");
+    expect(input).toHaveAttribute("step", "1");
+    fireEvent.change(input, { target: { value: "400" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(onChange).toHaveBeenCalledWith({ radiusM: 400 });
     expect(screen.queryByRole("dialog", { name: "Search radius" })).not.toBeInTheDocument();
   });
 
-  it("keeps a custom radius inside the 100 m to 1 km product range", () => {
+  it("keeps a custom radius inside the 100 to 1,000 meter product range", () => {
     const { onChange } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
-    fireEvent.change(screen.getByLabelText("Custom radius"), { target: { value: "1.2 km" } });
+    fireEvent.change(screen.getByLabelText("Custom radius (meters)"), { target: { value: "1001" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText("Choose a radius from 100 m to 1 km.")).toHaveClass("is-error");
-    expect(screen.getByLabelText("Custom radius")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Choose a radius from 100 to 1,000 meters.")).toHaveClass("is-error");
+    expect(screen.getByLabelText("Custom radius (meters)")).toHaveAttribute("aria-invalid", "true");
   });
 
   it("opens only one filter popup at a time", () => {

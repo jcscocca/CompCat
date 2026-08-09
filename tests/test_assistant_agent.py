@@ -882,30 +882,18 @@ def test_explicit_meter_radius_is_backfilled_for_update_filters():
     assert args == {"radius_m": 750}
 
 
-def test_explicit_kilometer_radius_is_normalized_for_update_filters():
+@pytest.mark.parametrize("user_text", ["Use a 0.4 km radius", "Set the radius to 400 miles"])
+def test_alternative_radius_units_are_not_interpreted_as_meters(user_text):
     from app.assistant.agent import _tool_arguments
 
     args = _tool_arguments(
         "update_filters",
         AssistantDashboardState(radii_m=[250]),
         {},
-        "Use a 0.4 km radius",
+        user_text,
     )
 
-    assert args == {"radius_m": 400}
-
-
-def test_explicit_fractional_mile_radius_is_normalized_for_update_filters():
-    from app.assistant.agent import _tool_arguments
-
-    args = _tool_arguments(
-        "update_filters",
-        AssistantDashboardState(radii_m=[250]),
-        {},
-        "Set the radius to ¼ mile",
-    )
-
-    assert args == {"radius_m": 402}
+    assert args == {}
 
 
 def test_agent_clarifies_underspecified_request(tmp_path):

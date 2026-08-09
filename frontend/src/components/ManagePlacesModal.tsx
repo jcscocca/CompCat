@@ -405,8 +405,8 @@ export function ManagePlacesModal({
           )}
         </div>
         <div className="mc-modal-foot">
-          <a className="mc-link-copy" href={exportHref}>Export session data (Tableau CSV)</a>
-          <p className="mc-export-note">Tableau-ready place summary for the current session.</p>
+          <a className="mc-link-copy" href={exportHref}>Export session CSV</a>
+          <p className="mc-export-note">Place summary for the current session.</p>
         </div>
       </div>
     </div>

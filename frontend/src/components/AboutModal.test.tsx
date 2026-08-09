@@ -27,20 +27,20 @@ afterEach(cleanup);
 afterEach(() => vi.clearAllMocks());
 
 describe("AboutModal", () => {
-  it("renders a labelled modal dialog with every section", () => {
+  it("renders a labelled modal dialog with four concise sections", () => {
     render(<AboutModal onClose={vi.fn()} />);
     const dialog = screen.getByRole("dialog", { name: "About CompCat" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     for (const heading of [
-      "What this is",
-      "Scope",
-      "Data sources",
-      "What's stored",
-      "Honest limits",
-      "License",
+      "What CompCat shows",
+      "Data and freshness",
+      "Privacy",
+      "Limits",
     ]) {
       expect(within(dialog).getByRole("heading", { name: heading })).toBeInTheDocument();
     }
+    expect(within(dialog).getAllByRole("heading", { level: 3 })).toHaveLength(4);
+    expect((dialog.textContent ?? "").trim().split(/\s+/).length).toBeLessThan(360);
   });
 
   it("states the product invariant verbatim and credits the operator", () => {
@@ -49,76 +49,69 @@ describe("AboutModal", () => {
       screen.getByText(/does not score safety, rank places as safe, unsafe, or dangerous/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Built by Jacob Scocca/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Source on GitHub" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Source" })).toHaveAttribute(
       "href",
       "https://github.com/jcscocca/CompCat",
     );
-  });
-
-  it("names the data sources, the basemap attribution, and the freshness pill", () => {
-    render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/Seattle Police Department \(SPD\) datasets/)).toBeInTheDocument();
-    expect(screen.getByText(/City of Seattle open data portal/)).toBeInTheDocument();
-    expect(screen.getByText(/OpenStreetMap contributors/)).toBeInTheDocument();
-    expect(screen.getByText(/Protomaps/)).toBeInTheDocument();
-    expect(screen.getByText(/“Data through”/)).toBeInTheDocument();
-  });
-
-  it("spells out sliding anonymous sessions, retention, geocode caching, and share links", () => {
-    render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/renewed while you use the app/i)).toBeInTheDocument();
-    expect(screen.getByText(/absolute session limit.*about 30 days/i)).toBeInTheDocument();
-    expect(screen.getByText(/new anonymous session starts/i)).toHaveTextContent(
-      /saved places from the earlier session are no longer linked in this browser/i,
-    );
-    expect(screen.getByText(/quiet.*automatically deleted.*about 30 days/i)).toBeInTheDocument();
-    expect(screen.getByText(/no account, name, email, or personal identity/i)).toBeInTheDocument();
-    expect(screen.getByText(/share links include the exact coordinates and location labels/i)).toHaveTextContent(
-      /anyone with the link can see those locations/i,
-    );
-    expect(screen.getByText(/share links include the exact coordinates and location labels/i)).toHaveTextContent(
-      /no session id or saved-place ids/i,
-    );
-    expect(screen.getByText(/normalized address you typed and the returned coordinates/i)).toBeInTheDocument();
-    expect(screen.getByText(/cache is shared across visitors.*about 30 days/i)).toBeInTheDocument();
-    expect(screen.getByText(/five recent address selections/i)).toHaveTextContent(
-      /labels and exact coordinates.*tab's session storage.*Clear recent searches.*Clear all/i,
-    );
-    expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
-  });
-
-  it("distinguishes browser-local assets from the server's address and Analyst providers", () => {
-    render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/Your browser does not contact third parties/i)).toHaveTextContent(
-      /map tiles, fonts, and address-search requests load from this server/i,
-    );
-    expect(screen.getByText(/server sends address lookups/i)).toHaveTextContent(
-      /OpenStreetMap's Nominatim service/i,
-    );
-    expect(screen.getByText(/If you use the Analyst/i)).toHaveTextContent(
-      /place names and coordinates.*language-model provider that powers the Analyst/i,
-    );
-    expect(screen.queryByText(/No third-party requests/i)).not.toBeInTheDocument();
-  });
-
-  it("states the statistical and data limits and links the MIT license", () => {
-    render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/incomplete, delayed, corrected, or geographically generalized/)).toBeInTheDocument();
-    expect(screen.getByText(/density per square kilometre per day/i)).toHaveTextContent(
-      /not a per-person or per-visit rate/i,
-    );
-    expect(screen.getByText(/Results depend on the radius/i)).toBeInTheDocument();
-    expect(screen.getByText(/within one analysis run/i)).toHaveTextContent(
-      /not across the many filter, layer, or radius combinations/i,
-    );
-    expect(screen.getByText(/Intervals are approximate/i)).toHaveTextContent(
-      /near, not exactly, 95%.*estimated from a small number of months/i,
-    );
-    expect(screen.getByText(/no accounts, no production authentication, and no encryption at rest/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "MIT License" })).toHaveAttribute(
       "href",
       "https://github.com/jcscocca/CompCat/blob/main/LICENSE",
     );
+  });
+
+  it("names and links the data sources and explains their daily-but-lagged freshness", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "SPD Crime Data" })).toHaveAttribute(
+      "href",
+      "https://data.seattle.gov/Public-Safety/SPD-Crime-Data-2008-Present/tazs-3rd5",
+    );
+    expect(screen.getByRole("link", { name: "SPD Arrest Data" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Call Data" })).toBeInTheDocument();
+    expect(screen.getByText(/Seattle refreshes these datasets daily/i)).toBeInTheDocument();
+    expect(screen.getByText(/“Data through” shows the newest event date/i)).toHaveTextContent(
+      /not today's date or the portal's refresh time/i,
+    );
+    expect(screen.getByText(/Daily updates are not live/i)).toHaveTextContent(
+      /CAD call records often trail by a few days.*crime reports appear after approval/i,
+    );
+    expect(screen.getByText(/OpenStreetMap data in self-hosted Protomaps tiles/i)).toBeInTheDocument();
+  });
+
+  it("summarizes sessions, retention, geocode caching, and share-link disclosure", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByText(/There are no user accounts/i)).toHaveTextContent(
+      /anonymous session can renew for up to about 30 days.*inactive server-side session data is deleted/i,
+    );
+    expect(screen.getByText(/Share links contain exact place labels/i)).toHaveTextContent(
+      /coordinates.*filters.*five recent address labels and coordinates.*shared address cache.*about 30 days/i,
+    );
+    expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
+  });
+
+  it("distinguishes first-party assets from server-proxied external services", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByText(/During normal use, map tiles and fonts load from this server/i)).toHaveTextContent(
+      /Address search is proxied.*Nominatim/i,
+    );
+    expect(screen.getByText(/During normal use, map tiles and fonts load from this server/i)).toHaveTextContent(
+      /Using the Analyst sends its analysis context.*language-model provider/i,
+    );
+    expect(screen.queryByText(/browser does not contact third parties/i)).not.toBeInTheDocument();
+  });
+
+  it("states the essential statistical, data, and storage limits", () => {
+    render(<AboutModal onClose={vi.fn()} />);
+    expect(screen.getByText(/incomplete, delayed, corrected, or geographically generalized/)).toBeInTheDocument();
+    expect(screen.getByText(/Results change with the dates, radius, filter, and layer/i)).toHaveTextContent(
+      /density per square kilometre per day/i,
+    );
+    expect(screen.getByText(/Results change with the dates, radius, filter, and layer/i)).toHaveTextContent(
+      /not a per-person or per-visit rate/i,
+    );
+    expect(screen.getByText(/Results change with the dates, radius, filter, and layer/i)).toHaveTextContent(
+      /one comparison run, not every setting/i,
+    );
+    expect(screen.getByText(/database is not encrypted at rest/i)).toBeInTheDocument();
   });
 
   it("moves focus into the dialog on open and restores it on close", () => {
@@ -187,8 +180,7 @@ describe("AboutModal personal uploads line", () => {
     render(<AboutModal onClose={vi.fn()} personalUploadsEnabled />);
     expect(screen.queryByText(/uploads are disabled on this instance/i)).not.toBeInTheDocument();
     const line = screen.getByText(/Personal location-history uploads are opt-in/i);
-    expect(line).toHaveTextContent(/nothing is uploaded unless you choose to/i);
-    expect(line).toHaveTextContent(/delete what you uploaded at any time/i);
+    expect(line).toHaveTextContent(/can be deleted at any time/i);
   });
 });
 

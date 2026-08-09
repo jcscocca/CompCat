@@ -962,7 +962,7 @@ export function MapWorkspace() {
   );
 
   // Analysis cards export the current detail-view schema. The Manage Places footer keeps the
-  // separate session-wide Tableau summary download.
+  // separate session-wide place-summary download.
   const exportHrefBase = data.analysisExportHref.split("?")[0];
 
   // Below the breakpoint the panel is a bottom sheet and the layer controls live inside it.
@@ -1125,6 +1125,8 @@ export function MapWorkspace() {
               unmappableCitywideCount={incidentLayer.unmappableCitywideCount}
               limit={incidentLayer.limit}
               itemNoun={incidentNoun(analysis.layer)}
+              refreshing={incidentLayer.refreshing}
+              stale={incidentLayer.stale}
             />
           ) : null}
 
