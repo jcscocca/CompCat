@@ -23,6 +23,8 @@ import type { IncidentFeatureCollection } from "../lib/useIncidentPoints";
 import type { AnalysisSettings, BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
 
 const SEATTLE: [number, number] = [-122.3321, 47.6062]; // [lng, lat]
+const TRACKPAD_ZOOM_RATE = 1 / 180;
+const WHEEL_ZOOM_RATE = 1 / 600;
 
 export type MarkerKind = "default" | "selected" | "analyzed" | "low";
 
@@ -250,6 +252,10 @@ export function MapCanvas({
         setMapFailed(true);
         return;
       }
+      // MapLibre's defaults react too aggressively to small wheel/trackpad corrections.
+      // Keep camera motion direct while giving people room to settle on a useful view.
+      map.scrollZoom.setZoomRate(TRACKPAD_ZOOM_RATE);
+      map.scrollZoom.setWheelZoomRate(WHEEL_ZOOM_RATE);
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.on("click", (event) => {
         onMapClickRef.current({ lat: event.lngLat.lat, lng: event.lngLat.lng });

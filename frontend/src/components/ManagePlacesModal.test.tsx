@@ -223,14 +223,14 @@ describe("ManagePlacesModal", () => {
 
   it("renders the export link with the given href", () => {
     render(<ManagePlacesModal {...baseProps} exportHref="/exports/session.csv" initialView="manage" />);
-    expect(screen.getByRole("link", { name: "Export session data (Tableau CSV)" })).toHaveAttribute("href", "/exports/session.csv");
+    expect(screen.getByRole("link", { name: "Export session CSV" })).toHaveAttribute("href", "/exports/session.csv");
   });
 
-  it("labels the export link as the session-wide Tableau CSV", () => {
+  it("labels the export link as a session CSV", () => {
     render(<ManagePlacesModal {...baseProps} initialView="manage" />);
-    const link = screen.getByRole("link", { name: "Export session data (Tableau CSV)" });
+    const link = screen.getByRole("link", { name: "Export session CSV" });
     expect(link).toHaveAttribute("href", "/exports/current.csv");
-    expect(screen.queryByRole("link", { name: /Download Tableau CSV/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Tableau-ready place summary for the current session.")).toBeInTheDocument();
+    expect(screen.getByText("Place summary for the current session.")).toBeInTheDocument();
+    expect(screen.queryByText(/tableau/i)).not.toBeInTheDocument();
   });
 });

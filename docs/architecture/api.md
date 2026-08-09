@@ -347,7 +347,7 @@ same router file:
   exact/Monte Carlo method and precision, adequacy/coverage, quantiles, and tie-aware
   fewer/equal/more shares. Polygon-density ratios, p-values, visit/dwell, and derived per-visit
   fields are deliberately absent. Export-suppressed places are omitted.
-- **Public session/Tableau export** (`required_public_user_hash`, in schema):
+- **Public session place-summary export** (`required_public_user_hash`, in schema):
   `GET /exports/tableau/place-summary.csv`. Supplying `run_id` scopes the legacy place-summary
   schema to that exact owned run; omitting it preserves latest-run behavior. This remains the
   Manage Places download and retains its compatibility-oriented visit/dwell columns.

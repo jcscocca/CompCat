@@ -43,7 +43,7 @@ geocoding and SPD ingestion are proxied or performed server-side.
 - Optional **CompCat Analyst** chat — *Tabby*, the case-desk analyst — that answers questions
   grounded in your current dashboard data ("how does this address compare to my downtown one?").
 - Statistical, exposure-adjusted rate comparison of place buffers.
-- Exports privacy-safe, Tableau-ready CSVs using generalized display coordinates.
+- Exports privacy-safe CSVs using generalized display coordinates.
 - Loads a bundled Seattle crime sample for offline development, or ingests a recent window of
   real Seattle SPD open data.
 
@@ -68,7 +68,7 @@ Analyze/Compare tabs.
 - **Tabby context + composer** — the active places, dates, radius, offense category, and data
   layer appear together under **Tabby is using**, directly attached to the message composer.
   Each value opens a compact anchored picker, while the radius picker also accepts custom
-  values from 100 m through 1 km (`400 m`, `0.4 km`, `¼ mile`, and similar inputs). Date
+  whole-meter values from 100 through 1,000. Date
   presets resolve against the active analysis window. The same state drives chat and the
   single **Run report** action; the copy-link action preserves the exact locations and filters.
 - **Inline analysis cards** — one selected place compares its count with empirical
@@ -78,7 +78,7 @@ Analyze/Compare tabs.
   breakdown, incident rows, and a run-scoped CSV link. Neutral presence badges connect
   analyzed map pins back to their latest card.
 - **Exports** — card links export that exact stored run. The manage-places dialog also exposes the
-  current-session Tableau CSV and per-place privacy toggles.
+  current-session place-summary CSV and per-place privacy toggles.
 
 The map renders from a self-hosted Seattle vector-tile extract (Protomaps/OpenStreetMap data), so
 no third-party tile server ever sees where users look; if the tile artifact is missing the map
@@ -94,7 +94,7 @@ answers questions about your dashboard data. It is grounded in what you currentl
 (places, date range, radius, and offense filters) and is policy-constrained: it reports incident
 context and will refuse to label a place as safe or unsafe. Filter requests made in chat update
 the visible controls, leave a deterministic receipt with a one-time Undo action, and use the
-same 100 m–1 km radius contract as direct input.
+same 100–1,000 meter radius contract as direct input.
 
 Under the hood free-text turns use an LLM planning call and a small tool set (`add_place`,
 `select_places`, `analyze_places`, `compare_places`, `update_filters`, `get_dashboard_summary`,
@@ -372,11 +372,11 @@ curl -b demo.cookies -H "Content-Type: application/json" \
   -d '{"place_ids":["<place_id>"],"analysis_start_date":"2024-01-01","analysis_end_date":"2024-01-31","radii_m":[250,500]}' \
   http://127.0.0.1:8000/dashboard/analyze
 
-# 4. Export the Tableau CSV
+# 4. Export the session CSV
 curl -b demo.cookies http://127.0.0.1:8000/exports/tableau/place-summary.csv
 ```
 
-The Tableau place-summary export includes recurring-place fields, generalized coordinates, the
+The session place-summary export includes recurring-place fields, generalized coordinates, the
 selected analysis range, offense grouping fields, incident counts, nearest-incident distance,
 and legacy incidents-per-visit and incidents-per-hour-of-dwell fields. Those legacy fields remain
 in the export schema for compatibility, but are excluded from the public UI and from all assistant

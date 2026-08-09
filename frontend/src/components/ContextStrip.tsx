@@ -279,14 +279,18 @@ export function ContextStrip({
                     );
                   })}
                 </div>
-                <form className="mc-ctx-radius-custom" onSubmit={handleRadiusSubmit}>
-                  <label htmlFor="mc-ctx-radius-input">Custom radius</label>
+                <form className="mc-ctx-radius-custom" noValidate onSubmit={handleRadiusSubmit}>
+                  <label htmlFor="mc-ctx-radius-input">Custom radius (meters)</label>
                   <div>
                     <input
                       id="mc-ctx-radius-input"
                       className="mc-inp"
+                      type="number"
+                      min={MIN_ANALYSIS_RADIUS_M}
+                      max={MAX_ANALYSIS_RADIUS_M}
+                      step="1"
                       value={radiusInput}
-                      inputMode="decimal"
+                      inputMode="numeric"
                       aria-invalid={Boolean(radiusInputError)}
                       aria-describedby="mc-ctx-radius-hint"
                       onChange={(event) => {
@@ -297,7 +301,7 @@ export function ContextStrip({
                     <button type="submit">Apply</button>
                   </div>
                   <small id="mc-ctx-radius-hint" className={radiusInputError ? "is-error" : undefined}>
-                    {radiusInputError || "100 m–1 km · try 400 m, 0.4 km, or ¼ mile"}
+                    {radiusInputError || "Enter 100 to 1,000 meters."}
                   </small>
                 </form>
               </div>

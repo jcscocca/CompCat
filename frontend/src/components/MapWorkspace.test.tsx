@@ -2653,7 +2653,7 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(updatePlace).toHaveBeenCalledWith("p1", { sensitivity_class: "suppress_from_public_export" }));
   });
 
-  it("Manage modal footer links to the dashboard's Tableau export href", async () => {
+  it("Manage modal footer links to the dashboard's session export href", async () => {
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
 
@@ -2662,7 +2662,7 @@ describe("MapWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     await screen.findByRole("dialog", { name: "Manage places" });
 
-    expect(screen.getByRole("link", { name: "Export session data (Tableau CSV)" })).toHaveAttribute("href", "/exports/current.csv");
+    expect(screen.getByRole("link", { name: "Export session CSV" })).toHaveAttribute("href", "/exports/current.csv");
   });
 
   it("opens the About panel from the topbar and closes it on Escape", async () => {
