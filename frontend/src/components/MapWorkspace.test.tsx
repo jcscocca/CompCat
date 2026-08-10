@@ -276,7 +276,7 @@ describe("MapWorkspace", () => {
       analysis_end_date: "2025-10-27",
     })));
     fireEvent.click(await screen.findByRole("button", { name: "Change" }));
-    fireEvent.click(screen.getByRole("button", { name: "Data layer: Reported incidents" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Data layer: Reported incidents" }));
     expect(screen.getByRole("button", { name: "Arrests — No data loaded" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "911 calls — No data loaded" })).toBeDisabled();
   });
@@ -411,8 +411,8 @@ describe("MapWorkspace", () => {
     expect(screen.getByLabelText("Analyst message")).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    expect(screen.getByText("Analysis setup")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
+    expect(await screen.findByText("Analysis setup")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Search radius: 250 m" }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(screen.getByRole("button", { name: "Update report" })).toBeInTheDocument();
   });
@@ -1129,7 +1129,7 @@ describe("MapWorkspace", () => {
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.click(screen.getByRole("button", { name: "Search radius: 250 m" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Search radius: 250 m" }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     fireEvent.click(screen.getByRole("button", { name: "Update report" }));
 
@@ -1446,7 +1446,7 @@ describe("MapWorkspace", () => {
     expect(screen.getByText("Analysis report")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     const previousBar = screen.getByText("Previous report").closest(".mc-stale-report-bar");
@@ -1788,9 +1788,13 @@ describe("MapWorkspace", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByText(/chips and filters still work/i)).toBeInTheDocument();
 
+    // Let the independent automatic report settle before opening its compact scope. Otherwise
+    // the report's completion can legitimately re-collapse controls opened in the same tick.
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
+
     // Filters are not gated by offline, and the change stays in the direct filter controls.
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(screen.getByRole("button", { name: /search radius: 500 m/i })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
@@ -2017,7 +2021,7 @@ describe("MapWorkspace", () => {
     // A radius change through the rail's context strip invalidates the analysis context,
     // detaching the presence badges.
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     await waitFor(() => expect(screen.queryByTestId("badge-a")).not.toBeInTheDocument());
@@ -2060,7 +2064,7 @@ describe("MapWorkspace", () => {
 
     // Deleting ONE place clears EVERY badge (delete invalidates the whole context).
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage places" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage places" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Remove Home" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove place" }));
@@ -2585,7 +2589,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    const runButton = screen.getByRole("button", { name: "Run report" });
+    const runButton = await screen.findByRole("button", { name: "Run report" });
     await waitFor(() => expect(runButton).toBeEnabled());
     fireEvent.click(runButton);
 
