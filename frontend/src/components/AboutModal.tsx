@@ -108,15 +108,8 @@ export function AboutModal({
         <section className="mc-about-section">
           <h3>What CompCat shows</h3>
           <p>
-            CompCat explores Seattle Police Department (SPD) activity around selected addresses.
-            Choose places, dates, a radius, and a layer; CompCat counts matching records nearby.
-            For reported incidents, it also compares a place with equal-radius circles centered
-            on eligible Seattle street segments.
-          </p>
-          <p>
-            Reported incidents are approved offense records. Arrests describe enforcement at the
-            recorded arrest location. 911 calls are police-response CAD events, not confirmed
-            offenses.
+            CompCat shows reported Seattle Police Department activity near selected addresses.
+            Choose places, dates, a radius, and a data layer to explore matching records.
           </p>
           <p>{ABOUT_INVARIANT}</p>
           <p className="mc-about-byline">
@@ -129,56 +122,35 @@ export function AboutModal({
         <section className="mc-about-section">
           <h3>Data and freshness</h3>
           <p>
-            Sources: <a href={CRIME_DATA_URL} target="_blank" rel="noreferrer">SPD Crime Data</a>,{" "}
+            Data comes from Seattle Open Data: <a href={CRIME_DATA_URL} target="_blank" rel="noreferrer">SPD Crime Data</a>,{" "}
             <a href={ARREST_DATA_URL} target="_blank" rel="noreferrer">SPD Arrest Data</a>, and{" "}
-            <a href={CALL_DATA_URL} target="_blank" rel="noreferrer">Call Data</a> from the City
-            of Seattle Open Data portal. Seattle refreshes these datasets daily.
+            <a href={CALL_DATA_URL} target="_blank" rel="noreferrer">Call Data</a>. For full
+            definitions and metadata, refer to the linked dataset pages. Seattle refreshes these
+            datasets daily.
           </p>
           <p>
-            “Data through” shows the newest event date this CompCat instance has loaded—not
-            today's date or the portal's refresh time. Daily updates are not live: CAD call
-            records often trail by a few days, crime reports appear after approval, and source
-            records can later be corrected.
-          </p>
-          <p>
-            Police and neighborhood boundaries come from the City. The basemap uses
-            OpenStreetMap data in self-hosted Protomaps tiles.
+            “Data through” is the newest event date loaded here. Updates are not live: CAD calls
+            can lag by a few days, crime reports appear after approval, and source records can be
+            corrected later.
           </p>
         </section>
 
         <section className="mc-about-section">
           <h3>Privacy</h3>
-          <ul>
-            <li>
-              There are no user accounts. An anonymous session can renew for up to about 30
-              days; inactive server-side session data is deleted after about 30 days.
-            </li>
-            <li>
-              Share links contain exact place labels, coordinates, and filters. Up to five recent
-              address labels and coordinates remain in this tab; the server's shared address
-              cache keeps normalized searches and returned coordinates for about 30 days.
-            </li>
-            <li>
-              During normal use, map tiles and fonts load from this server. Address search is
-              proxied to OpenStreetMap's Nominatim service. Using the Analyst sends its analysis
-              context to the configured language-model provider.
-            </li>
-            <li>
-              {personalUploadsEnabled
-                ? "Personal location-history uploads are opt-in and can be deleted at any time."
-                : "Personal location-history uploads are disabled on this instance."}
-            </li>
-          </ul>
+          <p>
+            CompCat has no user accounts. Inactive session data and cached address searches are
+            deleted after about 30 days. Share links include the places and filters you choose.
+            Address searches use OpenStreetMap, and the Analyst sends analysis context to the
+            configured language-model provider.{" "}
+            {personalUploadsEnabled
+              ? "Personal location-history uploads are opt-in and can be deleted at any time."
+              : "Personal location-history uploads are disabled on this instance."}
+          </p>
         </section>
 
         <section className="mc-about-section">
           <h3>Limits</h3>
           <p>{ABOUT_DATA_CAVEAT}</p>
-          <p>
-            Results change with the dates, radius, filter, and layer. Direct Compare uses event
-            density per square kilometre per day, not a per-person or per-visit rate. Statistical
-            adjustment covers one comparison run, not every setting someone tries.
-          </p>
           <p>This is a personal project on a small server. The database is not encrypted at rest.</p>
           <p>{ABOUT_RELIANCE_LIMIT}</p>
         </section>

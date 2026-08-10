@@ -40,7 +40,7 @@ describe("AboutModal", () => {
       expect(within(dialog).getByRole("heading", { name: heading })).toBeInTheDocument();
     }
     expect(within(dialog).getAllByRole("heading", { level: 3 })).toHaveLength(4);
-    expect((dialog.textContent ?? "").trim().split(/\s+/).length).toBeLessThan(360);
+    expect((dialog.textContent ?? "").trim().split(/\s+/).length).toBeLessThan(225);
   });
 
   it("states the product invariant verbatim and credits the operator", () => {
@@ -67,51 +67,33 @@ describe("AboutModal", () => {
     );
     expect(screen.getByRole("link", { name: "SPD Arrest Data" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Call Data" })).toBeInTheDocument();
+    expect(screen.getByText(/For full definitions and metadata/i)).toHaveTextContent(
+      /refer to the linked dataset pages/i,
+    );
     expect(screen.getByText(/Seattle refreshes these datasets daily/i)).toBeInTheDocument();
-    expect(screen.getByText(/“Data through” shows the newest event date/i)).toHaveTextContent(
-      /not today's date or the portal's refresh time/i,
+    expect(screen.getByText(/“Data through” is the newest event date loaded here/i)).toBeInTheDocument();
+    expect(screen.getByText(/Updates are not live/i)).toHaveTextContent(
+      /CAD calls can lag by a few days.*crime reports appear after approval/i,
     );
-    expect(screen.getByText(/Daily updates are not live/i)).toHaveTextContent(
-      /CAD call records often trail by a few days.*crime reports appear after approval/i,
-    );
-    expect(screen.getByText(/OpenStreetMap data in self-hosted Protomaps tiles/i)).toBeInTheDocument();
   });
 
-  it("summarizes sessions, retention, geocode caching, and share-link disclosure", () => {
+  it("summarizes the essential privacy disclosures in one paragraph", () => {
     render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/There are no user accounts/i)).toHaveTextContent(
-      /anonymous session can renew for up to about 30 days.*inactive server-side session data is deleted/i,
-    );
-    expect(screen.getByText(/Share links contain exact place labels/i)).toHaveTextContent(
-      /coordinates.*filters.*five recent address labels and coordinates.*shared address cache.*about 30 days/i,
-    );
-    expect(screen.getByText(/uploads are disabled on this instance/i)).toBeInTheDocument();
+    const privacy = screen.getByRole("heading", { name: "Privacy" }).nextElementSibling;
+    expect(privacy?.tagName).toBe("P");
+    expect(privacy).toHaveTextContent(/no user accounts/i);
+    expect(privacy).toHaveTextContent(/session data.*cached address searches.*about 30 days/i);
+    expect(privacy).toHaveTextContent(/Share links include the places and filters/i);
+    expect(privacy).toHaveTextContent(/Address searches use OpenStreetMap/i);
+    expect(privacy).toHaveTextContent(/Analyst sends analysis context.*language-model provider/i);
+    expect(privacy).toHaveTextContent(/uploads are disabled on this instance/i);
   });
 
-  it("distinguishes first-party assets from server-proxied external services", () => {
-    render(<AboutModal onClose={vi.fn()} />);
-    expect(screen.getByText(/During normal use, map tiles and fonts load from this server/i)).toHaveTextContent(
-      /Address search is proxied.*Nominatim/i,
-    );
-    expect(screen.getByText(/During normal use, map tiles and fonts load from this server/i)).toHaveTextContent(
-      /Using the Analyst sends its analysis context.*language-model provider/i,
-    );
-    expect(screen.queryByText(/browser does not contact third parties/i)).not.toBeInTheDocument();
-  });
-
-  it("states the essential statistical, data, and storage limits", () => {
+  it("states the essential data, storage, and reliance limits", () => {
     render(<AboutModal onClose={vi.fn()} />);
     expect(screen.getByText(/incomplete, delayed, corrected, or geographically generalized/)).toBeInTheDocument();
-    expect(screen.getByText(/Results change with the dates, radius, filter, and layer/i)).toHaveTextContent(
-      /density per square kilometre per day/i,
-    );
-    expect(screen.getByText(/Results change with the dates, radius, filter, and layer/i)).toHaveTextContent(
-      /not a per-person or per-visit rate/i,
-    );
-    expect(screen.getByText(/Results change with the dates, radius, filter, and layer/i)).toHaveTextContent(
-      /one comparison run, not every setting/i,
-    );
     expect(screen.getByText(/database is not encrypted at rest/i)).toBeInTheDocument();
+    expect(screen.getByText(/Don't rely on CompCat for safety or legal decisions/i)).toBeInTheDocument();
   });
 
   it("moves focus into the dialog on open and restores it on close", () => {
