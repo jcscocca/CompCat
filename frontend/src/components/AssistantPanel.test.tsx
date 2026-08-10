@@ -225,6 +225,22 @@ describe("AssistantPanel", () => {
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
   });
 
+  it("starts a newly opened area inspector at the top without resetting it on updates", () => {
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { value: scrollTo, configurable: true });
+    const { rerender } = setup();
+
+    rerender({ areaInspector: <div>Area data</div> });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+
+    scrollTo.mockClear();
+    rerender({ areaInspector: <div>Updated area data</div> });
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { value: originalScrollTo, configurable: true });
+  });
+
   it("renders the follow-up chip row when chips are present and forwards clicks", () => {
     const { onFollowupChip } = setup({ followupChips: [widenChip] });
     const chip = screen.getByRole("button", { name: "Widen to 500 m" });

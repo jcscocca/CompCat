@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -43,6 +43,11 @@ _SEATTLE_SOUTH, _SEATTLE_NORTH = 47.43, 47.78
 SEATTLE_WEST, SEATTLE_EAST = _SEATTLE_WEST, _SEATTLE_EAST
 SEATTLE_SOUTH, SEATTLE_NORTH = _SEATTLE_SOUTH, _SEATTLE_NORTH
 _MAX_POINTS = 10
+MAX_AREA_VERTICES = 250
+MAX_AREA_FILTER_TYPES = 24
+AreaTypeFilter = Annotated[str, Field(min_length=1, max_length=160)]
+AreaHourFilter = Annotated[int, Field(ge=0, le=23)]
+AreaDayFilter = Annotated[int, Field(ge=0, le=6)]
 
 
 def _validate_layer(value: str) -> str:
@@ -133,6 +138,61 @@ class DashboardIncidentPointsRequest(AnalysisWindow):
     @classmethod
     def layer_must_be_known(cls, value: str) -> str:
         return _validate_layer(value)
+
+
+class AreaPolygonGeometry(BaseModel):
+    """A single-ring GeoJSON polygon produced by rectangle, polygon, or lasso tools."""
+
+    type: Literal["Polygon"] = "Polygon"
+    coordinates: list[list[tuple[float, float]]]
+
+    @model_validator(mode="after")
+    def exterior_ring_is_bounded(self) -> AreaPolygonGeometry:
+        if len(self.coordinates) != 1:
+            raise ValueError("area selection must contain one exterior ring and no holes")
+        ring = self.coordinates[0]
+        if not 4 <= len(ring) <= MAX_AREA_VERTICES + 1:
+            raise ValueError(
+                f"area selection must contain 3 to {MAX_AREA_VERTICES} vertices"
+            )
+        if ring[0] != ring[-1]:
+            raise ValueError("area selection polygon must be closed")
+        for longitude, latitude in ring:
+            if not (-180 <= longitude <= 180 and -90 <= latitude <= 90):
+                raise ValueError("area selection contains an invalid coordinate")
+        return self
+
+
+class AreaSelectionRequest(AnalysisWindow):
+    geometry: AreaPolygonGeometry
+    offense_category: OffenseFilter = None
+    offense_subcategory: OffenseFilter = None
+    nibrs_group: OffenseFilter = None
+    # Linked inspector filters. Values within one dimension are ORed; dimensions are ANDed.
+    selected_types: list[AreaTypeFilter] = Field(
+        default_factory=list,
+        max_length=MAX_AREA_FILTER_TYPES,
+    )
+    selected_hours: list[AreaHourFilter] = Field(default_factory=list, max_length=24)
+    selected_days: list[AreaDayFilter] = Field(default_factory=list, max_length=7)
+    layer: str = LAYER_REPORTED
+
+    @field_validator("layer")
+    @classmethod
+    def layer_must_be_known(cls, value: str) -> str:
+        return _validate_layer(value)
+
+    @field_validator("selected_types", "selected_hours", "selected_days")
+    @classmethod
+    def cross_filters_must_be_unique(cls, values: list[object]) -> list[object]:
+        if len(values) != len(set(values)):
+            raise ValueError("area selection filters must not contain duplicate values")
+        return values
+
+
+class AreaSelectionRecordsRequest(AreaSelectionRequest):
+    page_size: int = Field(default=50, ge=1, le=100)
+    cursor: str | None = Field(default=None, max_length=512)
 
 
 class DashboardAnalyzeRequest(AnalysisWindow):

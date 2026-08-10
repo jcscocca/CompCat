@@ -1,13 +1,15 @@
 import * as maplibregl from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { Protocol } from "pmtiles";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 
 import { circlePolygonCoords } from "../lib/geodesy";
 import { hasIncidentSummaryForAnalysis, incidentCountForPlace } from "../lib/incidentSummaries";
 import type { IncidentNoun } from "../lib/layerCopy";
 import {
   BEATS_SOURCE,
+  AREA_HIGHLIGHTS_SOURCE,
+  AREA_SHAPE_SOURCE,
   EMPTY_FC,
   incidentCardElement,
   incidentClusterCardElement,
@@ -20,7 +22,7 @@ import {
 import { buildMapStyle, fallbackMapStyle, type MapTheme, TILES_URL } from "../lib/mapStyle";
 import type { PlaceIdentity } from "../lib/placeIdentity";
 import type { IncidentFeatureCollection } from "../lib/useIncidentPoints";
-import type { AnalysisSettings, BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
+import type { AnalysisSettings, AreaDrawMode, AreaPolygonGeometry, BeatFeatureCollection, DashboardSummary, DraftPin, LatLng, MapBounds, Place } from "../types";
 
 const SEATTLE: [number, number] = [-122.3321, 47.6062]; // [lng, lat]
 const TRACKPAD_ZOOM_RATE = 1 / 180;
@@ -149,6 +151,9 @@ type Props = {
   beats: BeatFeatureCollection | null;
   highlightBeats: string[];
   incidentPoints: IncidentFeatureCollection | null;
+  areaGeometry?: AreaPolygonGeometry | null;
+  areaHighlights?: IncidentFeatureCollection | null;
+  areaDrawMode?: AreaDrawMode | null;
   incidentNoun: IncidentNoun;
   theme: MapTheme;
   identityByPlaceId?: Map<string, PlaceIdentity>;
@@ -159,6 +164,8 @@ type Props = {
   onMapClick: (latlng: LatLng) => void;
   onMarkerClick: (placeId: string) => void;
   onBadgeClick?: (placeId: string) => void;
+  onAreaComplete?: (geometry: AreaPolygonGeometry) => void;
+  onAreaCancel?: () => void;
   /** Preserve the locator-strip visual while removing covered map controls from focus/AT. */
   interactionDisabled?: boolean;
 };
@@ -174,6 +181,9 @@ export function MapCanvas({
   beats,
   highlightBeats,
   incidentPoints,
+  areaGeometry = null,
+  areaHighlights = null,
+  areaDrawMode = null,
   incidentNoun,
   theme,
   identityByPlaceId,
@@ -184,6 +194,8 @@ export function MapCanvas({
   onMapClick,
   onMarkerClick,
   onBadgeClick,
+  onAreaComplete,
+  onAreaCancel,
   interactionDisabled = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -200,6 +212,9 @@ export function MapCanvas({
   const themeRef = useRef(theme);
   const selectedIncidentIdRef = useRef<string | null>(null);
   const tilesMissingRef = useRef(false);
+  const drawOverlayRef = useRef<HTMLDivElement>(null);
+  const drawPixelsRef = useRef<Array<[number, number]>>([]);
+  const [drawPixels, setDrawPixels] = useState<Array<[number, number]>>([]);
   const [mapReady, setMapReady] = useState(false);
   const [styleEpoch, setStyleEpoch] = useState(0);
   const [tilesMissing, setTilesMissing] = useState(false);
@@ -212,6 +227,12 @@ export function MapCanvas({
     onViewportChangeRef.current = onViewportChange;
     incidentNounRef.current = incidentNoun;
   });
+
+  useEffect(() => {
+    drawPixelsRef.current = [];
+    setDrawPixels([]);
+    if (areaDrawMode) drawOverlayRef.current?.focus();
+  }, [areaDrawMode]);
 
   useEffect(() => {
     const popup = incidentPopupRef.current;
@@ -462,6 +483,28 @@ export function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const shape = areaGeometry ? {
+      type: "FeatureCollection" as const,
+      features: [{
+        type: "Feature" as const,
+        properties: {},
+        geometry: areaGeometry,
+      }],
+    } : EMPTY_FC;
+    (map.getSource(AREA_SHAPE_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(shape);
+  }, [areaGeometry, mapReady, styleEpoch]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    (map.getSource(AREA_HIGHLIGHTS_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData(
+      areaHighlights ?? EMPTY_FC,
+    );
+  }, [areaHighlights, mapReady, styleEpoch]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !flyTo) return;
     // Floor 14 ≈ the old flyTo floor of 15 (512px- vs 256px-tile zoom offset).
     map.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: Math.max(map.getZoom(), 14) });
@@ -477,6 +520,128 @@ export function MapCanvas({
     map.fitBounds(bounds, { padding: fitTo.padding, maxZoom: 16, duration: 600 });
   }, [fitTo, mapReady]);
 
+  function overlayPoint(event: PointerEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>): [number, number] {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return [event.clientX - rect.left, event.clientY - rect.top];
+  }
+
+  function finishPixels(raw: Array<[number, number]>) {
+    const map = mapRef.current;
+    if (!map) return;
+    const distinct = raw.filter((point, index) => {
+      if (index === 0) return true;
+      const previous = raw[index - 1];
+      return Math.hypot(point[0] - previous[0], point[1] - previous[1]) >= 2;
+    });
+    if (distinct.length < 3) return;
+    const step = Math.max(1, Math.ceil(distinct.length / 249));
+    const sampled = distinct.filter((_point, index) => index % step === 0).slice(0, 249);
+    if (sampled.length < 3) return;
+    const ring = sampled.map(([x, y]) => {
+      const coordinate = map.unproject([x, y]);
+      return [coordinate.lng, coordinate.lat] as [number, number];
+    });
+    ring.push([...ring[0]] as [number, number]);
+    onAreaComplete?.({ type: "Polygon", coordinates: [ring] });
+    drawPixelsRef.current = [];
+    setDrawPixels([]);
+  }
+
+  function finishRectangle(start: [number, number], end: [number, number]) {
+    if (Math.abs(end[0] - start[0]) < 5 || Math.abs(end[1] - start[1]) < 5) return;
+    finishPixels([
+      start,
+      [end[0], start[1]],
+      end,
+      [start[0], end[1]],
+    ]);
+  }
+
+  function useVisibleArea() {
+    const map = mapRef.current;
+    // Bottom-sheet and responsive layout changes can resize the canvas without a camera
+    // gesture. Sync MapLibre's transform before reading bounds so this polygon matches the
+    // area the person can actually see now, not the previous panel size.
+    map?.resize();
+    const bounds = map?.getBounds();
+    if (!bounds) return;
+    onAreaComplete?.({
+      type: "Polygon",
+      coordinates: [[
+        [bounds.getWest(), bounds.getSouth()],
+        [bounds.getEast(), bounds.getSouth()],
+        [bounds.getEast(), bounds.getNorth()],
+        [bounds.getWest(), bounds.getNorth()],
+        [bounds.getWest(), bounds.getSouth()],
+      ]],
+    });
+    drawPixelsRef.current = [];
+    setDrawPixels([]);
+  }
+
+  function onDrawPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (areaDrawMode === "polygon") return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const next = [overlayPoint(event)] as Array<[number, number]>;
+    drawPixelsRef.current = next;
+    setDrawPixels(next);
+  }
+
+  function onDrawPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    const point = overlayPoint(event);
+    const current = drawPixelsRef.current;
+    const next = areaDrawMode === "rectangle"
+      ? (current.length ? [current[0], point] : [point])
+      : (() => {
+          const last = current.at(-1);
+          return last && Math.hypot(point[0] - last[0], point[1] - last[1]) < 4
+            ? current
+            : [...current, point];
+        })();
+    if (next === current) return;
+    drawPixelsRef.current = next;
+    setDrawPixels(next);
+  }
+
+  function onDrawPointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (areaDrawMode === "polygon") return;
+    const point = overlayPoint(event);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    const current = drawPixelsRef.current;
+    if (areaDrawMode === "rectangle" && current[0]) {
+      finishRectangle(current[0], point);
+    } else if (areaDrawMode === "lasso") {
+      finishPixels([...current, point]);
+    }
+  }
+
+  function onDrawKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      drawPixelsRef.current = [];
+      setDrawPixels([]);
+      onAreaCancel?.();
+    } else if (event.key === "Enter" && areaDrawMode === "polygon") {
+      event.preventDefault();
+      finishPixels(drawPixelsRef.current);
+    } else if (event.key === "Backspace" && areaDrawMode === "polygon") {
+      event.preventDefault();
+      const next = drawPixelsRef.current.slice(0, -1);
+      drawPixelsRef.current = next;
+      setDrawPixels(next);
+    }
+  }
+
+  const previewPixels = areaDrawMode === "rectangle" && drawPixels.length > 1
+    ? [
+        drawPixels[0],
+        [drawPixels[1][0], drawPixels[0][1]] as [number, number],
+        drawPixels[1],
+        [drawPixels[0][0], drawPixels[1][1]] as [number, number],
+      ]
+    : drawPixels;
+
   return (
     <div
       className={`mc-map${addPinMode ? " is-adding" : ""}`}
@@ -484,6 +649,48 @@ export function MapCanvas({
       aria-hidden={interactionDisabled || undefined}
     >
       <div ref={containerRef} className="mc-map-canvas" />
+      {areaDrawMode ? (
+        <div
+          ref={drawOverlayRef}
+          className={`mc-area-draw-overlay is-${areaDrawMode}`}
+          tabIndex={0}
+          role="region"
+          aria-label={`Draw a ${areaDrawMode} area. Escape cancels.`}
+          onPointerDown={onDrawPointerDown}
+          onPointerMove={onDrawPointerMove}
+          onPointerUp={onDrawPointerUp}
+          onClick={(event) => {
+            if (areaDrawMode !== "polygon" || event.detail > 1) return;
+            const point = overlayPoint(event);
+            const next = [...drawPixelsRef.current, point];
+            drawPixelsRef.current = next;
+            setDrawPixels(next);
+          }}
+          onDoubleClick={(event) => {
+            if (areaDrawMode !== "polygon") return;
+            event.preventDefault();
+            finishPixels(drawPixelsRef.current);
+          }}
+          onKeyDown={onDrawKeyDown}
+        >
+          <svg aria-hidden="true">
+            {previewPixels.length > 1 ? (
+              <polygon points={previewPixels.map(([x, y]) => `${x},${y}`).join(" ")} />
+            ) : null}
+            {areaDrawMode === "polygon" ? previewPixels.map(([x, y], index) => (
+              <circle key={`${x}-${y}-${index}`} cx={x} cy={y} r="4" />
+            )) : null}
+          </svg>
+          <div className="mc-area-draw-actions" onPointerDown={(event) => event.stopPropagation()}>
+            <span>{areaDrawMode === "polygon" ? "Click points, then finish" : `Drag to draw ${areaDrawMode}`}</span>
+            {areaDrawMode === "polygon" ? (
+              <button type="button" disabled={drawPixels.length < 3} onClick={(event) => { event.stopPropagation(); finishPixels(drawPixelsRef.current); }}>Finish polygon</button>
+            ) : null}
+            <button type="button" onClick={(event) => { event.stopPropagation(); useVisibleArea(); }}>Use visible map area</button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); onAreaCancel?.(); }}>Cancel</button>
+          </div>
+        </div>
+      ) : null}
       {mapFailed ? (
         <div className="mc-map-fallback" role="status">
           Map failed to initialize in this browser. Pins and analysis still work in the panel.

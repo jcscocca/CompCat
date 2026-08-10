@@ -18,6 +18,7 @@ export type IncidentFeatureCollection = {
       occurred_at: string | null;
       block_address: string | null;
       record_count: number;
+      location_count?: number;
     };
     geometry: { type: "Point"; coordinates: [number, number] };
   }>;

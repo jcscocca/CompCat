@@ -93,6 +93,8 @@ which are unauthenticated or session-creating.
 | `/dashboard/beats` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed beat-outline GeoJSON, gzip-negotiated) |
 | `/dashboard/mcpp` | GET | `app/api/routes_public_dashboard.py` | — | `Response` (slimmed MCPP-neighborhood-polygon GeoJSON, gzip-negotiated; sibling of `/dashboard/beats`) |
 | `/dashboard/incident-points` | POST | `app/api/routes_public_dashboard.py` | `DashboardIncidentPointsRequest` | `dict` (one feature per block-level coordinate with `record_count`; all-layer active-filter totals plus returned/total block-location counts; capped at 5,000 locations) |
+| `/dashboard/area-selection/summary` | POST | `app/api/routes_public_dashboard.py` | `AreaSelectionRequest` (single-ring GeoJSON polygon, active date/layer/offense filters, and optional `selected_types`/`selected_hours`/`selected_days`) | Complete polygon-member counts, type mix, Seattle-local temporal profile, and exact-or-grid map highlights |
+| `/dashboard/area-selection/records` | POST | `app/api/routes_public_dashboard.py` | `AreaSelectionRecordsRequest` (`page_size` 1-100 plus optional opaque cursor) | Newest-first, filter- and scope-bound cursor page of underlying polygon-member records |
 | `/dashboard/geocode` | GET | `app/api/routes_public_dashboard.py` | `?q=` query param | `list[GeocodeResultSchema]` |
 | `/dashboard/trends` | GET | `app/api/routes_public_dashboard.py` | `?mcpp=` (normalized, 404 unknown), `?layer=` (400 unknown), `?category=` | `dict` (raw zero-filled monthly `area_counts`/`citywide_counts`, last complete month, TTL-cached with a shared citywide entry; math: `docs/analysis/trend-indexing-method.md`) |
 | `/dashboard/report-profiles` | GET | `app/api/routes_reports.py` | — | `list[ReportLayerProfile]` (server-owned vocabulary and capabilities for reported incidents, arrests, and 911 calls) |
@@ -105,6 +107,7 @@ which are unauthenticated or session-creating.
 | `/uploads` | POST | `app/api/routes_uploads.py` | multipart file upload | `dict` (gated — see §4) |
 | `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (always available for erasure — see §4) |
 | `/exports/analysis.csv` | GET | `app/api/routes_exports.py` | required `?run_id=` | Current analytical detail CSV for an owned run; unknown/foreign run is 404 |
+| `/exports/area-selection.csv` | POST | `app/api/routes_exports.py` | `AreaSelectionRequest` | Formula-safe streaming CSV containing every record in the polygon, independent of the UI page size |
 | `/exports/tableau/place-summary.csv` | GET | `app/api/routes_exports.py` | optional `?run_id=` | CSV attachment for the requested user-owned run, or the latest run when omitted |
 
 `/health.revision` is the validated Git object ID baked into a launcher-built image. It is
@@ -353,6 +356,12 @@ same router file:
   exact/Monte Carlo method and precision, adequacy/coverage, quantiles, and tie-aware
   fewer/equal/more shares. Polygon-density ratios, p-values, visit/dwell, and derived per-visit
   fields are deliberately absent. Export-suppressed places are omitted.
+- **Public area-selection export** (`required_public_user_hash`, in schema):
+  `POST /exports/area-selection.csv`. The request repeats the transient GeoJSON polygon and
+  active filters; no selection is persisted. Linked inspector selections use OR within crime
+  type, hour, or day and AND across those three dimensions. Summary, highlights, cursor pages,
+  and CSV export use the same filtered iterator. The export neutralizes spreadsheet-formula
+  cells and carries the selection digest and filter scope on each row.
 - **Public session place-summary export** (`required_public_user_hash`, in schema):
   `GET /exports/tableau/place-summary.csv`. Supplying `run_id` scopes the legacy place-summary
   schema to that exact owned run; omitting it preserves latest-run behavior. This remains the

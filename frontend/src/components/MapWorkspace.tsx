@@ -21,6 +21,7 @@ import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
 import { clearRecentPlaces } from "../lib/searchHistory";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useIncidentPoints } from "../lib/useIncidentPoints";
+import { useAreaSelection } from "../lib/useAreaSelection";
 import { useCompare } from "../lib/useCompare";
 import { entriesFromPlaces, keyOf, useAddressList, type AddressEntry } from "../lib/useAddressList";
 import { useDashboardData } from "../lib/useDashboardData";
@@ -32,6 +33,7 @@ import { useAssistantTurn } from "../lib/useAssistantTurn";
 import { useThread } from "../lib/useThread";
 import { AboutModal } from "./AboutModal";
 import { AssistantPanel } from "./AssistantPanel";
+import { AreaSelectionCard } from "./AreaSelectionCard";
 import { BottomSheet } from "./BottomSheet";
 import { ClearPinsDialog } from "./ClearPinsDialog";
 import { ContextStrip } from "./ContextStrip";
@@ -46,7 +48,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { ManagePlacesModal, type ManageView } from "./ManagePlacesModal";
 import { SearchPill } from "./SearchPill";
 import { ThemeToggle } from "./ThemeToggle";
-import type { AnalysisCardData, AnalysisSettings, AssistantDashboardState, BadgeDescriptor, BeatFeatureCollection, GeocodeResult, LatLng, LayerKey, MapBounds, Place, PlaceCreate } from "../types";
+import type { AnalysisCardData, AnalysisSettings, AreaDrawMode, AreaPolygonGeometry, AssistantDashboardState, BadgeDescriptor, BeatFeatureCollection, GeocodeResult, LatLng, LayerKey, MapBounds, Place, PlaceCreate } from "../types";
 
 const ANALYSIS_SETTING_KEYS: (keyof AnalysisSettings)[] = [
   "startDate",
@@ -157,6 +159,9 @@ export function MapWorkspace() {
   const analysisEditedRef = useRef(Boolean(initialView));
   const [beats, setBeats] = useState<BeatFeatureCollection | null>(null);
   const [viewport, setViewport] = useState<MapBounds | null>(null);
+  const [areaGeometry, setAreaGeometry] = useState<AreaPolygonGeometry | null>(null);
+  const [areaDrawMode, setAreaDrawMode] = useState<AreaDrawMode | null>(null);
+  const [areaInspectorOpen, setAreaInspectorOpen] = useState(false);
 
   const data = useDashboardData();
 
@@ -183,6 +188,11 @@ export function MapWorkspace() {
   }, [data.freshness]);
   const activeLayerAvailable = layerAvailability?.[analysis.layer] !== false;
   const incidentLayer = useIncidentPoints({ bounds: viewport, analysis, enabled: activeLayerAvailable });
+  const areaSelection = useAreaSelection({
+    geometry: areaGeometry,
+    analysis,
+    enabled: activeLayerAvailable,
+  });
 
   // The freshness request resolves after initial render. Before an untouched returning
   // session auto-runs, move its default window onto the latest calendar year that actually
@@ -526,6 +536,27 @@ export function MapWorkspace() {
       else setDrawerCollapsed(collapsed);
     },
   });
+
+  function startAreaDraw(mode: AreaDrawMode) {
+    pinDraft.setAddPinMode(false);
+    setAreaDrawMode(mode);
+    setAreaInspectorOpen(false);
+    if (isMobile) onSnap("bar");
+  }
+
+  function completeAreaDraw(geometry: AreaPolygonGeometry) {
+    setAreaGeometry(geometry);
+    setAreaDrawMode(null);
+    setAreaInspectorOpen(true);
+    if (isMobile) onSnap("half");
+    else setDrawerCollapsed(false);
+  }
+
+  function clearAreaSelection() {
+    setAreaGeometry(null);
+    setAreaDrawMode(null);
+    setAreaInspectorOpen(false);
+  }
 
   // A newer search/preview target supersedes the last chip fly; chip clicks leave
   // pinDraft.flyTo untouched so this never fires for them.
@@ -1067,9 +1098,25 @@ export function MapWorkspace() {
           canClearPins={clearablePlaces.length > 0 || adhocPlaces.length > 0 || Boolean(pinDraft.draft)}
           onClearPins={requestClearPins}
           />
+          <div className="mc-area-tools">
+            <details>
+              <summary>{areaGeometry ? "Redraw area" : "Select area"}</summary>
+              <div>
+                {(["rectangle", "polygon", "lasso"] as AreaDrawMode[]).map((mode) => (
+                  <button key={mode} type="button" onClick={(event) => {
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                    startAreaDraw(mode);
+                  }}>{mode[0].toUpperCase() + mode.slice(1)}</button>
+                ))}
+              </div>
+            </details>
+            {areaGeometry && !areaInspectorOpen ? <button type="button" onClick={() => { setAreaInspectorOpen(true); if (isMobile) onSnap("half"); else setDrawerCollapsed(false); }}>View area data</button> : null}
+            {areaGeometry ? <button type="button" onClick={clearAreaSelection}>Clear area</button> : null}
+          </div>
           {pinDraft.addPinMode ? (
             <div className="mc-helper" role="status"><span className="cross" />Click the map to drop a pin - Esc to cancel</div>
           ) : null}
+          {areaDrawMode ? <div className="mc-helper" role="status"><span className="cross" />Draw a {areaDrawMode} area - Esc to cancel</div> : null}
 
           <MapCanvas
             places={mapPlaces}
@@ -1082,6 +1129,9 @@ export function MapWorkspace() {
             beats={beats}
             highlightBeats={highlightBeats}
             incidentPoints={incidentLayer.geojson}
+            areaGeometry={areaGeometry}
+            areaHighlights={areaSelection.highlights}
+            areaDrawMode={areaDrawMode}
             incidentNoun={incidentNoun(analysis.layer)}
             theme={theme}
             identityByPlaceId={identityByPlaceId}
@@ -1089,9 +1139,11 @@ export function MapWorkspace() {
             badgedPlaceIds={badgedPlaceIds}
             fitTo={fitTo}
             onViewportChange={setViewport}
-            onMapClick={pinDraft.handleMapClick}
+            onMapClick={areaDrawMode ? () => {} : pinDraft.handleMapClick}
             onMarkerClick={handleToggleSelect}
             onBadgeClick={handleBadgeClick}
+            onAreaComplete={completeAreaDraw}
+            onAreaCancel={() => setAreaDrawMode(null)}
             interactionDisabled={isMobile && drawer.snap === "full"}
           />
 
@@ -1225,6 +1277,33 @@ export function MapWorkspace() {
               focusCard={focusCard}
               exportHrefBase={exportHrefBase}
               paneActions={paneActions}
+              areaInspector={areaInspectorOpen && areaGeometry ? (
+                <AreaSelectionCard
+                  summary={areaSelection.summary}
+                  baseSummary={areaSelection.baseSummary}
+                  summaryLoading={areaSelection.summaryLoading}
+                  records={areaSelection.records}
+                  recordsLoading={areaSelection.recordsLoading}
+                  error={areaSelection.error}
+                  noun={incidentNoun(analysis.layer)}
+                  pageSize={areaSelection.pageSize}
+                  pageNumber={areaSelection.pageNumber}
+                  canPrevious={areaSelection.canPrevious}
+                  canNext={areaSelection.canNext}
+                  filters={areaSelection.filters}
+                  onPageSize={areaSelection.setPageSize}
+                  onPrevious={areaSelection.previousPage}
+                  onNext={areaSelection.nextPage}
+                  onToggleType={areaSelection.toggleType}
+                  onToggleHour={areaSelection.toggleHour}
+                  onToggleDay={areaSelection.toggleDay}
+                  onClearFilters={areaSelection.clearFilters}
+                  onRedraw={startAreaDraw}
+                  onClear={clearAreaSelection}
+                  onClose={() => setAreaInspectorOpen(false)}
+                  onExport={areaSelection.downloadCsv}
+                />
+              ) : undefined}
               errorLine={data.error}
               contextStrip={
                 <ContextStrip

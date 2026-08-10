@@ -79,6 +79,73 @@ export type MapBounds = {
   north: number;
 };
 
+export type AreaDrawMode = "rectangle" | "polygon" | "lasso";
+
+export type AreaPolygonGeometry = {
+  type: "Polygon";
+  /** One closed exterior ring in GeoJSON [longitude, latitude] order. */
+  coordinates: [[number, number][]];
+};
+
+export type AreaSelectionFilters = {
+  selectedTypes: string[];
+  selectedHours: number[];
+  selectedDays: number[];
+};
+
+export type AreaHighlightPoint = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  record_count: number;
+  location_count: number;
+};
+
+export type AreaTypeMixRow = { label: string; count: number; share: number };
+
+export type AreaTemporalProfile = {
+  hour_counts: number[];
+  dow_counts: number[];
+  hour_by_dow: number[][];
+  total_with_time: number;
+  without_time: number;
+};
+
+export type AreaSelectionSummary = {
+  selection_id: string;
+  record_count: number;
+  location_count: number;
+  counting_basis: string;
+  type_mix: AreaTypeMixRow[];
+  temporal: AreaTemporalProfile;
+  highlight_mode: "locations" | "grid";
+  highlight_points: AreaHighlightPoint[];
+  highlight_location_count: number;
+};
+
+export type AreaSelectionRecord = {
+  incident_id: string;
+  external_incident_id: string | null;
+  report_number: string | null;
+  occurred_at: string | null;
+  reported_at: string | null;
+  offense_category: string | null;
+  offense_subcategory: string | null;
+  nibrs_group: string | null;
+  block_address: string | null;
+  latitude: number;
+  longitude: number;
+  source_dataset: string;
+};
+
+export type AreaSelectionRecordsResponse = {
+  selection_id: string;
+  records: AreaSelectionRecord[];
+  returned_count: number;
+  page_size: number;
+  next_cursor: string | null;
+};
+
 export type IncidentPoint = {
   id: string;
   latitude: number;

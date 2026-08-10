@@ -1,4 +1,7 @@
 import type {
+  AreaPolygonGeometry,
+  AreaSelectionRecordsResponse,
+  AreaSelectionSummary,
   AnalysisReport,
   AnalysisReportRequest,
   AssistantDashboardState,
@@ -64,6 +67,19 @@ export type IncidentPointsPayload = {
   analysis_end_date: string;
   offense_category?: string | null;
   layer?: string;
+};
+
+export type AreaSelectionPayload = {
+  geometry: AreaPolygonGeometry;
+  analysis_start_date: string;
+  analysis_end_date: string;
+  offense_category?: string | null;
+  offense_subcategory?: string | null;
+  nibrs_group?: string | null;
+  selected_types?: string[];
+  selected_hours?: number[];
+  selected_days?: number[];
+  layer: string;
 };
 
 /**
@@ -291,6 +307,49 @@ export function getIncidentPoints(
     body: JSON.stringify(payload),
     signal,
   });
+}
+
+export function getAreaSelectionSummary(
+  payload: AreaSelectionPayload,
+  signal?: AbortSignal,
+): Promise<AreaSelectionSummary> {
+  return request<AreaSelectionSummary>("/dashboard/area-selection/summary", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function getAreaSelectionRecords(
+  payload: AreaSelectionPayload & { page_size: number; cursor?: string | null },
+  signal?: AbortSignal,
+): Promise<AreaSelectionRecordsResponse> {
+  return request<AreaSelectionRecordsResponse>("/dashboard/area-selection/records", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export async function exportAreaSelectionCsv(payload: AreaSelectionPayload): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch("/exports/area-selection.csv", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (cause) {
+    console.debug("area selection export network failure", cause);
+    throw new Error(SERVER_ERROR_MESSAGE);
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.debug("area selection export failed", response.status, body);
+    throw new Error(friendlyRequestError(response.status));
+  }
+  return response.blob();
 }
 
 export function getTrends(
