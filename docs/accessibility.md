@@ -44,6 +44,13 @@ contract.
 
 - Search results, map controls, pins, sheet controls, tabs, disclosures, filters, forms, and
   analysis actions are keyboard operable. Chart tables replace pointer-only value readouts.
+- Area selection exposes rectangle, polygon, and lasso pointer modes plus a **Use visible map
+  area** button as the equivalent keyboard/mobile path. Escape cancels drawing; click-built
+  polygons also support Enter to finish and Backspace to remove the last vertex. The resulting
+  Summary/Data inspector implements roving tab focus and gives both temporal charts exact-value
+  tables. Type, hour, and day chart values are named toggle buttons with `aria-pressed`; the
+  exact-value tables expose the same controls, and active filters appear as individually removable
+  chips plus a **Clear filters** action.
 - Each visible analysis-filter value is a named disclosure button. Every non-modal anchored
   picker closes on outside pointer input or Escape, and option pickers close immediately on
   selection; Escape and option selection restore focus to the originating filter.

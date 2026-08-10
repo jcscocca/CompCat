@@ -134,7 +134,7 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 
 ## 6. Backend ↔ frontend
 
-`frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
+`frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/area-selection/*`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
 
 Analysis cards use `GET /exports/analysis.csv?run_id=...`, which verifies run ownership,
 recomputes the same reference-circle payload from the frozen run parameters and selected
@@ -178,6 +178,20 @@ reports total/returned records and total/returned block locations, and the 5,000
 payload ceiling applies to locations ordered by their latest matching record. The same count
 query also returns current-viewport totals for all three layers, which the layer switch keeps
 visible so different source volumes cannot all appear to be “5,000.”
+
+The separate **Select area** workflow supports rectangle, click-built polygon, and freehand
+lasso input. It is transient map state rather than a saved place or assistant turn. The server
+validates and clips the single-ring GeoJSON polygon to the Seattle data extent, uses its bounding
+box to constrain the SQL candidate scan, and uses Shapely's boundary-inclusive prepared geometry
+for exact membership on both SQLite and Postgres. The Tabby rail becomes a Summary/Data inspector:
+complete type and temporal aggregates, scope-bound cursor pages of underlying records, and a
+formula-safe streaming CSV export all share that membership iterator. Up to 5,000 selected block
+locations are highlighted exactly; larger selections use grid highlights that still represent
+all matching locations and disclose the aggregation while counts, rows, and exports remain exact.
+Type, hour, and day bars also act as linked filters: values within one dimension are combined with
+OR, dimensions are combined with AND, and removable chips preserve a visible filter scope. These
+filters update the total, map highlights, paginated rows, and CSV while the original area facets
+remain visible for adding or removing selections. Saved or named areas are not part of this flow.
 
 Map navigation is decoupled from that endpoint's response time. MapLibre's trackpad and
 mouse-wheel rates are deliberately slower than its defaults (`1/180` and `1/600`) so small

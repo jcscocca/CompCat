@@ -55,6 +55,8 @@ type Props = {
   /** Desktop-only pane controls live with the pane identity instead of in a separate
    * size-mode strip. Mobile continues to use the bottom-sheet grabber. */
   paneActions?: ReactNode;
+  /** Transient map-owned data inspector; never appended to the assistant thread. */
+  areaInspector?: ReactNode;
   /** Dashboard error string (run/rename/save/export failures) announced on the rail —
    * the retired Compare panel used to be the visible home for these. */
   errorLine?: string;
@@ -110,11 +112,13 @@ export function AssistantPanel({
   contextStrip,
   onUndoSettings,
   paneActions,
+  areaInspector,
   errorLine,
 }: Props) {
   const [input, setInput] = useState("");
   const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
   const [usedUndoIds, setUsedUndoIds] = useState<Set<string>>(new Set());
+  const areaInspectorRef = useRef<HTMLDivElement>(null);
   // Card wrapper elements keyed by their index in displayItems, for scroll-to-card.
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
   const logRef = useRef<HTMLDivElement>(null);
@@ -144,7 +148,12 @@ export function AssistantPanel({
   // place (rather than an unmount+remount when the turn settles).
   const displayItems: ThreadItem[] = draft ? [...items, { kind: "tabby_text", text: draft }] : items;
   const newestDisplayItem = displayItems.at(-1);
-  const resultFocused = expandedCard !== null;
+  const hasAreaInspector = Boolean(areaInspector);
+  const resultFocused = expandedCard !== null || hasAreaInspector;
+
+  useEffect(() => {
+    if (hasAreaInspector) areaInspectorRef.current?.scrollTo?.({ top: 0 });
+  }, [hasAreaInspector]);
 
   // Follow the newest entry and the streaming draft. Runs on every commit rather than on a
   // length change alone: a streamed answer grows the same node in place. Analysis cards are
@@ -191,7 +200,9 @@ export function AssistantPanel({
         {paneActions}
       </div>
 
-      <div
+      {areaInspector ? (
+        <div ref={areaInspectorRef} className="mc-area-inspector">{areaInspector}</div>
+      ) : <div
         className="mc-dock-log"
         aria-live="polite"
         ref={logRef}
@@ -322,7 +333,7 @@ export function AssistantPanel({
             </div>
           </div>
         ) : null}
-      </div>
+      </div>}
 
       {!resultFocused && toolActivity.length ? (
         <ul className="mc-dock-tools" aria-label="Tool activity">

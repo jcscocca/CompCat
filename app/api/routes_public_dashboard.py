@@ -15,6 +15,8 @@ from app.analysis.beat_baselines import (
     load_beat_polygons,
 )
 from app.api.dashboard_schemas import (
+    AreaSelectionRecordsRequest,
+    AreaSelectionRequest,
     DashboardAnalyzeRequest,
     DashboardCompareRequest,
     DashboardIncidentDetailsRequest,
@@ -26,6 +28,10 @@ from app.config import get_settings
 from app.crime.sources import LAYER_REPORTED, sources_for_layer
 from app.db import get_session
 from app.geocoding.providers import GeocodeProvider, GeocoderUpstreamError, build_provider
+from app.services.area_selection_service import (
+    area_selection_records,
+    area_selection_summary,
+)
 from app.services.beat_geometry_service import beats_geojson_payloads
 from app.services.crime_service import dashboard_freshness_by_layer
 from app.services.dashboard_analysis_service import (
@@ -136,6 +142,30 @@ def dashboard_incident_points(
             offense_subcategory=request.offense_subcategory,
             nibrs_group=request.nibrs_group,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/dashboard/area-selection/summary")
+def dashboard_area_selection_summary(
+    request: AreaSelectionRequest,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, object]:
+    try:
+        return area_selection_summary(session, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/dashboard/area-selection/records")
+def dashboard_area_selection_records(
+    request: AreaSelectionRecordsRequest,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, object]:
+    try:
+        return area_selection_records(session, request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

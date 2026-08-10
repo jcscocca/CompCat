@@ -3,13 +3,42 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.dashboard_schemas import AreaSelectionRequest
 from app.api.deps import current_user_hash, required_public_user_hash
 from app.db import get_session
+from app.services.area_selection_service import area_selection_csv_rows
 from app.services.export_service import analysis_run_csv, tableau_place_summary_csv
 
 router = APIRouter()
+
+
+@router.post("/exports/area-selection.csv")
+def export_area_selection(
+    request: AreaSelectionRequest,
+    _user_id_hash: Annotated[str, Depends(required_public_user_hash)],
+    session: Annotated[Session, Depends(get_session)],
+) -> StreamingResponse:
+    try:
+        rows = area_selection_csv_rows(session, request)
+        # Validate before response headers are committed; later rows stream incrementally.
+        first = next(rows)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    def content():
+        yield first
+        yield from rows
+
+    return StreamingResponse(
+        content(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="compcat-area-selection.csv"'
+        },
+    )
 
 
 @router.get("/exports/analysis.csv")

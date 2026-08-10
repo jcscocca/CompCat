@@ -40,6 +40,8 @@ export function addRingLayers(map: maplibregl.Map, theme: MapTheme): void {
 
 export const BEATS_SOURCE = "mc-beats";
 export const INCIDENTS_SOURCE = "mc-incidents";
+export const AREA_SHAPE_SOURCE = "mc-area-shape";
+export const AREA_HIGHLIGHTS_SOURCE = "mc-area-highlights";
 export const INCIDENT_SELECTED_LAYER = "mc-incident-selected";
 export const EMPTY_FC: IncidentFeatureCollection = { type: "FeatureCollection", features: [] };
 export const CLUSTER_MAX_ZOOM = 15; // clusters through z15, precise block markers at z16+
@@ -221,10 +223,71 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
   });
 }
 
+function addAreaShapeLayers(map: maplibregl.Map, theme: MapTheme): void {
+  const accent = theme === "dark" ? "#3FBF8F" : "#0F6E56";
+  map.addSource(AREA_SHAPE_SOURCE, { type: "geojson", data: EMPTY_FC });
+  map.addLayer({
+    id: "mc-area-fill",
+    type: "fill",
+    source: AREA_SHAPE_SOURCE,
+    paint: { "fill-color": accent, "fill-opacity": 0.12 },
+  });
+  map.addLayer({
+    id: "mc-area-outline",
+    type: "line",
+    source: AREA_SHAPE_SOURCE,
+    paint: { "line-color": accent, "line-width": 2.5, "line-dasharray": [2, 1] },
+  });
+}
+
+function addAreaHighlightLayers(map: maplibregl.Map, theme: MapTheme): void {
+  const accent = theme === "dark" ? "#3FBF8F" : "#0F6E56";
+  map.addSource(AREA_HIGHLIGHTS_SOURCE, {
+    type: "geojson",
+    data: EMPTY_FC,
+    cluster: true,
+    clusterMaxZoom: CLUSTER_MAX_ZOOM,
+    clusterRadius: 40,
+    clusterProperties: {
+      record_count: ["+", ["get", "record_count"]],
+      location_count: ["+", ["get", "location_count"]],
+    },
+  });
+  map.addLayer({
+    id: "mc-area-highlight-cluster",
+    type: "circle",
+    source: AREA_HIGHLIGHTS_SOURCE,
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-color": accent,
+      "circle-opacity": 0.8,
+      "circle-radius": ["step", ["get", "location_count"], 7, 10, 10, 50, 14, 250, 18],
+      "circle-stroke-color": "#FFFFFF",
+      "circle-stroke-width": 1.5,
+    },
+  });
+  map.addLayer({
+    id: "mc-area-highlight-dot",
+    type: "circle",
+    source: AREA_HIGHLIGHTS_SOURCE,
+    minzoom: PRECISE_LOCATION_MIN_ZOOM,
+    filter: ["!", ["has", "point_count"]],
+    paint: {
+      "circle-color": accent,
+      "circle-opacity": 0.9,
+      "circle-radius": ["step", ["get", "record_count"], 5.5, 2, 6.5, 10, 8],
+      "circle-stroke-color": "#FFFFFF",
+      "circle-stroke-width": 1.5,
+    },
+  });
+}
+
 export function registerDataLayers(map: maplibregl.Map, theme: MapTheme): void {
   addBeatLayers(map);
   addRingLayers(map, theme);
+  addAreaShapeLayers(map, theme);
   addIncidentLayers(map, theme);
+  addAreaHighlightLayers(map, theme);
 }
 
 function sentenceCase(value: string): string {

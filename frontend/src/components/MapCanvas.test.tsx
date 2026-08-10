@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // maplibre-gl needs WebGL; mock the whole module. Markers append their element to
@@ -71,6 +71,7 @@ vi.mock("maplibre-gl", () => {
     flyTo = vi.fn();
     easeTo = vi.fn();
     fitBounds = vi.fn();
+    resize = vi.fn();
     remove() {}
     fireClick(lat: number, lng: number) {
       for (const cb of this.handlers.click ?? []) cb({ lngLat: { lat, lng } });
@@ -85,6 +86,9 @@ vi.mock("maplibre-gl", () => {
     }
     getCanvas() {
       return { style: {} } as HTMLCanvasElement;
+    }
+    unproject(point: [number, number]) {
+      return { lng: -122.4 + point[0] / 1000, lat: 47.5 + point[1] / 1000 };
     }
     fireMoveEnd() {
       for (const cb of this.handlers.moveend ?? []) cb();
@@ -184,6 +188,7 @@ type MockMapInstance = {
   setStyle: ReturnType<typeof vi.fn>;
   easeTo: ReturnType<typeof vi.fn>;
   fitBounds: ReturnType<typeof vi.fn>;
+  resize: ReturnType<typeof vi.fn>;
   scrollZoom: {
     setZoomRate: ReturnType<typeof vi.fn>;
     setWheelZoomRate: ReturnType<typeof vi.fn>;
@@ -379,6 +384,81 @@ describe("ringsGeoJSON", () => {
 });
 
 describe("MapCanvas", () => {
+  it("offers the current viewport as a keyboard-operable area selection", async () => {
+    const onAreaComplete = vi.fn();
+    renderCanvas({ areaDrawMode: "lasso", onAreaComplete });
+    const button = await screen.findByRole("button", { name: "Use visible map area" });
+    button.click();
+    expect(MockedMap.last!.resize).toHaveBeenCalledTimes(1);
+    expect(onAreaComplete).toHaveBeenCalledWith({
+      type: "Polygon",
+      coordinates: [[
+        [-122.4, 47.55],
+        [-122.25, 47.55],
+        [-122.25, 47.65],
+        [-122.4, 47.65],
+        [-122.4, 47.55],
+      ]],
+    });
+  });
+
+  it("finishes a click-built polygon from the drawing controls", async () => {
+    const onAreaComplete = vi.fn();
+    renderCanvas({ areaDrawMode: "polygon", onAreaComplete });
+    const overlay = await screen.findByRole("region", { name: /draw a polygon area/i });
+    fireEvent.click(overlay, { clientX: 10, clientY: 20, detail: 1 });
+    fireEvent.click(overlay, { clientX: 80, clientY: 20, detail: 1 });
+    fireEvent.click(overlay, { clientX: 40, clientY: 90, detail: 1 });
+    screen.getByRole("button", { name: "Finish polygon" }).click();
+    expect(onAreaComplete).toHaveBeenCalledTimes(1);
+    const geometry = onAreaComplete.mock.calls[0][0];
+    expect(geometry.type).toBe("Polygon");
+    expect(geometry.coordinates[0]).toHaveLength(4);
+    expect(geometry.coordinates[0][0]).toEqual(geometry.coordinates[0][3]);
+  });
+
+  it("converts a dragged rectangle to a closed polygon", async () => {
+    const onAreaComplete = vi.fn();
+    renderCanvas({ areaDrawMode: "rectangle", onAreaComplete });
+    const overlay = await screen.findByRole("region", { name: /draw a rectangle area/i });
+    let captured = false;
+    Object.assign(overlay, {
+      setPointerCapture: () => { captured = true; },
+      hasPointerCapture: () => captured,
+      releasePointerCapture: () => { captured = false; },
+    });
+
+    fireEvent.pointerDown(overlay, { pointerId: 1, clientX: 10, clientY: 20 });
+    fireEvent.pointerMove(overlay, { pointerId: 1, clientX: 80, clientY: 90 });
+    fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 80, clientY: 90 });
+
+    const ring = onAreaComplete.mock.calls[0][0].coordinates[0];
+    expect(ring).toHaveLength(5);
+    expect(ring[0]).toEqual(ring[4]);
+  });
+
+  it("converts a freehand lasso to a closed polygon", async () => {
+    const onAreaComplete = vi.fn();
+    renderCanvas({ areaDrawMode: "lasso", onAreaComplete });
+    const overlay = await screen.findByRole("region", { name: /draw a lasso area/i });
+    let captured = false;
+    Object.assign(overlay, {
+      setPointerCapture: () => { captured = true; },
+      hasPointerCapture: () => captured,
+      releasePointerCapture: () => { captured = false; },
+    });
+
+    fireEvent.pointerDown(overlay, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(overlay, { pointerId: 1, clientX: 50, clientY: 10 });
+    fireEvent.pointerMove(overlay, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(overlay, { pointerId: 1, clientX: 10, clientY: 50 });
+    fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 10, clientY: 10 });
+
+    const ring = onAreaComplete.mock.calls[0][0].coordinates[0];
+    expect(ring.length).toBeGreaterThanOrEqual(4);
+    expect(ring[0]).toEqual(ring.at(-1));
+  });
+
   it("slows the default trackpad and wheel zoom rates", async () => {
     renderCanvas();
     await waitFor(() => expect(MockedMap.last).not.toBeNull());
