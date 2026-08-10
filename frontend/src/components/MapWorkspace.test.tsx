@@ -275,6 +275,7 @@ describe("MapWorkspace", () => {
       analysis_start_date: "2025-01-01",
       analysis_end_date: "2025-10-27",
     })));
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Change" }));
     fireEvent.click(await screen.findByRole("button", { name: "Data layer: Reported incidents" }));
     expect(screen.getByRole("button", { name: "Arrests — No data loaded" })).toBeDisabled();
@@ -1127,6 +1128,7 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalledTimes(1));
     await screen.findByRole("button", { name: "View details" });
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     fireEvent.click(await screen.findByRole("button", { name: "Search radius: 250 m" }));
@@ -1182,6 +1184,7 @@ describe("MapWorkspace", () => {
     // The shared view auto-runs its single point once.
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
     await screen.findByText(/shared view/i);
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     const chip = await screen.findByRole("checkbox", { name: home.display_label });
@@ -1444,6 +1447,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
     expect(screen.getByText("Analysis report")).toBeInTheDocument();
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
@@ -2387,6 +2391,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
 
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     fireEvent.click(await screen.findByRole("button", { name: "Save Pike Place" }));
     await waitFor(() =>
