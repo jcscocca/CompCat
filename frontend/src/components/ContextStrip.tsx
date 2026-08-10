@@ -39,6 +39,21 @@ type Props = {
    * clipboard write); the strip only owns the transient status note. */
   onCopyLink?: () => Promise<boolean> | boolean;
   copyDisabled?: boolean;
+  /** A current report already represents this scope. Collapse the editing controls into a
+   * compact provenance bar until the user explicitly asks to change them. */
+  compact?: boolean;
+  /** Plain-language place summary used by the compact report scope. */
+  scopeLabel?: string;
+  /** Number of places in the live setup, used for the concise report-action summary. */
+  placeCount?: number;
+  /** Keeps report generation attached to the setup it submits instead of competing with chat. */
+  reportAction?: {
+    label: string;
+    busy: boolean;
+    disabled: boolean;
+    disabledReason?: string;
+    onRun: () => void;
+  };
   /** Fields most recently changed by a Tabby tool call. They receive a short visual
    * confirmation while the matching deterministic receipt is announced in the thread. */
   assistantUpdatedFields?: (keyof AnalysisSettings)[];
@@ -60,6 +75,18 @@ function Checkmark() {
   );
 }
 
+function formatFilterDate(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
 /** The live dashboard context above Tabby's input. Each visible value is its own
  * disclosure button, so changing a filter no longer requires opening a separate editor. */
 export function ContextStrip({
@@ -71,9 +98,14 @@ export function ContextStrip({
   metadata,
   onCopyLink,
   copyDisabled,
+  compact = false,
+  scopeLabel,
+  placeCount,
+  reportAction,
   assistantUpdatedFields = [],
 }: Props) {
   const [openMenu, setOpenMenu] = useState<FilterMenu | null>(null);
+  const [editingCompactScope, setEditingCompactScope] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRefs = useRef<Record<FilterMenu, HTMLButtonElement | null>>({
     dates: null,
@@ -137,6 +169,10 @@ export function ContextStrip({
     if (!showCategories && openMenu === "category") setOpenMenu(null);
   }, [openMenu, showCategories]);
 
+  useEffect(() => {
+    if (compact) setEditingCompactScope(false);
+  }, [compact]);
+
   function toggleMenu(menu: FilterMenu) {
     if (menu === "radius" && openMenu !== "radius") {
       setRadiusInput(String(analysis.radiusM));
@@ -193,20 +229,75 @@ export function ContextStrip({
 
   const datesUpdated = assistantUpdatedFields.includes("startDate")
     || assistantUpdatedFields.includes("endDate");
+  const showCopyLink = Boolean(onCopyLink) && copyDisabled !== true;
+  const showCompactScope = compact && !editingCompactScope;
+  const copyLinkButton = showCopyLink ? (
+    <button
+      type="button"
+      className="mc-ctx-share"
+      disabled={!datesValid}
+      onClick={() => void handleCopyLink()}
+    >
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
+        <path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" />
+      </svg>
+      Copy link
+    </button>
+  ) : null;
+  const reportDateSummary = (() => {
+    const start = new Date(`${analysis.startDate}T00:00:00Z`);
+    const end = new Date(`${analysis.endDate}T00:00:00Z`);
+    const month = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+    if (start.getUTCFullYear() === end.getUTCFullYear()) {
+      const monthRange = start.getUTCMonth() === end.getUTCMonth()
+        ? month.format(start)
+        : `${month.format(start)}–${month.format(end)}`;
+      return `${monthRange} ${end.getUTCFullYear()}`;
+    }
+    return `${month.format(start)} ${start.getUTCFullYear()}–${month.format(end)} ${end.getUTCFullYear()}`;
+  })();
+  const placeSummary = placeCount === 1 ? "1 place" : `${placeCount ?? 0} places`;
 
   return (
-    <div className="mc-ctx" ref={rootRef}>
+    <div className={`mc-ctx${showCompactScope ? " is-compact" : ""}`} ref={rootRef}>
+      {showCompactScope ? (
+        <div className="mc-ctx-compact">
+          <div className="mc-ctx-compact-head">
+            <span className="mc-ctx-compact-kicker">
+              <svg className="mc-ctx-filter-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 6h16M7 12h10M10 18h4" />
+              </svg>
+              Report scope
+            </span>
+            <div className="mc-ctx-compact-actions">
+              {copyLinkButton}
+              <button type="button" className="mc-ctx-change" onClick={() => setEditingCompactScope(true)}>
+                Change
+              </button>
+            </div>
+          </div>
+          <div className="mc-ctx-compact-summary">
+            <strong>{scopeLabel || "Current places"}</strong>
+            <span>{formatFilterDate(analysis.startDate)} — {formatFilterDate(analysis.endDate)} · {analysis.radiusM} m</span>
+            <span>{incidentNoun(analysis.layer).pluralCap} · {activeCategoryLabel}</span>
+          </div>
+        </div>
+      ) : (
       <div className={`mc-ctx-summary${openMenu ? " is-open" : ""}`}>
         <div className="mc-ctx-summary-head">
           <span className="mc-ctx-summary-label">
             <svg className="mc-ctx-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
-            Tabby is using
+            Analysis setup
           </span>
-          {metadata ? <div className="mc-ctx-metadata">{metadata}</div> : null}
+          <div className="mc-ctx-head-actions">
+            {metadata ? <div className="mc-ctx-metadata">{metadata}</div> : null}
+            {copyLinkButton}
+          </div>
         </div>
-        <p className="mc-ctx-guidance">Change a filter here or tell Tabby what to use.</p>
+        <p className="mc-ctx-guidance">Choose what Tabby examines, or tell Tabby what to use.</p>
 
         {locationControls ? (
           <div className="mc-ctx-locations">
@@ -216,8 +307,7 @@ export function ContextStrip({
         ) : null}
 
         <div className="mc-ctx-summary-values" role="group" aria-label="Analysis filter controls">
-          <div className="mc-ctx-filter-row">
-          <div className={`mc-ctx-filter is-grow${datesUpdated ? " is-assistant-updated" : ""}`}>
+          <div className={`mc-ctx-filter is-wide${datesUpdated ? " is-assistant-updated" : ""}`}>
             <button
               ref={(node) => { triggerRefs.current.dates = node; }}
               type="button"
@@ -230,7 +320,10 @@ export function ContextStrip({
               aria-describedby={dateError ? "mc-ctx-date-error" : undefined}
               onClick={() => toggleMenu("dates")}
             >
-              <span>{analysis.startDate} – {analysis.endDate}</span>
+              <span className="mc-ctx-filter-copy">
+                <span className="mc-ctx-filter-label">Date range</span>
+                <strong className="mc-ctx-filter-value">{formatFilterDate(analysis.startDate)} — {formatFilterDate(analysis.endDate)}</strong>
+              </span>
               <Chevron open={openMenu === "dates"} />
             </button>
             {openMenu === "dates" ? (
@@ -262,7 +355,10 @@ export function ContextStrip({
               aria-controls="mc-ctx-radius-menu"
               onClick={() => toggleMenu("radius")}
             >
-              <span>{analysis.radiusM} m</span>
+              <span className="mc-ctx-filter-copy">
+                <span className="mc-ctx-filter-label">Search radius</span>
+                <strong className="mc-ctx-filter-value">{analysis.radiusM} m</strong>
+              </span>
               <Chevron open={openMenu === "radius"} />
             </button>
             {openMenu === "radius" ? (
@@ -307,9 +403,7 @@ export function ContextStrip({
               </div>
             ) : null}
           </div>
-          </div>
 
-          <div className="mc-ctx-filter-row">
           {showCategories ? (
             <div className={`mc-ctx-filter is-category${assistantUpdatedFields.includes("offenseCategory") ? " is-assistant-updated" : ""}`}>
               <button
@@ -322,7 +416,10 @@ export function ContextStrip({
                 aria-controls="mc-ctx-category-menu"
                 onClick={() => toggleMenu("category")}
               >
-                <span>{activeCategoryLabel}</span>
+                <span className="mc-ctx-filter-copy">
+                  <span className="mc-ctx-filter-label">{analysis.layer === "arrests" ? "Arrest category" : "Incident category"}</span>
+                  <strong className="mc-ctx-filter-value">{activeCategoryLabel}</strong>
+                </span>
                 <Chevron open={openMenu === "category"} />
               </button>
               {openMenu === "category" ? (
@@ -345,7 +442,7 @@ export function ContextStrip({
             </div>
           ) : null}
 
-          <div className={`mc-ctx-filter is-layer is-align-end is-grow${assistantUpdatedFields.includes("layer") ? " is-assistant-updated" : ""}`}>
+          <div className={`mc-ctx-filter is-layer is-align-end is-wide${assistantUpdatedFields.includes("layer") ? " is-assistant-updated" : ""}`}>
             <button
               ref={(node) => { triggerRefs.current.layer = node; }}
               type="button"
@@ -356,7 +453,10 @@ export function ContextStrip({
               aria-controls="mc-ctx-layer-menu"
               onClick={() => toggleMenu("layer")}
             >
-              <span>{incidentNoun(analysis.layer).pluralCap}</span>
+              <span className="mc-ctx-filter-copy">
+                <span className="mc-ctx-filter-label">Data layer</span>
+                <strong className="mc-ctx-filter-value">{incidentNoun(analysis.layer).pluralCap}</strong>
+              </span>
               <Chevron open={openMenu === "layer"} />
             </button>
             {openMenu === "layer" ? (
@@ -385,15 +485,35 @@ export function ContextStrip({
               </div>
             ) : null}
           </div>
-          </div>
         </div>
 
         {dateError ? <p id="mc-ctx-date-error" className="mc-ctx-date-error" role="alert">{dateError}</p> : null}
 
-        <div className="mc-ctx-actions">
-          <button type="button" className="mc-link-copy" disabled={copyDisabled || !onCopyLink || !datesValid} onClick={() => void handleCopyLink()}>Copy link</button>
-        </div>
+        {reportAction ? (
+          <div className="mc-ctx-report-action">
+            <span className="mc-ctx-report-scope">
+              {placeSummary} · {analysis.radiusM} m · {reportDateSummary}
+            </span>
+            <span className="mc-ctx-report-button-wrap" title={reportAction.disabled ? reportAction.disabledReason : undefined}>
+              <button
+                type="button"
+                className="mc-ctx-run-report"
+                disabled={reportAction.disabled || reportAction.busy}
+                onClick={reportAction.onRun}
+              >
+                <span>{reportAction.busy ? "Building…" : reportAction.label}</span>
+                {!reportAction.busy ? (
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                ) : null}
+              </button>
+            </span>
+          </div>
+        ) : null}
+
       </div>
+      )}
 
       <span className="mc-copy-status" data-testid="copy-status" role="status" aria-live="polite">
         {copyState === "copied" ? "Copied" : copyState === "failed" ? "Couldn't copy — try again." : ""}

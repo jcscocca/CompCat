@@ -33,6 +33,8 @@ describe("PlaceChipStrip", () => {
   it("renders only the active scope and marks ad-hoc places unsaved", () => {
     setup();
     expect(screen.getByRole("group", { name: "Places" })).toBeInTheDocument();
+    expect(screen.getByText("2 places selected")).toBeInTheDocument();
+    expect(screen.getByText("Home · Downtown test")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Home" })).toHaveTextContent("A");
     expect(screen.getByRole("button", { name: "Show Downtown test on map — Unsaved" })).toHaveTextContent("Unsaved");
     expect(screen.getByRole("button", { name: "Save Downtown test" })).toBeInTheDocument();
@@ -58,10 +60,19 @@ describe("PlaceChipStrip", () => {
     expect(handlers.onRemove).toHaveBeenCalledWith(1);
   });
 
-  it("has a trailing Manage places chip that opens the manager", () => {
+  it("uses a clear Manage action instead of a trailing dashed chip", () => {
     const handlers = setup();
-    expect(screen.getByRole("button", { name: "Manage places" })).toHaveTextContent("Manage places");
+    expect(screen.getByRole("button", { name: "Manage places" })).toHaveTextContent("Manage");
+    expect(screen.getByRole("button", { name: "Manage places" })).toHaveClass("mc-place-manage");
     fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
     expect(handlers.onAdd).toHaveBeenCalled();
+  });
+
+  it("explains the empty place state before any place is selected", () => {
+    const handlers = { onToggle: vi.fn(), onFocus: vi.fn(), onHoverPlace: vi.fn(), onRemove: vi.fn(), onSave: vi.fn(), onAdd: vi.fn() };
+    render(<PlaceChipStrip places={[]} entries={[]} identityByPlaceId={new Map()} {...handlers} />);
+
+    expect(screen.getByText("No places selected")).toBeInTheDocument();
+    expect(screen.getByText("Add a place to begin")).toBeInTheDocument();
   });
 });

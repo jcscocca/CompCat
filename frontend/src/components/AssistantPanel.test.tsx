@@ -32,7 +32,6 @@ function setup(overrides: Partial<PanelProps> = {}) {
   const onSend = vi.fn();
   const onRetry = vi.fn();
   const onRunCommand = vi.fn();
-  const onShowData = vi.fn();
   const onFollowupChip = vi.fn();
   const onCardExpandChange = vi.fn();
   const onAction = vi.fn();
@@ -46,7 +45,6 @@ function setup(overrides: Partial<PanelProps> = {}) {
     onSend,
     onRetry,
     onRunCommand,
-    onShowData,
     followupChips: [],
     onFollowupChip,
     expandedCard: null,
@@ -58,7 +56,7 @@ function setup(overrides: Partial<PanelProps> = {}) {
   };
   const view = render(<AssistantPanel {...props} />);
   const rerender = (next: Partial<PanelProps>) => view.rerender(<AssistantPanel {...props} {...next} />);
-  return { onSend, onRetry, onRunCommand, onShowData, onFollowupChip, onCardExpandChange, onAction, rerender };
+  return { onSend, onRetry, onRunCommand, onFollowupChip, onCardExpandChange, onAction, rerender };
 }
 
 beforeEach(() => localStorage.clear());
@@ -121,24 +119,76 @@ describe("AssistantPanel", () => {
     expect(onSend).toHaveBeenCalledWith("What's on file around here?");
   });
 
-  it("keeps one direct report action attached to the shared context and composer", () => {
-    const { onShowData } = setup();
-    const button = screen.getByRole("button", { name: "Run report" });
-    expect(button.closest(".mc-context-composer")).toContainElement(screen.getByLabelText("Analyst message"));
-    expect(screen.queryByText("Quick report")).not.toBeInTheDocument();
-    fireEvent.click(button);
-    expect(onShowData).toHaveBeenCalledTimes(1);
+  it("keeps the shared context and chat composer in one coordinated region", () => {
+    setup({ contextStrip: <div data-testid="ctx-slot" /> });
+    const container = screen.getByTestId("ctx-slot").closest(".mc-context-composer");
+    expect(container).toContainElement(screen.getByLabelText("Analyst message"));
+    expect(screen.getByTestId("ctx-slot").closest(".mc-context-body")).toBeInTheDocument();
+    expect(screen.getByTestId("ctx-slot").closest(".mc-action-dock")).not.toBeInTheDocument();
   });
 
-  it("shows report progress without disabling Tabby's offline fallback", () => {
-    const { rerender } = setup({ offline: true });
-    expect(screen.getByRole("button", { name: "Run report" })).toBeEnabled();
+  it("keeps the starting prompts outside the scrollable conversation log", () => {
+    setup();
+    const start = screen.getByRole("heading", { name: "What should we look into?" })
+      .closest(".mc-dock-start") as HTMLElement | null;
+    const log = document.querySelector(".mc-dock-log");
 
+    expect(start).toBeInTheDocument();
+    expect(start).toContainElement(screen.getByRole("button", { name: "What's near this pin?" }));
+    expect(log).not.toContainElement(start);
+    expect(document.querySelector(".mc-rail")).toHaveClass("is-starting");
+  });
+
+  it("hands a completed report to a prominent report-aware chat composer", () => {
+    const { onSend } = setup({
+      items: [{ kind: "analysis_card", card: analyzeCard }] as ThreadItem[],
+      currentCard: analyzeCard,
+      followupChips: [widenChip],
+      contextStrip: <div data-testid="ctx-slot" />,
+    });
+
+    expect(document.querySelector(".mc-rail")).toHaveClass("has-current-report");
+    expect(screen.getByText("Report ready")).toBeInTheDocument();
+    expect(screen.getByText("Ask Tabby about this report")).toBeInTheDocument();
+    expect(screen.getByLabelText("Analyst message")).toHaveAttribute(
+      "placeholder",
+      "Ask Tabby about this report…",
+    );
+    expect(screen.getByLabelText("Analyst message")).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Run report" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Widen to 500 m" })).toBeInTheDocument();
+    expect(screen.getByTestId("ctx-slot")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "What stands out?" }));
+    expect(onSend).toHaveBeenCalledWith("What stands out?");
+  });
+
+  it("returns a stale report to the ordinary chat composer", () => {
+    const { onCardExpandChange } = setup({
+      items: [
+        { kind: "analysis_card", card: analyzeCard },
+        { kind: "tabby_text", text: "I kept your follow-up in the conversation." },
+      ] as ThreadItem[],
+      currentCard: null,
+    });
+
+    expect(screen.getByText("Previous report").closest(".mc-stale-report-bar")).toHaveTextContent(
+      "Previous reportKept for referenceView",
+    );
+    expect(screen.queryByRole("heading", { name: "Place analysis" })).not.toBeInTheDocument();
+    expect(screen.getByText("I kept your follow-up in the conversation.")).toBeInTheDocument();
+    expect(screen.queryByText("Ask Tabby about this report")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Analyst message")).toHaveAttribute("placeholder", "Ask Tabby…");
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(onCardExpandChange).toHaveBeenCalledWith(analyzeCard, true);
+  });
+
+  it("disables the available-date recovery action while a report is building", () => {
+    const onUseAvailableDates = vi.fn();
+    const { rerender } = setup({ coverageAdjustment: "Jan 1, 2025", onUseAvailableDates });
+    expect(screen.getByRole("button", { name: "Use available dates" })).toBeEnabled();
     rerender({ showDataBusy: true });
-    expect(screen.getByRole("button", { name: "Building…" })).toBeDisabled();
-
-    rerender({ showDataBusy: false, showDataDisabled: true });
-    expect(screen.getByRole("button", { name: "Run report" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use available dates" })).toBeDisabled();
   });
 
   it("offline disables the composer and prompt chip but keeps command chips live", () => {
@@ -219,7 +269,6 @@ describe("AssistantPanel", () => {
 
     rerender({ expandedCard: null });
     expect(document.querySelector(".mc-rail")).not.toHaveClass("is-result-focused");
-    expect(screen.getByRole("button", { name: "Run report" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Widen to 500 m" })).toBeInTheDocument();
     expect(screen.getByTestId("ctx-slot")).toBeInTheDocument();
     expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
@@ -328,7 +377,7 @@ describe("AssistantPanel", () => {
       expect(screen.getByRole("heading", { name: "Let’s start with a place" })).toBeInTheDocument();
       expect(
         screen.getByText(
-          "Point me at a place — search an address, drop a pin, or add one by hand. I’ll pull the reports near it.",
+          "Point me at a place: search, drop a pin, or add one manually.",
         ),
       ).toBeInTheDocument();
 
@@ -363,7 +412,7 @@ describe("AssistantPanel", () => {
   it("keeps the has-places greeting and SUGGESTED_ACTIONS chips when hasPlaces is true", () => {
     setup({ hasPlaces: true });
     expect(screen.getByRole("heading", { name: "What should we look into?" })).toBeInTheDocument();
-    expect(screen.getByText("Point me at a place and I’ll pull the reports near it.")).toBeInTheDocument();
+    expect(screen.getByText("Run a report or ask about the places in this analysis.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "What's near this pin?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Compare my places" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "What's on file around here?" })).toBeInTheDocument();
@@ -373,7 +422,7 @@ describe("AssistantPanel", () => {
     const { rerender } = setup();
     expect(screen.getByLabelText("Analyst message")).toHaveAttribute(
       "placeholder",
-      "Ask Tabby about these places or change a filter…",
+      "Ask Tabby…",
     );
     rerender({ offline: true });
     expect(screen.getByLabelText("Analyst message")).toHaveAttribute("placeholder", "Tabby is offline");

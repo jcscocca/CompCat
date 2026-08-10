@@ -378,7 +378,6 @@ export function MapWorkspace() {
   // card on the rail. Fully saved-place lists carry the AnalysisRun id from the parallel
   // summary refresh and can export; ad-hoc or mixed point lists remain runId-null.
   const pendingCardRef = useRef(false);
-  const pendingCardExpandRef = useRef(false);
   useEffect(() => {
     if (!pendingAutoRun || list.entries.length === 0) return;
     if (!data.freshnessLoaded) return;
@@ -388,7 +387,6 @@ export function MapWorkspace() {
       return;
     }
     setPendingAutoRun(false);
-    pendingCardExpandRef.current = false;
     pendingCardRef.current = true;
     void compare.run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -423,24 +421,13 @@ export function MapWorkspace() {
       incidents: compare.incidents,
       report: compare.report,
     };
-    const shouldExpand = pendingCardExpandRef.current;
     pendingCardRef.current = false;
-    pendingCardExpandRef.current = false;
     thread.replaceAnalysisCard(localCardRef.current, card);
     localCardRef.current = card;
     setCurrentCard(card);
-    if (shouldExpand) {
-      // A direct report becomes the rail's primary document and needs the same readable width
-      // as a card opened with View details. Mobile still needs the map fit before the sheet is
-      // raised so the locations are framed correctly when it comes back down. Focus the card
-      // explicitly so the report opens at its heading rather than inheriting chat's
-      // stick-to-bottom behavior.
-      if (isMobile) fitCard(card);
-      expandCard(card);
-      setFocusCard({ card });
-    } else {
-      fitCard(card);
-    }
+    // A completed report now hands the rail to report-aware conversation. Keep the report
+    // collapsed as a readable reference; View report still opens the full document on demand.
+    fitCard(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compare.report]);
 
@@ -448,7 +435,6 @@ export function MapWorkspace() {
     // Any context invalidation cancels a pending auto-run card: if the armed run failed
     // (ref left armed), a later result landing in the same slices must not revive it.
     pendingCardRef.current = false;
-    pendingCardExpandRef.current = false;
     compare.invalidate();
     // Filter/selection changes detach presence badges — they describe a specific run's
     // results, which no longer reflect the current context once it changes.
@@ -730,7 +716,6 @@ export function MapWorkspace() {
     // leaves the ref armed, and applyAssistant writing the same result slices the completion
     // effect keys on would append a LOCAL card alongside the bridge card (double-card).
     pendingCardRef.current = false;
-    pendingCardExpandRef.current = false;
     if (effect.selection || effect.neighborhood !== undefined || effect.incidents !== undefined || effect.comparison !== undefined) {
       pinDraft.setDraft(null);
       setSharedBanner(false);
@@ -762,7 +747,7 @@ export function MapWorkspace() {
     }
     // Assistant selection edits invalidate like user edits; payload-bearing effects
     // re-apply their panes right below.
-    if (effect.selection) compare.invalidate();
+    if (effect.selection) invalidateAnalysisContext();
     if (effect.selection) {
       const { mode, ids } = effect.selection;
       if (mode === "clear") list.replaceAll([]);
@@ -898,7 +883,6 @@ export function MapWorkspace() {
   function handleDirectReportRun() {
     if (!activeLayerAvailable || list.entries.length === 0) return;
     setOffer(null);
-    pendingCardExpandRef.current = true;
     pendingCardRef.current = true;
     void compare.run();
   }
@@ -1020,11 +1004,13 @@ export function MapWorkspace() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M8 8 4 12l4 4M16 8l4 4-4 4M4 12h16" />
         </svg>
+        <span>{paneIsWide ? "Standard" : "Widen"}</span>
       </button>
       <button type="button" className="mc-pane-action" aria-label="Collapse Tabby pane" title="Collapse Tabby pane" onClick={onToggleCollapsed}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="m9 6 6 6-6 6" />
         </svg>
+        <span>Hide</span>
       </button>
     </div>
   ) : null;
@@ -1256,9 +1242,7 @@ export function MapWorkspace() {
               onSend={(text) => { setOffer(null); void turn.sendChat(text); }}
               onRetry={() => void turn.sendChat(null)}
               onRunCommand={runPanelCommand}
-              onShowData={handleDirectReportRun}
               showDataBusy={compare.running}
-              showDataDisabled={!activeLayerAvailable || list.entries.length === 0}
               coverageAdjustment={compare.coverageAdjustment}
               onUseAvailableDates={() => void compare.run(true)}
               workspaceAnalysis={analysis}
@@ -1315,6 +1299,16 @@ export function MapWorkspace() {
                   metadata={isMobile ? freshnessIndicator : undefined}
                   onCopyLink={handleCopyLink}
                   copyDisabled={list.entries.length === 0}
+                  compact={currentCard != null}
+                  scopeLabel={list.entries.length === 1 ? list.entries[0].label : `${list.entries.length} places`}
+                  placeCount={list.entries.length}
+                  reportAction={currentCard == null && list.entries.length > 0 ? {
+                    label: latestCard ? "Update report" : "Run report",
+                    busy: compare.running,
+                    disabled: !activeLayerAvailable,
+                    disabledReason: !activeLayerAvailable ? "No data is loaded for this layer." : undefined,
+                    onRun: handleDirectReportRun,
+                  } : undefined}
                   assistantUpdatedFields={assistantUpdatedFields}
                 />
               }

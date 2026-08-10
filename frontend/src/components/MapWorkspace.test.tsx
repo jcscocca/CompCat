@@ -275,7 +275,9 @@ describe("MapWorkspace", () => {
       analysis_start_date: "2025-01-01",
       analysis_end_date: "2025-10-27",
     })));
-    fireEvent.click(screen.getByRole("button", { name: "Data layer: Reported incidents" }));
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Data layer: Reported incidents" }));
     expect(screen.getByRole("button", { name: "Arrests — No data loaded" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "911 calls — No data loaded" })).toBeDisabled();
   });
@@ -289,8 +291,12 @@ describe("MapWorkspace", () => {
     const panel = () => container.querySelector(".mc-workspace-panel") as HTMLElement;
 
     expect(screen.queryByRole("group", { name: "Panel size" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Use wide pane width" }));
+    const widenButton = screen.getByRole("button", { name: "Use wide pane width" });
+    expect(widenButton).toHaveTextContent("Widen");
+    expect(screen.getByRole("button", { name: "Collapse Tabby pane" })).toHaveTextContent("Hide");
+    fireEvent.click(widenButton);
     expect(panel().style.width).toBe("640px");
+    expect(screen.getByRole("button", { name: "Use default pane width" })).toHaveTextContent("Standard");
     expect(screen.getByRole("button", { name: "Use default pane width" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse Tabby pane" }));
@@ -395,20 +401,21 @@ describe("MapWorkspace", () => {
       layer: "reported",
     }));
     expect(streamAssistantCommand).not.toHaveBeenCalled();
-    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "View details" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Collapse" })).not.toBeInTheDocument();
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
-    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("720px");
+    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("400px");
     expect(screen.queryByRole("button", { name: "Run report" })).not.toBeInTheDocument();
     expect(screen.queryByText("Tabby is using")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(screen.getByText("Report scope")).toBeInTheDocument();
+    expect(screen.getByText("Ask Tabby about this report")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Analyst message")).toHaveFocus());
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
-    expect((container.querySelector(".mc-workspace-panel") as HTMLElement).style.width).toBe("400px");
-    expect(screen.getByRole("button", { name: "Run report" })).toBeInTheDocument();
-    expect(screen.getByText("Tabby is using")).toBeInTheDocument();
-    expect(screen.getByLabelText("Analyst message")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(await screen.findByText("Analysis setup")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Search radius: 250 m" }));
+    fireEvent.click(screen.getByRole("button", { name: "500 m" }));
+    expect(screen.getByRole("button", { name: "Update report" })).toBeInTheDocument();
   });
 
   it("lets bulk imported places run a direct comparison report", async () => {
@@ -957,17 +964,18 @@ describe("MapWorkspace", () => {
     });
     expect(analyzePlaces).not.toHaveBeenCalled();
     expect(createPlace).not.toHaveBeenCalled();
-    // The explicit report action opens the card directly; no second "View details" click.
-    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
+    // The report remains a compact reference while Tabby becomes the primary next step.
+    expect(await screen.findByRole("button", { name: "View details" })).toBeInTheDocument();
+    expect(screen.getByText("Report scope")).toBeInTheDocument();
+    expect(screen.getByText("Ask Tabby about this report")).toBeInTheDocument();
     // A point-backed card can frame its frozen coordinates even though no dashboard Place
-    // exists. A direct report expands to the 720px detail width, plus a 40px map gutter.
+    // exists. The compact 400px pane leaves a 40px map gutter.
     const fit = fitToCaptures.at(-1) as {
       points: { lat: number; lng: number }[];
       padding: { top: number; right: number; bottom: number; left: number };
     };
     expect(fit.points).toEqual([{ lat: 47.61, lng: -122.34 }]);
-    expect(fit.padding).toEqual({ top: 90, left: 40, right: 760, bottom: 40 });
+    expect(fit.padding).toEqual({ top: 90, left: 40, right: 440, bottom: 40 });
   });
 
   it("lets a later search recenter supersede the last chip fly", async () => {
@@ -1106,7 +1114,7 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 
-  it("replaces the restored quick report and opens the requested report in place", async () => {
+  it("replaces a stale restored report when the user updates its scope", async () => {
     localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
@@ -1120,14 +1128,18 @@ describe("MapWorkspace", () => {
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalledTimes(1));
     await screen.findByRole("button", { name: "View details" });
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Run report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Search radius: 250 m" }));
+    fireEvent.click(screen.getByRole("button", { name: "500 m" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update report" }));
 
-    // The explicit report replaces that live quick report and expands it. It must not leave
-    // the automatic card behind as a second, historical "Previous analysis" card.
+    // The updated report replaces that stale quick report in place. It must not leave the
+    // automatic card behind as a second, historical "Previous analysis" card.
     await waitFor(() => expect(analyzePlaces).toHaveBeenCalledTimes(2));
-    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "View details" })).toBeInTheDocument();
+    expect(await screen.findByText("Ask Tabby about this report")).toBeInTheDocument();
     expect(document.querySelectorAll(".mc-result-card")).toHaveLength(1);
     expect(screen.queryByText("Previous analysis")).not.toBeInTheDocument();
   });
@@ -1172,7 +1184,9 @@ describe("MapWorkspace", () => {
     // The shared view auto-runs its single point once.
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
     await screen.findByText(/shared view/i);
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
     const chip = await screen.findByRole("checkbox", { name: home.display_label });
     fireEvent.click(chip);
 
@@ -1423,7 +1437,7 @@ describe("MapWorkspace", () => {
     expect(screen.queryByRole("button", { name: "Show 500 Pine St on map — Unsaved" })).not.toBeInTheDocument();
   });
 
-  it("marks the current card as previous analysis when filters change", async () => {
+  it("replaces a stale card with a compact previous-report reference while filters change", async () => {
     localStorage.setItem("compcat.selection", JSON.stringify([home.id]));
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
@@ -1433,12 +1447,19 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
     expect(screen.getByText("Analysis report")).toBeInTheDocument();
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
-    expect(screen.getByText("Previous report")).toBeInTheDocument();
+    const previousBar = screen.getByText("Previous report").closest(".mc-stale-report-bar");
+    expect(previousBar).toHaveTextContent("Kept for reference");
+    expect(document.querySelector(".mc-result-card")).not.toBeInTheDocument();
+
+    fireEvent.click(within(previousBar as HTMLElement).getByRole("button", { name: "View" }));
     expect(document.querySelector(".mc-result-card")).toHaveClass("is-historical");
+    expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
   });
 
   it("clicking an ad-hoc pin flies to it instead of removing the entry", async () => {
@@ -1480,7 +1501,7 @@ describe("MapWorkspace", () => {
     // Shared view auto-runs its two points once; wait until places have loaded so the
     // persisted selection has been restored (the guard the Exit path depends on).
     await waitFor(() => expect(getNeighborhoodAnalysis).toHaveBeenCalledTimes(1));
-    await screen.findByRole("checkbox", { name: home.display_label });
+    await waitFor(() => expect(getDashboardSummary).toHaveBeenCalled());
 
     fireEvent.click(await screen.findByRole("button", { name: "Exit" }));
 
@@ -1669,6 +1690,7 @@ describe("MapWorkspace", () => {
 
     render(<MapWorkspace />);
     // Wait for the restored selection to SEED the list (checked chip) — not just render.
+    fireEvent.click(await screen.findByRole("button", { name: "Change" }));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Home" })).toHaveAttribute("aria-checked", "true"));
     // Let the greet run's own summary refresh land first, so the deferred below is
     // consumed by the tool effect's refetch and nothing else.
@@ -1770,8 +1792,13 @@ describe("MapWorkspace", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByText(/chips and filters still work/i)).toBeInTheDocument();
 
+    // Let the independent automatic report settle before opening its compact scope. Otherwise
+    // the report's completion can legitimately re-collapse controls opened in the same tick.
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
+
     // Filters are not gated by offline, and the change stays in the direct filter controls.
-    fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
     expect(screen.getByRole("button", { name: /search radius: 500 m/i })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Search radius → 500 m")).not.toBeInTheDocument();
@@ -1997,7 +2024,8 @@ describe("MapWorkspace", () => {
 
     // A radius change through the rail's context strip invalidates the analysis context,
     // detaching the presence badges.
-    fireEvent.click(screen.getByRole("button", { name: /search radius: 250 m/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: /search radius: 250 m/i }));
     fireEvent.click(screen.getByRole("button", { name: "500 m" }));
 
     await waitFor(() => expect(screen.queryByTestId("badge-a")).not.toBeInTheDocument());
@@ -2039,7 +2067,8 @@ describe("MapWorkspace", () => {
     expect(screen.getByTestId("badge-p2")).toBeInTheDocument();
 
     // Deleting ONE place clears EVERY badge (delete invalidates the whole context).
-    fireEvent.click(screen.getByRole("button", { name: "Manage places" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage places" }));
     const dialog = await screen.findByRole("dialog", { name: "Manage places" });
     fireEvent.click(await within(dialog).findByRole("button", { name: "Remove Home" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove place" }));
@@ -2362,6 +2391,8 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
 
     await waitFor(() => expect(document.querySelector(".mc-result-card")).toBeInTheDocument());
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
     fireEvent.click(await screen.findByRole("button", { name: "Save Pike Place" }));
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Pike Place" })).toHaveAttribute(
@@ -2563,7 +2594,7 @@ describe("MapWorkspace", () => {
     render(<MapWorkspace />);
     await screen.findByText("Home");
 
-    const runButton = screen.getByRole("button", { name: "Run report" });
+    const runButton = await screen.findByRole("button", { name: "Run report" });
     await waitFor(() => expect(runButton).toBeEnabled());
     fireEvent.click(runButton);
 

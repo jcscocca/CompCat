@@ -668,8 +668,12 @@ describe("beat + incident layers", () => {
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-dot")).toMatchObject({
       minzoom: 16,
       paint: {
-        "circle-opacity": 0.72,
+        "circle-color": "#3A3F46",
+        "circle-opacity": 0.92,
         "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 5.5, 10, 7, 100, 8.5],
+        "circle-stroke-color": "#FFFFFF",
+        "circle-stroke-opacity": 0.95,
+        "circle-stroke-width": 1.5,
       },
     });
     expect(MockedMap.last!.layers.find((layer) => layer.id === "mc-incident-selected")).toMatchObject({
@@ -866,6 +870,12 @@ describe("themed map", () => {
     expect((ringLine?.paint as Record<string, unknown>)["line-color"]).toBe("#3FBF8F");
     const selectedIncident = MockedMap.last!.layers.find((l) => l.id === "mc-incident-selected");
     expect((selectedIncident?.paint as Record<string, unknown>)["circle-stroke-color"]).toBe("#3FBF8F");
+    const incidentDot = MockedMap.last!.layers.find((l) => l.id === "mc-incident-dot");
+    expect(incidentDot?.paint).toMatchObject({
+      "circle-color": "#C6D2DC",
+      "circle-stroke-color": "#141A20",
+      "circle-stroke-width": 1.5,
+    });
   });
 
   // Regression: under maplibre-gl v6 the default (diffing) setStyle applies a theme swap in

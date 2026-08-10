@@ -46,7 +46,7 @@ export function MapLegend({ layer, id, hidden }: Props) {
       </div>
       <div className="mc-leg-row">
         <span className="g">
-          <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#3A3F46", border: "1px solid #fff", display: "block" }} />
+          <span className="mc-leg-dot mc-leg-dot-single" />
         </span>
         <span>{sentenceCase(noun.singular)}</span>
       </div>
@@ -58,7 +58,7 @@ export function MapLegend({ layer, id, hidden }: Props) {
       </div>
       <div className="mc-leg-row">
         <span className="g">
-          <span style={{ width: 13, height: 13, borderRadius: "50%", background: "#3A3F46", border: "1px solid #fff", display: "block" }} />
+          <span className="mc-leg-dot mc-leg-dot-stack" />
         </span>
         <span>Same-block {noun.plural}<small>select for exact count · large stacks label at close zoom</small></span>
       </div>

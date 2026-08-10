@@ -31,11 +31,65 @@ function setup(overrides: Partial<AnalysisSettings> = {}) {
 }
 
 describe("ContextStrip", () => {
+  it("keeps report generation inside the setup card with a concise scope summary", () => {
+    const onRun = vi.fn();
+    const { container } = render(
+      <ContextStrip
+        analysis={analysis}
+        availableRadii={[250, 500, 1000]}
+        onChange={vi.fn()}
+        placeCount={2}
+        reportAction={{ label: "Run report", busy: false, disabled: false, onRun }}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Run report" });
+    expect(button.closest(".mc-ctx-summary")).toBeInTheDocument();
+    expect(button.closest(".mc-ctx-report-action")).toHaveTextContent("2 places · 250 m · Jan–Jul 2026");
+    expect(container.querySelector(".mc-report-action-row")).not.toBeInTheDocument();
+    fireEvent.click(button);
+    expect(onRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows report progress and preserves the tonal action's disabled explanation", () => {
+    const { rerender } = render(
+      <ContextStrip
+        analysis={analysis}
+        availableRadii={[250]}
+        onChange={vi.fn()}
+        placeCount={1}
+        reportAction={{ label: "Run report", busy: true, disabled: false, onRun: vi.fn() }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Building…" })).toBeDisabled();
+
+    rerender(
+      <ContextStrip
+        analysis={analysis}
+        availableRadii={[250]}
+        onChange={vi.fn()}
+        placeCount={1}
+        reportAction={{
+          label: "Run report",
+          busy: false,
+          disabled: true,
+          disabledReason: "No data is loaded for this layer.",
+          onRun: vi.fn(),
+        }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Run report" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run report" }).parentElement).toHaveAttribute(
+      "title",
+      "No data is loaded for this layer.",
+    );
+  });
+
   it("keeps every active filter directly selectable without an Edit disclosure", () => {
     const { container } = setup({ offenseCategory: "PROPERTY", layer: "arrests" });
     const summary = container.querySelector(".mc-ctx-summary");
 
-    expect(summary).toHaveTextContent("Tabby is using");
+    expect(summary).toHaveTextContent("Analysis setup");
     expect(summary).toHaveTextContent("tell Tabby what to use");
     expect(summary).toHaveTextContent("Saved location controls");
     expect(screen.getByRole("button", { name: "Date range: 2026-01-01 – 2026-07-19" })).toBeVisible();
@@ -43,6 +97,19 @@ describe("ContextStrip", () => {
     expect(screen.getByRole("button", { name: "Arrest category: Property" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Data layer: Arrests" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /edit filters/i })).not.toBeInTheDocument();
+  });
+
+  it("presents filters as labeled controls with a readable date range", () => {
+    const { container } = setup();
+    const dateTrigger = screen.getByRole("button", { name: "Date range: 2026-01-01 – 2026-07-19" });
+
+    expect(dateTrigger).toHaveTextContent("Date range");
+    expect(dateTrigger).toHaveTextContent("Jan 1, 2026 — Jul 19, 2026");
+    expect(dateTrigger.closest(".mc-ctx-filter")).toHaveClass("is-wide");
+    expect(screen.getByRole("button", { name: "Search radius: 250 m" })).toHaveTextContent("Search radius250 m");
+    expect(screen.getByRole("button", { name: "Incident category: All reported" })).toHaveTextContent("Incident categoryAll reported");
+    expect(screen.getByRole("button", { name: "Data layer: Reported incidents" }).closest(".mc-ctx-filter")).toHaveClass("is-wide");
+    expect(container.querySelectorAll(".mc-ctx-filter-value")).toHaveLength(4);
   });
 
   it("opens a compact radius popup, applies a choice immediately, and closes", () => {
@@ -127,7 +194,14 @@ describe("ContextStrip", () => {
   });
 
   it("disables actions when given an invalid range from an external source", () => {
-    setup({ startDate: "2026-08-01", endDate: "2026-07-19" });
+    render(
+      <ContextStrip
+        analysis={{ ...analysis, startDate: "2026-08-01", endDate: "2026-07-19" }}
+        availableRadii={[250, 500, 1000]}
+        onChange={vi.fn()}
+        onCopyLink={vi.fn()}
+      />,
+    );
     expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /date range:/i })).toHaveAttribute("aria-invalid", "true");
   });
@@ -189,11 +263,51 @@ describe("ContextStrip", () => {
     expect(onChange).toHaveBeenCalledWith({ layer: "arrests", offenseCategory: "" });
   });
 
-  it("leaves report execution to the shared composer and keeps Copy link available", () => {
+  it("leaves report execution to the shared composer and hides sharing until a place is selected", () => {
     setup();
     expect(screen.queryByRole("button", { name: /edit filters/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /run (analysis|report)/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Copy link" })).not.toBeInTheDocument();
+  });
+
+  it("places the share action beside the Analysis setup heading when sharing is available", () => {
+    render(
+      <ContextStrip
+        analysis={analysis}
+        availableRadii={[250, 500, 1000]}
+        onChange={vi.fn()}
+        onCopyLink={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Copy link" }).closest(".mc-ctx-summary-head"))
+      .toBeInTheDocument();
+  });
+
+  it("collapses a completed report into a readable scope summary and reopens editing on request", () => {
+    const { container } = render(
+      <ContextStrip
+        analysis={analysis}
+        availableRadii={[250, 500, 1000]}
+        onChange={vi.fn()}
+        onCopyLink={vi.fn()}
+        compact
+        scopeLabel="Downtown Seattle"
+      />,
+    );
+
+    expect(container.querySelector(".mc-ctx")).toHaveClass("is-compact");
+    expect(screen.getByText("Report scope")).toBeInTheDocument();
+    expect(screen.getByText("Downtown Seattle")).toBeInTheDocument();
+    expect(screen.getByText("Jan 1, 2026 — Jul 19, 2026 · 250 m")).toBeInTheDocument();
+    expect(screen.getByText("Reported incidents · All reported")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /date range:/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+
+    expect(container.querySelector(".mc-ctx")).not.toHaveClass("is-compact");
+    expect(screen.getByText("Analysis setup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /date range:/i })).toBeInTheDocument();
   });
 
   it("highlights filters most recently updated by Tabby", () => {
@@ -213,7 +327,9 @@ describe("ContextStrip", () => {
     const onCopyLink = vi.fn().mockResolvedValue(true);
     render(<ContextStrip analysis={analysis} availableRadii={[250, 500, 1000]} onChange={vi.fn()} onCopyLink={onCopyLink} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    const copyButton = screen.getByRole("button", { name: "Copy link" });
+    expect(copyButton.closest(".mc-ctx-summary-head")).toBeInTheDocument();
+    fireEvent.click(copyButton);
     expect(onCopyLink).toHaveBeenCalled();
     expect(await screen.findByText("Copied")).toBeInTheDocument();
     const hint = screen.getByText(/includes the exact locations, labels, and filters/i);
