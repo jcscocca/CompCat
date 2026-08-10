@@ -508,7 +508,18 @@ the session secret, the hash salt, and the database password.
 
 ```bash
 cd /opt/compcat && git pull && scripts/prod/start-compcat.sh
+
+# The public response must match the checkout the launcher just built.
+expected="$(git rev-parse HEAD)"
+actual="$(curl -fsS https://compcat.app/health | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["revision"])')"
+test "${actual}" = "${expected}" && echo "Deployed revision verified: ${actual}"
 ```
+
+The launcher resolves the full Git object ID after environment validation and passes it only as
+non-sensitive image metadata, then refuses to report a successful deploy unless `/health` returns
+the same value. The commands above are an independent operator check. A direct local run that did
+not use a launcher reports `"revision": null` instead of claiming a commit it cannot verify.
 
 **Logs:**
 

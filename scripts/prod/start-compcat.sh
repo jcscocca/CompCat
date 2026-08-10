@@ -29,6 +29,10 @@ fi
 
 python3 scripts/public/validate_public_env.py --mode vps "${ENV_FILE}"
 
+# Bake the exact checkout into the image so the public /health response can verify a deploy.
+BUILD_REVISION="$(git rev-parse --verify 'HEAD^{commit}')"
+export BUILD_REVISION
+
 compose() {
     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
         --profile ops --env-file "${ENV_FILE}" "$@"
@@ -53,7 +57,13 @@ do
     fi
     sleep 5
 done
-echo "API healthy."
+served_revision="$(compose exec -T api python -c \
+    "import json, urllib.request; print(json.load(urllib.request.urlopen('http://localhost:8000/health'))['revision'])")"
+if [ "${served_revision}" != "${BUILD_REVISION}" ]; then
+    echo "Deployed revision mismatch: expected ${BUILD_REVISION}, served ${served_revision:-null}." >&2
+    exit 1
+fi
+echo "API healthy; deployed revision verified: ${served_revision}."
 
 # Refresh SPD data if stale. /dashboard/freshness is session-scoped, so mint one first; a
 # null data_through (fresh database, first run) counts as maximally stale.

@@ -28,7 +28,12 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: .
+      # Launchers set this to the current full Git object ID. Direct local Compose use
+      # leaves it empty, and /health reports revision: null rather than guessing.
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-}
     environment:
       # Defaults keep `docker compose up` working for local dev. For a shared
       # deploy, override via: docker compose --env-file .env.deploy up -d --build

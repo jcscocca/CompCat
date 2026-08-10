@@ -127,6 +127,23 @@ def test_public_vps_launcher_validates_its_env_before_starting() -> None:
     assert text.index(validation) < text.index("compose up -d --build")
 
 
+def test_building_launchers_stamp_the_full_git_revision() -> None:
+    personal = _read("start-compcat.ps1")
+    tunnel = _read("public/start-public.ps1")
+    vps = _read("prod/start-compcat.sh")
+
+    assert "$env:BUILD_REVISION = (git rev-parse HEAD).Trim()" in personal
+    assert personal.index("$env:BUILD_REVISION") < personal.index("Compose up -d --build")
+    assert "$env:BUILD_REVISION = (git rev-parse HEAD).Trim()" in tunnel
+    assert tunnel.index("$env:BUILD_REVISION") < tunnel.index("Compose up -d --build")
+    assert "BUILD_REVISION=\"$(git rev-parse --verify 'HEAD^{commit}')\"" in vps
+    assert vps.index("BUILD_REVISION=") < vps.index("compose up -d --build")
+    assert '$servedRevision -ne $env:BUILD_REVISION' in tunnel
+    assert '"${served_revision}" != "${BUILD_REVISION}"' in vps
+    assert "Deployed revision mismatch" in tunnel
+    assert "Deployed revision mismatch" in vps
+
+
 def test_vps_and_mac_launchers_cannot_be_mistaken_for_thinkpad_personal() -> None:
     vps_start = _read("prod/start-compcat.sh")
     vps_stop = _read("prod/stop-compcat.sh")

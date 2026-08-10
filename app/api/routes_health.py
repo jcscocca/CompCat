@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/health")
-def health() -> dict[str, str]:
+def health() -> dict[str, str | None]:
     # Readiness probe: confirm the database is reachable, not just that the process is up,
     # so an orchestrator/healthcheck can tell "serving" from "running but DB is down".
     try:
@@ -24,7 +24,8 @@ def health() -> dict[str, str]:
             connection.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001 — any DB/connection failure means not-ready
         raise HTTPException(status_code=503, detail="database unavailable") from exc
-    return {"status": "ok"}
+    revision = get_settings().build_revision or None
+    return {"status": "ok", "revision": revision}
 
 
 SEATTLE_TZ = ZoneInfo("America/Los_Angeles")

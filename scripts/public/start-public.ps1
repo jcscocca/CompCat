@@ -62,6 +62,12 @@ if (-not (Test-Path '.env.tunnel')) {
 python scripts\public\validate_public_env.py --mode tunnel .env.tunnel
 if ($LASTEXITCODE -ne 0) { throw 'Unsafe public posture; refusing to start.' }
 
+# Bake the exact checkout into the image so the public /health response can verify a deploy.
+$env:BUILD_REVISION = (git rev-parse HEAD).Trim()
+if ($env:BUILD_REVISION -notmatch '^[0-9a-f]{40}([0-9a-f]{24})?$') {
+    throw 'Could not resolve a valid Git revision for the image build.'
+}
+
 # 1. Docker engine. Docker Desktop starts at login, but the engine takes a moment.
 if (-not (Test-Docker)) {
     $dd = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
@@ -99,7 +105,11 @@ while ($true) {
     if ((Get-Date) -gt $deadline) { throw "API did not become healthy in $HealthTimeoutMinutes minutes - check: docker compose -p compcat-public ... logs api" }
     Start-Sleep -Seconds 5
 }
-Write-Host 'API: healthy'
+$servedRevision = (Compose exec -T api python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://localhost:8000/health'))['revision'])").Trim()
+if ($LASTEXITCODE -ne 0 -or $servedRevision -ne $env:BUILD_REVISION) {
+    throw "Deployed revision mismatch: expected $env:BUILD_REVISION, served $servedRevision."
+}
+Write-Host ("API: healthy; deployed revision verified: {0}" -f $servedRevision)
 
 # 5. Data freshness, per layer (same policy as scripts/start-compcat.ps1). mode=backfill
 #    starts from the configured overlap before each stored watermark and pages through Socrata

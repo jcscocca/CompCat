@@ -177,7 +177,7 @@ def test_liveness_probe_is_unchanged(tmp_path) -> None:
     # The container healthcheck stays on /health: stale data must not restart the app.
     client = _client(tmp_path)
     _seed({"reported": 400, "arrests": 400, "calls": 400})
-    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/health").json() == {"status": "ok", "revision": None}
     assert client.get("/health/data").status_code == 503
 
 

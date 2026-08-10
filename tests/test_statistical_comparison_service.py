@@ -513,7 +513,11 @@ def test_compare_site_options_counts_incidents_persists_and_returns_payload(tmp_
 
     assert result["overview"]["decision_class"] == "statistically_lower"
     assert result["overview"]["recommendation_label"] == "Site A"
-    assert result["overview"]["options"][0]["geometry_metadata"] == {
+    # Persisted options use created_at plus their generated row ID as a deterministic
+    # database tie-break, so equal-timestamp rows do not promise input order. Verify the
+    # intended option by its stable public ID instead of whichever UUID sorts first.
+    overview_options = {option["id"]: option for option in result["overview"]["options"]}
+    assert overview_options["site-a"]["geometry_metadata"] == {
         "center": {"latitude": 47.6116, "longitude": -122.3372},
         "radius_m": 250,
     }
