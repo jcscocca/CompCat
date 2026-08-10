@@ -23,11 +23,7 @@ type Props = {
   onSend: (text: string) => void;
   onRetry: () => void;
   onRunCommand: (label: string, command: AssistantCommandName) => void;
-  /** Runs the current places and filters directly through the dashboard APIs without
-   * requiring an assistant message or command. */
-  onShowData: () => void;
   showDataBusy?: boolean;
-  showDataDisabled?: boolean;
   coverageAdjustment?: string | null;
   onUseAvailableDates?: () => void;
   workspaceAnalysis?: AnalysisSettings;
@@ -76,6 +72,12 @@ const ONBOARDING_ACTIONS: SuggestedAction[] = [
   { label: "Add places manually", action: "manual" },
 ];
 
+const REPORT_CHAT_PROMPTS = [
+  "What stands out?",
+  "Explain the timeline",
+  "Explain the categories",
+];
+
 const OFFLINE_COMPOSER_HINT = "Tabby can't reach the case files — chips and filters still work.";
 
 const GREETED_KEY = "compcat.tabby.greeted";
@@ -93,9 +95,7 @@ export function AssistantPanel({
   onSend,
   onRetry,
   onRunCommand,
-  onShowData,
   showDataBusy = false,
-  showDataDisabled = false,
   coverageAdjustment,
   onUseAvailableDates,
   workspaceAnalysis,
@@ -119,6 +119,7 @@ export function AssistantPanel({
   const [greeted, setGreeted] = useState(() => localStorage.getItem(GREETED_KEY) === "1");
   const [usedUndoIds, setUsedUndoIds] = useState<Set<string>>(new Set());
   const areaInspectorRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   // Card wrapper elements keyed by their index in displayItems, for scroll-to-card.
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
   const logRef = useRef<HTMLDivElement>(null);
@@ -150,6 +151,17 @@ export function AssistantPanel({
   const newestDisplayItem = displayItems.at(-1);
   const hasAreaInspector = Boolean(areaInspector);
   const resultFocused = expandedCard !== null || hasAreaInspector;
+  const reportReady = currentCard != null;
+  const staleReportCard = currentCard === null && !resultFocused
+    ? [...displayItems].reverse().find((item) => item.kind === "analysis_card")?.card ?? null
+    : null;
+  const hasVisibleConversation = displayItems.some((item) => item.kind !== "analysis_card")
+    || Boolean(statusLine);
+  const showConversationStart = conversationEmpty && !draft && !resultFocused;
+
+  useEffect(() => {
+    if (reportReady) composerRef.current?.focus({ preventScroll: true });
+  }, [currentCard, reportReady]);
 
   useEffect(() => {
     if (hasAreaInspector) areaInspectorRef.current?.scrollTo?.({ top: 0 });
@@ -181,7 +193,7 @@ export function AssistantPanel({
   }, [focusCard]);
 
   return (
-    <div className={`mc-dock mc-rail${resultFocused ? " is-result-focused" : ""}`}>
+    <div className={`mc-dock mc-rail${resultFocused ? " is-result-focused" : ""}${reportReady ? " has-current-report" : ""}${showConversationStart ? " is-starting" : ""}`}>
       <div className="mc-dock-head">
         <div className="mc-tabby-identity">
           <span className={`mc-tabby-mark${greeted ? "" : " mc-tabby-pulse"}${offline ? " is-offline" : ""}`}>
@@ -200,9 +212,71 @@ export function AssistantPanel({
         {paneActions}
       </div>
 
+      {showConversationStart ? (
+        <div className="mc-dock-start">
+          <div className="mc-tabby-welcome">
+            <div className="mc-tabby-portrait">
+              <TabbyAvatar variant="bust" size={78} />
+            </div>
+            <div className="mc-tabby-intro">
+              <span className="mc-tabby-kicker">Case desk</span>
+              <h3>{hasPlaces ? "What should we look into?" : "Let’s start with a place"}</h3>
+              <p>
+                {hasPlaces
+                  ? "Run a report or ask about the places in this analysis."
+                  : "Point me at a place: search, drop a pin, or add one manually."}
+              </p>
+            </div>
+          </div>
+          <div className="mc-dock-chips">
+            {(hasPlaces ? SUGGESTED_ACTIONS : ONBOARDING_ACTIONS).map((suggestion) => {
+              if (suggestion.action) {
+                const onboardingAction = suggestion.action;
+                return (
+                  <button key={suggestion.label} type="button" className="mc-chip" disabled={busy}
+                    onClick={() => { markGreeted(); onAction(onboardingAction); }}>
+                    {suggestion.label}
+                  </button>
+                );
+              }
+              const command = suggestion.command;
+              return command ? (
+                <button key={suggestion.label} type="button" className="mc-chip" disabled={busy}
+                  onClick={() => { markGreeted(); onRunCommand(suggestion.label, command); }}>
+                  {suggestion.label}
+                </button>
+              ) : (
+                <button key={suggestion.label} type="button" className="mc-chip" disabled={busy || offline}
+                  onClick={() => { markGreeted(); onSend(suggestion.label); }}>
+                  {suggestion.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {staleReportCard ? (
+        <div className="mc-stale-report-bar">
+          <span className="mc-stale-report-copy">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 3h9l3 3v15H6z" />
+              <path d="M14 3v4h4M9 12h6M9 16h6" />
+            </svg>
+            <span>
+              <strong>Previous report</strong>
+              <small>Kept for reference</small>
+            </span>
+          </span>
+          <button type="button" onClick={() => onCardExpandChange(staleReportCard, true)}>
+            View
+          </button>
+        </div>
+      ) : null}
+
       {areaInspector ? (
         <div ref={areaInspectorRef} className="mc-area-inspector">{areaInspector}</div>
-      ) : <div
+      ) : !staleReportCard || hasVisibleConversation ? <div
         className="mc-dock-log"
         aria-live="polite"
         ref={logRef}
@@ -213,6 +287,7 @@ export function AssistantPanel({
         }}
       >
         {displayItems.map((item, index) => {
+          if (staleReportCard && item.kind === "analysis_card") return null;
           if (item.kind === "user_text") {
             return <div key={index} className="mc-dock-msg is-user">{item.text}</div>;
           }
@@ -290,50 +365,7 @@ export function AssistantPanel({
         {!draft && statusLine ? (
           <div className="mc-dock-msg is-assistant mc-dock-statusline">{statusLine}</div>
         ) : null}
-        {conversationEmpty && !draft ? (
-          <div className="mc-dock-empty">
-            <div className="mc-tabby-welcome">
-              <div className="mc-tabby-portrait">
-                <TabbyAvatar variant="bust" size={106} />
-              </div>
-              <div className="mc-tabby-intro">
-                <span className="mc-tabby-kicker">Your case desk</span>
-                <h3>{hasPlaces ? "What should we look into?" : "Let’s start with a place"}</h3>
-                <p>
-                  {hasPlaces
-                    ? "Point me at a place and I’ll pull the reports near it."
-                    : "Point me at a place — search an address, drop a pin, or add one by hand. I’ll pull the reports near it."}
-                </p>
-              </div>
-            </div>
-            <div className="mc-dock-chips">
-              {(hasPlaces ? SUGGESTED_ACTIONS : ONBOARDING_ACTIONS).map((suggestion) => {
-                if (suggestion.action) {
-                  const onboardingAction = suggestion.action;
-                  return (
-                    <button key={suggestion.label} type="button" className="mc-chip" disabled={busy}
-                      onClick={() => { markGreeted(); onAction(onboardingAction); }}>
-                      {suggestion.label}
-                    </button>
-                  );
-                }
-                const command = suggestion.command;
-                return command ? (
-                  <button key={suggestion.label} type="button" className="mc-chip" disabled={busy}
-                    onClick={() => { markGreeted(); onRunCommand(suggestion.label, command); }}>
-                    {suggestion.label}
-                  </button>
-                ) : (
-                  <button key={suggestion.label} type="button" className="mc-chip" disabled={busy || offline}
-                    onClick={() => { markGreeted(); onSend(suggestion.label); }}>
-                    {suggestion.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-      </div>}
+      </div> : null}
 
       {!resultFocused && toolActivity.length ? (
         <ul className="mc-dock-tools" aria-label="Tool activity">
@@ -364,35 +396,53 @@ export function AssistantPanel({
       ) : null}
 
       {!resultFocused ? (
-        <div className="mc-context-composer">
-          {contextStrip}
-          {offline ? <p className="mc-rail-offline">{OFFLINE_COMPOSER_HINT}</p> : null}
-          <form className="mc-dock-form" onSubmit={handleSubmit}>
-            <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
-            <textarea
-              id="assistant-message"
-              value={input}
-              rows={2}
-              disabled={offline}
-              placeholder={offline ? "Tabby is offline" : "Ask Tabby about these places or change a filter…"}
-              onChange={(event) => setInput(event.target.value)}
-            />
-            <div className="mc-dock-form-actions">
-              {hasPlaces ? (
-                <button
-                  type="button"
-                  className="mc-run-report"
-                  disabled={showDataDisabled || showDataBusy}
-                  onClick={onShowData}
-                >
-                  {showDataBusy ? "Building…" : "Run report"}
+        <div className={`mc-context-composer${reportReady ? " is-report-chat" : ""}`}>
+          <div className="mc-context-body">{contextStrip}</div>
+          <div className="mc-action-dock">
+            {offline ? <p className="mc-rail-offline">{OFFLINE_COMPOSER_HINT}</p> : null}
+            {reportReady ? (
+              <div className="mc-report-chat-intro">
+                <span className="mc-report-chat-kicker">Report ready</span>
+                <strong>Ask Tabby about this report</strong>
+                <small>Explore the results, request an explanation, or decide what to examine next.</small>
+              </div>
+            ) : null}
+            {reportReady && !busy ? (
+              <div className="mc-report-chat-prompts" aria-label="Questions to ask Tabby about this report">
+                {REPORT_CHAT_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    className="mc-report-chat-prompt"
+                    disabled={offline}
+                    onClick={() => {
+                      markGreeted();
+                      onSend(prompt);
+                    }}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <form className="mc-dock-form" onSubmit={handleSubmit}>
+              <label className="mc-sr" htmlFor="assistant-message">Analyst message</label>
+              <textarea
+                ref={composerRef}
+                id="assistant-message"
+                value={input}
+                rows={reportReady ? 3 : 1}
+                disabled={offline}
+                placeholder={offline ? "Tabby is offline" : reportReady ? "Ask Tabby about this report…" : "Ask Tabby…"}
+                onChange={(event) => setInput(event.target.value)}
+              />
+              <div className="mc-dock-form-actions">
+                <button type="submit" disabled={busy || offline || !input.trim()}>
+                  Send
                 </button>
-              ) : null}
-              <button type="submit" disabled={busy || offline || !input.trim()}>
-                Send
-              </button>
-            </div>
-          </form>
+              </div>
+            </form>
+          </div>
         </div>
       ) : null}
     </div>

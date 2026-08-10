@@ -9,13 +9,14 @@ afterEach(cleanup);
 
 describe("MapLegend", () => {
   it("documents every marker state", () => {
-    render(<MapLegend layer="reported" />);
+    const { container } = render(<MapLegend layer="reported" />);
     expect(screen.getByRole("region", { name: "Map key" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Map key", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("Saved place")).toBeInTheDocument();
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getByText(/Analyzed radius/i)).toBeInTheDocument();
     expect(screen.getByText("Low data")).toBeInTheDocument();
+    expect(container.querySelectorAll(".mc-leg-dot")).toHaveLength(2);
   });
 
   // The dots and clusters plot whichever layer is active, so a legend hard-coded to

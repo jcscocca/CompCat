@@ -92,6 +92,11 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
   const selectedColor = theme === "dark" ? "#3FBF8F" : "#0F6E56";
   const labelColor = theme === "dark" ? "#E8EDF2" : "#3A3F46";
   const labelHalo = theme === "dark" ? "#141A20" : "#FFFFFF";
+  // Precise markers reverse their neutral contrast with the basemap. Keeping one dark grey
+  // in both themes made a one-record, 4.5 px marker blend into dark streets and buildings.
+  // These remain neutral data marks — the theme switch conveys contrast, never severity.
+  const preciseDotColor = theme === "dark" ? "#C6D2DC" : "#3A3F46";
+  const preciseDotOutline = theme === "dark" ? "#141A20" : "#FFFFFF";
   map.addSource(INCIDENTS_SOURCE, {
     type: "geojson",
     data: EMPTY_FC,
@@ -159,13 +164,14 @@ export function addIncidentLayers(map: maplibregl.Map, theme: MapTheme): void {
     minzoom: PRECISE_LOCATION_MIN_ZOOM,
     filter: ["!", ["has", "point_count"]],
     paint: {
-      "circle-color": "#3A3F46",
-      "circle-opacity": 0.72,
+      "circle-color": preciseDotColor,
+      "circle-opacity": 0.92,
       // Preserve one precise marker per block location without letting a count turn it into
       // a dominant bubble. Exact record counts remain available in the click card.
       "circle-radius": ["step", ["get", "record_count"], 4.5, 2, 5.5, 10, 7, 100, 8.5],
-      "circle-stroke-color": "#FFFFFF",
-      "circle-stroke-width": 0.75,
+      "circle-stroke-color": preciseDotOutline,
+      "circle-stroke-opacity": 0.95,
+      "circle-stroke-width": 1.5,
     },
   });
   map.addLayer({
