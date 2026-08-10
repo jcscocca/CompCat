@@ -33,7 +33,7 @@ def test_overlay_documents_its_own_usage_and_sources_secrets_from_env() -> None:
     assert "${MCA_DATABASE_URL:?" in text
     # db, api, the ops-profile ingest sidecar, and caddy.
     assert text.count("restart: unless-stopped") == 4
-    assert "- VITE_CANONICAL_ORIGIN" in text  # list form: no ":-" default, see below
+    assert "VITE_CANONICAL_ORIGIN:" in text  # null mapping: no ":-" default, see below
     assert ":-" not in text  # no dev fallback defaults anywhere in the production overlay
 
 
@@ -182,6 +182,19 @@ def test_canonical_origin_reaches_the_frontend_build_when_set() -> None:
     without_origin = _render(env, drop=("VITE_CANONICAL_ORIGIN",))
     assert without_origin.returncode == 0, without_origin.stderr
     assert "VITE_CANONICAL_ORIGIN" not in without_origin.stdout
+
+
+def test_source_revision_reaches_the_runtime_image_build() -> None:
+    if not _compose_available():
+        pytest.skip("docker compose plugin not available")
+    revision = "d111c3bad64fc6c7765da12986fcf6a2f7e1909e"
+    result = _render({**_BASE_ENV, "BUILD_REVISION": revision})
+    assert result.returncode == 0, result.stderr
+    assert f"BUILD_REVISION: {revision}" in result.stdout
+
+    dockerfile = _APP_DOCKERFILE.read_text(encoding="utf-8")
+    assert 'ARG BUILD_REVISION=""' in dockerfile
+    assert "MCA_BUILD_REVISION=${BUILD_REVISION}" in dockerfile
 
 
 def test_rendered_overlay_refuses_to_render_without_a_db_password() -> None:

@@ -87,6 +87,14 @@ if ($SkipPull) {
     }
 }
 
+# The image bakes the full source revision into /health. Resolve it after the optional pull so
+# it describes the checkout actually sent to Docker; -SkipBuild correctly leaves the existing
+# image's older revision untouched.
+$env:BUILD_REVISION = (git rev-parse HEAD).Trim()
+if ($env:BUILD_REVISION -notmatch '^[0-9a-f]{40}([0-9a-f]{24})?$') {
+    throw 'Could not resolve a valid Git revision for the image build.'
+}
+
 # 0.5 Self-hosted basemap tiles: fetch once if missing (kept out of git; ~100 MB).
 #     Gates on both artifacts: the docker build bakes basemaps-assets (fonts/sprites) into
 #     the image, so a missing assets dir would ship a glyphless map on the next rebuild.

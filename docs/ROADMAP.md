@@ -1,6 +1,6 @@
 # CompCat roadmap
 
-**Last updated:** 2026-08-01 · **Status:** public release, current priorities.
+**Last updated:** 2026-08-09 · **Status:** public release, current priorities.
 
 CompCat is live as a privacy-first tool for exploring **reported Seattle SPD incident
 context** around places. It does not score safety, rank places as safe or dangerous, or infer
@@ -13,8 +13,8 @@ under [`reviews/`](reviews/).
 
 ## Now — operate the public release
 
-- Deploy the reviewed cleanup branch and verify the served revision through the build-asset
-  hashes plus `/health` and `/health/data`.
+- Verify each deploy by matching `/health`'s non-sensitive `revision` to the deployed Git commit,
+  then confirm `/health/data` is current.
 - Disable Cloudflare Web Analytics in the authenticated dashboard. The application CSP blocks
   the injected beacon, but the zone setting should still be off so the edge does not attempt it.
 - Run the production Postgres soak recipe in [`soak-testing.md`](soak-testing.md) after deploy;
@@ -28,8 +28,6 @@ under [`reviews/`](reviews/).
 
 ## Next — hardening with clear acceptance criteria
 
-- Expose non-sensitive build revision metadata from `/health` so deployed-code verification no
-  longer depends on asset hashes.
 - Add a Python 3.14 locked-image smoke step that imports and boots the built Docker image; Python
   3.11 remains the minimum/direct backend CI runtime.
 - Complete the combobox ARIA pattern and a keyboard/screen-reader pass across search, filters,

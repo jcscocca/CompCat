@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MCA_", env_file=".env", env_file_encoding="utf-8")
 
     environment: str = "local"
+    # Public, non-sensitive source revision baked into deploy images. Empty in direct local
+    # runs; when present it must look like a Git object ID so /health can never echo an
+    # accidentally miswired secret or arbitrary environment value.
+    build_revision: str = Field(default="", pattern=r"^(?:[0-9a-f]{7,64})?$")
     database_url: str = "sqlite+pysqlite:///./dev-output/mobility.sqlite3"
     user_hash_salt: str = DEFAULT_USER_HASH_SALT
     session_secret: str = DEFAULT_SESSION_SECRET

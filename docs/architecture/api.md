@@ -4,7 +4,7 @@ This document covers the auth model, tier contracts, enforcement invariant, and 
 notes for the CompCat API. The live `/openapi.json` (and Swagger UI at `/docs`) is the
 field-level source of truth; this document covers rules and tier structure only.
 
-> Updated 2026-08-02 for the canonical layer-aware analysis-report API.
+> Updated 2026-08-09 for public build-revision verification on `/health`.
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
@@ -76,7 +76,7 @@ which are unauthenticated or session-creating.
 |---|---|---|---|---|
 | `/sessions` | POST | `app/api/routes_sessions.py` | — | `{"session_state": "created"|"resumed"}` |
 | `/sessions` | DELETE | `app/api/routes_sessions.py` | — | 204; clears `mca_session` |
-| `/health` | GET | `app/api/routes_health.py` | — | `{"status": "ok"}` |
+| `/health` | GET | `app/api/routes_health.py` | — | `{"status": "ok", "revision": str \| null}` |
 | `/input-modes` | GET | `app/api/routes_input_modes.py` | — | `{"modes": [...]}` |
 | `/places` | GET | `app/api/routes_places.py` | — | `{"count": int, "places": [...]}` |
 | `/places` | POST | `app/api/routes_public_places.py` | `ManualPlaceCreate` (`app/places/schemas.py`) | `ManualPlaceResponse` |
@@ -106,6 +106,12 @@ which are unauthenticated or session-creating.
 | `/uploads` | DELETE | `app/api/routes_uploads.py` | — | `dict` (always available for erasure — see §4) |
 | `/exports/analysis.csv` | GET | `app/api/routes_exports.py` | required `?run_id=` | Current analytical detail CSV for an owned run; unknown/foreign run is 404 |
 | `/exports/tableau/place-summary.csv` | GET | `app/api/routes_exports.py` | optional `?run_id=` | CSV attachment for the requested user-owned run, or the latest run when omitted |
+
+`/health.revision` is the validated Git object ID baked into a launcher-built image. It is
+`null` for direct local runs that do not provide build metadata. The public response never reads
+the repository or invokes Git at request time; the launchers resolve the checkout once and Docker
+stores it as `MCA_BUILD_REVISION` in the runtime image. Both public launchers compare the served
+value with the checkout they built and fail clearly on a mismatch.
 
 The `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, and
 `/dashboard/neighborhood` request bodies accept an optional `layer` field (`"reported"`
