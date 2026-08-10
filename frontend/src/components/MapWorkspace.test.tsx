@@ -408,7 +408,7 @@ describe("MapWorkspace", () => {
     expect(screen.queryByText("Tabby is using")).not.toBeInTheDocument();
     expect(screen.getByText("Report scope")).toBeInTheDocument();
     expect(screen.getByText("Ask Tabby about this report")).toBeInTheDocument();
-    expect(screen.getByLabelText("Analyst message")).toHaveFocus();
+    await waitFor(() => expect(screen.getByLabelText("Analyst message")).toHaveFocus());
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     expect(await screen.findByText("Analysis setup")).toBeInTheDocument();
