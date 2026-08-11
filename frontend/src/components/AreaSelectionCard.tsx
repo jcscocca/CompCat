@@ -77,20 +77,30 @@ function SummaryTab({
   onToggleHour: (hour: number) => void;
   onToggleDay: (day: number) => void;
 }) {
-  const facets = baseSummary ?? summary;
   const active = filters.selectedTypes.length + filters.selectedHours.length + filters.selectedDays.length > 0;
-  const maxType = Math.max(1, ...facets.type_mix.map((row) => row.count));
+  const optionSummary = baseSummary ?? summary;
+  const visibleTypeLabels = new Set(optionSummary.type_mix.filter((row) => row.label !== "Other").map((row) => row.label));
+  const typeRows = optionSummary.type_mix.map((row) => {
+    const count = row.label === "Other"
+      ? Object.entries(summary.type_counts).reduce((total, [label, value]) => total + (visibleTypeLabels.has(label) ? 0 : value), 0)
+      : summary.type_counts[row.label] ?? 0;
+    return { ...row, count, share: summary.record_count ? count / summary.record_count : 0 };
+  });
+  const maxType = Math.max(1, ...typeRows.map((row) => row.count));
+  const temporalOptionsAvailable = optionSummary.temporal.total_with_time > 0;
+  const missingTimeScope = active ? "matching" : "area";
   return (
     <div className="mc-area-summary">
       <div className="mc-area-total">
         <strong>{summary.record_count.toLocaleString()}</strong>
-        <span>{countNoun(noun, summary.record_count)} across {summary.location_count.toLocaleString()} mapped block {summary.location_count === 1 ? "location" : "locations"}{active ? `, matching filters (${facets.record_count.toLocaleString()} total in area)` : ""}</span>
+        <span>{countNoun(noun, summary.record_count)} across {summary.location_count.toLocaleString()} mapped block {summary.location_count === 1 ? "location" : "locations"}{active ? `, matching filters (${optionSummary.record_count.toLocaleString()} total in area)` : ""}</span>
       </div>
+      {active && summary.record_count === 0 ? <p className="mc-area-note" role="status">No records match the active filters. Adjust or clear a filter to continue.</p> : null}
       <section>
         <h4>Type mix</h4>
-        {facets.type_mix.length ? (
+        {typeRows.length ? (
           <div className="mc-area-type-list">
-            {facets.type_mix.map((row) => (
+            {typeRows.map((row) => (
               <button key={row.label} type="button" aria-label={`${titleCase(row.label)}: ${row.count}`} aria-pressed={filters.selectedTypes.includes(row.label)} disabled={row.label === "Other"} title={row.label === "Other" ? "Grouped types remain available in the Data table." : `${row.label}: ${row.count}`} onClick={() => onToggleType(row.label)}>
                 <span>{titleCase(row.label)}</span>
                 <i><b style={{ width: `${row.count / maxType * 100}%` }} /></i>
@@ -102,15 +112,15 @@ function SummaryTab({
       </section>
       <section>
         <h4>When records occurred</h4>
-        {facets.temporal.total_with_time ? (
+        {temporalOptionsAvailable ? (
           <>
             <h5>Hour of day</h5>
-            <Bars counts={facets.temporal.hour_counts} labels={Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`)} label="Records by hour of day" selected={filters.selectedHours} onToggle={onToggleHour} />
+            <Bars counts={summary.temporal.hour_counts} labels={Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`)} label="Records by hour of day" selected={filters.selectedHours} onToggle={onToggleHour} />
             <h5>Day of week</h5>
-            <Bars counts={facets.temporal.dow_counts} labels={DAYS} label="Records by day of week" selected={filters.selectedDays} onToggle={onToggleDay} />
+            <Bars counts={summary.temporal.dow_counts} labels={DAYS} label="Records by day of week" selected={filters.selectedDays} onToggle={onToggleDay} />
           </>
         ) : <p>No matching records have a recorded primary time.</p>}
-        {facets.temporal.without_time ? <p className="mc-area-note">{facets.temporal.without_time} area {facets.temporal.without_time === 1 ? "record has" : "records have"} no primary time and are excluded from these charts.</p> : null}
+        {summary.temporal.without_time ? <p className="mc-area-note">{summary.temporal.without_time} {missingTimeScope} {summary.temporal.without_time === 1 ? "record has" : "records have"} no primary time and {summary.temporal.without_time === 1 ? "is" : "are"} excluded from these charts.</p> : null}
       </section>
       <p className="mc-area-note">Only records with public mappable coordinates can be assigned to this area.</p>
       {summary.highlight_mode === "grid" ? <p className="mc-area-note">The map groups this large selection into geographic cells; counts and data still cover every matching record.</p> : null}

@@ -100,6 +100,12 @@ def area_selection_summary(
         "location_count": len(location_counts),
         "counting_basis": "records with mappable coordinates inside the selected area",
         "type_mix": _type_mix(category_counts, record_count),
+        # Keep the compact top-N mix for presentation, plus exact counts for every type.
+        # The inspector uses the latter to preserve its original selectable buckets while
+        # showing their current values after linked filters are applied.
+        "type_counts": dict(
+            sorted(category_counts.items(), key=lambda item: item[0].casefold())
+        ),
         "temporal": {
             "hour_counts": hour_counts,
             "dow_counts": dow_counts,

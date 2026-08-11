@@ -59,6 +59,7 @@ const areaSummary = {
     { label: "ASSAULT", count: 5, share: 0.278 },
     { label: "BURGLARY", count: 4, share: 0.222 },
   ],
+  type_counts: { THEFT: 9, ASSAULT: 5, BURGLARY: 4 },
   temporal: {
     hour_counts: Array.from({ length: 24 }, (_, hour) => (hour === 12 ? 5 : hour === 18 ? 4 : hour % 5 === 0 ? 1 : 0)),
     dow_counts: [2, 4, 1, 3, 2, 4, 2],
@@ -70,6 +71,70 @@ const areaSummary = {
   highlight_points: [],
   highlight_location_count: 11,
 };
+
+type AreaFilterPayload = {
+  selected_types?: string[];
+  selected_hours?: number[];
+  selected_days?: number[];
+};
+
+function areaSummaryFor(payload: AreaFilterPayload) {
+  const selectedTypes = payload.selected_types ?? [];
+  const hasTypes = selectedTypes.length > 0;
+  const hasHours = Boolean(payload.selected_hours?.length);
+  const hasDays = Boolean(payload.selected_days?.length);
+  if (!hasTypes && !hasHours && !hasDays) return areaSummary;
+
+  const baseTypeCounts: Record<string, number> = { THEFT: 9, ASSAULT: 5, BURGLARY: 4 };
+  const selectedTypeTotal = selectedTypes.reduce((total, label) => total + (baseTypeCounts[label] ?? 0), 0);
+  const recordCount = hasDays
+    ? (hasHours ? (hasTypes ? 2 : 3) : (hasTypes ? 2 : 4))
+    : hasHours ? (hasTypes ? 3 : 5) : selectedTypeTotal;
+  const typeCounts: Record<string, number> = hasTypes
+    ? hasHours || hasDays
+      ? { [selectedTypes[0]]: recordCount }
+      : Object.fromEntries(selectedTypes.map((label) => [label, baseTypeCounts[label] ?? 0]))
+    : hasHours && hasDays
+      ? { THEFT: 2, ASSAULT: 1 }
+      : hasHours
+        ? { THEFT: 3, ASSAULT: 1, BURGLARY: 1 }
+        : { THEFT: 2, ASSAULT: 1, BURGLARY: 1 };
+  const hourCounts = Array(24).fill(0);
+  if (hasHours || hasDays) {
+    hourCounts[12] = recordCount;
+  } else {
+    hourCounts[0] = 1;
+    hourCounts[5] = 1;
+    hourCounts[10] = 1;
+    hourCounts[12] = 3;
+    hourCounts[18] = 2;
+    hourCounts[20] = 1;
+  }
+  const dowCounts = hasDays
+    ? [0, recordCount, 0, 0, 0, 0, 0]
+    : hasHours
+      ? [1, recordCount - 1, 0, 0, 0, 0, 0]
+      : [1, 2, 1, 1, 1, 2, 1];
+  const typeMix = Object.entries(typeCounts)
+    .map(([label, count]) => ({ label, count, share: count / recordCount }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+
+  return {
+    ...areaSummary,
+    selection_id: `visual-area-${recordCount}`,
+    record_count: recordCount,
+    location_count: Math.min(recordCount, 6),
+    type_mix: typeMix,
+    type_counts: typeCounts,
+    temporal: {
+      ...areaSummary.temporal,
+      hour_counts: hourCounts,
+      dow_counts: dowCounts,
+      total_with_time: recordCount,
+    },
+    highlight_location_count: Math.min(recordCount, 6),
+  };
+}
 
 const areaRecords = {
   selection_id: "visual-area",
@@ -244,9 +309,15 @@ export async function mockEmptyDashboard(
     } else if (path === "/dashboard/incident-points") {
       await json(incidentPoints);
     } else if (path === "/dashboard/area-selection/summary") {
-      await json(areaSummary);
+      await json(areaSummaryFor(request.postDataJSON() as AreaFilterPayload));
     } else if (path === "/dashboard/area-selection/records") {
       await json(areaRecords);
+    } else if (path === "/exports/area-selection.csv") {
+      await route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/csv", "Content-Disposition": "attachment; filename=compcat-area-selection.csv" },
+        body: "incident_id,offense_subcategory\nvisual-record,THEFT\n",
+      });
     } else if (path === "/dashboard/reports") {
       await json(sharedReport);
     } else if (path === "/dashboard/incidents") {

@@ -193,8 +193,11 @@ selections use grid highlights that still represent
 all matching locations and disclose the aggregation while counts, rows, and exports remain exact.
 Type, hour, and day bars also act as linked filters: values within one dimension are combined with
 OR, dimensions are combined with AND, and removable chips preserve a visible filter scope. These
-filters update the total, map highlights, paginated rows, and CSV while the original area facets
-remain visible for adding or removing selections. Saved or named areas are not part of this flow.
+filters update the total, location count, type mix, temporal bars and exact-value tables, missing-time
+disclosure, map highlights, paginated rows, and CSV. The original area summary supplies only the
+total-in-area denominator and stable selectable type/hour/day buckets; current filtered counts are
+overlaid on those buckets, including zeros, so users can add or remove OR selections without stale
+chart values. Saved or named areas are not part of this flow.
 
 Map navigation is decoupled from that endpoint's response time. MapLibre's trackpad and
 mouse-wheel rates are deliberately slower than its defaults (`1/180` and `1/600`) so small

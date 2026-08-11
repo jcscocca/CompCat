@@ -97,6 +97,11 @@ def test_polygon_summary_uses_exact_membership_and_complete_aggregates(tmp_path)
         {"label": "BURGLARY", "count": 1, "share": 0.25},
         {"label": "Uncategorized", "count": 1, "share": 0.25},
     ]
+    assert result["type_counts"] == {
+        "BURGLARY": 1,
+        "THEFT": 2,
+        "Uncategorized": 1,
+    }
     session.close()
 
 
@@ -142,6 +147,7 @@ def test_linked_cross_filters_or_within_dimensions_and_and_across_them(tmp_path)
     )
     assert result["record_count"] == 2
     assert [row["label"] for row in result["type_mix"]] == ["BURGLARY", "THEFT"]
+    assert result["type_counts"] == {"BURGLARY": 1, "THEFT": 1}
     assert result["temporal"]["hour_counts"][11:13] == [1, 1]
 
     page = area_selection_records(
@@ -158,6 +164,24 @@ def test_linked_cross_filters_or_within_dimensions_and_and_across_them(tmp_path)
     assert rows[0]["selected_type_filters"] == '["THEFT", "BURGLARY"]'
     assert rows[0]["selected_hour_filters"] == "[11, 12, 14]"
     assert rows[0]["selected_day_filters"] == "[6, 0, 2]"
+    session.close()
+
+
+def test_summary_keeps_exact_type_counts_for_buckets_folded_into_other(tmp_path) -> None:
+    session = _session(tmp_path)
+    session.add_all([
+        _incident(number, offense_subcategory=f"TYPE_{number:02d}")
+        for number in range(1, 14)
+    ])
+    session.commit()
+
+    result = area_selection_summary(session, AreaSelectionRequest(**_scope()))
+
+    assert len(result["type_mix"]) == 12
+    assert result["type_mix"][-1] == {"label": "Other", "count": 2, "share": 2 / 13}
+    assert result["type_counts"] == {
+        f"TYPE_{number:02d}": 1 for number in range(1, 14)
+    }
     session.close()
 
 
