@@ -186,9 +186,10 @@ lasso input. It is transient map state rather than a saved place or assistant tu
 validates and clips the single-ring GeoJSON polygon to the Seattle data extent, uses its bounding
 box to constrain the SQL candidate scan, and uses Shapely's boundary-inclusive prepared geometry
 for exact membership on both SQLite and Postgres. The Tabby rail becomes a Summary/Data inspector:
-complete type and temporal aggregates, scope-bound cursor pages of underlying records, and a
-formula-safe streaming CSV export all share that membership iterator. Up to 5,000 selected block
-locations are highlighted exactly; larger selections use grid highlights that still represent
+the active date window remains visible while complete type and temporal aggregates, scope-bound
+cursor pages of underlying records, and a formula-safe streaming CSV export all share that
+membership iterator. Up to 5,000 selected block locations are highlighted exactly; larger
+selections use grid highlights that still represent
 all matching locations and disclose the aggregation while counts, rows, and exports remain exact.
 Type, hour, and day bars also act as linked filters: values within one dimension are combined with
 OR, dimensions are combined with AND, and removable chips preserve a visible filter scope. These
