@@ -3,7 +3,10 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/visual",
   outputDir: "./test-results/visual",
-  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}",
+  // Text rasterization differs materially between macOS development and Linux CI. Keep
+  // the strict visual threshold by reviewing one baseline per supported platform instead
+  // of weakening comparisons until cross-platform noise passes.
+  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-{platform}{ext}",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
