@@ -26,7 +26,7 @@ const analysis: AnalysisSettings = { startDate: "2025-01-01", endDate: "2025-12-
 const summary = {
   selection_id: "s1", record_count: 2, location_count: 1,
   counting_basis: "records with mappable coordinates inside the selected area",
-  type_mix: [], temporal: { hour_counts: Array(24).fill(0), dow_counts: Array(7).fill(0), hour_by_dow: Array.from({ length: 7 }, () => Array(24).fill(0)), total_with_time: 0, without_time: 2 },
+  type_mix: [], type_counts: {}, temporal: { hour_counts: Array(24).fill(0), dow_counts: Array(7).fill(0), hour_by_dow: Array.from({ length: 7 }, () => Array(24).fill(0)), total_with_time: 0, without_time: 2 },
   highlight_mode: "locations" as const,
   highlight_points: [{ id: "p1", latitude: 47.61, longitude: -122.33, record_count: 2, location_count: 1 }],
   highlight_location_count: 1,
@@ -156,5 +156,12 @@ describe("useAreaSelection", () => {
     await act(async () => result.current.downloadCsv());
     expect(exportAreaSelectionCsv).toHaveBeenLastCalledWith(expect.objectContaining(expectedFilters));
     expect(downloadBlob).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.clearFilters());
+    await waitFor(() => expect(result.current.activeFilterCount).toBe(0));
+    expect(getAreaSelectionSummary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selected_types: [], selected_hours: [], selected_days: [] }),
+      expect.any(AbortSignal),
+    );
   });
 });

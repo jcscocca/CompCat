@@ -15,6 +15,7 @@ const summary: AreaSelectionSummary = {
   location_count: 2,
   counting_basis: "records with mappable coordinates inside the selected area",
   type_mix: [{ label: "THEFT", count: 3, share: 1 }],
+  type_counts: { THEFT: 3 },
   temporal: {
     hour_counts: Array.from({ length: 24 }, (_, hour) => hour === 12 ? 3 : 0),
     dow_counts: [0, 3, 0, 0, 0, 0, 0],
@@ -80,6 +81,88 @@ describe("AreaSelectionCard", () => {
     expect(onToggleType).toHaveBeenCalledWith("THEFT");
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders every summary metric from the filtered response while preserving filter options", () => {
+    const hourCounts = Array(24).fill(0);
+    hourCounts[12] = 1;
+    const filtered: AreaSelectionSummary = {
+      ...summary,
+      selection_id: "selection-filtered",
+      record_count: 1,
+      location_count: 1,
+      type_mix: [{ label: "THEFT", count: 1, share: 1 }],
+      type_counts: { THEFT: 1 },
+      temporal: {
+        ...summary.temporal,
+        hour_counts: hourCounts,
+        dow_counts: [0, 1, 0, 0, 0, 0, 0],
+        total_with_time: 1,
+        without_time: 0,
+      },
+    };
+
+    render(card({
+      summary: filtered,
+      filters: { selectedTypes: ["THEFT"], selectedHours: [12], selectedDays: [1] },
+    }));
+
+    expect(screen.getByText(/matching filters \(3 total in area\)/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theft: 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "12:00: 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "00:00: 0" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tuesday: 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Monday: 0" })).toBeInTheDocument();
+  });
+
+  it("keeps zero-count buckets available when active filters have no matches", () => {
+    render(card({
+      summary: {
+        ...summary,
+        record_count: 0,
+        location_count: 0,
+        type_mix: [],
+        type_counts: {},
+        temporal: {
+          ...summary.temporal,
+          hour_counts: Array(24).fill(0),
+          dow_counts: Array(7).fill(0),
+          total_with_time: 0,
+          without_time: 0,
+        },
+      },
+      filters: { selectedTypes: ["THEFT"], selectedHours: [], selectedDays: [] },
+    }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("No records match the active filters");
+    expect(screen.getByRole("button", { name: "Theft: 0" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "12:00: 0" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tuesday: 0" })).toBeInTheDocument();
+  });
+
+  it("forwards redraw, clear, close, page-size, and previous actions", () => {
+    const onRedraw = vi.fn();
+    const onClear = vi.fn();
+    const onClose = vi.fn();
+    const onPageSize = vi.fn();
+    const onPrevious = vi.fn();
+    render(card({ onRedraw, onClear, onClose, onPageSize, onPrevious, canPrevious: true }));
+
+    fireEvent.click(screen.getByText("Redraw"));
+    fireEvent.click(screen.getByRole("button", { name: "Rectangle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Polygon" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lasso" }));
+    expect(onRedraw.mock.calls.map(([mode]) => mode)).toEqual(["rectangle", "polygon", "lasso"]);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close area data" }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Data" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Rows" }), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    expect(onPageSize).toHaveBeenCalledWith(25);
+    expect(onPrevious).toHaveBeenCalledTimes(1);
   });
 
   it("switches to paginated underlying data and requests the complete export", async () => {

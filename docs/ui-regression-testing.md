@@ -15,7 +15,7 @@ cannot represent.
 | Desktop rail resizing/focus, mobile bar/half/full snaps, map inaccessibility at full snap | `MapWorkspace.test.tsx`, `BottomSheet.test.tsx`, and stylesheet contract tests |
 | Context pickers, custom 100–1,000 m radii, date validation/presets, layer availability, copy-link disclosure | `ContextStrip.test.tsx` and focused `frontend/src/lib/` tests |
 | Canonical report rendering, expansion, exports, coverage adjustments, reference distributions, trends, incident rows | `AnalysisCard.test.tsx`, `TrendSection.test.tsx`, `reportExport.test.ts`, and backend report tests |
-| Area rectangle/polygon/lasso behavior, keyboard alternative, linked filters, tabs, rows, highlights, pagination, CSV | `MapCanvas.test.tsx`, `AreaSelectionCard.test.tsx`, `useAreaSelection.test.ts`, and `tests/test_area_selection.py` |
+| Area rectangle/polygon/lasso behavior, keyboard alternative, linked filters with synchronized type/hour/day counts, zero-result buckets, tabs, rows, highlights, pagination, CSV, close/reopen, and redraw cancellation | `MapCanvas.test.tsx`, `AreaSelectionCard.test.tsx`, `useAreaSelection.test.ts`, `desktop.spec.ts`, and `tests/test_area_selection.py` |
 | Map clusters, stacks, popups, active-layer wording, theme rebuilds, badges, camera fitting | `MapCanvas.test.tsx`, `IncidentDisclosure.test.tsx`, `MapLegend.test.tsx`, and map-style tests |
 | Composed accessibility in both themes across desktop onboarding/reports/dialogs/area views and mobile snaps/area views/320-pixel text spacing | 26 Playwright Axe cases in `accessibility.desktop.spec.ts` and `accessibility.mobile.spec.ts` |
 | Stable browser composition | Playwright baselines for desktop light onboarding, desktop About dialog, desktop area inspector, and mobile dark half-sheet |
@@ -102,7 +102,7 @@ launch the worktree app on an unused port, then verify:
 
 1. desktop light and dark onboarding;
 2. one saved-place report and one multi-place report;
-3. area selection Summary/Data tabs plus one linked filter;
+3. area selection Summary/Data tabs plus cumulative type/hour/day filters, removable chips, exact-value tables, close/reopen, redraw cancellation, pagination, and CSV scope;
 4. mobile bar, half, and full sheet snaps;
 5. keyboard focus, Escape behavior, and map inaccessibility at the full snap; and
 6. the product-language sweep: no safety ranking or personal-presence claims, with only the fixed
