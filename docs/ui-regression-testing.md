@@ -24,8 +24,10 @@ The browser tests use deterministic API fixtures in `frontend/tests/visual/mockD
 4.12.1 runs WCAG 2 A/AA, WCAG 2.1 A/AA, WCAG 2.2 AA, and best-practice rules against those states.
 For screenshots, the MapLibre canvas itself is hidden because GPU rendering varies across platforms;
 the map container, controls, disclosures, overlays, top bar, rail/sheet, modal, and area inspector
-remain. The snapshots tolerate at most a one-percent changed-pixel ratio so minor font rasterization
-does not make Linux and macOS disagree while layout changes remain visible.
+remain. macOS development and Linux CI use separately reviewed baselines because text rasterization
+differs materially between the operating systems. Each platform retains the same strict one-percent
+changed-pixel limit, so cross-platform noise cannot force a tolerance broad enough to hide layout
+changes.
 
 ## Commands
 
@@ -73,9 +75,24 @@ npm run test:visual:update
 npm run test:visual
 ```
 
-Commit the changed PNGs with the UI change. A new important composed state should usually add a new
-baseline; a state whose risk is primarily logic or semantics should stay in the faster component
-suite.
+The update command writes only the current operating system's files (`darwin` on macOS, `linux` in
+CI-compatible containers). Keep both platform sets synchronized for intentional layout changes and
+inspect each actual/diff before committing. Commit the changed PNGs with the UI change. A new
+important composed state should usually add a new baseline; a state whose risk is primarily logic
+or semantics should stay in the faster component suite.
+
+From the repository root, regenerate the Linux set with the Playwright image matching the installed
+`@playwright/test` version (currently 1.62.1):
+
+```bash
+docker run --rm --ipc=host \
+  -v "${PWD}":/work \
+  -v compcat-playwright-node-modules:/work/frontend/node_modules \
+  -w /work/frontend \
+  mcr.microsoft.com/playwright:v1.62.1-noble \
+  bash -lc "npm ci && npm run test:visual:update"
+docker volume rm compcat-playwright-node-modules
+```
 
 ## Live built-app check
 

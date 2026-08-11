@@ -30,9 +30,10 @@ not rewritten to describe current code.
   routes, the README omits a route, the mapped-table count drifts, or a maintained local Markdown
   link breaks. Archived `docs/superpowers/` plans are excluded because stale source links are part of
   their stated historical contract.
-- Playwright now captures reviewed platform-independent baselines for desktop light onboarding, the
+- Playwright now captures reviewed macOS and Linux baselines for desktop light onboarding, the
   desktop About modal, the desktop area inspector, and the mobile dark half-sheet. Network responses
-  are deterministic; only the GPU-dependent map canvas is hidden.
+  are deterministic; only the GPU-dependent map canvas is hidden. Per-platform images retain the
+  strict one-percent threshold without treating operating-system text rasterization as product drift.
 - Twenty-six durable Playwright accessibility cases run Axe 4.12.1 in both themes across desktop
   onboarding, reports, dialogs, area views, all mobile sheet snaps, and a 320-pixel text-spacing
   state. The area cases also assert keyboard tabs, exact-value disclosure, target sizing, and the
