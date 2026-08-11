@@ -37,6 +37,7 @@ describe("AreaSelectionCard", () => {
     expect(screen.getByRole("heading", { name: "Area data" })).toBeInTheDocument();
     expect(screen.getByText(/reported incidents across 2 mapped block locations/i)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /records by hour of day/i })).toBeInTheDocument();
+    expect(screen.getByText("Scroll for all 24 hours →")).toBeInTheDocument();
     expect(screen.getAllByText("View exact values")).toHaveLength(2);
   });
 
@@ -78,6 +79,7 @@ describe("AreaSelectionCard", () => {
     render(card({ onNext, onExport }));
     fireEvent.click(screen.getByRole("tab", { name: "Data" }));
     expect(screen.getByRole("table")).toHaveTextContent("100 block of Pine St");
+    expect(screen.getByRole("region", { name: /area records table/i })).toHaveAttribute("tabindex", "0");
     screen.getByRole("button", { name: "Next" }).click();
     expect(onNext).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));

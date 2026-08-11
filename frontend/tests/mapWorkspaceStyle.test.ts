@@ -97,6 +97,16 @@ describe("contrast", () => {
       }
     }
   });
+
+  it("keeps dark report accents readable as text and as filled-card backgrounds", () => {
+    const darkSurface = token("surface", "dark");
+    const darkOnAccent = token("on-accent", "dark");
+    for (const accent of ["#7FE0BC", "#F2B66D", "#8DB8F2"]) {
+      expect(contrast(accent, darkSurface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(accent, darkOnAccent)).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(css).toMatch(/\[data-theme="dark"\] \.mc-report-card\{--report-accent:#7FE0BC;--report-on-accent:#0E1519;/);
+  });
 });
 
 describe("motion and mobile chrome", () => {

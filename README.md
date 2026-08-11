@@ -36,10 +36,13 @@ geocoding and SPD ingestion are proxied or performed server-side.
 
 - Map-first dashboard: search an address, drop a pin, type a place, or paste a list of places.
 - Runs incident analysis for selected places at chosen radii (e.g. 250 m / 500 m / 1000 m) and
-  a date range, filtered by offense category (all / person / property / society).
+  a date range across reported incidents, arrest activity, or 911 calls for service. Reported
+  incidents and arrests can be narrowed with their layer-appropriate categories.
 - Shows reported-incident counts, nearest-incident distance, the category mix, the top specific
   offenses, and the individual incident rows behind the numbers.
 - Compares two or more candidate addresses side by side at a single radius.
+- Selects a transient rectangle, polygon, or lasso on the map for linked type/time filtering,
+  exact record inspection, map highlights, and a complete CSV export of the selected area.
 - Optional **CompCat Analyst** chat — *Tabby*, the case-desk analyst — that answers questions
   grounded in your current dashboard data ("how does this address compare to my downtown one?").
 - Statistical, exposure-adjusted rate comparison of place buffers.
@@ -75,10 +78,14 @@ Analyze/Compare tabs.
   equal-radius circles centered on eligible Seattle street segments; two or more also produce
   the separate place-to-place statistical comparison. Expanding a card reveals MCPP, sector,
   and city reference distributions, adequacy/method details, monthly trend, category
-  breakdown, incident rows, and a run-scoped CSV link. Neutral presence badges connect
+  breakdown, incident rows, and a canonical frozen report. Neutral presence badges connect
   analyzed map pins back to their latest card.
-- **Exports** — card links export that exact stored run. The manage-places dialog also exposes the
-  current-session place-summary CSV and per-place privacy toggles.
+- **Area selection** — **Select area** supports rectangles, click-built polygons, and freehand
+  lassos. Its Summary/Data inspector links type, hour, and weekday filters to the count, map
+  highlights, underlying rows, and complete CSV export without creating a saved place.
+- **Exports** — report cards can print/save PDF, download versioned JSON, export neighborhood
+  trend CSVs, or package the report data as a ZIP. The manage-places dialog separately exposes
+  the current-session place-summary CSV and per-place privacy toggles.
 
 The map renders from a self-hosted Seattle vector-tile extract (Protomaps/OpenStreetMap data), so
 no third-party tile server ever sees where users look; if the tile artifact is missing the map
@@ -110,7 +117,9 @@ the last two via their official SDKs. By default CompCat reaches a local endpoin
 `MCA_LLM_BASE_URL` (`http://127.0.0.1:8080/v1`) using the model `MCA_LLM_MODEL`. If no
 endpoint is running, the rest of the dashboard works normally — only the Analyst panel is
 limited to its deterministic controls; free-text questions pause while chips, filters, cards,
-badges, and exports continue to work. See [Running the Analyst](#running-the-analyst-optional).
+badges, and exports continue to work. Up to three independently selected providers can form a
+failover chain; duplicate backends are dropped and the optional third slot never inherits the
+primary compatible-endpoint key. See [Running the Analyst](#running-the-analyst-optional).
 
 ## Input modes
 
@@ -253,7 +262,10 @@ make run
 To use a hosted model instead of a local endpoint, set `MCA_LLM_PROVIDER=anthropic`
 (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`) for Claude, or `openai_native`
 (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI's API — both via their official SDKs.
-See `.env.example` for the full set of knobs.
+`MCA_LLM_FALLBACK_PROVIDER` and `MCA_LLM_THIRD_PROVIDER` configure two optional, independent
+failover slots. Compatible-endpoint slots also need their slot-specific base URL and model;
+key-based Claude/OpenAI slots activate from their provider key. See `.env.example` and the
+[assistant architecture](docs/architecture/assistant.md#6-llm-client) for the complete contract.
 
 Without an LLM endpoint the dashboard still works. Free-text planning pauses, while Tabby's
 deterministic command chips, filters, cards, badges, and exports remain available.
@@ -284,9 +296,13 @@ curl --fail --show-error -X POST \
 ```bash
 make test        # backend tests (pytest)
 make lint        # ruff
-make test-all    # backend tests + lint + frontend tests + frontend build
+make test-all    # backend + lint + frontend unit/visual tests + production build
 make migrate     # apply Alembic migrations (for Postgres/production)
 ```
+
+The browser visual suite needs Chromium once per machine: `cd frontend && npx playwright install
+chromium`. See [UI regression testing](docs/ui-regression-testing.md) before intentionally updating
+the reviewed screenshots.
 
 ## Configuration
 
@@ -310,7 +326,9 @@ salt/secret and forces secure cookies.
 | `MCA_SOCRATA_DATASET_ID` | `tazs-3rd5` | SPD "Crime Data: 2008-Present" dataset id. |
 | `MCA_SOCRATA_RECONCILIATION_DAYS` | `14` | Days before each source's stored watermark revisited by automatic backfills to reconcile late rows and corrections (`0` disables overlap; maximum `365`). Explicit `start_date` requests are not widened (the existing source floor still applies). |
 | `SOCRATA_APP_TOKEN` | _unset_ | Optional Socrata app token for higher rate limits. |
-| `MCA_LLM_PROVIDER` | `openai` | Analyst backend: `openai` (OpenAI-compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK). `MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently. |
+| `MCA_LLM_PROVIDER` | `openai` | Primary Analyst backend: `openai` (OpenAI-compatible endpoint), `openai_native` (OpenAI SDK), or `anthropic` (Claude SDK). |
+| `MCA_LLM_FALLBACK_PROVIDER` | `openai` | Optional second provider, selected independently; a compatible endpoint also needs its fallback base URL and model. |
+| `MCA_LLM_THIRD_PROVIDER` | _unset_ | Optional third provider. A compatible endpoint needs its third-slot base URL/model/key; its key never inherits from the primary slot. |
 | `MCA_LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible LLM endpoint base URL (provider `openai`). |
 | `MCA_LLM_MODEL` | `gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k` | Model name sent to the endpoint (provider `openai`). |
 | `MCA_LLM_TIMEOUT_S` | `120` | Read timeout in seconds for OpenAI-compatible calls. Raising it does not slow providers that respond sooner. |
@@ -346,13 +364,14 @@ design, and the roadmap — see [`docs/`](docs/README.md).
 | Sessions | `POST /sessions` · `DELETE /sessions` |
 | Input modes | `GET /input-modes` |
 | Places | `GET /places` · `POST /places` · `DELETE /places` · `POST /places/bulk` · `PATCH /places/{id}` · `DELETE /places/{id}` |
-| Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` · `POST /dashboard/neighborhood` · `GET /dashboard/trends` · `GET /dashboard/freshness` · `GET /dashboard/beats` · `GET /dashboard/mcpp` · `POST /dashboard/incident-points` · `GET /dashboard/geocode` |
+| Dashboard | `GET /dashboard/summary` · `POST /dashboard/analyze` · `POST /dashboard/incidents` · `POST /dashboard/compare` · `POST /dashboard/neighborhood` · `GET /dashboard/trends` · `GET /dashboard/freshness` · `GET /dashboard/beats` · `GET /dashboard/mcpp` · `POST /dashboard/incident-points` · `POST /dashboard/area-selection/summary` · `POST /dashboard/area-selection/records` · `GET /dashboard/geocode` |
+| Canonical reports | `GET /dashboard/report-profiles` · `POST /dashboard/reports` · `GET /dashboard/reports/{id}` · `DELETE /dashboard/reports/{id}` · `DELETE /dashboard/reports` |
 | Analyst | `POST /assistant/chat` · `POST /assistant/commands` (Server-Sent Events) |
 | Statistical analysis (internal) | `POST /internal/analysis/sites/compare` · `GET /internal/analysis/comparisons/{id}` |
 | Uploads | `POST /uploads` (feature-gated) · `DELETE /uploads` (always available for erasure) |
-| Exports | `GET /exports/analysis.csv` (required `run_id`) · `GET /exports/tableau/place-summary.csv` (optional `run_id`) |
+| Exports | `GET /exports/analysis.csv` (required `run_id`) · `POST /exports/area-selection.csv` · `GET /exports/tableau/place-summary.csv` (optional `run_id`) |
 | Crime/maintenance | `POST /internal/crime/ingest/sample` · `POST /internal/crime/summarize` · `POST /admin/crime/ingest/socrata` · hidden `POST /admin/maintenance/retention-sweep` |
-| Internal/demo | `POST /internal/imports` · `GET /internal/imports/{id}` · `POST /internal/imports/{id}/normalize` |
+| Internal/demo | `GET /internal/places` · `GET /internal/dashboard/summary` · `POST /internal/imports` · `GET /internal/imports/{id}` · `POST /internal/imports/{id}/normalize` · `GET /internal/exports/tableau/place-summary.csv` |
 
 A minimal end-to-end flow with `curl`:
 
@@ -386,10 +405,11 @@ prompts, semantic context, and tool results. They are not personal-risk metrics.
 
 ## Data sources and caveats
 
-Crime data comes from Seattle's open-data portal — by default the SPD "Crime Data: 2008-Present"
-dataset (`tazs-3rd5`). Reported crime data can be incomplete, delayed, corrected, or
-geographically generalized, and personal location history can be incomplete, inaccurate, or
-biased by device behavior. CompCat provides context summaries, not safety predictions.
+Data comes from Seattle's open-data portal: SPD "Crime Data: 2008-Present" (`tazs-3rd5`),
+SPD arrest records (`9bjs-7a7w`), and SPD 911 calls for service (`33kz-ixgy`). The three analysis
+layers remain disjoint. Source data can be incomplete, delayed, corrected, or geographically
+generalized, and personal location history can be incomplete, inaccurate, or biased by device
+behavior. CompCat provides context summaries, not safety predictions.
 
 Police beat boundaries come from the City of Seattle's Seattle GeoData open-data site
 (Seattle Police Department Beats layer; source: City of Seattle, Seattle Police Department

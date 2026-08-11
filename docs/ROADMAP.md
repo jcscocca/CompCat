@@ -1,6 +1,6 @@
 # CompCat roadmap
 
-**Last updated:** 2026-08-09 · **Status:** public release, current priorities.
+**Last updated:** 2026-08-10 · **Status:** public release, current priorities.
 
 CompCat is live as a privacy-first tool for exploring **reported Seattle SPD incident
 context** around places. It does not score safety, rank places as safe or dangerous, or infer
@@ -25,6 +25,9 @@ under [`reviews/`](reviews/).
 - Keep public uploads and the internal tier off. The public launcher validates the effective
   Compose environment, isolated database target, proxy posture, and non-placeholder secrets
   before Docker starts.
+- Treat browser screenshot changes as product changes: review the desktop light, modal, and
+  mobile dark baselines before accepting them, then run the live checklist in
+  [`ui-regression-testing.md`](ui-regression-testing.md).
 
 ## Next — hardening with clear acceptance criteria
 
@@ -36,8 +39,6 @@ under [`reviews/`](reviews/).
   disclosure.
 - Decide whether share-link locations should move from the query string to the URL fragment.
   Either way, keep the current explicit warning that links contain exact locations and labels.
-- Add a mechanically checked route inventory generated from the app so README and API docs cannot
-  silently drift from registered public/internal/admin surfaces.
 
 ## Later — research, not promises
 
@@ -54,5 +55,6 @@ under [`reviews/`](reviews/).
 
 For every roadmap change: update the canonical doc, add a regression at the lowest durable
 boundary, run `make test-all`, exercise the built UI, and confirm the product invariant still
-holds. Deployment or external-dashboard actions must be recorded separately when local code
-cannot perform them.
+holds. `tests/test_documentation_contract.py` keeps the canonical API table, README route
+inventory, model count, and maintained local links synchronized with code. Deployment or
+external-dashboard actions must be recorded separately when local code cannot perform them.

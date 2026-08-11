@@ -212,8 +212,10 @@ structurally from the incident-points layer, counted, and disclosed as an
 
 This is a product where the query itself is the sensitive data: nobody needs a user's saved
 places to learn something about them, because watching which addresses they look up, in which
-order, is enough. So the deployed app makes **zero third-party requests**, and the interesting
-part is what had to be rebuilt to get there.
+order, is enough. So the deployed **browser** makes **zero third-party requests**, and the
+interesting part is what had to be rebuilt to get there. Controlled server-side calls still
+broker address search and the configured language model, while data ingestion runs as an
+operator task; none exposes a user's map viewport to a third-party tile or font host.
 
 The map is the big one. A map that loads tiles from a CDN tells that CDN, viewport by viewport,
 exactly which blocks a user is investigating and how long they lingered — so I self-hosted a

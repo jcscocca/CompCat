@@ -1,6 +1,7 @@
 # WCAG 2.2 accessibility
 
-> Last assessed 2026-07-30 against the React dashboard in this repository.
+> Full assessment completed 2026-08-10 with Axe 4.12.1 and a manual production-build review.
+> The 2026-07-30 baseline is retained below as historical evidence.
 
 CompCat targets **WCAG 2.2 Level AA** for the public React dashboard. The current
 engineering assessment found no known Level A or AA failures in the audited scope. This
@@ -14,6 +15,8 @@ not a third-party legal certification.
 - Empty, analyzed, expanded-detail, warning, and error states.
 - About and Manage Places dialogs, all Manage Places tabs, and form validation.
 - Trend, temporal, comparison, category, and incident-detail visualizations.
+- Area drawing, the Summary/Data inspector, linked chart filters, exact-value tables, and paged
+  records.
 - Light and dark themes at desktop and 320 CSS-pixel mobile widths.
 
 The assessment covers the application-generated interface. User-provided place names and
@@ -84,36 +87,44 @@ contract.
 
 ## Verification record
 
-The 2026-07-30 assessment used Axe 4.10.3 with the `wcag2a`, `wcag2aa`, `wcag21a`,
-`wcag21aa`, `wcag22aa`, and `best-practice` rule tags. Thirteen stable production-build
-states were scanned:
+The 2026-08-10 assessment is preserved as 26 repeatable Playwright accessibility cases using Axe
+4.12.1 with the `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`, and `best-practice`
+rule tags. It scans both themes across:
 
-- desktop empty and analyzed states in both themes;
-- desktop expanded analysis details;
-- About and Manage Places dialogs;
-- mobile bar, half, and full snaps in both themes.
+- desktop onboarding, analyzed report, expanded report, About, every Manage Places tab, and area
+  Summary/Data states;
+- mobile bar, half, and full snaps, area Summary/Data states, and the area inspector at 320 CSS
+  pixels with WCAG text-spacing overrides.
 
-All thirteen states returned **zero violations**. Axe marks rounded empty textareas as a
-manual color-contrast review because sampling their rounded corner can hit the parent
-surface. Their computed text/surface ratios were reviewed directly: 16.04:1 in light mode
-and 13.63:1 in dark mode.
+All scans return **zero violations**. The suite also makes the browser-level keyboard and layout
+checks repeatable: area tabs use roving arrow-key focus, Enter opens exact-value tables, hourly
+targets are at least 24 CSS pixels wide, the records table is in the expected tab order, the full
+mobile snap makes the covered map inert, and the 320-pixel text-spacing state has no document-level
+horizontal overflow.
 
-Manual checks also verified:
+The manual production-build review also verified:
 
 - a complete 320-pixel keyboard sweep with no obscured focus target and no covered map
   control reachable at the full snap;
 - forward/reverse modal focus containment, Escape dismissal, focus restoration, and tabs
   arrow-key behavior;
-- keyboard opening of hourly, daily, and 60-row monthly chart tables;
+- keyboard opening of hourly, daily, and monthly chart tables;
+- area selection through **Use visible map area**, linked hour filtering, Summary/Data tab behavior,
+  the area exact-value table, and the named horizontally scrollable records region;
 - 320-pixel bar/half/full reflow and WCAG text-spacing overrides with no document overflow;
 - light/dark contrast ratios for text, accents, identity badges, data marks, focus rings,
-  and control boundaries;
+  control boundaries, and expanded-report metadata;
 - the live product-language invariant: no safe/unsafe/dangerous ranking language and only
   the fixed “not a personal risk prediction” caveat.
 
+The earlier 2026-07-30 assessment used Axe 4.10.3 on thirteen stable production-build states and
+also returned zero violations. It remains useful historical evidence; the newer durable suite
+supersedes its state coverage and includes the later area-selection interface.
+
 The repository gate remains `make test-all` (backend tests and lint plus frontend tests and
-the production build). Accessibility behavior is also covered by component and stylesheet
-regression tests under `frontend/src/` and `frontend/tests/`.
+the production build). Accessibility behavior is covered by component and stylesheet tests plus
+the browser Axe suite under `frontend/tests/visual/`. See
+[`ui-regression-testing.md`](ui-regression-testing.md) for the maintained coverage matrix.
 
 ## Maintenance rule
 

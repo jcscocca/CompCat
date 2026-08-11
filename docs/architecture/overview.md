@@ -1,7 +1,7 @@
 This document describes CompCat's system architecture for maintainers and AI coding agents working the repo.
 
-> Updated 2026-08-04 for layer-explicit incident-map labels, neighborhood-scale clustering,
-> the auto-expanding direct report action, public-runtime hardening, and the WCAG 2.2 Level AA frontend contract.
+> Audited 2026-08-10 for canonical reports, interactive area selection, the three-slot LLM
+> failover chain, public-runtime hardening, and the UI regression contract.
 
 ---
 
@@ -80,7 +80,9 @@ clears the cookie.
 
 ⚠ **Invariant:** Internal routers must not be re-exposed on bare public paths. `tests/test_internal_surface.py` enforces this by scanning all registered routes for internal-only prefixes appearing without `include_in_schema=False`.
 
-**Admin** — `/admin/crime/ingest/socrata` (`app/api/routes_admin_crime.py`); guarded by the `X-Admin-Token` header checked against `MCA_ADMIN_INGEST_TOKEN`.
+**Admin** — `/admin/crime/ingest/socrata` (`app/api/routes_admin_crime.py`) plus the schema-hidden
+`/admin/maintenance/retention-sweep` (`app/api/routes_admin_maintenance.py`); both are guarded by
+the `X-Admin-Token` header checked against `MCA_ADMIN_INGEST_TOKEN`.
 
 ---
 
@@ -89,11 +91,11 @@ clears the cookie.
 | Subsystem | Entry point | Role |
 |---|---|---|
 | Assistant | `app/assistant/agent.py` + `app/api/routes_assistant.py` | Guarded decision-tree chat plus deterministic no-LLM commands; both stream the same event vocabulary into the Tabby rail |
-| LLM client | `app/assistant/llm_client.py` | Backend selected by `MCA_LLM_PROVIDER` — OpenAI-compatible endpoint, OpenAI SDK, or Claude SDK; `FailoverLlmClient` wraps two for automatic failover |
+| LLM client | `app/assistant/llm_client.py` | Primary plus up to two independently selected failover slots across OpenAI-compatible, OpenAI SDK, or Claude SDK backends; unusable and duplicate slots are dropped |
 | Statistical analysis | `app/analysis/reference_circles.py` + `app/analysis/comparison.py` | Empirical equal-radius reference distributions for one-place context; separate exposure-adjusted quasi-Poisson/BH tests for user-selected place-to-place comparison |
-| Crime ingestion | `app/crime/` | `seattle_socrata.py` fetches from Socrata; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
+| Crime ingestion | `app/crime/` | Source-specific Socrata parsers ingest reported incidents, arrests, and 911 calls into disjoint layers; `summaries.py` aggregates `CrimeIncident` rows into `PlaceCrimeSummaryData` |
 | Upload pipeline | `app/parsers/` + `app/normalization/` | Parsers (`google_timeline`, `gpx_points`, `csv_points`, `geojson_points`, `recurring_places`) normalize raw uploads into `StagingLocationObservation` rows |
-| Exports | `app/exports/` | `tableau.py` produces the legacy session-wide place summary; `analysis.py` flattens the current analytical detail view into a run-owned CSV with target counts, reference-circle distributions, adequacy, and method metadata |
+| Reports and exports | `app/reports/` + `app/exports/` | Versioned layer-aware canonical reports and owned snapshots; privacy-safe print/JSON/ZIP/trend artifacts; legacy run-owned analysis and session-wide place-summary CSVs; transient area-selection CSV |
 | Geocoding | `app/geocoding/providers.py` | `NominatimProvider` calls Nominatim; region-locked to the Seattle-metro viewbox (`MCA_GEOCODER_VIEWBOX`, bounded by default) |
 | Places | `app/places/schemas.py` + `app/services/manual_place_service.py` | Manual and bulk place creation/update/delete; `PlaceCluster` is the canonical record |
 | Services | `app/services/` | All business logic: `dashboard_analysis_service.py`, `analysis_service.py`, `crime_service.py`, `geocoding_service.py`, `export_service.py`, `import_service.py`, `normalization_service.py`, and others |
@@ -211,6 +213,8 @@ bottom sheet covers it. All chart values have keyboard-operable tabular alternat
 modal dialogs trap and restore focus, and pointer-drag operations have keyboard/button
 equivalents. Theme tokens preserve text, focus, control-boundary, and data-mark contrast in
 both light and dark modes. See `../accessibility.md` for the maintained verification record.
+Behavioral component coverage plus reviewed desktop/mobile browser screenshots are described in
+`../ui-regression-testing.md`.
 
 **Serving modes:**
 
