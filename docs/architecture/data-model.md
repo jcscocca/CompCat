@@ -1,6 +1,6 @@
 SQLAlchemy/Alembic schema for CompCat's FastAPI backend: 13 mapped tables spanning the upload-to-cluster pipeline, SPD incident data, analysis reports, statistical comparison, and infrastructure.
 
-> Updated 2026-08-02 for owned immutable analysis-report snapshots.
+> Audited 2026-08-10 against `app/models.py` and all 18 Alembic migrations.
 
 ---
 

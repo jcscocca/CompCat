@@ -1,4 +1,4 @@
-.PHONY: install test lint run dev migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-build test-all docker-build soak-load soak-observe assistant-eval
+.PHONY: install test lint run dev migrate demo seed-crime ingest-crime seed-arrests ingest-arrests seed-calls ingest-calls fetch-tiles frontend-install frontend-test frontend-visual-install frontend-visual-test frontend-build test-all docker-build soak-load soak-observe assistant-eval
 
 install:
 	python3.11 -m venv .venv
@@ -66,10 +66,16 @@ frontend-install:
 frontend-test:
 	cd frontend && npm test
 
+frontend-visual-install:
+	cd frontend && npx playwright install chromium
+
+frontend-visual-test:
+	cd frontend && npm run test:visual
+
 frontend-build:
 	cd frontend && npm run build
 
-test-all: test lint frontend-test frontend-build
+test-all: test lint frontend-test frontend-visual-test frontend-build
 
 docker-build:
 	docker build .

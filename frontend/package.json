@@ -11,6 +11,8 @@
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc -b && vite build",
     "test": "vitest run --environment jsdom",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots",
     "lint": "tsc -b --pretty false",
     "ios:assets": "node ../scripts/render_ios_icon.mjs",
     "ios:sync": "npm run ios:assets && npm run build && cap sync ios",
@@ -26,9 +28,11 @@
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@capacitor/cli": "^7.6.8",
     "@capacitor/core": "^7.6.8",
     "@capacitor/ios": "^7.6.8",
+    "@playwright/test": "^1.62.1",
     "@resvg/resvg-js": "^2.6.2",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.0.0",

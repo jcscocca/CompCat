@@ -4,7 +4,8 @@ This document covers the auth model, tier contracts, enforcement invariant, and 
 notes for the CompCat API. The live `/openapi.json` (and Swagger UI at `/docs`) is the
 field-level source of truth; this document covers rules and tier structure only.
 
-> Updated 2026-08-09 for public build-revision verification on `/health`.
+> Audited 2026-08-10 against every registered FastAPI route. The route table is enforced by
+> `tests/test_documentation_contract.py`.
 
 ⚠ **Invariant:** CompCat reports *reported incident context*. The API must not score
 safety, rank places as safe/unsafe/dangerous, or claim a user was present at an incident.
@@ -56,11 +57,11 @@ The `X-Demo-User-Id` header value is hashed deterministically via
 
 ### Admin token
 
-`POST /admin/crime/ingest/socrata` requires an `X-Admin-Token` header whose value must
-equal `MCA_ADMIN_INGEST_TOKEN`. The guard is defined inline in
-`app/api/routes_admin_crime.py` (`require_admin_ingest_token` dependency). The endpoint
-appears in the public OpenAPI schema (it is not `include_in_schema=False`) but returns
-HTTP 403 without a matching token.
+Both `POST /admin/crime/ingest/socrata` and the schema-hidden
+`POST /admin/maintenance/retention-sweep` require an `X-Admin-Token` header whose value must equal
+`MCA_ADMIN_INGEST_TOKEN`. The shared guard is `require_admin_ingest_token` in
+`app/api/routes_admin_crime.py`. Socrata ingest appears in the public OpenAPI schema; retention is
+deliberately omitted. Both return HTTP 403 without a matching token.
 
 ---
 
@@ -77,6 +78,7 @@ which are unauthenticated or session-creating.
 | `/sessions` | POST | `app/api/routes_sessions.py` | — | `{"session_state": "created"|"resumed"}` |
 | `/sessions` | DELETE | `app/api/routes_sessions.py` | — | 204; clears `mca_session` |
 | `/health` | GET | `app/api/routes_health.py` | — | `{"status": "ok", "revision": str \| null}` |
+| `/health/data` | GET | `app/api/routes_health.py` | — | Hidden, session-free data-recency probe for external monitoring; 200 when every layer is current, 503 when stale/unknown |
 | `/input-modes` | GET | `app/api/routes_input_modes.py` | — | `{"modes": [...]}` |
 | `/places` | GET | `app/api/routes_places.py` | — | `{"count": int, "places": [...]}` |
 | `/places` | POST | `app/api/routes_public_places.py` | `ManualPlaceCreate` (`app/places/schemas.py`) | `ManualPlaceResponse` |
@@ -329,11 +331,12 @@ text (holdback-guard trip or narrated-answer fallback). See `docs/architecture/a
 The LLM backing the assistant is selected by `MCA_LLM_PROVIDER` — an OpenAI-compatible endpoint
 (`MCA_LLM_BASE_URL` / `MCA_LLM_MODEL`, default), OpenAI's API (`openai_native`), or Claude
 (`anthropic`) — and drives both the single planning call and the second, streamed narration call
-that writes the model-authored final (kill switch: `MCA_ASSISTANT_NARRATION_ENABLED`). An optional
-failover backend is chosen independently via `MCA_LLM_FALLBACK_PROVIDER` (and, for the compatible
-path, `MCA_LLM_FALLBACK_BASE_URL` / `MCA_LLM_FALLBACK_MODEL`); when configured, `FailoverLlmClient`
-wraps the two. If the LLM is unreachable, only the chat panel is affected; the rest of the API is
-unaffected.
+that writes the model-authored final (kill switch: `MCA_ASSISTANT_NARRATION_ENABLED`). Two optional
+failover slots are chosen independently via `MCA_LLM_FALLBACK_PROVIDER` and
+`MCA_LLM_THIRD_PROVIDER`; compatible-endpoint slots also require their slot-specific base URL and
+model. `FailoverLlmClient` tries the usable, deduplicated chain in order. The third compatible slot
+never inherits `MCA_LLM_API_KEY`. If every backend is unreachable, only the chat panel is affected;
+the rest of the API is unaffected.
 
 `POST /assistant/commands` accepts only the fixed command enum declared by
 `AssistantCommandRequest`: `analyze_places`, `compare_places`, `add_place`, `select_places`,

@@ -35,6 +35,7 @@ function Bars({
           </button>
         ))}
       </div>
+      {counts.length > 12 ? <p className="mc-area-scroll-hint">Scroll for all 24 hours →</p> : null}
       <details className="mc-chart-data">
         <summary>View exact values</summary>
         <table>
@@ -169,7 +170,7 @@ function RecordsTab({
         <button type="button" disabled={!canNext || loading} onClick={onNext}>Next</button>
       </div>
       {loading ? <p role="status">Loading selected records…</p> : records?.records.length ? (
-        <div className="mc-area-records-wrap">
+        <div className="mc-area-records-wrap" tabIndex={0} role="region" aria-label="Area records table; scroll horizontally to view all columns">
           <table className="mc-area-records">
             <thead><tr><th scope="col">Date/time</th><th scope="col">Type</th><th scope="col">Block/address</th><th scope="col">ID</th></tr></thead>
             <tbody>{records.records.map((record) => (

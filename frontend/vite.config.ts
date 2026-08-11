@@ -61,6 +61,9 @@ export default defineConfig({
     exclude: ["maplibre-gl"],
   },
   test: {
+    // Playwright owns tests/visual/*.spec.ts. Keeping Vitest on *.test.* prevents
+    // the two runners from collecting each other's suites during `make test-all`.
+    include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
     setupFiles: ["./src/testSetup.ts"],
   },
   server: {

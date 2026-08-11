@@ -1,8 +1,8 @@
 # Security Policy
 
-CompCat is a **portfolio / showcase project** — a public repository and an occasional,
-on-demand demo, not an operated multi-user service (see [`docs/ROADMAP.md`](docs/ROADMAP.md),
-Phase 7). Please read the scope notes below before reporting.
+CompCat is a **portfolio / showcase project** with a small public instance, not a service with
+user accounts or a support SLA (see [`docs/ROADMAP.md`](docs/ROADMAP.md)). Please read the scope
+notes below before reporting.
 
 ## Reporting a vulnerability
 
@@ -40,5 +40,8 @@ internal tier (`MCA_INTERNAL_TIER_ENABLED`) or personal uploads
 
 ## Data
 
-The bundled crime CSVs are **synthetic** samples, and the deployed app makes zero third-party
-requests. No real personal data ships in this repository.
+The bundled incident CSVs are **synthetic** samples, and no real personal data ships in this
+repository. During normal dashboard use the **browser** makes no third-party requests: map tiles,
+fonts, and application assets are self-hosted. The server does make controlled outbound requests
+for proxied address search, configured LLM providers, and operator-triggered Seattle Open Data
+ingestion; those boundaries are documented in the architecture and deployment guides.

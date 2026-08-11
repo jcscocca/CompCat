@@ -284,11 +284,12 @@
 .mc-area-type-list>button>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mc-area-type-list i{height:8px;border-radius:99px;background:var(--surface-sunken);overflow:hidden;}
 .mc-area-type-list i b{display:block;height:100%;background:var(--accent);}
-.mc-area-bars{display:flex;align-items:flex-end;gap:3px;height:88px;padding-top:4px;border-bottom:1px solid var(--border-strong);}
-.mc-area-bars>button{display:flex;align-items:flex-end;flex:1;height:100%;min-width:4px;padding:0;border:0;border-radius:3px 3px 0 0;background:transparent;cursor:pointer;}
+.mc-area-bars{display:flex;align-items:flex-end;gap:3px;height:96px;padding:4px 0 7px;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--border-strong);}
+.mc-area-bars>button{display:flex;align-items:flex-end;flex:1 0 24px;height:100%;min-width:24px;padding:0;border:0;border-radius:3px 3px 0 0;background:transparent;cursor:pointer;}
 .mc-area-bars>button:hover,.mc-area-bars>button[aria-pressed="true"]{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent);}
 .mc-area-bars i{display:block;width:100%;min-height:0;background:var(--accent);border-radius:2px 2px 0 0;}
-.mc-chart-data th button{border:0;background:transparent;color:var(--text-strong);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
+.mc-area-scroll-hint{margin:3px 0 0;color:var(--text-dim);font-size:9.5px;text-align:right;}
+.mc-chart-data th button{display:inline-flex;align-items:center;min-height:24px;border:0;background:transparent;color:var(--text-strong);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
 .mc-chart-data th button[aria-pressed="true"]{color:var(--accent-deep);font-weight:750;}
 .mc-area-note{margin:0;color:var(--text-dim);font-size:11.5px;line-height:1.45;}
 .mc-area-filter-chips{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--border);border-radius:9px;background:var(--surface-raised);font-size:11px;}
@@ -302,6 +303,7 @@
 .mc-area-page-controls button{padding:0 9px;cursor:pointer;}
 .mc-area-page-controls span{margin-left:auto;}
 .mc-area-records-wrap{min-width:0;width:100%;max-width:100%;overflow:auto;}
+.mc-area-records-wrap:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .mc-area-records{width:100%;min-width:495px;border-collapse:collapse;font-size:11px;}
 .mc-area-records th,.mc-area-records td{padding:8px 6px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;min-width:110px;}
 .mc-area-records th{color:var(--text);font-weight:700;}
@@ -1109,7 +1111,7 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-trend-readout{margin:0;font-size:11px;color:var(--text-dim);font-family:var(--f-mono,ui-monospace);min-height:15px;}
 .mc-trend-note{margin:0;font-size:10.5px;color:var(--text-dim);}
 .mc-chart-data{font-size:11.5px;color:var(--text);}
-.mc-chart-data>summary{display:inline-block;cursor:pointer;font-weight:600;color:var(--accent-deep);text-decoration:underline;text-underline-offset:3px;}
+.mc-chart-data>summary{display:inline-flex;align-items:center;min-height:24px;cursor:pointer;font-weight:600;color:var(--accent-deep);text-decoration:underline;text-underline-offset:3px;}
 .mc-chart-data>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px;}
 .mc-chart-data-wrap{max-width:100%;margin-top:7px;overflow:auto;border:1px solid var(--control-border);border-radius:8px;background:var(--surface);}
 .mc-chart-data-table{width:100%;border-collapse:collapse;font-size:11px;color:var(--text-strong);font-variant-numeric:tabular-nums;}
@@ -1124,7 +1126,7 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 
 /* Layer-aware report document. It intentionally reads more like a compact dossier than a
    chat bubble; the layer tint makes switching Reported / Arrests / Calls unmistakable. */
-.mc-report-card{--report-accent:#176b50;--report-soft:rgba(23,107,80,.10);grid-template-columns:minmax(0,1fr);margin:10px 8px 16px;border:1px solid var(--border-strong);border-top:4px solid var(--report-accent);border-radius:12px;background:var(--surface);box-shadow:0 10px 28px rgba(28,45,38,.10);overflow:visible;color:var(--text);}
+.mc-report-card{--report-accent:#176b50;--report-on-accent:#fff;--report-soft:rgba(23,107,80,.10);grid-template-columns:minmax(0,1fr);margin:10px 8px 16px;border:1px solid var(--border-strong);border-top:4px solid var(--report-accent);border-radius:12px;background:var(--surface);box-shadow:0 10px 28px rgba(28,45,38,.10);overflow:visible;color:var(--text);}
 .mc-report-card.is-arrests{--report-accent:#9a5c18;--report-soft:rgba(154,92,24,.11)}
 .mc-report-card.is-calls{--report-accent:#315f9f;--report-soft:rgba(49,95,159,.11)}
 .mc-report-card.is-historical{opacity:.91}
@@ -1145,7 +1147,7 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .mc-report-mismatch,.mc-report-coverage{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 16px;padding:10px 12px;border:1px solid #c8913b;border-radius:9px;background:rgba(200,145,59,.12);font-size:12px}
 .mc-report-mismatch div{display:grid;gap:2px}.mc-report-mismatch span{color:var(--text-dim)}
 .mc-report-overview{display:grid;grid-template-columns:minmax(130px,.8fr) 1.4fr;gap:12px;padding:15px 17px}
-.mc-report-total{display:flex;flex-direction:column;justify-content:center;min-height:100px;padding:14px;border-radius:10px;background:var(--report-accent);color:white}
+.mc-report-total{display:flex;flex-direction:column;justify-content:center;min-height:100px;padding:14px;border-radius:10px;background:var(--report-accent);color:var(--report-on-accent)}
 .mc-report-total span,.mc-report-total small{font-size:10px}.mc-report-total strong{font:700 39px/1 Georgia,serif;margin:4px 0}
 .mc-report-facts{display:grid;grid-template-columns:1fr;gap:7px}
 .mc-report-facts>div{min-width:0;display:flex;flex-direction:column;justify-content:center;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-raised)}
@@ -1194,6 +1196,9 @@ input.mc-inp:focus{outline:2px solid var(--accent);outline-offset:1px;}
   --map-dot:#C6D2DC; --map-dot-outline:#141A20;
   color-scheme:dark;
 }
+[data-theme="dark"] .mc-report-card{--report-accent:#7FE0BC;--report-on-accent:#0E1519;--report-soft:rgba(127,224,188,.12)}
+[data-theme="dark"] .mc-report-card.is-arrests{--report-accent:#F2B66D;--report-soft:rgba(242,182,109,.12)}
+[data-theme="dark"] .mc-report-card.is-calls{--report-accent:#8DB8F2;--report-soft:rgba(141,184,242,.12)}
 /* MapLibre popup surface + tip follow the theme (white by default). */
 [data-theme="dark"] .mc-scope .maplibregl-popup-content{background:var(--surface);color:var(--text-strong);}
 [data-theme="dark"] .mc-scope .maplibregl-popup-anchor-top .maplibregl-popup-tip,

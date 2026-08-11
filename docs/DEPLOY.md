@@ -204,7 +204,9 @@ The AI panel (chat assistant) calls an **OpenAI-compatible** model gateway (e.g.
 used. Alternatively, point the assistant at a **hosted model** via its official SDK — set
 `MCA_LLM_PROVIDER=anthropic` (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`) for Claude, or
 `openai_native` (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI — no gateway needed.
-`MCA_LLM_FALLBACK_PROVIDER` chooses the failover slot independently.
+`MCA_LLM_FALLBACK_PROVIDER` and `MCA_LLM_THIRD_PROVIDER` choose two optional failover slots
+independently. See `architecture/assistant.md` §6 before mixing compatible-endpoint and key-based
+providers; the third compatible slot deliberately does not inherit the primary API key.
 
 For the default OpenAI-compatible gateway, set two variables in `.env.deploy`:
 
@@ -218,14 +220,19 @@ MCA_LLM_MODEL=gemma-4-26b-a4b-it-ud-q4-k-m-ctx32k
 `host.docker.internal` resolve to the Docker host's gateway).
 
 **Optional automatic failover.** Set a second endpoint and the assistant tries the
-primary first, then fails over to the fallback when the primary is offline or returns
-no usable content. This needs a **second always-on host**, so skip it for the
-single-ThinkPad setup. Failover activates only when **both** fallback values are set:
+primary first, then fails over when the primary is offline or returns no usable content.
+This needs a **second always-on host**, so skip it for the single-ThinkPad setup. A compatible
+fallback activates only when **both** fallback values are set:
 
 ```
 MCA_LLM_FALLBACK_BASE_URL=http://<second-host>:8080/v1
 MCA_LLM_FALLBACK_MODEL=qwen3.6-27b-q4-k-m-ctx32k
 ```
+
+An optional third slot follows the same provider-selection rule via `MCA_LLM_THIRD_PROVIDER`.
+For a compatible endpoint set `MCA_LLM_THIRD_BASE_URL` and `MCA_LLM_THIRD_MODEL`; set
+`MCA_LLM_THIRD_API_KEY` explicitly when it needs authentication. That key never falls back to
+`MCA_LLM_API_KEY`, preventing a primary vendor credential from being sent to a third host.
 
 For llama.cpp "thinking" models (e.g. Qwen) that otherwise spend the whole token
 budget on `reasoning_content` and return empty content, disable the chain-of-thought

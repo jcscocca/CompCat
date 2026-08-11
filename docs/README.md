@@ -8,14 +8,16 @@ change a subsystem, update its canonical document in the same PR.
 | Doc | What it covers |
 |---|---|
 | [Architecture overview](architecture/overview.md) | System map: layers, the public/internal/admin API tiers, the subsystem index, an end-to-end request walkthrough, and the backend↔frontend boundary. **Start here.** |
-| [Data model](architecture/data-model.md) | The 12 SQLAlchemy entities, the upload→stop→cluster lifecycle, coordinate generalization, and the Alembic migration approach. |
+| [Data model](architecture/data-model.md) | The 13 SQLAlchemy entities, the upload→stop→cluster lifecycle, coordinate generalization, and the Alembic migration approach. |
 | [API contract](architecture/api.md) | Auth model (session cookie, demo identity, admin token), the three-tier endpoint reference, the internal-surface invariant, and upload/SSE transport notes. |
 | [Assistant / agent design](architecture/assistant.md) | The CompCat Analyst: deterministic preflight, one planning call plus optional narration, the tool toolbox + frontend bridge, deterministic summaries, and the safety-refusal guard. |
 | [Assistant evaluation](assistant-evaluation.md) | Repeatable local-first behavioral corpus, Groq acceptance subset, report format, and baseline comparisons. |
 | [WCAG 2.2 accessibility](accessibility.md) | The React dashboard's Level AA accessibility contract, implementation coverage, and repeatable conformance evidence. |
+| [UI regression testing](ui-regression-testing.md) | The behavior/visual coverage matrix, deterministic browser fixtures, local commands, baseline-review rules, and live verification checklist. |
 | [Run modes](RUN-MODES.md) | Which personal, public-ThinkPad, VPS, or Mac launcher to use; their databases, ports, update behavior, and stop commands. |
 | [Roadmap](ROADMAP.md) | Current public-release operating priorities organized as Now, Next, and Later work. |
 | [Public-release cleanup audit](reviews/2026-08-01-public-release-cleanup.md) | The frozen public baseline, Claude-informed cleanup plan, resolved findings, verification evidence, deleted/archived material, and remaining operator actions. |
+| [Documentation/UI regression audit](reviews/2026-08-10-documentation-ui-regression-audit.md) | Current-state drift found across docs, the automated documentation contract, browser visual baselines, remaining limits, and verification evidence. |
 | [Write-ups](writeups/statistical-methods.md) | The two long-form capstone essays: [statistical methods](writeups/statistical-methods.md) and [product ethics](writeups/product-ethics.md) — the narrative layer over `analysis/`. |
 
 ## Also under `docs/`
@@ -37,3 +39,4 @@ change a subsystem, update its canonical document in the same PR.
 - **`DEPLOY-VPS.md`** — public-instance runbook, rented-box path: provisioning, hardening, TLS,
   nightly ingest/backup, restore rehearsal, launch checklist and teardown for compcat.app.
 - **`IOS.md`** — CompCat on iOS — personal build runbook (Tailscale + Capacitor shell).
+- **`soak-testing.md`** — sustained Postgres load/observation procedure and pass criteria.
