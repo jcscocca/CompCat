@@ -32,6 +32,7 @@ test("desktop area selection preserves the linked inspector layout", async ({ pa
   await page.getByRole("button", { name: "Use visible map area" }).click();
   const inspector = page.getByRole("article", { name: "Area data" });
   await expect(inspector.getByRole("heading", { name: "Area data" })).toBeVisible();
+  await expect(inspector.getByText("Jan 1, 2025 — Oct 31, 2025")).toBeVisible();
   await expect(inspector.getByText("reported incidents across 11 mapped block locations")).toBeVisible();
   await expect(inspector.getByText("Scroll for all 24 hours →")).toBeVisible();
 

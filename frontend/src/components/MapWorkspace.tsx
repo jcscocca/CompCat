@@ -1270,6 +1270,8 @@ export function MapWorkspace() {
                   recordsLoading={areaSelection.recordsLoading}
                   error={areaSelection.error}
                   noun={incidentNoun(analysis.layer)}
+                  analysisStartDate={analysis.startDate}
+                  analysisEndDate={analysis.endDate}
                   pageSize={areaSelection.pageSize}
                   pageNumber={areaSelection.pageNumber}
                   canPrevious={areaSelection.canPrevious}

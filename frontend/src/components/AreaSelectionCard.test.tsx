@@ -28,17 +28,26 @@ const summary: AreaSelectionSummary = {
 };
 
 function card(over: Partial<Parameters<typeof AreaSelectionCard>[0]> = {}) {
-  return <AreaSelectionCard summary={summary} baseSummary={summary} summaryLoading={false} records={{ selection_id: "selection-1", returned_count: 1, page_size: 50, next_cursor: "next", records: [{ incident_id: "i1", external_incident_id: null, report_number: "R1", occurred_at: "2025-01-01T12:00:00-08:00", reported_at: null, offense_category: "PROPERTY", offense_subcategory: "THEFT", nibrs_group: null, block_address: "1XX BLOCK OF PINE ST", latitude: 47.61, longitude: -122.33, source_dataset: "seattle_spd_crime" }] }} recordsLoading={false} error={null} noun={incidentNoun("reported")} pageSize={50} pageNumber={1} canPrevious={false} canNext filters={{ selectedTypes: [], selectedHours: [], selectedDays: [] }} onPageSize={vi.fn()} onPrevious={vi.fn()} onNext={vi.fn()} onToggleType={vi.fn()} onToggleHour={vi.fn()} onToggleDay={vi.fn()} onClearFilters={vi.fn()} onRedraw={vi.fn()} onClear={vi.fn()} onClose={vi.fn()} onExport={vi.fn().mockResolvedValue(undefined)} {...over} />;
+  return <AreaSelectionCard summary={summary} baseSummary={summary} summaryLoading={false} records={{ selection_id: "selection-1", returned_count: 1, page_size: 50, next_cursor: "next", records: [{ incident_id: "i1", external_incident_id: null, report_number: "R1", occurred_at: "2025-01-01T12:00:00-08:00", reported_at: null, offense_category: "PROPERTY", offense_subcategory: "THEFT", nibrs_group: null, block_address: "1XX BLOCK OF PINE ST", latitude: 47.61, longitude: -122.33, source_dataset: "seattle_spd_crime" }] }} recordsLoading={false} error={null} noun={incidentNoun("reported")} analysisStartDate="2025-01-01" analysisEndDate="2025-10-27" pageSize={50} pageNumber={1} canPrevious={false} canNext filters={{ selectedTypes: [], selectedHours: [], selectedDays: [] }} onPageSize={vi.fn()} onPrevious={vi.fn()} onNext={vi.fn()} onToggleType={vi.fn()} onToggleHour={vi.fn()} onToggleDay={vi.fn()} onClearFilters={vi.fn()} onRedraw={vi.fn()} onClear={vi.fn()} onClose={vi.fn()} onExport={vi.fn().mockResolvedValue(undefined)} {...over} />;
 }
 
 describe("AreaSelectionCard", () => {
   it("shows complete summary charts with accessible exact-value tables", () => {
     render(card());
     expect(screen.getByRole("heading", { name: "Area data" })).toBeInTheDocument();
+    expect(screen.getByText("Jan 1, 2025 — Oct 27, 2025")).toBeInTheDocument();
     expect(screen.getByText(/reported incidents across 2 mapped block locations/i)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /records by hour of day/i })).toBeInTheDocument();
     expect(screen.getByText("Scroll for all 24 hours →")).toBeInTheDocument();
     expect(screen.getAllByText("View exact values")).toHaveLength(2);
+  });
+
+  it("keeps the active report window visible when the date filter changes", () => {
+    const { rerender } = render(card({ analysisStartDate: "2025-07-29" }));
+    expect(screen.getByText("Jul 29, 2025 — Oct 27, 2025")).toBeInTheDocument();
+
+    rerender(card({ analysisStartDate: "2025-01-01" }));
+    expect(screen.getByText("Jan 1, 2025 — Oct 27, 2025")).toBeInTheDocument();
   });
 
   it("turns type, hour, and day bars into linked filter controls", () => {

@@ -80,6 +80,43 @@ describe("useAreaSelection", () => {
     await act(async () => resolveChanged?.({ ...summary, selection_id: "s2" }));
   });
 
+  it("refreshes the summary, records, and highlights when the analysis dates change", async () => {
+    const shortWindow = { ...summary, selection_id: "short", record_count: 13 };
+    const fullWindow = {
+      ...summary,
+      selection_id: "full",
+      record_count: 49,
+      highlight_points: [{ ...summary.highlight_points[0], record_count: 49 }],
+    };
+    vi.mocked(getAreaSelectionSummary).mockImplementation(async (payload) => (
+      payload.analysis_start_date === "2025-01-01" ? fullWindow : shortWindow
+    ));
+    const shortAnalysis = { ...analysis, startDate: "2025-07-29" };
+    const { result, rerender } = renderHook(
+      ({ activeAnalysis }) => useAreaSelection({ geometry, analysis: activeAnalysis, enabled: true }),
+      { initialProps: { activeAnalysis: shortAnalysis } },
+    );
+    await waitFor(() => expect(result.current.summary?.record_count).toBe(13));
+
+    rerender({ activeAnalysis: analysis });
+    await waitFor(() => expect(result.current.summary?.record_count).toBe(49));
+    expect(getAreaSelectionSummary).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        analysis_start_date: "2025-01-01",
+        analysis_end_date: "2025-12-31",
+      }),
+      expect.any(AbortSignal),
+    );
+    await waitFor(() => expect(getAreaSelectionRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        analysis_start_date: "2025-01-01",
+        analysis_end_date: "2025-12-31",
+      }),
+      expect.any(AbortSignal),
+    ));
+    expect(result.current.highlights.features[0].properties.record_count).toBe(49);
+  });
+
   it("shares linked filters across summary, records, highlights, and CSV export", async () => {
     const filtered = {
       ...summary,

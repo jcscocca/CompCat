@@ -12,6 +12,17 @@ import type {
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 type Tab = "summary" | "data";
 
+function formatScopeDate(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
 function Bars({
   counts,
   labels,
@@ -196,6 +207,8 @@ export function AreaSelectionCard({
   recordsLoading,
   error,
   noun,
+  analysisStartDate,
+  analysisEndDate,
   pageSize,
   pageNumber,
   canPrevious,
@@ -220,6 +233,8 @@ export function AreaSelectionCard({
   recordsLoading: boolean;
   error: string | null;
   noun: IncidentNoun;
+  analysisStartDate: string;
+  analysisEndDate: string;
   pageSize: number;
   pageNumber: number;
   canPrevious: boolean;
@@ -268,6 +283,10 @@ export function AreaSelectionCard({
     <article className="mc-area-card" aria-labelledby="mc-area-title">
       <header>
         <div><span className="mc-area-kicker">Map selection</span><h3 id="mc-area-title">Area data</h3></div>
+        <p className="mc-area-scope">
+          <span>Date range</span>
+          <strong>{formatScopeDate(analysisStartDate)} — {formatScopeDate(analysisEndDate)}</strong>
+        </p>
         <button type="button" aria-label="Close area data" onClick={onClose}>×</button>
       </header>
       <div className="mc-area-actions">
