@@ -117,6 +117,7 @@ export type AreaSelectionSummary = {
   location_count: number;
   counting_basis: string;
   type_mix: AreaTypeMixRow[];
+  type_counts: Record<string, number>;
   temporal: AreaTemporalProfile;
   highlight_mode: "locations" | "grid";
   highlight_points: AreaHighlightPoint[];
