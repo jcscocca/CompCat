@@ -15,6 +15,17 @@ def _read(relative_path: str) -> str:
     return (_SCRIPTS / relative_path).read_text(encoding="utf-8")
 
 
+def _code(relative_path: str) -> str:
+    """The script with comment lines stripped.
+
+    Assertions about what a script *does* must not be satisfied - or broken - by prose that
+    merely mentions the thing. These launchers carry long explanatory headers.
+    """
+    return "\n".join(
+        line for line in _read(relative_path).splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 def test_powershell_launchers_are_ascii_safe_for_windows_powershell() -> None:
     """Windows PowerShell 5.1 misdecodes BOM-less UTF-8 punctuation as ANSI."""
     for path in sorted(_SCRIPTS.rglob("*.ps1")):
@@ -119,6 +130,58 @@ def test_public_thinkpad_launchers_name_the_persistent_tunnel_mode() -> None:
     assert "Volumes kept: compcat-public_mca-postgres" in stop
 
 
+def test_public_supervisor_is_scoped_validated_and_never_deploys() -> None:
+    """ensure-public.ps1 runs unattended every few minutes, so it must not be able to ship code."""
+    code = _code("public/ensure-public.ps1")
+
+    assert "'-p', 'compcat-public'" in code
+    assert "'.env.tunnel'" in code
+    # The same posture gate as the manual launcher, and for a stronger reason.
+    assert "validate_public_env.py --mode tunnel .env.tunnel" in code
+
+    # A supervisor, not a deployer: it must never build an image, and it must never ingest -
+    # that is the nightly sidecar's job, not something a 10-minute watchdog may kick off.
+    assert "--build" not in code
+    assert "Compose up -d" in code
+    assert "admin/crime/ingest" not in code
+    # Drift between the checkout and the running image is reported, never acted on.
+    assert "Run start-public.ps1 to deploy the checkout." in code
+
+    # End-to-end proof, not just a local health check: a healthy API behind a dead tunnel is
+    # exactly the outage this is meant to catch.
+    assert "https://compcat.app/health" in code
+    assert "Compose restart cloudflared" in code
+
+
+def test_public_supervisor_repairs_the_orphaned_socket_failure() -> None:
+    """The 2026-08-13 outage: Docker Desktop cannot start while a stale AF_UNIX socket exists."""
+    code = _code("public/ensure-public.ps1")
+
+    # Both directories must be swept before every start attempt: each failed start leaves a fresh
+    # orphan, so clearing only the one named in the newest crash never converges.
+    assert "Docker\\run" in code
+    assert "docker-secrets-engine" in code
+    assert "remove (<HOME>[^:]+?): The file cannot be accessed" in code
+    # Only zero-byte socket files may ever be relocated unattended.
+    assert "$_.PSIsContainer -or $_.Length -gt 0" in code
+    assert "Rename-Item -LiteralPath $dir -NewName $bak" in code
+
+
+def test_public_autostart_installer_is_reversible_and_needs_no_elevation() -> None:
+    code = _code("public/install-public-autostart.ps1")
+
+    assert "[switch]$Uninstall" in code
+    assert "Unregister-ScheduledTask" in code
+    assert "$taskName = 'CompCat public site'" in code
+    assert "ensure-public.ps1" in code
+    # Interactive, because Docker Desktop cannot run as a service and lives in the desktop session.
+    assert "-LogonType Interactive -RunLevel Limited" in code
+    # Both triggers: the logon bring-up and the watchdog that covers everything logon cannot.
+    assert "-AtLogOn" in code
+    assert "-RepetitionInterval" in code
+    assert "MultipleInstances IgnoreNew" in code
+
+
 def test_public_vps_launcher_validates_its_env_before_starting() -> None:
     text = _read("prod/start-compcat.sh")
 
@@ -172,6 +235,8 @@ def test_run_mode_chooser_covers_every_launcher_and_is_linked() -> None:
         r"scripts\start-compcat.ps1",
         r"scripts\stop-compcat.ps1",
         r"scripts\public\start-public.ps1",
+        r"scripts\public\install-public-autostart.ps1",
+        r"scripts\public\ensure-public.ps1",
         "scripts/prod/start-compcat.sh",
         "scripts/dev.sh",
     ):

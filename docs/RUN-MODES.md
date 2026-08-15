@@ -133,7 +133,20 @@ This project has uploads and the internal API tier disabled. It has its own data
 ingestion, backups, retention sweep, restart policy, hosted LLM configuration, and rate limits.
 Its volumes never overlap the personal project.
 
-Detailed setup and incident response: [DEPLOY-TUNNEL.md](DEPLOY-TUNNEL.md).
+Keeping it up without being asked is a separate, one-time install:
+
+```powershell
+pwsh -File .\scripts\public\install-public-autostart.ps1
+```
+
+That registers the **CompCat public site** scheduled task, which runs
+`scripts\public\ensure-public.ps1` at logon and every 10 minutes thereafter. `ensure-public.ps1` is
+a **supervisor, not a launcher**: it starts Docker Desktop, brings the stack up with no `--build`,
+verifies `/health` and that `compcat.app` actually answers, and repairs the orphaned-socket failure
+that stops Docker Desktop from starting. It never deploys new code and never ingests — a checkout
+ahead of the running image is reported, not published. Use `start-public.ps1` to deploy.
+
+Detailed setup and incident response: [DEPLOY-TUNNEL.md](DEPLOY-TUNNEL.md), section 9.
 
 ### Public Linux VPS
 

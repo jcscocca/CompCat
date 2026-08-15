@@ -513,10 +513,11 @@ The VPS posture costs ~$5/month and this one costs nothing. Three things pay for
 
 **1. Uptime follows the ThinkPad.** There is no redundancy and no SLA. The laptop sleeping, being
 rebooted, losing wifi, or being carried out of the house takes the site down, and visitors see
-Cloudflare's error page instead of CompCat. `restart: unless-stopped` covers container crashes and
-Docker-Desktop-at-login covers reboots, but nothing covers a suspended host — which is why §1
-step 2 (sleep off) and the U7 uptime check exist. Honest framing for a portfolio link: it is a
-personal instance that is usually up, not a service.
+Cloudflare's error page instead of CompCat. `restart: unless-stopped` covers container crashes,
+and [§9](#9-keeping-it-up-by-itself)'s logon task plus its 10-minute watchdog covers reboots and a
+Docker Desktop that dies or refuses to start — but nothing covers a suspended host, or a reboot
+after which nobody signs in, which is why §1 step 2 (sleep off) and the U7 uptime check exist.
+Honest framing for a portfolio link: it is a personal instance that is usually up, not a service.
 
 **2. Cloudflare's free tier is for websites, not file hosting.** Cloudflare's self-serve terms
 discourage using the free CDN to serve a disproportionate share of non-HTML content — large
@@ -555,6 +556,92 @@ you layer.
 
 ---
 
+## §9 Keeping it up by itself
+
+Everything above brings the site up **once, by hand**. This section makes the ThinkPad being
+switched on the only thing the site needs. Install it once:
+
+```powershell
+pwsh -File scripts\public\install-public-autostart.ps1
+```
+
+That registers a Scheduled Task named **CompCat public site** under your user, enables Docker
+Desktop's own autostart entry, and turns off sleep-on-AC. No elevation required.
+
+### Why a Scheduled Task and not a Windows service
+
+Docker Desktop **cannot run as a Windows service** — it needs an interactive user session, so
+anything driving it has to live in one too. A logon-triggered task is therefore the strongest
+honest guarantee available on this host, and the limit is worth stating plainly:
+
+> The site returns when **you sign in**, not at the login screen. An unattended reboot — a
+> Windows Update at 03:00 — leaves compcat.app down until the next sign-in.
+
+Closing that last gap needs auto-logon (`AutoAdminLogon`), which stores the account password as an
+LSA secret. That trade has not been made here.
+
+### The three pieces
+
+| Piece | Covers |
+|---|---|
+| Docker Desktop autostart (`Run` key) | the engine itself, without which nothing else matters |
+| Task trigger: at logon, +2 min | the initial bring-up after a reboot |
+| Task trigger: every 10 min | everything a logon trigger structurally cannot — Docker Desktop quit or crashed, the tunnel dropping registration, a `compose down` left undone, a half-alive resume from sleep |
+
+Both triggers run the same idempotent [`scripts/public/ensure-public.ps1`](../scripts/public/ensure-public.ps1).
+
+### Supervisor, not deployer
+
+`ensure-public.ps1` runs `compose up -d` with **no `--build`**, so an existing image is reused
+verbatim. A checkout ahead of the running image is **reported in the log, never deployed** —
+nothing running unattended every 10 minutes should be able to push code to compcat.app because a
+`git pull` was left on disk. Deploying stays a deliberate `start-public.ps1`. It does not ingest
+either; that is the 03:10 sidecar's job.
+
+It still runs `validate_public_env.py` before touching Docker, for a stronger reason than the
+manual path: a hand-edited `.env.tunnel` that re-enables uploads or the internal tier must never be
+published automatically at the next logon.
+
+Each run appends to `%LOCALAPPDATA%\CompCat\logs\ensure-public.log` (rolled at 5 MB).
+
+### The failure mode it exists for
+
+On **2026-08-13** a reboot took compcat.app down for ~2 days 19 hours. Docker Desktop was crashing
+at startup:
+
+```
+backend crashed: starting services: initializing Inference manager:
+listening on unix://<HOME>\AppData\Local\Docker\run\dockerInference:
+remove ...\dockerInference: The file cannot be accessed by the system.
+```
+
+Docker's services each bind an AF_UNIX socket under `%LOCALAPPDATA%`. After an unclean shutdown
+those files survive as 0-byte reparse points that Windows can no longer touch — `Remove-Item`,
+`del` and `fsutil reparsepoint delete` all return **error 1920**, and **a reboot does not clear
+them**. Docker then crashes because it cannot remove the stale socket before rebinding.
+
+Renaming the *containing directory* is the only thing that works. Two directories are involved
+(`Docker\run`, `docker-secrets-engine`) and **each failed start leaves a fresh orphan**, so
+clearing one at a time never converges — the sweep must cover every known socket directory before
+each start attempt. `ensure-public.ps1` does exactly that, up to two repair passes, and refuses to
+relocate any directory containing something other than zero-byte sockets. Swept directories are
+kept as `<name>.broken-<timestamp>` next to the original; they are safe to delete.
+
+### Operating it
+
+```powershell
+Start-ScheduledTask -TaskName 'CompCat public site'                      # run now
+Get-Content "$env:LOCALAPPDATA\CompCat\logs\ensure-public.log" -Tail 30  # what it has been doing
+Get-ScheduledTaskInfo -TaskName 'CompCat public site'                    # last run time and result
+pwsh -File scripts\public\install-public-autostart.ps1 -Uninstall        # remove
+```
+
+Uninstalling removes only the task — Docker Desktop's autostart and the running containers are
+left alone. To take the site down, use `stop-public.ps1`; note that while the task is installed
+the watchdog will bring it back within 10 minutes, so uninstall first for a deliberate outage.
+
+---
+
 ## Routine operations
 
 **Deploy a new commit:**
@@ -584,10 +671,16 @@ every origin and old upload metadata, and evicts expired `geocode_cache` entries
 returning visitors are preserved through `session_activity`; SPD incident data is never touched. See
 [`DEPLOY-VPS.md`](DEPLOY-VPS.md#routine-operations) for the full description.
 
-**After a reboot:** Docker Desktop starts at login and `restart: unless-stopped` brings `db`,
-`api`, `cloudflared` and the sidecar back; the tunnel re-registers on its own and the hostname
-keeps working. If the machine was down long enough for data to age, the next
-`start-public.ps1` (or the next 03:10 cron) catches it up.
+**After a reboot:** with [§9](#9-keeping-it-up-by-itself) installed this is automatic — sign in and
+the task brings the stack back. Docker Desktop starts at logon and `restart: unless-stopped` does
+most of the work: the containers come back the moment the engine is ready, and the tunnel
+re-registers on its own. The task's job is the two cases that policy cannot cover — the engine not
+starting at all, and the tunnel being up but unregistered. If the machine was down long enough for
+data to age, the next 03:10 cron catches it up (the watchdog deliberately does not ingest).
+
+Do not assume `restart: unless-stopped` alone is enough. It only restores containers **once the
+engine is running**; a Docker Desktop that will not start leaves the site down indefinitely, which
+is exactly what happened on 2026-08-13.
 
 **Where things live:**
 
