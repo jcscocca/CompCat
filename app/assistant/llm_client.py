@@ -549,9 +549,12 @@ class OpenAiNativeLlmClient:
     """First-class OpenAI backend using the official ``openai`` SDK — native auth, built-in
     retries, and typed errors. Distinct from :class:`OpenAiLlmClient`, which is a generic
     /chat/completions HTTP client for any OpenAI-compatible host (local llama-swap, Groq, …).
-    OpenAI takes ``system`` in the messages array and accepts ``temperature``, so messages pass
-    through unchanged. Errors map to :class:`LlmUnavailable` / :class:`LlmStreamInterrupted` so
-    this composes with :class:`FailoverLlmClient` like the other backends."""
+    OpenAI takes ``system`` in the messages array, so messages pass through unchanged. Request
+    controls are selected by the builder for the configured model: GPT-5.6 uses explicit
+    reasoning effort and structured planning while older chat models retain the original
+    temperature behavior. Errors map to :class:`LlmUnavailable` /
+    :class:`LlmStreamInterrupted` so this composes with :class:`FailoverLlmClient` like the other
+    backends."""
 
     def __init__(
         self,
@@ -560,6 +563,9 @@ class OpenAiNativeLlmClient:
         *,
         base_url: str = "",
         send_temperature: bool = True,
+        reasoning_effort: str | None = None,
+        structured_reasoning_effort: str | None = None,
+        supports_structured_output: bool = False,
         max_tokens_default: int = _OPENAI_NATIVE_DEFAULT_MAX_TOKENS,
         timeout_s: float = 120.0,
         connect_timeout_s: float = 5.0,
@@ -569,6 +575,12 @@ class OpenAiNativeLlmClient:
         self.api_key = api_key
         self.base_url = base_url or "https://api.openai.com/v1"
         self._send_temperature = send_temperature
+        # Narration is latency-sensitive and tightly capped. Planning may use a separate effort
+        # because choosing a tool and producing valid JSON benefits from a small amount of
+        # reasoning, while spending the narration budget on hidden reasoning can yield no text.
+        self.reasoning_effort = reasoning_effort
+        self.structured_reasoning_effort = structured_reasoning_effort
+        self.supports_structured_output = supports_structured_output
         self._max_tokens_default = max_tokens_default
         self._timeout = httpx.Timeout(timeout_s, connect=connect_timeout_s)
         # Built lazily on first use so construction stays cheap and loop-free; tests inject a fake.
@@ -590,6 +602,8 @@ class OpenAiNativeLlmClient:
         max_tokens: int | None,
         *,
         stream: bool,
+        reasoning_effort: str | None = None,
+        response_format: dict[str, object] | None = None,
     ) -> dict[str, object]:
         kwargs: dict[str, object] = {
             "model": self.model,
@@ -600,6 +614,10 @@ class OpenAiNativeLlmClient:
         }
         if self._send_temperature and temperature is not None:
             kwargs["temperature"] = temperature
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
+        if response_format is not None:
+            kwargs["response_format"] = response_format
         if stream:
             kwargs["stream"] = True
             # Trailing usage chunk for the daily token budget; harmless when a proxy drops it.
@@ -614,9 +632,54 @@ class OpenAiNativeLlmClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
+        return await self._complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=self.reasoning_effort,
+        )
+
+    async def complete_structured(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: dict[str, object],
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Use provider-backed JSON mode for models whose contract is known."""
+        return await self._complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=(
+                self.structured_reasoning_effort
+                if self.structured_reasoning_effort is not None
+                else self.reasoning_effort
+            ),
+            response_format=response_format if self.supports_structured_output else None,
+        )
+
+    async def _complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        reasoning_effort: str | None,
+        response_format: dict[str, object] | None = None,
+    ) -> str:
         try:
             response = await self._ensure_client().chat.completions.create(
-                **self._request_kwargs(messages, temperature, max_tokens, stream=False)
+                **self._request_kwargs(
+                    messages,
+                    temperature,
+                    max_tokens,
+                    stream=False,
+                    reasoning_effort=reasoning_effort,
+                    response_format=response_format,
+                )
             )
         except openai.APIError as exc:
             raise _sdk_llm_error(exc, rate_limit_type=openai.RateLimitError) from exc
@@ -640,7 +703,13 @@ class OpenAiNativeLlmClient:
         parts: list[str] = []
         try:
             chunks = await self._ensure_client().chat.completions.create(
-                **self._request_kwargs(messages, temperature, max_tokens, stream=True)
+                **self._request_kwargs(
+                    messages,
+                    temperature,
+                    max_tokens,
+                    stream=True,
+                    reasoning_effort=self.reasoning_effort,
+                )
             )
             reached = True
             # async with so an abandoned generator (disconnect, guard trip) closes the SDK

@@ -250,6 +250,58 @@ def test_temperature_suppressed_for_reasoning_models() -> None:
     assert "temperature" not in comp.captured
 
 
+def test_luna_regular_completion_uses_explicit_none_reasoning() -> None:
+    comp = _FakeCompletions(response=_resp("ok"))
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=comp))
+    client = OpenAiNativeLlmClient(
+        api_key="test",
+        model="gpt-5.6-luna",
+        send_temperature=False,
+        reasoning_effort="none",
+        structured_reasoning_effort="medium",
+        supports_structured_output=True,
+        client=fake,
+    )
+
+    asyncio.run(
+        client.complete(
+            [{"role": "user", "content": "hi"}], temperature=0.2, max_tokens=512
+        )
+    )
+
+    assert comp.captured["reasoning_effort"] == "none"
+    assert "temperature" not in comp.captured
+
+
+def test_luna_structured_completion_uses_json_mode_and_medium_reasoning() -> None:
+    comp = _FakeCompletions(response=_resp('{"type":"final","message":"ok"}'))
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=comp))
+    client = OpenAiNativeLlmClient(
+        api_key="test",
+        model="gpt-5.6-luna",
+        send_temperature=False,
+        reasoning_effort="none",
+        structured_reasoning_effort="medium",
+        supports_structured_output=True,
+        client=fake,
+    )
+    response_format = {"type": "json_object"}
+
+    result = asyncio.run(
+        client.complete_structured(
+            [{"role": "user", "content": "return JSON"}],
+            response_format=response_format,
+            temperature=0.2,
+            max_tokens=1024,
+        )
+    )
+
+    assert result == '{"type":"final","message":"ok"}'
+    assert comp.captured["response_format"] == response_format
+    assert comp.captured["reasoning_effort"] == "medium"
+    assert "temperature" not in comp.captured
+
+
 # ---------- daily token budget accounting ----------
 
 

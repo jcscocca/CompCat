@@ -220,6 +220,25 @@ def test_openai_native_provider_builds_native_primary() -> None:
     assert client.api_key == "sk-oai-x"
 
 
+def test_openai_native_luna_enables_compatible_request_options() -> None:
+    client = build_assistant_llm_client(
+        _settings(
+            llm_provider="openai_native",
+            openai_api_key="sk-oai-x",
+            openai_model="gpt-5.6-luna",
+            # Luna must be safe even when an existing deployment has not added the manual
+            # temperature override yet.
+            openai_send_temperature=True,
+        )
+    )
+
+    assert isinstance(client, OpenAiNativeLlmClient)
+    assert client._send_temperature is False
+    assert client.reasoning_effort == "none"
+    assert client.structured_reasoning_effort == "medium"
+    assert client.supports_structured_output is True
+
+
 def test_openai_native_provider_without_key_raises() -> None:
     with pytest.raises(ValueError, match="openai_native"):
         build_assistant_llm_client(_settings(llm_provider="openai_native"))

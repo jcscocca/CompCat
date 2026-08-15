@@ -386,12 +386,15 @@ prompt requires all of these qualifiers to survive the rewrite.
 - **`OpenAiNativeLlmClient`** — first-class OpenAI via the official `openai` SDK (native auth,
   built-in retries, typed errors). Messages pass through unchanged (OpenAI takes `system` inline);
   it sends `max_completion_tokens` and forwards `temperature` unless `MCA_OPENAI_SEND_TEMPERATURE`
-  is off (reasoning models reject a non-default temperature). `stream` iterates the SDK
-  `AsyncStream` inside `async with` so an abandoned turn closes it. SDK `RateLimitError` and any
-  generic status error carrying HTTP 429 map to `LlmRateLimited`; OpenAI's
-  `code=insufficient_quota` variant maps to the more specific `LlmQuotaExhausted` so the UI does
-  not describe a billing allowance as a minute-long throttle. Distinct from `OpenAiLlmClient`,
-  which is the generic compatible client for local/Groq hosts.
+  is off. GPT-5.6 models are detected automatically: temperature is suppressed even for an older
+  env file that leaves the flag on, narration uses `reasoning_effort=none`, and planning uses
+  `reasoning_effort=medium` with JSON-object mode. This preserves the 512-token narration allowance
+  for visible content while giving the routing step a bounded reasoning budget and a syntactic
+  JSON guarantee. `stream` iterates the SDK `AsyncStream` inside `async with` so an abandoned turn
+  closes it. SDK `RateLimitError` and any generic status error carrying HTTP 429 map to
+  `LlmRateLimited`; OpenAI's `code=insufficient_quota` variant maps to the more specific
+  `LlmQuotaExhausted` so the UI does not describe a billing allowance as a minute-long throttle.
+  Distinct from `OpenAiLlmClient`, which is the generic compatible client for local/Groq hosts.
 - **`AnthropicLlmClient`** — first-class Claude via the official `anthropic` SDK. Hoists `system`
   turns into Anthropic's top-level field, drops a leading assistant turn (Anthropic requires the
   array to start with `user`), does not forward `temperature` (current Claude models reject it),
@@ -428,7 +431,7 @@ prompt requires all of these qualifiers to survive the rewrite.
 | `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | `""` / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`) |
 | `MCA_ANTHROPIC_DISABLE_THINKING` | `true` | Disable Claude thinking so it doesn't consume the token budget; set false for `claude-fable-5` |
 | `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | `""` / `gpt-4o` | OpenAI credentials + model (provider `openai_native`); `MCA_OPENAI_BASE_URL` optional |
-| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward temperature; set false for reasoning models (o-series / gpt-5). The public env templates use the cross-family-safe `false`, and boot logs a warning when an active reasoning-model OpenAI SDK slot leaves it true. |
+| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward temperature for models that accept it. GPT-5.6 suppresses it automatically; public templates use the cross-family-safe `false`, and boot warns when another active reasoning-model slot leaves it true. |
 
 The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_assistant_llm_client`
 on each request. `_failover_chain` assembles the primary (`MCA_LLM_PROVIDER`) followed by each

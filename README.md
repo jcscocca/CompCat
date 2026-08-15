@@ -262,6 +262,9 @@ make run
 To use a hosted model instead of a local endpoint, set `MCA_LLM_PROVIDER=anthropic`
 (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`) for Claude, or `openai_native`
 (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI's API — both via their official SDKs.
+GPT-5.6 models such as `gpt-5.6-luna` are detected automatically: CompCat omits the unsupported
+sampling temperature, uses medium reasoning plus JSON mode for planning, and disables reasoning
+for the short narration pass.
 `MCA_LLM_FALLBACK_PROVIDER` and `MCA_LLM_THIRD_PROVIDER` configure two optional, independent
 failover slots. Compatible-endpoint slots also need their slot-specific base URL and model;
 key-based Claude/OpenAI slots activate from their provider key. See `.env.example` and the

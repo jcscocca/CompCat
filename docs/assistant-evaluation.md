@@ -8,8 +8,10 @@ snapshot: model wording can change while the required properties remain correct.
 The versioned corpus is [`evals/assistant/v1.json`](../evals/assistant/v1.json). It covers safety
 and presence refusals, tool routing, filter arguments, result-aware follow-ups, data-layer
 language, multi-turn scope, clarification, and a Spanish request. Every turn always checks for a
-complete SSE stream, no error event, and a non-empty response. Cases add properties such as an
-expected tool, a subset of tool arguments, required concepts, and prohibited claims.
+complete SSE stream, no error event, a non-empty response, and sentence-closing punctuation. The
+last check makes an apparently successful stream fail when its prose stops mid-sentence, such as
+in the middle of an ISO date. Cases add properties such as an expected tool, a subset of tool
+arguments, required concepts, and prohibited claims.
 
 ## Local-first workflow
 
@@ -46,21 +48,30 @@ python scripts/evaluate_assistant.py --target local --case guard_safety_ranking
 python scripts/evaluate_assistant.py --target local --tag guard
 ```
 
-## Groq acceptance check
+## Hosted acceptance checks
 
 After a meaningful prompt, routing, guard, or narration change, run only the smaller acceptance
-subset against a CompCat app configured to use Groq:
+subset against a CompCat app configured to use the hosted provider under test:
 
 ```powershell
 $env:COMPCAT_EVAL_GROQ_URL = "http://127.0.0.1:8001"
 python scripts/evaluate_assistant.py --target groq --tag acceptance
 ```
 
-`--target groq` deliberately has no default URL. It requires `--base-url` or
-`COMPCAT_EVAL_GROQ_URL`, prints a quota warning, and prevents an accidental run against the public
-site. The URL names the CompCat app, not Groq's model endpoint; that app must already have its
-provider variables configured. Using `https://compcat.app` is possible but consumes the public
-request pool and should be limited to a final smoke check.
+For OpenAI—including GPT-5.6 Luna—use a separately named target and app URL so reports and quota
+warnings identify the provider correctly:
+
+```powershell
+$env:COMPCAT_EVAL_OPENAI_URL = "http://127.0.0.1:8002"
+python scripts/evaluate_assistant.py --target openai --tag acceptance
+```
+
+Hosted targets deliberately have no default URL. Groq requires `--base-url` or
+`COMPCAT_EVAL_GROQ_URL`; OpenAI requires `--base-url` or `COMPCAT_EVAL_OPENAI_URL`. Both print a
+quota warning and prevent an accidental production run. The URL names the CompCat app, not the
+model endpoint; that app must already have its provider variables configured. Using
+`https://compcat.app` is possible but consumes the public request pool and should be limited to a
+final smoke check.
 
 ## Compare a baseline
 
@@ -80,7 +91,7 @@ data, and a genuine regression.
 
 - Unit and integration tests remain the fastest gate for deterministic policy and tool behavior.
 - The full local corpus is the primary deep-quality loop and consumes no hosted-model quota.
-- The Groq acceptance subset catches serving, quantization, structured-output, and tool-routing
+- The hosted acceptance subset catches serving, reasoning, structured-output, and tool-routing
   differences that local llama.cpp cannot reproduce exactly.
 - A short public smoke check confirms the deployed revision, proxy, cookies, and production
   limits; it is not the place for exhaustive prompt iteration.

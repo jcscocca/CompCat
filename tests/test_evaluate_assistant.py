@@ -97,12 +97,51 @@ def test_turn_checks_fail_on_error_missing_done_and_wrong_tool() -> None:
     assert {"terminal_done", "no_error", "nonempty_response", "tool_name"} <= failed
 
 
+def test_turn_checks_fail_when_response_ends_mid_sentence() -> None:
+    events = [
+        {
+            "event": "token",
+            "data": {
+                "delta": (
+                    "From reported incidents, Pike Place Market had 7,224 within 500 m "
+                    "from 2024-01-"
+                )
+            },
+        },
+        {"event": "done", "data": {}},
+    ]
+
+    checks = evaluate_assistant.check_turn(events, 1.0, {})
+
+    complete = next(check for check in checks if check["name"] == "complete_response")
+    assert complete == {
+        "name": "complete_response",
+        "passed": False,
+        "detail": "response does not end with sentence-closing punctuation",
+    }
+
+
 def test_groq_target_requires_an_explicit_app_url(monkeypatch) -> None:
     monkeypatch.delenv("COMPCAT_EVAL_GROQ_URL", raising=False)
     args = argparse.Namespace(target="groq", base_url=None)
 
     with pytest.raises(evaluate_assistant.EvalConfigurationError, match="quota-consuming"):
         evaluate_assistant.resolve_base_url(args)
+
+
+def test_openai_target_requires_an_explicit_app_url(monkeypatch) -> None:
+    monkeypatch.delenv("COMPCAT_EVAL_OPENAI_URL", raising=False)
+    args = argparse.Namespace(target="openai", base_url=None)
+
+    with pytest.raises(evaluate_assistant.EvalConfigurationError, match="quota-consuming"):
+        evaluate_assistant.resolve_base_url(args)
+
+
+def test_openai_target_uses_its_configured_app_url(monkeypatch) -> None:
+    monkeypatch.setenv("COMPCAT_EVAL_OPENAI_URL", "http://127.0.0.1:8002/")
+    args = argparse.Namespace(target="openai", base_url=None)
+
+    assert evaluate_assistant.resolve_base_url(args) == "http://127.0.0.1:8002"
 
 
 def test_baseline_is_validated_before_an_expensive_run(tmp_path, capsys) -> None:
