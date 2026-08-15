@@ -123,20 +123,36 @@ if ($SkipIngest) {
     try {
         # /dashboard/freshness is session-scoped, so mint a cookie first. Run inside the api
         # container for the same reason as the health probe above.
+        #
+        # Carry the cookie BY HAND rather than through an HTTPCookieProcessor. Every
+        # production-like posture sets MCA_SESSION_COOKIE_SECURE=true (it is true in
+        # .env.tunnel), and a cookiejar will not replay a Secure cookie over the plain-HTTP
+        # loopback this probe necessarily uses - so /dashboard/freshness answered 401, every
+        # layer read as "data through []", and each deploy silently backfilled all three layers
+        # instead of the stale ones. Plain HTTP is fine here: it never leaves the container.
         $freshnessScript = @'
-import http.cookiejar, json, urllib.request
+import json, urllib.request
 
 base = "http://localhost:8000"
-opener = urllib.request.build_opener(
-    urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
-)
-opener.open(urllib.request.Request(base + "/sessions", method="POST")).read()
-layers = json.load(opener.open(base + "/dashboard/freshness"))
+created = urllib.request.urlopen(urllib.request.Request(base + "/sessions", method="POST"))
+cookie = created.getheader("Set-Cookie", "").split(";", 1)[0]
+if not cookie:
+    raise SystemExit("POST /sessions returned no session cookie")
+request = urllib.request.Request(base + "/dashboard/freshness", headers={"Cookie": cookie})
+layers = json.load(urllib.request.urlopen(request))
 print(json.dumps({name: (values or {}).get("data_through") for name, values in layers.items()}))
 '@
         # Piped straight to `docker`, not through the Compose function: a PowerShell function
         # buffers pipeline input into $input instead of wiring it to the native process stdin.
-        $freshness = ($freshnessScript | docker @composeArgs exec -T api python -) | ConvertFrom-Json
+        $freshnessJson = ($freshnessScript | docker @composeArgs exec -T api python -)
+        # Fail loudly. Left unchecked, a broken probe yields $null, every layer compares as
+        # maximally stale, and the launcher quietly runs a full backfill - the 911-calls layer
+        # alone is a rolling 24-month window. Skipping the refresh and saying so is the safer
+        # failure: the 03:10 sidecar catches the data up anyway.
+        if ($LASTEXITCODE -ne 0 -or -not $freshnessJson) {
+            throw 'the freshness probe failed (see the error above)'
+        }
+        $freshness = $freshnessJson | ConvertFrom-Json
 
         $layers = [ordered]@{ reported = 'seattle_spd_crime'; arrests = 'seattle_spd_arrests'; calls = 'seattle_spd_911' }
         foreach ($layer in $layers.Keys) {

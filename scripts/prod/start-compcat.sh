@@ -67,16 +67,23 @@ echo "API healthy; deployed revision verified: ${served_revision}."
 
 # Refresh SPD data if stale. /dashboard/freshness is session-scoped, so mint one first; a
 # null data_through (fresh database, first run) counts as maximally stale.
+#
+# Carry the cookie BY HAND rather than through an HTTPCookieProcessor. .env.prod sets
+# MCA_SESSION_COOKIE_SECURE=true, and a cookiejar will not replay a Secure cookie over the
+# plain-HTTP loopback this probe necessarily uses - /dashboard/freshness would answer 401 and,
+# under `set -e`, abort the deploy after the site was already healthy. Plain HTTP is fine here:
+# it never leaves the container.
 freshness_report="$(compose exec -T api python - "${FRESHNESS_MAX_AGE_DAYS}" <<'PY'
-import datetime, http.cookiejar, json, sys, urllib.request
+import datetime, json, sys, urllib.request
 
 max_age_days = int(sys.argv[1])
 base = "http://localhost:8000"
-opener = urllib.request.build_opener(
-    urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
-)
-opener.open(urllib.request.Request(base + "/sessions", method="POST")).read()
-layers = json.load(opener.open(base + "/dashboard/freshness"))
+created = urllib.request.urlopen(urllib.request.Request(base + "/sessions", method="POST"))
+cookie = created.getheader("Set-Cookie", "").split(";", 1)[0]
+if not cookie:
+    raise SystemExit("POST /sessions returned no session cookie")
+request = urllib.request.Request(base + "/dashboard/freshness", headers={"Cookie": cookie})
+layers = json.load(urllib.request.urlopen(request))
 data_through = (layers.get("reported") or {}).get("data_through")
 try:
     age_days = (datetime.date.today() - datetime.date.fromisoformat(data_through)).days

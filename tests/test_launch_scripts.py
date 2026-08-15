@@ -190,6 +190,36 @@ def test_public_vps_launcher_validates_its_env_before_starting() -> None:
     assert text.index(validation) < text.index("compose up -d --build")
 
 
+def test_freshness_probes_carry_the_session_cookie_by_hand() -> None:
+    """A cookiejar silently breaks this probe in every production-like posture.
+
+    `/dashboard/freshness` is session-scoped, and MCA_SESSION_COOKIE_SECURE is true in both
+    .env.tunnel and .env.prod. urllib's HTTPCookieProcessor refuses to replay a Secure cookie
+    over the plain-HTTP container loopback these probes must use, so the request answered 401:
+    the tunnel launcher then backfilled every layer on every deploy, and the VPS launcher
+    aborted under `set -e` after the site was already healthy.
+    """
+    for launcher in ("public/start-public.ps1", "prod/start-compcat.sh"):
+        # Comments stripped: both scripts explain the cookiejar trap by name, and prose must
+        # neither satisfy nor break an assertion about what the script actually does.
+        code = _code(launcher)
+        assert "http.cookiejar" not in code, f"{launcher} still relies on a cookiejar"
+        assert "HTTPCookieProcessor" not in code, f"{launcher} still relies on a cookiejar"
+        assert 'created.getheader("Set-Cookie", "").split(";", 1)[0]' in code
+        assert 'headers={"Cookie": cookie}' in code
+        # A session with no cookie must not be mistaken for a fresh dataset.
+        assert "POST /sessions returned no session cookie" in code
+
+
+def test_tunnel_launcher_refuses_to_guess_when_the_freshness_probe_fails() -> None:
+    """Silence here is expensive: unknown freshness reads as maximally stale, and a full
+    911-calls backfill is a rolling 24-month window."""
+    code = _code("public/start-public.ps1")
+
+    assert "if ($LASTEXITCODE -ne 0 -or -not $freshnessJson) {" in code
+    assert "throw 'the freshness probe failed (see the error above)'" in code
+
+
 def test_building_launchers_stamp_the_full_git_revision() -> None:
     personal = _read("start-compcat.ps1")
     tunnel = _read("public/start-public.ps1")
