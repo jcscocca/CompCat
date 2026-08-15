@@ -624,8 +624,12 @@ Renaming the *containing directory* is the only thing that works. Two directorie
 (`Docker\run`, `docker-secrets-engine`) and **each failed start leaves a fresh orphan**, so
 clearing one at a time never converges — the sweep must cover every known socket directory before
 each start attempt. `ensure-public.ps1` does exactly that, up to two repair passes, and refuses to
-relocate any directory containing something other than zero-byte sockets. Swept directories are
-kept as `<name>.broken-<timestamp>` next to the original; they are safe to delete.
+relocate any directory containing something other than zero-byte sockets.
+
+Swept directories are left as `<name>.broken-<timestamp>` beside the original. **Do not bother
+trying to delete them** — they still contain the undeletable socket, so `Remove-Item -Recurse`
+fails with the same error 1920. They are inert (one 0-byte stub each) and accumulate at most one
+per repair. Ignore them.
 
 ### Operating it
 
