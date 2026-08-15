@@ -8,6 +8,8 @@ import openai
 import pytest
 
 from app.assistant.llm_client import (
+    LlmQuotaExhausted,
+    LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
     OpenAiNativeLlmClient,
@@ -15,6 +17,16 @@ from app.assistant.llm_client import (
 from app.ratelimit import get_rate_limiter
 
 _DUMMY_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+
+
+def _api_status_error(
+    error_type: type[openai.APIStatusError] = openai.RateLimitError,
+    *,
+    code: str = "rate_limit_exceeded",
+) -> openai.APIStatusError:
+    body = {"message": "provider limit", "type": "requests", "code": code}
+    response = httpx.Response(429, request=_DUMMY_REQUEST, json={"error": body})
+    return error_type("provider limit", response=response, body=body)
 
 
 def _resp(content: str | None):
@@ -129,6 +141,24 @@ def test_complete_api_error_raises_unavailable() -> None:
         asyncio.run(_client(comp).complete([{"role": "user", "content": "hi"}]))
 
 
+def test_complete_rate_limit_error_raises_rate_limited() -> None:
+    comp = _FakeCompletions(create_exc=_api_status_error())
+    with pytest.raises(LlmRateLimited, match="provider limit"):
+        asyncio.run(_client(comp).complete([{"role": "user", "content": "hi"}]))
+
+
+def test_complete_generic_429_status_raises_rate_limited() -> None:
+    comp = _FakeCompletions(create_exc=_api_status_error(openai.APIStatusError))
+    with pytest.raises(LlmRateLimited, match="provider limit"):
+        asyncio.run(_client(comp).complete([{"role": "user", "content": "hi"}]))
+
+
+def test_complete_insufficient_quota_has_distinct_classification() -> None:
+    comp = _FakeCompletions(create_exc=_api_status_error(code="insufficient_quota"))
+    with pytest.raises(LlmQuotaExhausted, match="quota exhausted"):
+        asyncio.run(_client(comp).complete([{"role": "user", "content": "hi"}]))
+
+
 def test_complete_forwards_messages_temperature_and_model() -> None:
     comp = _FakeCompletions(response=_resp("ok"))
     # OpenAI takes system in the messages array as-is — no hoisting like the Anthropic path.
@@ -161,6 +191,12 @@ def test_stream_empty_raises_unavailable() -> None:
 def test_stream_pre_delta_error_raises_unavailable() -> None:
     comp = _FakeCompletions(create_exc=openai.APIConnectionError(request=_DUMMY_REQUEST))
     with pytest.raises(LlmUnavailable, match="unavailable"):
+        _collect(_client(comp), [{"role": "user", "content": "hi"}])
+
+
+def test_stream_pre_delta_rate_limit_raises_rate_limited() -> None:
+    comp = _FakeCompletions(create_exc=_api_status_error())
+    with pytest.raises(LlmRateLimited, match="provider limit"):
         _collect(_client(comp), [{"role": "user", "content": "hi"}])
 
 

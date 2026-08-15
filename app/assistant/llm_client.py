@@ -90,6 +90,10 @@ class LlmRateLimited(LlmUnavailable):
     """The upstream model provider rejected the request at its usage limit."""
 
 
+class LlmQuotaExhausted(LlmRateLimited):
+    """The provider rejected the request because its paid allowance is exhausted."""
+
+
 class LlmStreamInterrupted(RuntimeError):
     """A streaming completion died after emitting at least one delta. Not safe to
     fail over (the consumer already saw text); callers replace the partial answer."""
@@ -335,6 +339,37 @@ def _http_llm_error(exc: httpx.HTTPError) -> LlmUnavailable:
     return LlmUnavailable(f"LLM endpoint unavailable: {exc}")
 
 
+def _sdk_error_code(exc: Exception) -> str:
+    """Return a normalized vendor error code from an SDK exception body, when present."""
+    body = getattr(exc, "body", None)
+    if not isinstance(body, dict):
+        return ""
+    nested = body.get("error")
+    error = nested if isinstance(nested, dict) else body
+    code = error.get("code")
+    return code.strip().lower() if isinstance(code, str) else ""
+
+
+def _sdk_llm_error(
+    exc: Exception,
+    *,
+    rate_limit_type: type[Exception],
+) -> LlmUnavailable:
+    """Map typed SDK failures onto the backend-independent assistant contract.
+
+    SDKs normally use ``RateLimitError`` for HTTP 429, while the status-code check keeps
+    the classification correct for compatible SDK versions that surface a generic status
+    error instead. OpenAI also uses 429 for ``insufficient_quota``; preserve that separately
+    so the user is not told a billing condition should clear in a minute.
+    """
+    is_rate_limit = isinstance(exc, rate_limit_type) or getattr(exc, "status_code", None) == 429
+    if is_rate_limit:
+        if _sdk_error_code(exc) == "insufficient_quota":
+            return LlmQuotaExhausted(f"LLM provider quota exhausted: {exc}")
+        return LlmRateLimited(f"LLM provider rate limit reached: {exc}")
+    return LlmUnavailable(f"LLM endpoint unavailable: {exc}")
+
+
 def _split_anthropic_messages(
     messages: list[dict[str, str]],
 ) -> tuple[str, list[dict[str, str]]]:
@@ -443,7 +478,7 @@ class AnthropicLlmClient:
                 **self._request_kwargs(messages, max_tokens)
             )
         except anthropic.APIError as exc:
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=anthropic.RateLimitError) from exc
         content = _anthropic_text(response)
         record_llm_tokens(messages, content, getattr(response, "usage", None))
         if not content or not content.strip():
@@ -481,7 +516,7 @@ class AnthropicLlmClient:
                 raise LlmStreamInterrupted(
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=anthropic.RateLimitError) from exc
         finally:
             # Also runs on aclose() (output-guard trip, client disconnect), where usage is still
             # None and the chars/4 estimate charges what was generated. Never-connected
@@ -584,7 +619,7 @@ class OpenAiNativeLlmClient:
                 **self._request_kwargs(messages, temperature, max_tokens, stream=False)
             )
         except openai.APIError as exc:
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=openai.RateLimitError) from exc
         content = _openai_message_text(response)
         record_llm_tokens(messages, content, getattr(response, "usage", None))
         if not content or not content.strip():
@@ -623,7 +658,7 @@ class OpenAiNativeLlmClient:
                 raise LlmStreamInterrupted(
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=openai.RateLimitError) from exc
         finally:
             # Also runs on aclose() (output-guard trip, client disconnect). Never-connected
             # requests charge nothing.
@@ -657,6 +692,7 @@ class FailoverLlmClient:
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
         saw_rate_limit = False
+        saw_quota_exhausted = False
         for index, client in enumerate(self.clients):
             try:
                 return await client.complete(
@@ -667,6 +703,9 @@ class FailoverLlmClient:
                 )
             except LlmUnavailable as exc:
                 saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
+                saw_quota_exhausted = saw_quota_exhausted or isinstance(
+                    exc, LlmQuotaExhausted
+                )
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -680,7 +719,7 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise _failover_error(failures, saw_rate_limit) from last_exc
+        raise _failover_error(failures, saw_rate_limit, saw_quota_exhausted) from last_exc
 
     async def complete_structured(
         self,
@@ -695,6 +734,7 @@ class FailoverLlmClient:
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
         saw_rate_limit = False
+        saw_quota_exhausted = False
         for index, client in enumerate(self.clients):
             try:
                 structured_complete = getattr(client, "complete_structured", None)
@@ -714,6 +754,9 @@ class FailoverLlmClient:
                 )
             except LlmUnavailable as exc:
                 saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
+                saw_quota_exhausted = saw_quota_exhausted or isinstance(
+                    exc, LlmQuotaExhausted
+                )
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -727,7 +770,7 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise _failover_error(failures, saw_rate_limit) from last_exc
+        raise _failover_error(failures, saw_rate_limit, saw_quota_exhausted) from last_exc
 
     async def stream(
         self,
@@ -743,6 +786,7 @@ class FailoverLlmClient:
         last_exc: LlmUnavailable | None = None
         yielded = False
         saw_rate_limit = False
+        saw_quota_exhausted = False
         for index, client in enumerate(self.clients):
             try:
                 async with contextlib.aclosing(
@@ -764,6 +808,9 @@ class FailoverLlmClient:
                     # partial answer instead.
                     raise
                 saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
+                saw_quota_exhausted = saw_quota_exhausted or isinstance(
+                    exc, LlmQuotaExhausted
+                )
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -777,9 +824,17 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise _failover_error(failures, saw_rate_limit) from last_exc
+        raise _failover_error(failures, saw_rate_limit, saw_quota_exhausted) from last_exc
 
 
-def _failover_error(failures: list[str], saw_rate_limit: bool) -> LlmUnavailable:
-    error_type = LlmRateLimited if saw_rate_limit else LlmUnavailable
+def _failover_error(
+    failures: list[str], saw_rate_limit: bool, saw_quota_exhausted: bool
+) -> LlmUnavailable:
+    error_type = (
+        LlmQuotaExhausted
+        if saw_quota_exhausted
+        else LlmRateLimited
+        if saw_rate_limit
+        else LlmUnavailable
+    )
     return error_type("All LLM endpoints failed: " + "; ".join(failures))

@@ -62,9 +62,9 @@ def _render(
         [
             "docker",
             "compose",
-            # /dev/null so a stray repo-root .env cannot supply the required variables.
+            # The platform null device keeps a stray repo-root .env from supplying variables.
             "--env-file",
-            "/dev/null",
+            os.devnull,
             *profile_args,
             "-f",
             str(_BASE),

@@ -334,6 +334,7 @@ salt/secret and forces secure cookies.
 | `MCA_LLM_TIMEOUT_S` | `120` | Read timeout in seconds for OpenAI-compatible calls. Raising it does not slow providers that respond sooner. |
 | `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | _unset_ / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`). |
 | `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | _unset_ / `gpt-4o` | OpenAI credentials + model (provider `openai_native`). |
+| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward Tabby's sampling temperatures to OpenAI; set `false` for o-series and gpt-5-family reasoning models. |
 | `MCA_ASSISTANT_ROLE` | `compcat_analyst` | Analyst role label included in assistant responses. |
 
 Normalization thresholds for the internal upload pipeline are also configurable:

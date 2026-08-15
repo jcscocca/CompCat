@@ -219,3 +219,13 @@ def test_public_limit_templates_match_the_raised_hourly_posture() -> None:
         assert "MCA_RATE_LIMIT_ASSISTANT_PER_IP_PER_HOUR=90" in text
         assert "MCA_RATE_LIMIT_ASSISTANT_GLOBAL_PER_DAY=500" in text
         assert "MCA_ASSISTANT_TOKEN_BUDGET_PER_DAY=2000000" in text
+
+
+def test_public_templates_disable_temperature_for_reasoning_model_compatibility() -> None:
+    for path in (
+        evaluate_assistant.REPO_ROOT / ".env.prod.example",
+        evaluate_assistant.REPO_ROOT / ".env.tunnel.example",
+    ):
+        text = path.read_text()
+        assert "MCA_OPENAI_SEND_TEMPERATURE=false" in text
+        assert "o-series and gpt-5-family models reject" in text

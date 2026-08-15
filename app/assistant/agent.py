@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import re
 from calendar import monthrange
 from collections.abc import AsyncIterator, Callable
@@ -13,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.assistant.llm_client import (
     AssistantLlmClient,
+    LlmQuotaExhausted,
     LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
@@ -54,6 +56,8 @@ from app.assistant.tools import AssistantClarification, AssistantToolError, exec
 from app.config import get_settings
 from app.ratelimit import get_rate_limiter
 
+logger = logging.getLogger(__name__)
+
 # The product-invariant guard (safety-ranking, place-ranking prose, presence claims) lives in
 # app/assistant/output_guard.py so the deterministic tool summaries can apply it too. The
 # underscore names below are kept as aliases: they are the historical import surface.
@@ -86,6 +90,10 @@ _UNREACHABLE_MESSAGE = (
 _RATE_LIMITED_MESSAGE = (
     "Tabby's model provider is at its short-term limit. Wait about a minute and try again — "
     "chips, filters, and the rest of CompCat still work."
+)
+_QUOTA_EXHAUSTED_MESSAGE = (
+    "Tabby's model provider has exhausted its current allowance. Try again later — chips, "
+    "filters, and the rest of CompCat still work."
 )
 # A syntactically valid plan whose shape we don't recognize (e.g. a small local model emits
 # {"type": "clarify"}) is a soft failure, not an internal error: ask the user to rephrase.
@@ -293,13 +301,22 @@ async def run_assistant_turn(
                 settings.assistant_role,
             )
             plan = _parse_model_json(raw_plan)
-        except LlmRateLimited:
+        except LlmQuotaExhausted as exc:
+            logger.warning("Assistant planning failed because provider quota is exhausted: %s", exc)
+            yield AssistantStreamEvent(
+                event="error",
+                data={"message": _QUOTA_EXHAUSTED_MESSAGE, "code": "llm_quota_exhausted"},
+            )
+            return
+        except LlmRateLimited as exc:
+            logger.warning("Assistant planning was rate limited: %s", exc)
             yield AssistantStreamEvent(
                 event="error",
                 data={"message": _RATE_LIMITED_MESSAGE, "code": "llm_rate_limited"},
             )
             return
-        except LlmUnavailable:
+        except LlmUnavailable as exc:
+            logger.warning("Assistant planning LLM was unavailable: %s", exc)
             yield AssistantStreamEvent(
                 event="error",
                 data={"message": _UNREACHABLE_MESSAGE, "code": "llm_unreachable"},
