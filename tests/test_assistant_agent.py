@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
 
+import app.assistant.agent as agent_module
 from app.assistant.agent import _complete_plan, run_assistant_turn
-from app.assistant.llm_client import LlmRateLimited, LlmStreamInterrupted, LlmUnavailable
+from app.assistant.llm_client import (
+    LlmQuotaExhausted,
+    LlmRateLimited,
+    LlmStreamInterrupted,
+    LlmUnavailable,
+)
 from app.assistant.schemas import (
     AssistantChatMessage,
     AssistantDashboardState,
@@ -26,6 +34,28 @@ def _narration_off(monkeypatch: pytest.MonkeyPatch):
     # kill-switch mode. Streaming-mode tests opt back in per-test with
     # monkeypatch.setenv("MCA_ASSISTANT_NARRATION_ENABLED", "true").
     monkeypatch.setenv("MCA_ASSISTANT_NARRATION_ENABLED", "false")
+
+
+@contextlib.contextmanager
+def _capture_agent_logs():
+    records: list[logging.LogRecord] = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logger = agent_module.logger
+    previous_level = logger.level
+    previous_disabled = logger.disabled
+    previous_global_disable = logging.root.manager.disable
+    logger.addHandler(handler)
+    logger.setLevel(logging.WARNING)
+    logger.disabled = False
+    logging.disable(logging.NOTSET)
+    try:
+        yield records
+    finally:
+        logger.setLevel(previous_level)
+        logger.disabled = previous_disabled
+        logging.disable(previous_global_disable)
+        logger.removeHandler(handler)
 
 
 class FakeClient:
@@ -927,8 +957,6 @@ def test_agent_clarifies_underspecified_request(tmp_path):
 
 
 def test_agent_reports_unreachable_classifier(tmp_path):
-    from app.assistant.llm_client import LlmUnavailable
-
     class RaisingClient:
         calls: list = []
 
@@ -936,22 +964,24 @@ def test_agent_reports_unreachable_classifier(tmp_path):
             raise LlmUnavailable("endpoint down")
 
     session, user_hash = _session_with_place_and_crime(tmp_path)
-    try:
-        events = asyncio.run(
-            _collect(
-                session,
-                user_hash,
-                [AssistantChatMessage(role="user", content="Compare A and B.")],
-                AssistantDashboardState(selected_place_ids=["place-1"]),
-                RaisingClient(),
+    with _capture_agent_logs() as records:
+        try:
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content="Compare A and B.")],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    RaisingClient(),
+                )
             )
-        )
-    finally:
-        session.close()
+        finally:
+            session.close()
 
     assert events[-1].event == "error"
     assert "Couldn't reach the analyst" in events[-1].data["message"]
     assert events[-1].data["code"] == "llm_unreachable"
+    assert any("endpoint down" in record.getMessage() for record in records)
 
 
 def test_agent_recomputes_clear_result_followup_without_calling_planner(tmp_path):
@@ -1046,22 +1076,51 @@ def test_agent_reports_provider_rate_limit_without_marking_unreachable(tmp_path)
             raise LlmRateLimited("provider limit")
 
     session, user_hash = _session_with_place_and_crime(tmp_path)
-    try:
-        events = asyncio.run(
-            _collect(
-                session,
-                user_hash,
-                [AssistantChatMessage(role="user", content="Summarize the dashboard.")],
-                AssistantDashboardState(selected_place_ids=["place-1"]),
-                RateLimitedClient(),
+    with _capture_agent_logs() as records:
+        try:
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content="Summarize the dashboard.")],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    RateLimitedClient(),
+                )
             )
-        )
-    finally:
-        session.close()
+        finally:
+            session.close()
 
     assert events[-1].event == "error"
     assert events[-1].data["code"] == "llm_rate_limited"
     assert "about a minute" in events[-1].data["message"]
+    assert any("provider limit" in record.getMessage() for record in records)
+
+
+def test_agent_reports_exhausted_provider_quota_without_short_term_copy(tmp_path):
+    class QuotaExhaustedClient:
+        async def complete(self, messages, *, role, temperature=None, max_tokens=None):
+            raise LlmQuotaExhausted("insufficient_quota")
+
+    session, user_hash = _session_with_place_and_crime(tmp_path)
+    with _capture_agent_logs() as records:
+        try:
+            events = asyncio.run(
+                _collect(
+                    session,
+                    user_hash,
+                    [AssistantChatMessage(role="user", content="Summarize the dashboard.")],
+                    AssistantDashboardState(selected_place_ids=["place-1"]),
+                    QuotaExhaustedClient(),
+                )
+            )
+        finally:
+            session.close()
+
+    assert events[-1].event == "error"
+    assert events[-1].data["code"] == "llm_quota_exhausted"
+    assert "current allowance" in events[-1].data["message"]
+    assert "about a minute" not in events[-1].data["message"]
+    assert any("insufficient_quota" in record.getMessage() for record in records)
 
 
 def test_agent_reports_tool_error_code(tmp_path):

@@ -386,22 +386,30 @@ prompt requires all of these qualifiers to survive the rewrite.
 - **`OpenAiNativeLlmClient`** — first-class OpenAI via the official `openai` SDK (native auth,
   built-in retries, typed errors). Messages pass through unchanged (OpenAI takes `system` inline);
   it sends `max_completion_tokens` and forwards `temperature` unless `MCA_OPENAI_SEND_TEMPERATURE`
-  is off (reasoning models reject a non-default temperature). `stream` iterates the SDK
-  `AsyncStream` inside `async with` so an abandoned turn closes it. Distinct from `OpenAiLlmClient`,
-  which is the generic compatible client for local/Groq hosts.
+  is off. GPT-5.6 models are detected automatically: temperature is suppressed even for an older
+  env file that leaves the flag on, narration uses `reasoning_effort=none`, and planning uses
+  `reasoning_effort=medium` with JSON-object mode. This preserves the 512-token narration allowance
+  for visible content while giving the routing step a bounded reasoning budget and a syntactic
+  JSON guarantee. `stream` iterates the SDK `AsyncStream` inside `async with` so an abandoned turn
+  closes it. SDK `RateLimitError` and any generic status error carrying HTTP 429 map to
+  `LlmRateLimited`; OpenAI's `code=insufficient_quota` variant maps to the more specific
+  `LlmQuotaExhausted` so the UI does not describe a billing allowance as a minute-long throttle.
+  Distinct from `OpenAiLlmClient`, which is the generic compatible client for local/Groq hosts.
 - **`AnthropicLlmClient`** — first-class Claude via the official `anthropic` SDK. Hoists `system`
   turns into Anthropic's top-level field, drops a leading assistant turn (Anthropic requires the
   array to start with `user`), does not forward `temperature` (current Claude models reject it),
   and disables thinking by default (`MCA_ANTHROPIC_DISABLE_THINKING`) so the tight `max_tokens`
-  budget isn't spent on reasoning. Both first-class clients map errors to the same
-  `LlmUnavailable` / `LlmStreamInterrupted` contract as `OpenAiLlmClient`.
+  budget isn't spent on reasoning. Its typed or status-based HTTP 429 failures map to
+  `LlmRateLimited`; other failures retain the same `LlmUnavailable` / `LlmStreamInterrupted`
+  contract as `OpenAiLlmClient`.
 - **`FailoverLlmClient`** — wraps a list of backends (any `AssistantLlmClient`) and tries each in order.
   For `complete`, it falls back to the next client on any `LlmUnavailable`. For `stream`, failover
   is only possible *before the first delta*: once a client has yielded any text, a subsequent
   `LlmUnavailable` from it is a contract violation and is re-raised rather than silently retried
   (retrying would repeat text already sent to the user) — `LlmStreamInterrupted` after the first
-  delta is never treated as failover-eligible either way. Raises `LlmUnavailable` only when every
-  client fails before yielding anything.
+  delta is never treated as failover-eligible either way. When every client fails, the aggregate
+  preserves the most actionable classification (`LlmQuotaExhausted`, then `LlmRateLimited`, then
+  plain `LlmUnavailable`).
 
 **Configuration (all in `app/config.py`, env prefix `MCA_`)**
 
@@ -423,7 +431,7 @@ prompt requires all of these qualifiers to survive the rewrite.
 | `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | `""` / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`) |
 | `MCA_ANTHROPIC_DISABLE_THINKING` | `true` | Disable Claude thinking so it doesn't consume the token budget; set false for `claude-fable-5` |
 | `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | `""` / `gpt-4o` | OpenAI credentials + model (provider `openai_native`); `MCA_OPENAI_BASE_URL` optional |
-| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward temperature; set false for reasoning models (o-series / gpt-5) |
+| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward temperature for models that accept it. GPT-5.6 suppresses it automatically; public templates use the cross-family-safe `false`, and boot warns when another active reasoning-model slot leaves it true. |
 
 The SSE endpoint in `app/api/routes_assistant.py` builds the client via `build_assistant_llm_client`
 on each request. `_failover_chain` assembles the primary (`MCA_LLM_PROVIDER`) followed by each
@@ -450,12 +458,17 @@ instance, letting a caller choose the backend would be an unmetered-spend surfac
 > path skips planning entirely: a clearly result-referential follow-up with a typed newest-card
 > scope runs `explain_result` directly, because the model cannot author or change that scope. The
 > normal narration pass still writes in Tabby's voice, and its deterministic summary remains
-> available if narration fails. Provider HTTP
-> 429s instead emit `llm_rate_limited`, which does not
-> latch the composer offline. A failure of the **narration** call (§2) does *not* emit `error` — it
+> available if narration fails. Provider HTTP 429s instead emit `llm_rate_limited`, which does not
+> latch the composer offline; OpenAI `insufficient_quota` emits `llm_quota_exhausted` with copy
+> that does not promise a short retry. A failure of the **narration** call (§2) does *not* emit
+> `error` — it
 > degrades to a `replace` event carrying the already-computed deterministic text, since the plan
 > already succeeded by the time narration runs. Either way, the rest of the CompCat app
 > (dashboard, places, exports) is unaffected.
+
+Before emitting any planning-stage quota, rate-limit, or unavailable error, the agent writes a
+WARNING containing the underlying exception detail. User-facing SSE copy stays stable while the
+server log retains the provider/endpoint diagnosis.
 
 ---
 
@@ -550,6 +563,7 @@ flowchart TD
     C -- no match, narration on --> C1[Stream status: interpreting…]
     C -- no match, narration off --> E
     C1 --> E[Single planning LLM call\nbuild_planning_messages → _complete_plan\ntemperature 0.2, max_tokens 1024]
+    E -- LlmQuotaExhausted --> F0[Stream allowance-exhausted\nllm_quota_exhausted error]
     E -- LlmRateLimited --> F1[Stream retryable\nllm_rate_limited error]
     E -- LlmUnavailable --> F[Stream error event]
     E -- bad JSON --> G[Stream error event]

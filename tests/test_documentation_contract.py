@@ -65,7 +65,7 @@ def _documented_inline_routes(text: str) -> set[tuple[str, str]]:
 
 def test_canonical_api_route_table_matches_the_application() -> None:
     registered = _registered_api_routes()
-    documented = _documented_api_table_routes(CANONICAL_API_DOC.read_text())
+    documented = _documented_api_table_routes(CANONICAL_API_DOC.read_text(encoding="utf-8"))
 
     assert documented == registered, (
         f"missing from docs: {sorted(registered - documented)}; "
@@ -75,15 +75,15 @@ def test_canonical_api_route_table_matches_the_application() -> None:
 
 def test_readme_route_inventory_covers_the_application() -> None:
     registered = _registered_api_routes()
-    documented = _documented_inline_routes(README.read_text())
+    documented = _documented_inline_routes(README.read_text(encoding="utf-8"))
 
     assert registered <= documented, f"missing from README: {sorted(registered - documented)}"
 
 
 def test_documented_model_count_matches_sqlalchemy_metadata() -> None:
     count = len(Base.metadata.tables)
-    docs_index = (ROOT / "docs" / "README.md").read_text()
-    data_model = (ROOT / "docs" / "architecture" / "data-model.md").read_text()
+    docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+    data_model = (ROOT / "docs" / "architecture" / "data-model.md").read_text(encoding="utf-8")
 
     assert f"The {count} SQLAlchemy entities" in docs_index
     assert f"Total: **{count} tables**" in data_model
@@ -95,7 +95,7 @@ def test_maintained_markdown_links_resolve() -> None:
     broken: list[str] = []
 
     for source in maintained:
-        for raw_target in _MARKDOWN_LINK.findall(source.read_text()):
+        for raw_target in _MARKDOWN_LINK.findall(source.read_text(encoding="utf-8")):
             target = raw_target.strip().removeprefix("<").removesuffix(">")
             target = target.split("#", 1)[0]
             if not target or target.startswith(("http://", "https://", "mailto:")):

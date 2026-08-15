@@ -9,12 +9,21 @@ import pytest
 
 from app.assistant.llm_client import (
     AnthropicLlmClient,
+    LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
 )
 from app.ratelimit import get_rate_limiter
 
 _DUMMY_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
+def _api_status_error(
+    error_type: type[anthropic.APIStatusError] = anthropic.RateLimitError,
+) -> anthropic.APIStatusError:
+    body = {"type": "error", "error": {"type": "rate_limit_error", "message": "limit"}}
+    response = httpx.Response(429, request=_DUMMY_REQUEST, json=body)
+    return error_type("provider limit", response=response, body=body)
 
 
 class _Block:
@@ -133,6 +142,18 @@ def test_complete_api_error_raises_unavailable() -> None:
         asyncio.run(_client(msgs).complete([{"role": "user", "content": "hi"}]))
 
 
+def test_complete_rate_limit_error_raises_rate_limited() -> None:
+    msgs = _FakeMessages(create_exc=_api_status_error())
+    with pytest.raises(LlmRateLimited, match="provider limit"):
+        asyncio.run(_client(msgs).complete([{"role": "user", "content": "hi"}]))
+
+
+def test_complete_generic_429_status_raises_rate_limited() -> None:
+    msgs = _FakeMessages(create_exc=_api_status_error(anthropic.APIStatusError))
+    with pytest.raises(LlmRateLimited, match="provider limit"):
+        asyncio.run(_client(msgs).complete([{"role": "user", "content": "hi"}]))
+
+
 def test_complete_hoists_system_and_drops_temperature() -> None:
     msgs = _FakeMessages(response=_Response([_Block("text", "ok")]))
     asyncio.run(
@@ -184,6 +205,12 @@ def test_stream_pre_delta_error_raises_unavailable() -> None:
         stream_ctx=_StreamCtx([], enter_exc=anthropic.APIConnectionError(request=_DUMMY_REQUEST))
     )
     with pytest.raises(LlmUnavailable, match="unavailable"):
+        _collect(_client(msgs), [{"role": "user", "content": "hi"}])
+
+
+def test_stream_pre_delta_rate_limit_raises_rate_limited() -> None:
+    msgs = _FakeMessages(stream_ctx=_StreamCtx([], enter_exc=_api_status_error()))
+    with pytest.raises(LlmRateLimited, match="provider limit"):
         _collect(_client(msgs), [{"role": "user", "content": "hi"}])
 
 

@@ -56,6 +56,38 @@ def test_personal_uploads_warning_names_the_env_var_and_the_exposure(
     assert "keep OFF on shared instances" in caplog.text
 
 
+def test_reasoning_model_temperature_warning_names_the_fix(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = _prod_settings(
+        llm_provider="openai_native",
+        openai_api_key="test-openai-key",
+        openai_model="gpt-5.6-luna",
+        openai_send_temperature=True,
+        rate_limit_enabled=True,
+    )
+    with caplog.at_level(logging.WARNING, logger="app.main"):
+        log_posture_warnings(settings)
+    assert "MCA_OPENAI_SEND_TEMPERATURE=true" in caplog.text
+    assert "gpt-5-family models reject" in caplog.text
+    assert "MCA_OPENAI_SEND_TEMPERATURE=false" in caplog.text
+
+
+def test_reasoning_model_with_temperature_disabled_is_quiet(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = _prod_settings(
+        llm_provider="openai_native",
+        openai_api_key="test-openai-key",
+        openai_model="gpt-5.6-luna",
+        openai_send_temperature=False,
+        rate_limit_enabled=True,
+    )
+    with caplog.at_level(logging.WARNING, logger="app.main"):
+        log_posture_warnings(settings)
+    assert caplog.text == ""
+
+
 def test_default_production_posture_is_quiet(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="app.main"):
         log_posture_warnings(_prod_settings())

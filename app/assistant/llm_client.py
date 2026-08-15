@@ -90,6 +90,10 @@ class LlmRateLimited(LlmUnavailable):
     """The upstream model provider rejected the request at its usage limit."""
 
 
+class LlmQuotaExhausted(LlmRateLimited):
+    """The provider rejected the request because its paid allowance is exhausted."""
+
+
 class LlmStreamInterrupted(RuntimeError):
     """A streaming completion died after emitting at least one delta. Not safe to
     fail over (the consumer already saw text); callers replace the partial answer."""
@@ -335,6 +339,37 @@ def _http_llm_error(exc: httpx.HTTPError) -> LlmUnavailable:
     return LlmUnavailable(f"LLM endpoint unavailable: {exc}")
 
 
+def _sdk_error_code(exc: Exception) -> str:
+    """Return a normalized vendor error code from an SDK exception body, when present."""
+    body = getattr(exc, "body", None)
+    if not isinstance(body, dict):
+        return ""
+    nested = body.get("error")
+    error = nested if isinstance(nested, dict) else body
+    code = error.get("code")
+    return code.strip().lower() if isinstance(code, str) else ""
+
+
+def _sdk_llm_error(
+    exc: Exception,
+    *,
+    rate_limit_type: type[Exception],
+) -> LlmUnavailable:
+    """Map typed SDK failures onto the backend-independent assistant contract.
+
+    SDKs normally use ``RateLimitError`` for HTTP 429, while the status-code check keeps
+    the classification correct for compatible SDK versions that surface a generic status
+    error instead. OpenAI also uses 429 for ``insufficient_quota``; preserve that separately
+    so the user is not told a billing condition should clear in a minute.
+    """
+    is_rate_limit = isinstance(exc, rate_limit_type) or getattr(exc, "status_code", None) == 429
+    if is_rate_limit:
+        if _sdk_error_code(exc) == "insufficient_quota":
+            return LlmQuotaExhausted(f"LLM provider quota exhausted: {exc}")
+        return LlmRateLimited(f"LLM provider rate limit reached: {exc}")
+    return LlmUnavailable(f"LLM endpoint unavailable: {exc}")
+
+
 def _split_anthropic_messages(
     messages: list[dict[str, str]],
 ) -> tuple[str, list[dict[str, str]]]:
@@ -443,7 +478,7 @@ class AnthropicLlmClient:
                 **self._request_kwargs(messages, max_tokens)
             )
         except anthropic.APIError as exc:
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=anthropic.RateLimitError) from exc
         content = _anthropic_text(response)
         record_llm_tokens(messages, content, getattr(response, "usage", None))
         if not content or not content.strip():
@@ -481,7 +516,7 @@ class AnthropicLlmClient:
                 raise LlmStreamInterrupted(
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=anthropic.RateLimitError) from exc
         finally:
             # Also runs on aclose() (output-guard trip, client disconnect), where usage is still
             # None and the chars/4 estimate charges what was generated. Never-connected
@@ -514,9 +549,12 @@ class OpenAiNativeLlmClient:
     """First-class OpenAI backend using the official ``openai`` SDK — native auth, built-in
     retries, and typed errors. Distinct from :class:`OpenAiLlmClient`, which is a generic
     /chat/completions HTTP client for any OpenAI-compatible host (local llama-swap, Groq, …).
-    OpenAI takes ``system`` in the messages array and accepts ``temperature``, so messages pass
-    through unchanged. Errors map to :class:`LlmUnavailable` / :class:`LlmStreamInterrupted` so
-    this composes with :class:`FailoverLlmClient` like the other backends."""
+    OpenAI takes ``system`` in the messages array, so messages pass through unchanged. Request
+    controls are selected by the builder for the configured model: GPT-5.6 uses explicit
+    reasoning effort and structured planning while older chat models retain the original
+    temperature behavior. Errors map to :class:`LlmUnavailable` /
+    :class:`LlmStreamInterrupted` so this composes with :class:`FailoverLlmClient` like the other
+    backends."""
 
     def __init__(
         self,
@@ -525,6 +563,9 @@ class OpenAiNativeLlmClient:
         *,
         base_url: str = "",
         send_temperature: bool = True,
+        reasoning_effort: str | None = None,
+        structured_reasoning_effort: str | None = None,
+        supports_structured_output: bool = False,
         max_tokens_default: int = _OPENAI_NATIVE_DEFAULT_MAX_TOKENS,
         timeout_s: float = 120.0,
         connect_timeout_s: float = 5.0,
@@ -534,6 +575,12 @@ class OpenAiNativeLlmClient:
         self.api_key = api_key
         self.base_url = base_url or "https://api.openai.com/v1"
         self._send_temperature = send_temperature
+        # Narration is latency-sensitive and tightly capped. Planning may use a separate effort
+        # because choosing a tool and producing valid JSON benefits from a small amount of
+        # reasoning, while spending the narration budget on hidden reasoning can yield no text.
+        self.reasoning_effort = reasoning_effort
+        self.structured_reasoning_effort = structured_reasoning_effort
+        self.supports_structured_output = supports_structured_output
         self._max_tokens_default = max_tokens_default
         self._timeout = httpx.Timeout(timeout_s, connect=connect_timeout_s)
         # Built lazily on first use so construction stays cheap and loop-free; tests inject a fake.
@@ -555,6 +602,8 @@ class OpenAiNativeLlmClient:
         max_tokens: int | None,
         *,
         stream: bool,
+        reasoning_effort: str | None = None,
+        response_format: dict[str, object] | None = None,
     ) -> dict[str, object]:
         kwargs: dict[str, object] = {
             "model": self.model,
@@ -565,6 +614,10 @@ class OpenAiNativeLlmClient:
         }
         if self._send_temperature and temperature is not None:
             kwargs["temperature"] = temperature
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
+        if response_format is not None:
+            kwargs["response_format"] = response_format
         if stream:
             kwargs["stream"] = True
             # Trailing usage chunk for the daily token budget; harmless when a proxy drops it.
@@ -579,12 +632,57 @@ class OpenAiNativeLlmClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
+        return await self._complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=self.reasoning_effort,
+        )
+
+    async def complete_structured(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: dict[str, object],
+        role: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Use provider-backed JSON mode for models whose contract is known."""
+        return await self._complete(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=(
+                self.structured_reasoning_effort
+                if self.structured_reasoning_effort is not None
+                else self.reasoning_effort
+            ),
+            response_format=response_format if self.supports_structured_output else None,
+        )
+
+    async def _complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        reasoning_effort: str | None,
+        response_format: dict[str, object] | None = None,
+    ) -> str:
         try:
             response = await self._ensure_client().chat.completions.create(
-                **self._request_kwargs(messages, temperature, max_tokens, stream=False)
+                **self._request_kwargs(
+                    messages,
+                    temperature,
+                    max_tokens,
+                    stream=False,
+                    reasoning_effort=reasoning_effort,
+                    response_format=response_format,
+                )
             )
         except openai.APIError as exc:
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=openai.RateLimitError) from exc
         content = _openai_message_text(response)
         record_llm_tokens(messages, content, getattr(response, "usage", None))
         if not content or not content.strip():
@@ -605,7 +703,13 @@ class OpenAiNativeLlmClient:
         parts: list[str] = []
         try:
             chunks = await self._ensure_client().chat.completions.create(
-                **self._request_kwargs(messages, temperature, max_tokens, stream=True)
+                **self._request_kwargs(
+                    messages,
+                    temperature,
+                    max_tokens,
+                    stream=True,
+                    reasoning_effort=self.reasoning_effort,
+                )
             )
             reached = True
             # async with so an abandoned generator (disconnect, guard trip) closes the SDK
@@ -623,7 +727,7 @@ class OpenAiNativeLlmClient:
                 raise LlmStreamInterrupted(
                     f"LLM stream died mid-generation: {exc}"
                 ) from exc
-            raise LlmUnavailable(f"LLM endpoint unavailable: {exc}") from exc
+            raise _sdk_llm_error(exc, rate_limit_type=openai.RateLimitError) from exc
         finally:
             # Also runs on aclose() (output-guard trip, client disconnect). Never-connected
             # requests charge nothing.
@@ -657,6 +761,7 @@ class FailoverLlmClient:
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
         saw_rate_limit = False
+        saw_quota_exhausted = False
         for index, client in enumerate(self.clients):
             try:
                 return await client.complete(
@@ -667,6 +772,9 @@ class FailoverLlmClient:
                 )
             except LlmUnavailable as exc:
                 saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
+                saw_quota_exhausted = saw_quota_exhausted or isinstance(
+                    exc, LlmQuotaExhausted
+                )
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -680,7 +788,7 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise _failover_error(failures, saw_rate_limit) from last_exc
+        raise _failover_error(failures, saw_rate_limit, saw_quota_exhausted) from last_exc
 
     async def complete_structured(
         self,
@@ -695,6 +803,7 @@ class FailoverLlmClient:
         failures: list[str] = []
         last_exc: LlmUnavailable | None = None
         saw_rate_limit = False
+        saw_quota_exhausted = False
         for index, client in enumerate(self.clients):
             try:
                 structured_complete = getattr(client, "complete_structured", None)
@@ -714,6 +823,9 @@ class FailoverLlmClient:
                 )
             except LlmUnavailable as exc:
                 saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
+                saw_quota_exhausted = saw_quota_exhausted or isinstance(
+                    exc, LlmQuotaExhausted
+                )
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -727,7 +839,7 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise _failover_error(failures, saw_rate_limit) from last_exc
+        raise _failover_error(failures, saw_rate_limit, saw_quota_exhausted) from last_exc
 
     async def stream(
         self,
@@ -743,6 +855,7 @@ class FailoverLlmClient:
         last_exc: LlmUnavailable | None = None
         yielded = False
         saw_rate_limit = False
+        saw_quota_exhausted = False
         for index, client in enumerate(self.clients):
             try:
                 async with contextlib.aclosing(
@@ -764,6 +877,9 @@ class FailoverLlmClient:
                     # partial answer instead.
                     raise
                 saw_rate_limit = saw_rate_limit or isinstance(exc, LlmRateLimited)
+                saw_quota_exhausted = saw_quota_exhausted or isinstance(
+                    exc, LlmQuotaExhausted
+                )
                 label = getattr(client, "base_url", f"client[{index}]")
                 failures.append(f"{label}: {exc}")
                 last_exc = exc
@@ -777,9 +893,17 @@ class FailoverLlmClient:
                         exc,
                         next_label,
                     )
-        raise _failover_error(failures, saw_rate_limit) from last_exc
+        raise _failover_error(failures, saw_rate_limit, saw_quota_exhausted) from last_exc
 
 
-def _failover_error(failures: list[str], saw_rate_limit: bool) -> LlmUnavailable:
-    error_type = LlmRateLimited if saw_rate_limit else LlmUnavailable
+def _failover_error(
+    failures: list[str], saw_rate_limit: bool, saw_quota_exhausted: bool
+) -> LlmUnavailable:
+    error_type = (
+        LlmQuotaExhausted
+        if saw_quota_exhausted
+        else LlmRateLimited
+        if saw_rate_limit
+        else LlmUnavailable
+    )
     return error_type("All LLM endpoints failed: " + "; ".join(failures))

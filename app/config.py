@@ -145,8 +145,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_base_url: str = ""
-    # Reasoning models (o-series / gpt-5-family) reject a non-default temperature; set False
-    # when openai_model is one of those. Standard chat models (the gpt-4o default) want it on.
+    # Reasoning models reject a non-default temperature. GPT-5.6 is detected and suppressed by
+    # the client builder even when an older deployment leaves this True; set False explicitly
+    # for other reasoning models. Standard chat models (the gpt-4o default) want it on.
     openai_send_temperature: bool = True
 
     # Demo/public rate limiting (see docs/superpowers/specs/2026-07-10-demo-on-demand-design.md).

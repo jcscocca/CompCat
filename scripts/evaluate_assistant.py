@@ -21,6 +21,11 @@ DEFAULT_CORPUS = REPO_ROOT / "evals" / "assistant" / "v1.json"
 DEFAULT_RESULTS = REPO_ROOT / "assistant-eval-results"
 LOCAL_DEFAULT_URL = "http://127.0.0.1:8000"
 
+# CompCat's assistant returns prose, so a response that lacks sentence-closing punctuation is
+# strong evidence that streaming or generation stopped early. Permit common quote, bracket, and
+# Markdown closers after the punctuation itself.
+_COMPLETE_RESPONSE_END = re.compile(r"[.!?…](?:[\"'”’)}\]*_~`]+)?$")
+
 
 class EvalConfigurationError(ValueError):
     pass
@@ -140,6 +145,16 @@ def check_turn(
     add("no_error", not errors, errors[0].get("data", {}) if errors else "no error event")
     if not expect.get("allow_empty_response", False):
         add("nonempty_response", bool(text), f"response length: {len(text)}")
+        response_complete = bool(_COMPLETE_RESPONSE_END.search(text))
+        add(
+            "complete_response",
+            response_complete,
+            (
+                "response ends with sentence-closing punctuation"
+                if response_complete
+                else "response does not end with sentence-closing punctuation"
+            ),
+        )
 
     expected_tool = expect.get("tool_name", "*")
     actual_tool_names = [str(tool.get("tool_name", "")) for tool in tools]
@@ -349,21 +364,25 @@ def write_report(path: Path, report: dict[str, Any]) -> None:
 def resolve_base_url(args: argparse.Namespace) -> str:
     if args.base_url:
         return args.base_url.rstrip("/")
-    env_name = "COMPCAT_EVAL_LOCAL_URL" if args.target == "local" else "COMPCAT_EVAL_GROQ_URL"
+    env_name = {
+        "local": "COMPCAT_EVAL_LOCAL_URL",
+        "groq": "COMPCAT_EVAL_GROQ_URL",
+        "openai": "COMPCAT_EVAL_OPENAI_URL",
+    }[args.target]
     configured = os.environ.get(env_name, "").strip()
     if configured:
         return configured.rstrip("/")
     if args.target == "local":
         return LOCAL_DEFAULT_URL
     raise EvalConfigurationError(
-        "--target groq requires --base-url or COMPCAT_EVAL_GROQ_URL; this prevents an "
-        "accidental quota-consuming production run"
+        f"--target {args.target} requires --base-url or {env_name}; this prevents an "
+        "accidental quota-consuming hosted run"
     )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", choices=("local", "groq"), default="local")
+    parser.add_argument("--target", choices=("local", "groq", "openai"), default="local")
     parser.add_argument("--base-url", help="CompCat app origin; provider is configured by that app")
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     parser.add_argument("--case", action="append", default=[], dest="case_ids")
@@ -394,8 +413,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {case['id']}: {case.get('description', '')}")
     if args.dry_run:
         return 0
-    if args.target == "groq":
-        print("Groq run confirmed: these turns consume hosted request/token quota.")
+    if args.target in {"groq", "openai"}:
+        print(
+            f"{args.target.title()} run confirmed: these turns consume hosted "
+            "request/token quota."
+        )
 
     started_at = datetime.now(UTC)
     output = args.output

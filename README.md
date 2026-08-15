@@ -262,6 +262,9 @@ make run
 To use a hosted model instead of a local endpoint, set `MCA_LLM_PROVIDER=anthropic`
 (`MCA_ANTHROPIC_API_KEY`, `MCA_ANTHROPIC_MODEL`) for Claude, or `openai_native`
 (`MCA_OPENAI_API_KEY`, `MCA_OPENAI_MODEL`) for OpenAI's API — both via their official SDKs.
+GPT-5.6 models such as `gpt-5.6-luna` are detected automatically: CompCat omits the unsupported
+sampling temperature, uses medium reasoning plus JSON mode for planning, and disables reasoning
+for the short narration pass.
 `MCA_LLM_FALLBACK_PROVIDER` and `MCA_LLM_THIRD_PROVIDER` configure two optional, independent
 failover slots. Compatible-endpoint slots also need their slot-specific base URL and model;
 key-based Claude/OpenAI slots activate from their provider key. See `.env.example` and the
@@ -334,6 +337,7 @@ salt/secret and forces secure cookies.
 | `MCA_LLM_TIMEOUT_S` | `120` | Read timeout in seconds for OpenAI-compatible calls. Raising it does not slow providers that respond sooner. |
 | `MCA_ANTHROPIC_API_KEY` / `MCA_ANTHROPIC_MODEL` | _unset_ / `claude-sonnet-5` | Claude credentials + model (provider `anthropic`). |
 | `MCA_OPENAI_API_KEY` / `MCA_OPENAI_MODEL` | _unset_ / `gpt-4o` | OpenAI credentials + model (provider `openai_native`). |
+| `MCA_OPENAI_SEND_TEMPERATURE` | `true` | Forward Tabby's sampling temperatures to OpenAI; set `false` for o-series and gpt-5-family reasoning models. |
 | `MCA_ASSISTANT_ROLE` | `compcat_analyst` | Analyst role label included in assistant responses. |
 
 Normalization thresholds for the internal upload pipeline are also configurable:

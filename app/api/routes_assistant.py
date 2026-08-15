@@ -82,6 +82,11 @@ def _is_groq_gpt_oss(base_url: str, model: str) -> bool:
     )
 
 
+def _is_openai_gpt_56(model: str) -> bool:
+    """GPT-5.6 family members share the request controls used by CompCat."""
+    return model.lower().startswith("gpt-5.6-")
+
+
 def _openai_compatible_options(
     base_url: str,
     model: str,
@@ -117,11 +122,21 @@ def _require_openai_native(settings: Settings) -> OpenAiNativeLlmClient:
         raise ValueError(
             "Assistant LLM provider 'openai_native' requires MCA_OPENAI_API_KEY."
         )
+    is_gpt_56 = _is_openai_gpt_56(settings.openai_model)
     return OpenAiNativeLlmClient(
         api_key=settings.openai_api_key,
         model=settings.openai_model,
         base_url=settings.openai_base_url,
-        send_temperature=settings.openai_send_temperature,
+        # GPT-5.6 reasoning models reject a non-default sampling temperature. Detect the
+        # family so an older deployment remains compatible even before its env file adds the
+        # manual MCA_OPENAI_SEND_TEMPERATURE=false override.
+        send_temperature=settings.openai_send_temperature and not is_gpt_56,
+        # Keep narration fast and ensure its 512-token allowance reaches visible content.
+        reasoning_effort="none" if is_gpt_56 else None,
+        # Planning gets JSON-object mode and preserves Luna's successful default-quality
+        # reasoning baseline. A lower effort can be evaluated later against the corpus.
+        structured_reasoning_effort="medium" if is_gpt_56 else None,
+        supports_structured_output=is_gpt_56,
     )
 
 

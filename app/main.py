@@ -35,6 +35,19 @@ from app.response_security import ResponseSecurityMiddleware
 logger = logging.getLogger(__name__)
 
 
+def _uses_openai_native(settings: Settings) -> bool:
+    return bool(settings.openai_api_key) and "openai_native" in {
+        settings.llm_provider,
+        settings.llm_fallback_provider,
+        settings.llm_third_provider,
+    }
+
+
+def _looks_like_openai_reasoning_model(model: str) -> bool:
+    normalized = model.strip().lower()
+    return normalized.startswith(("o1", "o3", "o4", "gpt-5"))
+
+
 class OptionalStaticFiles(StaticFiles):
     """Static files whose source directory may be provisioned after app startup.
 
@@ -54,8 +67,20 @@ class OptionalStaticFiles(StaticFiles):
 
 
 def log_posture_warnings(settings: Settings) -> None:
-    """Loud boot-time warnings for prod-like postures that are one env var away from real
-    exposure. Warn, never block — both toggles have legitimate single-host uses."""
+    """Loud boot-time warnings for incompatible config and risky production postures."""
+    if (
+        _uses_openai_native(settings)
+        and settings.openai_send_temperature
+        and _looks_like_openai_reasoning_model(settings.openai_model)
+    ):
+        # Warn rather than block: a custom MCA_OPENAI_BASE_URL may accept the same model
+        # name and sampling parameters even though OpenAI's endpoint does not.
+        logger.warning(
+            "MCA_OPENAI_SEND_TEMPERATURE=true with reasoning model %s: OpenAI o-series "
+            "and gpt-5-family models reject Tabby's non-default temperatures. Set "
+            "MCA_OPENAI_SEND_TEMPERATURE=false and restart.",
+            settings.openai_model,
+        )
     if not settings.is_production_like:
         return
     if settings.internal_tier_enabled:

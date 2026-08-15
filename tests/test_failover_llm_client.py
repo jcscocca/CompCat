@@ -9,6 +9,7 @@ import pytest
 from app.assistant import llm_client
 from app.assistant.llm_client import (
     FailoverLlmClient,
+    LlmQuotaExhausted,
     LlmRateLimited,
     LlmStreamInterrupted,
     LlmUnavailable,
@@ -126,6 +127,26 @@ def test_any_rate_limited_backend_preserves_retryable_failure() -> None:
         asyncio.run(client.complete(_MESSAGES, role="x"))
 
     with pytest.raises(LlmRateLimited, match="All LLM endpoints failed"):
+        asyncio.run(
+            client.complete_structured(
+                _MESSAGES,
+                response_format={"type": "json_object"},
+                role="x",
+            )
+        )
+
+
+def test_any_quota_exhausted_backend_preserves_quota_failure() -> None:
+    primary = _FakeClient(base_url="primary", error=LlmUnavailable("primary down"))
+    fallback = _FakeClient(
+        base_url="fallback", error=LlmQuotaExhausted("insufficient_quota")
+    )
+    client = FailoverLlmClient([primary, fallback])
+
+    with pytest.raises(LlmQuotaExhausted, match="All LLM endpoints failed"):
+        asyncio.run(client.complete(_MESSAGES, role="x"))
+
+    with pytest.raises(LlmQuotaExhausted, match="All LLM endpoints failed"):
         asyncio.run(
             client.complete_structured(
                 _MESSAGES,
@@ -265,6 +286,12 @@ class _StreamRateLimited:
         yield  # pragma: no cover - makes this an async generator
 
 
+class _StreamQuotaExhausted:
+    async def stream(self, messages, *, role, temperature=None, max_tokens=None):
+        raise LlmQuotaExhausted("insufficient_quota")
+        yield  # pragma: no cover - makes this an async generator
+
+
 class _StreamInterrupted:
     async def stream(self, messages, *, role, temperature=None, max_tokens=None):
         yield "partial "
@@ -297,6 +324,13 @@ def test_stream_raises_when_all_fail() -> None:
 def test_stream_preserves_rate_limited_failure() -> None:
     with pytest.raises(LlmRateLimited, match="All LLM endpoints failed"):
         asyncio.run(_drain(FailoverLlmClient([_StreamUnavailable(), _StreamRateLimited()])))
+
+
+def test_stream_preserves_quota_exhausted_failure() -> None:
+    with pytest.raises(LlmQuotaExhausted, match="All LLM endpoints failed"):
+        asyncio.run(
+            _drain(FailoverLlmClient([_StreamUnavailable(), _StreamQuotaExhausted()]))
+        )
 
 
 def test_stream_mid_stream_interrupt_propagates_without_failover() -> None:
