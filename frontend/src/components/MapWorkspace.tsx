@@ -766,11 +766,20 @@ export function MapWorkspace() {
     // The newest analysis defines "current" — badges replace wholesale, not merge.
     if (effect.badges) setLiveBadges(new Map(effect.badges.map((b) => [b.place_id, b])));
     // The frozen card lands in the thread alongside the map effects — it doesn't replace them.
+    // Canonical reports are the requested result, so open them at the heading instead of
+    // hiding their reference, type, temporal, and record sections behind another click.
+    // Legacy cards remain compact because their older detail layout is supplemental.
     if (effect.card) {
       const card = effect.card;
-      fitCard(card);
       thread.append({ kind: "analysis_card", card });
       setCurrentCard(card);
+      if (card.report) {
+        if (isMobile) fitCard(card);
+        expandCard(card);
+        setFocusCard({ card });
+      } else {
+        fitCard(card);
+      }
     }
   }
 
@@ -1237,7 +1246,6 @@ export function MapWorkspace() {
               busy={turn.busy}
               draft={turn.draft}
               statusLine={turn.statusLine}
-              toolActivity={turn.toolActivity}
               offline={turn.offline}
               onSend={(text) => { setOffer(null); void turn.sendChat(text); }}
               onRetry={() => void turn.sendChat(null)}

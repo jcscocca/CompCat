@@ -40,7 +40,6 @@ function setup(overrides: Partial<PanelProps> = {}) {
     busy: false,
     draft: "",
     statusLine: "",
-    toolActivity: [],
     offline: false,
     onSend,
     onRetry,

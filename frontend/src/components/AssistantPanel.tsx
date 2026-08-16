@@ -18,7 +18,6 @@ type Props = {
   busy: boolean;
   draft: string;
   statusLine: string;
-  toolActivity: { label: string }[];
   offline: boolean;
   onSend: (text: string) => void;
   onRetry: () => void;
@@ -90,7 +89,6 @@ export function AssistantPanel({
   busy,
   draft,
   statusLine,
-  toolActivity,
   offline,
   onSend,
   onRetry,
@@ -175,7 +173,7 @@ export function AssistantPanel({
     const log = logRef.current;
     if (!log || !stickToBottomRef.current || newestDisplayItem?.kind === "analysis_card") return;
     log.scrollTop = log.scrollHeight;
-  }, [displayItems.length, draft, newestDisplayItem?.kind, statusLine, toolActivity.length]);
+  }, [displayItems.length, draft, newestDisplayItem?.kind, statusLine]);
 
   useEffect(() => {
     if (!focusCard) return;
@@ -366,14 +364,6 @@ export function AssistantPanel({
           <div className="mc-dock-msg is-assistant mc-dock-statusline">{statusLine}</div>
         ) : null}
       </div> : null}
-
-      {!resultFocused && toolActivity.length ? (
-        <ul className="mc-dock-tools" aria-label="Tool activity">
-          {toolActivity.map((item, index) => (
-            <li key={`${item.label}-${index}`}>{item.label}</li>
-          ))}
-        </ul>
-      ) : null}
 
       {!resultFocused && followupChips.length > 0 && !busy ? (
         <div className="mc-followups">

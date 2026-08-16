@@ -285,6 +285,9 @@ The agent influences the Tabby rail and map by emitting `tool` SSE events. The f
   `null` (no pane change).
 
 `useAssistantTurn` serializes chat and command streams with newest-intent-wins abort semantics.
+Tool names remain an internal event protocol: the rail does not render raw function names such
+as `explain_result`. User-visible progress comes from assistant status and response text, while
+the underlying tool events continue to drive the mapped UI effects above.
 `AssistantPanel.tsx` renders the typed thread, while `MapWorkspace.tsx` applies
 `AssistantToolEffect`, reconciles late-arriving place IDs, owns live badge invalidation, and
 connects badge taps back to the newest matching card.

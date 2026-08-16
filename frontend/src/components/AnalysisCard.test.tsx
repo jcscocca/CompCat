@@ -235,6 +235,44 @@ describe("categoryCounts", () => {
 });
 
 describe("AnalysisCard", () => {
+  it("surfaces the leading type and local reference result in the report overview", () => {
+    render(
+      <AnalysisCard
+        card={analyzeCard({ report: canonicalReport() })}
+        expanded={false}
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+
+    expect(screen.getByText("Most common offense subcategory")).toBeInTheDocument();
+    expect(screen.getByText("Theft")).toBeInTheDocument();
+    expect(screen.getByText("3 of 3 reported incident records")).toBeInTheDocument();
+    expect(screen.getByText("Test Hill MCPP reference")).toBeInTheDocument();
+    expect(screen.getByText("68% fewer · 7% same · 25% more")).toBeInTheDocument();
+    expect(screen.getByText("Eligible equal-radius circles")).toBeInTheDocument();
+  });
+
+  it("uses the busiest weekday when the layer has no reference distribution", () => {
+    const report = canonicalReport();
+    report.scope.layer = "calls";
+    report.profile.layer = "calls";
+    report.profile.capabilities.reference_context = false;
+    report.sections.place_context[0].reference_context = [];
+    render(
+      <AnalysisCard
+        card={analyzeCard({ report })}
+        expanded={false}
+        onExpandChange={() => {}}
+        exportHrefBase={EXPORT_BASE}
+      />,
+    );
+
+    expect(screen.getByText("Most recorded weekdays")).toBeInTheDocument();
+    expect(screen.getByText("Monday · Wednesday · Friday")).toBeInTheDocument();
+    expect(screen.getByText("1 reported incident record each")).toBeInTheDocument();
+  });
+
   it("hides redundant memberships for one place and explains overlap for two", () => {
     const single = canonicalReport();
     const { rerender } = render(

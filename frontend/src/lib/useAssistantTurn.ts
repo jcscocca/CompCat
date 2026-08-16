@@ -29,7 +29,6 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState("");
   const [statusLine, setStatusLine] = useState("");
-  const [toolActivity, setToolActivity] = useState<{ label: string }[]>([]);
   const [offline, setOffline] = useState(false);
   // Newest intent wins: a new turn aborts the one in flight. `turnSeq` tags each turn so a
   // superseded turn writes nothing (every state mutation is gated by `live()`) and its
@@ -59,7 +58,6 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
       let settingsOnly = true;
       setDraft("");
       setStatusLine("");
-      setToolActivity([]);
       setBusy(true);
       try {
         await start((event) => {
@@ -69,7 +67,6 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
             const toolName = String(event.data.tool_name ?? "tool");
             sawTool = true;
             settingsOnly &&= toolName === "update_filters";
-            setToolActivity((current) => [{ label: toolName }, ...current].slice(0, 4));
             onToolResult?.(event.data);
           }
           if (event.event === "status") {
@@ -168,5 +165,5 @@ export function useAssistantTurn({ dashboardState, items, append, onToolResult }
     [append, runTurn],
   );
 
-  return { busy, draft, statusLine, toolActivity, offline, sendChat, runCommand };
+  return { busy, draft, statusLine, offline, sendChat, runCommand };
 }

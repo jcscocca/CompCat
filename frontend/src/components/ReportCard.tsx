@@ -4,7 +4,7 @@ import { getAnalysisReport, getTrends } from "../api/client";
 import { buildReportZip, downloadBlob, jsonBlob, printableBlob, reportFilename, trendCsvBlob, trendFilename } from "../lib/reportExport";
 import { reportOverlapExplanation } from "../lib/reportOverlap";
 import type { AnalysisReport, AnalysisSettings, LayerKey, NeighborhoodAnalysis } from "../types";
-import { ReportReferencePlot } from "./ReportReferencePlot";
+import { ReportReferencePlot, reportReferencePercentages } from "./ReportReferencePlot";
 import { TrendSection } from "./TrendSection";
 
 type Props = {
@@ -18,6 +18,7 @@ type Props = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const NO_REFERENCE_COPY: Partial<Record<LayerKey, { title: string; detail: string }>> = {
   arrests: {
@@ -51,12 +52,72 @@ function scopeMismatch(report: AnalysisReport, live?: AnalysisSettings): boolean
     || (report.scope.filters.offense_category ?? "") !== live.offenseCategory;
 }
 
+type ReportFact = { label: string; value: string; detail: string };
+
+function mostCommonTypeFact(report: AnalysisReport): ReportFact | null {
+  const counts = new Map<string, number>();
+  for (const place of report.sections.place_context) {
+    for (const row of place.type_mix) counts.set(row.label, (counts.get(row.label) ?? 0) + row.count);
+  }
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const top = rows[0];
+  if (!top) return null;
+  const total = rows.reduce((sum, [, count]) => sum + count, 0);
+  const basis = report.selection_kind === "single_place"
+    ? (total === 1 ? report.profile.record_noun_singular : report.profile.record_noun_plural)
+    : (total === 1 ? "per-place membership" : "per-place memberships");
+  return {
+    label: `Most common ${report.profile.subtype_label.toLocaleLowerCase()}`,
+    value: top[0],
+    detail: `${top[1].toLocaleString()} of ${total.toLocaleString()} ${basis}`,
+  };
+}
+
+function localReferenceFact(report: AnalysisReport): ReportFact | null {
+  if (report.selection_kind !== "single_place") return null;
+  const references = report.sections.place_context[0]?.reference_context ?? [];
+  const reference = references.find((row) => row.kind === "mcpp" && row.available)
+    ?? references.find((row) => row.available);
+  if (!reference
+    || reference.share_below === null
+    || reference.share_equal === null
+    || reference.share_above === null) return null;
+  const [below, equal, above] = reportReferencePercentages(reference);
+  return {
+    label: `${reference.label} reference`,
+    value: `${below}% fewer · ${equal}% same · ${above}% more`,
+    detail: "Eligible equal-radius circles",
+  };
+}
+
+function busiestWeekdayFact(report: AnalysisReport): ReportFact | null {
+  const counts = Array(7).fill(0) as number[];
+  for (const place of report.sections.place_context) {
+    place.temporal.dow_counts.forEach((count, index) => { counts[index] += count; });
+  }
+  const maximum = Math.max(...counts);
+  if (maximum <= 0) return null;
+  const labels = DAY_NAMES.filter((_, index) => counts[index] === maximum);
+  const basis = report.selection_kind === "single_place"
+    ? (maximum === 1 ? report.profile.record_noun_singular : report.profile.record_noun_plural)
+    : (maximum === 1 ? "per-place membership" : "per-place memberships");
+  return {
+    label: labels.length === 1 ? "Most recorded weekday" : "Most recorded weekdays",
+    value: labels.join(" · "),
+    detail: `${maximum.toLocaleString()} ${basis}${labels.length > 1 ? " each" : ""}`,
+  };
+}
+
 export function ReportCard({ report, neighborhood, expanded, historical, workspaceAnalysis, onExpandChange, onRerun }: Props) {
   const [exporting, setExporting] = useState<"print" | "json" | "trend" | "zip" | null>(null);
   const [exportError, setExportError] = useState("");
   const mismatch = scopeMismatch(report, workspaceAnalysis);
   const overview = report.sections.overview;
   const overlapExplanation = reportOverlapExplanation(report);
+  const atAGlanceFacts = [
+    mostCommonTypeFact(report),
+    localReferenceFact(report) ?? busiestWeekdayFact(report),
+  ].filter((fact): fact is ReportFact => fact !== null);
   const maxPlaceCount = Math.max(1, ...report.sections.place_context.map((place) => place.record_count));
   const hasTrendContext = Boolean(neighborhood?.places.some((place) =>
     place.baselines?.some((baseline) => baseline.kind === "mcpp"),
@@ -165,6 +226,13 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
         <div className="mc-report-total"><span>Unique source records</span><strong>{overview.unique_source_record_count}</strong><small>Unique-source-record basis</small></div>
         <div className="mc-report-facts">
           <div><span>Latest recorded event</span><strong>{report.scope.latest_recorded_event_date ?? "Not available"}</strong></div>
+          {atAGlanceFacts.map((fact) => (
+            <div key={fact.label}>
+              <span>{fact.label}</span>
+              <strong>{fact.value}</strong>
+              <small>{fact.detail}</small>
+            </div>
+          ))}
         </div>
         {overlapExplanation ? (
           <div className="mc-report-overlap" role="note">
