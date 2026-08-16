@@ -2154,6 +2154,13 @@ describe("MapWorkspace", () => {
 
   it("runs the offer chip as a structured command and hands the row back to the card's chips", async () => {
     const window = currentYearAnalysisWindow();
+    const report = makeAnalysisReport({
+      place_ids: ["p1"],
+      analysis_start_date: "2026-01-01",
+      analysis_end_date: "2026-06-30",
+      radius_m: 250,
+      layer: "reported",
+    });
     vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
     vi.mocked(getDashboardSummary).mockResolvedValueOnce(makeSummary()).mockResolvedValue(makeSummary([home]));
     vi.mocked(createPlace).mockResolvedValue(home);
@@ -2167,6 +2174,7 @@ describe("MapWorkspace", () => {
             settings_used: { radius_m: 250, analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30", offense_category: null, layer: "reported" },
             neighborhood: makeNeighborhoodAnalysis(),
             incidents: makeIncidentDetails(),
+            report,
           },
         },
       });
@@ -2196,9 +2204,14 @@ describe("MapWorkspace", () => {
       layer: "reported",
     });
 
-    // The offer is consumed: its chip is gone and the landed card's own re-run chips take over.
+    // The offer is consumed and its requested canonical report opens immediately; collapsing
+    // hands the rail back to the landed card's own re-run chips.
     await screen.findByText("Pulled reports near Home.");
     expect(screen.queryByRole("button", { name: "Pull reports near Home" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Widen to 500 m" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(await screen.findByRole("button", { name: "Widen to 500 m" })).toBeInTheDocument();
   });
 
@@ -2321,6 +2334,30 @@ describe("MapWorkspace", () => {
       place_ids: [],
       points,
     }));
+  });
+
+  it("keeps internal assistant function names out of the rail", async () => {
+    vi.mocked(createSession).mockResolvedValue({ session_state: "ready" });
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary());
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, handlers) => {
+      handlers.onEvent({
+        event: "tool",
+        data: { tool_name: "explain_result", result: {} },
+      });
+      handlers.onEvent({ event: "token", data: { delta: "Here is what that result means." } });
+      handlers.onEvent({ event: "done", data: {} });
+    });
+
+    render(<MapWorkspace />);
+    await screen.findByText(/point me at a place/i);
+    fireEvent.change(screen.getByLabelText("Analyst message"), {
+      target: { value: "Explain that result" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByText("Here is what that result means.");
+    expect(screen.queryByText("explain_result")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Tool activity" })).not.toBeInTheDocument();
   });
 
   it("keeps assistant point-backed results out of persistent and selectable place chips", async () => {
