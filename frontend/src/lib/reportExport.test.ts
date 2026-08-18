@@ -74,6 +74,8 @@ describe("report exports", () => {
     expect(decodeReportFile(files["overview.csv"]).split("\r\n")[0]).toContain("shared_source_record_count,additional_membership_count,maximum_places_per_record");
     expect(decodeReportFile(files["overview.csv"])).toContain(",3,per_place_membership,4,1,1,2,2,false");
     expect(decodeReportFile(files["places.csv"])).toContain("'=HYPERLINK");
+    expect(decodeReportFile(files["records.csv"])).toContain(",selection-1,\"'=HYPERLINK");
+    expect(decodeReportFile(files["records.csv"])).toContain("2025-01-02T10:00:00Z");
     const metadata = JSON.parse(decodeReportFile(files["metadata.json"]));
     expect(metadata).toMatchObject({
       selected_location: "=HYPERLINK(\"bad\")",
@@ -129,6 +131,8 @@ describe("report exports", () => {
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain("1 source record falls within both selected radii.");
     expect(html).toContain("individual place totals add up to 4 memberships");
+    expect(html).not.toContain("Record disclosure");
+    expect(html).not.toContain("<table");
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).not.toContain("owner_hash");
     expect(reportFilename(fixture(), "zip")).toBe("compcat-reported-hyperlink-bad-plus-1-report-2026-08-02.zip");

@@ -198,7 +198,7 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
                   Neighborhood trend CSV · {label}
                 </button>
               ))}
-              <button type="button" role="menuitem" disabled={exporting !== null} onClick={() => void exportReport("zip")}>Data package (ZIP)</button>
+              <button type="button" role="menuitem" disabled={exporting !== null} onClick={() => void exportReport("zip")}>Data package (ZIP) · includes records.csv</button>
             </div>
           </details>
           <button type="button" className="mc-result-toggle" aria-label={expanded ? "Collapse" : "View details"} aria-expanded={expanded} onClick={() => onExpandChange(!expanded)}>
@@ -312,14 +312,6 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
           ) : report.selection_kind === "multi_place" ? (
             <section className="mc-report-section mc-report-comparison"><header><div><span>Descriptive only</span><h4>Place counts</h4></div></header><p>This layer does not apply the reported-record comparison model. The per-place counts above are shown without a modeled verdict.</p></section>
           ) : null}
-
-          <section className="mc-report-section">
-            <header><div><span>Per-place membership</span><h4>Record disclosure</h4></div><strong>{report.sections.records.returned_count} of {report.sections.records.total_membership_count}</strong></header>
-            {report.sections.records.truncated ? <p className="mc-report-note">This disclosure is truncated at {report.sections.records.limit} rows. The overview counts cover the complete result.</p> : null}
-            <div className="mc-report-table-wrap"><table><thead><tr><th>Place</th><th>{report.profile.primary_time_label}</th><th>Category</th><th>{report.profile.subtype_label}</th><th>Distance</th></tr></thead><tbody>
-              {report.sections.records.records.map((record, index) => <tr key={`${record.selection_id}-${record.primary_time}-${index}`}><td>{record.place_label}</td><td>{formatDateTime(record.primary_time)}</td><td>{record.offense_category ?? "—"}</td><td>{record.offense_subcategory ?? record.arrest_offense_description ?? record.call_type ?? "—"}</td><td>{Math.round(record.distance_m)} m</td></tr>)}
-            </tbody></table></div>
-          </section>
 
           <footer className="mc-report-disclosures">{report.disclosures.map((disclosure) => <p key={disclosure}>{disclosure}</p>)}<p>Schema {report.schema_version} · Method {report.method_version} · Artifact coordinates generalized to {report.export_policy.artifact_coordinate_decimals} decimals.</p></footer>
         </div>

@@ -330,6 +330,8 @@ describe("AnalysisCard", () => {
     expect(screen.queryByText("View monthly data")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Export"));
     expect(screen.getByRole("menuitem", { name: "Neighborhood trend CSV · Test Hill" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Data package (ZIP) · includes records.csv" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Record disclosure" })).not.toBeInTheDocument();
   });
 
   it.each([
