@@ -657,9 +657,10 @@ describe("MapWorkspace", () => {
         layer: "reported",
       });
     });
-    // Incident details render in the local card's expanded view on the rail.
+    // The canonical report renders its aggregate pattern without repeating incident rows.
     fireEvent.click(await screen.findByRole("button", { name: "View details" }));
-    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Observed pattern" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Record disclosure" })).not.toBeInTheDocument();
   });
 
   it("fetches neighborhood analysis after analysis succeeds", async () => {
@@ -2209,7 +2210,8 @@ describe("MapWorkspace", () => {
     await screen.findByText("Pulled reports near Home.");
     expect(screen.queryByRole("button", { name: "Pull reports near Home" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Collapse" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Record disclosure" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Observed pattern" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Record disclosure" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Widen to 500 m" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
     expect(await screen.findByRole("button", { name: "Widen to 500 m" })).toBeInTheDocument();
