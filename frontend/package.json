@@ -21,14 +21,14 @@
   "dependencies": {
     "@protomaps/basemaps": "^5.7.2",
     "lucide-react": "^1.31.0",
-    "maplibre-gl": "^6.2.0",
-    "pmtiles": "^4.4.1",
+    "maplibre-gl": "^6.4.0",
+    "pmtiles": "^4.5.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
+    "@axe-core/playwright": "^4.13.0",
     "@capacitor/cli": "^7.6.8",
     "@capacitor/core": "^7.6.8",
     "@capacitor/ios": "^7.6.8",
