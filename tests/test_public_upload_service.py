@@ -10,6 +10,7 @@ from app.config import Settings
 from app.db import get_sessionmaker
 from app.main import create_app
 from app.models import (
+    AnalysisReportSnapshot,
     AnalysisRun,
     ImportBatch,
     PlaceCluster,
@@ -364,3 +365,45 @@ def test_delete_personal_data_erases_upload_keeps_manual(tmp_path):
     assert session.query(PlaceCrimeSummary).filter(
         PlaceCrimeSummary.user_id_hash == USER
     ).one().place_cluster_id == manual_place.id
+
+
+def test_upload_erasure_removes_owned_mixed_snapshots_and_preserves_unrelated_reports(tmp_path):
+    from app.services.public_upload_service import delete_personal_data, run_personal_upload
+
+    session = _app_session(tmp_path)
+    manual = _add_manual_place(session)
+    run_personal_upload(
+        session, (FIXTURES / "google_recurring.json").read_bytes(),
+        "timeline.json", USER, Settings(),
+    )
+    upload = session.query(PlaceCluster).filter(
+        PlaceCluster.user_id_hash == USER, PlaceCluster.cluster_method == CLUSTER_METHOD,
+    ).one()
+    upload_id = upload.id
+    selections = {
+        "upload": (USER, json.dumps([upload.id])),
+        "mixed": (USER, json.dumps([manual.id, upload.id])),
+        "legacy": (USER, f"broken:[{upload.id}"),
+        "manual": (USER, json.dumps([manual.id])),
+        "other-user": ("another-user", json.dumps([upload.id])),
+    }
+    session.add_all([
+        AnalysisReportSnapshot(
+            id=report_id, user_id_hash=owner, selected_place_ids_json=selected_ids,
+            schema_version="1.1", method_version="analysis-report-v1", layer="reported",
+            selection_kind="multi_place", comparison_mode="modeled",
+            payload_json='{"label":"Synthetic private place"}',
+            privacy_policy_checked_at=datetime.now(UTC),
+        )
+        for report_id, (owner, selected_ids) in selections.items()
+    ])
+    session.commit()
+
+    deleted = delete_personal_data(session, USER)
+
+    assert deleted["analysis_report_snapshots"] == 3
+    assert set(deleted["deleted_report_ids"]) == {"upload", "mixed", "legacy"}
+    assert {row.id for row in session.query(AnalysisReportSnapshot)} == {"manual", "other-user"}
+    assert session.get(PlaceCluster, upload_id) is None
+    assert session.get(PlaceCluster, manual.id) is not None
+    assert delete_personal_data(session, USER)["deleted_report_ids"] == []

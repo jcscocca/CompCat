@@ -114,7 +114,7 @@ This is the primary analysis endpoint that runs incident counts for a user's sel
 
    b. Queries `PlaceCluster` rows for the given `place_ids` scoped to `user_id_hash` — raises 400 if any are missing.
 
-   c. Runs a bounding-box query against `CrimeIncident` for all clusters simultaneously, filtered by date range and optional offense category/subcategory/NIBRS group.
+   c. Runs a bounding-box query against `CrimeIncident` for all clusters simultaneously, filtered by date range and optional offense category/subcategory/NIBRS group. SQL queries and reference-circle grids share a conservative spherical envelope from `app/normalization/geo.py`, using the same Earth radius as the final haversine distance check so in-radius records are not discarded at the boundary.
 
    d. Calls `app/crime/summaries.py` `summarize_place_crime` to compute per-cluster, per-radius incident counts and `PlaceCrimeSummaryData` objects.
 
@@ -228,8 +228,10 @@ Behavioral component coverage plus reviewed desktop/mobile browser screenshots a
 `ResponseSecurityMiddleware` wraps the complete ASGI surface without buffering SSE. It
 enforces the dashboard's CSP and browser hardening headers on every response, and writes
 `Cache-Control: no-store` for session tokens, saved places, session-owned dashboard analysis,
-assistant, upload, export, internal, and admin routes. Public beat/MCPP reference geometry keeps
-its explicit one-hour cache policy; static assets and health/freshness metadata are unaffected.
+assistant, upload, export, internal, and admin routes. Dashboard endpoints are private by default,
+including reports and area selections; only the exact beat, MCPP, freshness, and report-profile
+paths are shared-data exceptions. Beat/MCPP reference geometry keeps its explicit one-hour cache
+policy; static assets and health metadata are unaffected.
 
 The self-hosted PMTiles artifact is mounted at `/tiles`, but `.pmtiles` requests must carry
 `Range`; a range-less request receives 416 instead of downloading the complete ~100 MiB file.

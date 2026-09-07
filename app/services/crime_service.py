@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time
 from importlib import resources
-from math import cos, radians
 from time import monotonic
 
 from sqlalchemy import func, select
@@ -13,6 +12,7 @@ from app.crime.seattle_socrata import load_crime_csv
 from app.crime.sources import LAYER_CALLS, LAYERS, SOURCE_SPD_CRIME
 from app.crime.summaries import summarize_place_crime
 from app.models import CrimeIncident, PlaceCluster, PlaceCrimeSummary
+from app.normalization.geo import bounding_box_for_points
 from app.schemas import CrimeIncidentData, PlaceClusterData, PlaceCrimeSummaryData
 from app.services.analysis_runs import create_analysis_run
 
@@ -188,12 +188,7 @@ def _incidents_near_clusters(
     ]
     if not points or not radii_m:
         return []
-    radius_m = max(radii_m)
-    lats = [lat for lat, _ in points]
-    lons = [lon for _, lon in points]
-    lat_pad = radius_m / 111_320
-    lon_scale = max(abs(cos(radians(sum(lats) / len(lats)))), 0.01)
-    lon_pad = radius_m / (111_320 * lon_scale)
+    box = bounding_box_for_points(points, max(radii_m))
     start_at = datetime.combine(analysis_start_date, time.min, tzinfo=UTC)
     end_at = datetime.combine(analysis_end_date, time.max, tzinfo=UTC)
     observed = func.coalesce(CrimeIncident.offense_start_utc, CrimeIncident.report_utc)
@@ -202,10 +197,10 @@ def _incidents_near_clusters(
         .where(CrimeIncident.source_dataset == source_dataset)
         .where(CrimeIncident.latitude.is_not(None))
         .where(CrimeIncident.longitude.is_not(None))
-        .where(CrimeIncident.latitude >= min(lats) - lat_pad)
-        .where(CrimeIncident.latitude <= max(lats) + lat_pad)
-        .where(CrimeIncident.longitude >= min(lons) - lon_pad)
-        .where(CrimeIncident.longitude <= max(lons) + lon_pad)
+        .where(CrimeIncident.latitude >= box.min_lat)
+        .where(CrimeIncident.latitude <= box.max_lat)
+        .where(CrimeIncident.longitude >= box.min_lon)
+        .where(CrimeIncident.longitude <= box.max_lon)
         .where(observed >= start_at)
         .where(observed <= end_at)
     )

@@ -157,7 +157,7 @@ const areaRecords = {
   }],
 };
 
-const sharedReport: AnalysisReport = {
+export const sharedReport: AnalysisReport = {
   report_id: null,
   schema_version: "1.1",
   method_version: "analysis-report-v1",

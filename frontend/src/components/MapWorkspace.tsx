@@ -18,6 +18,7 @@ import { cardWithSavedPlaceIds } from "../lib/localCard";
 import { incidentNoun } from "../lib/layerCopy";
 import { categoryLabel } from "../lib/offenseCategories";
 import { placeIdentity, type PlaceIdentity } from "../lib/placeIdentity";
+import { REPORTS_ERASED_EVENT } from "../lib/reportHistory";
 import { clearRecentPlaces } from "../lib/searchHistory";
 import { decodeView, encodeView } from "../lib/savedView";
 import { useIncidentPoints } from "../lib/useIncidentPoints";
@@ -984,6 +985,20 @@ export function MapWorkspace() {
     },
     [expandCard, isMobile, onSnap, onDrawerResize],
   );
+
+  useEffect(() => {
+    const forgetErasedReports = (event: Event) => {
+      const erased = new Set((event as CustomEvent<string[]>).detail);
+      const isErased = (card: AnalysisCardData | null) => Boolean(
+        card?.report?.report_id && erased.has(card.report.report_id),
+      );
+      if (expandedCard && isErased(expandedCard)) handleCardExpandChange(expandedCard, false);
+      setCurrentCard((current) => isErased(current) ? null : current);
+      if (isErased(localCardRef.current)) localCardRef.current = null;
+    };
+    window.addEventListener(REPORTS_ERASED_EVENT, forgetErasedReports);
+    return () => window.removeEventListener(REPORTS_ERASED_EVENT, forgetErasedReports);
+  }, [expandedCard, handleCardExpandChange]);
 
   // Analysis cards export the current detail-view schema. The Manage Places footer keeps the
   // separate session-wide place-summary download.

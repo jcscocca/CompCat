@@ -1,3 +1,4 @@
+import { eraseReportHistory } from "../lib/reportHistory";
 import type {
   AreaPolygonGeometry,
   AreaSelectionRecordsResponse,
@@ -268,8 +269,10 @@ export async function uploadPersonalData(file: File): Promise<{ place_cluster_co
   return response.json();
 }
 
-export function deletePersonalData(): Promise<{ place_clusters: number }> {
-  return request("/uploads", { method: "DELETE" });
+export async function deletePersonalData(): Promise<{ place_clusters: number; deleted_report_ids?: string[] }> {
+  const result = await request<{ place_clusters: number; deleted_report_ids?: string[] }>("/uploads", { method: "DELETE" });
+  eraseReportHistory(result.deleted_report_ids ?? []);
+  return result;
 }
 
 export function getInputModes(): Promise<{ modes: { id: string }[] }> {

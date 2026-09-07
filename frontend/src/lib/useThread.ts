@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { ThreadItem } from "./threadItems";
-import { loadReportHistory, saveReportHistory } from "./reportHistory";
+import { loadReportHistory, REPORTS_ERASED_EVENT, saveReportHistory, withoutErasedReports } from "./reportHistory";
 
-/** Session-scoped cap — the thread is not persisted, this just bounds memory/DOM. */
+/** Bounds conversation memory/DOM; only recent canonical reports persist in tab storage. */
 export const THREAD_CAP = 200;
 type AnalysisCard = Extract<ThreadItem, { kind: "analysis_card" }>["card"];
 
 export function useThread() {
   const [items, setItems] = useState<ThreadItem[]>(loadReportHistory);
   useEffect(() => saveReportHistory(items), [items]);
+  useEffect(() => {
+    const removeReports = (event: Event) => {
+      const reportIds = (event as CustomEvent<string[]>).detail;
+      setItems((current) => withoutErasedReports(current, reportIds));
+    };
+    window.addEventListener(REPORTS_ERASED_EVENT, removeReports);
+    return () => window.removeEventListener(REPORTS_ERASED_EVENT, removeReports);
+  }, []);
   const append = useCallback((item: ThreadItem) => {
     setItems((current) => {
       const next = [...current, item];

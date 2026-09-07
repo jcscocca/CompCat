@@ -82,6 +82,7 @@ import { getIncidentPoints, SESSION_EXPIRED_MESSAGE } from "../api/client";
 import { assertValidPlaceCreate } from "../api/placeCreateContract";
 import { currentYearAnalysisWindow } from "../lib/analysisDefaults";
 import { snapHeightPx } from "../lib/drawer";
+import { eraseReportHistory } from "../lib/reportHistory";
 import { decodeView, encodeView } from "../lib/savedView";
 import { keyOf } from "../lib/useAddressList";
 import type { AnalysisReport, AnalysisReportRequest, DashboardFreshness, DashboardSummary, IncidentDetailsResponse, NeighborhoodAnalysis, Place, SiteComparison } from "../types";
@@ -2151,6 +2152,34 @@ describe("MapWorkspace", () => {
     expect(analyzePlaces).not.toHaveBeenCalled();
     expect(comparePlaces).not.toHaveBeenCalled();
     expect(getNeighborhoodAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("restores the workspace controls when personal-data erasure removes the open report", async () => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(makeSummary([home]));
+    const report = makeAnalysisReport({
+      place_ids: [home.id], analysis_start_date: "2026-01-01", analysis_end_date: "2026-06-30",
+      radius_m: 250, layer: "reported",
+    });
+    vi.mocked(streamAssistantChat).mockImplementation(async (_payload, { onEvent }) => {
+      onEvent({ event: "tool", data: {
+        tool_name: "analyze_places",
+        result: { place_ids: [home.id], settings_used: { radius_m: 250, layer: "reported" }, report },
+      } });
+      onEvent({ event: "done", data: {} });
+    });
+    render(<MapWorkspace />);
+    await screen.findByText("Home");
+    fireEvent.change(screen.getByLabelText("Analyst message"), { target: { value: "Show reported context" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByRole("button", { name: "Collapse" });
+    expect(screen.queryByLabelText("Analyst message")).not.toBeInTheDocument();
+
+    act(() => eraseReportHistory([report.report_id as string]));
+
+    expect(await screen.findByLabelText("Analyst message")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Collapse" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: report.profile.report_title })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run report" })).toBeInTheDocument();
   });
 
   it("runs the offer chip as a structured command and hands the row back to the card's chips", async () => {

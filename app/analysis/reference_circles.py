@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 from app.analysis.area_baselines import mcpp_display_label, sector_for_beat
 from app.analysis.beat_baselines import BeatPolygons, _point_in_polygon
-from app.normalization.geo import haversine_m
+from app.normalization.geo import circle_bounding_box, haversine_m
 
 DEFAULT_REFERENCE_CENTERS = (
     Path(__file__).resolve().parent.parent
@@ -85,10 +85,9 @@ class IncidentGrid:
         return floor(lat / _GRID_DEGREES), floor(lon / _GRID_DEGREES)
 
     def count_within(self, latitude: float, longitude: float, radius_m: int) -> int:
-        lat_pad = radius_m / 111_320.0
-        lon_pad = radius_m / max(111_320.0 * cos(radians(latitude)), 1.0)
-        min_row, min_col = self._key(latitude - lat_pad, longitude - lon_pad)
-        max_row, max_col = self._key(latitude + lat_pad, longitude + lon_pad)
+        box = circle_bounding_box(latitude, longitude, radius_m)
+        min_row, min_col = self._key(box.min_lat, box.min_lon)
+        max_row, max_col = self._key(box.max_lat, box.max_lon)
         count = 0
         for row in range(min_row, max_row + 1):
             for col in range(min_col, max_col + 1):

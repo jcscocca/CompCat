@@ -151,6 +151,11 @@ personal-upload display coordinates are generalized (see §4) — survive into t
 data layer. Persistence and normalization are one public-path transaction; a normalization
 failure rolls back and defensively removes any batch-derived rows before the error propagates.
 
+Personal-data erasure deletes upload-derived canonical report snapshots in the same transaction
+as the uploaded clusters, analysis runs, and comparisons. A snapshot whose selected-place
+envelope mentions any erased upload cluster is deleted in full, including mixed reports;
+manual-only snapshots and snapshots owned by another session are preserved.
+
 On the internal import path, re-normalizing an import (`_delete_existing_normalization`) first wipes `StopVisit`,
 `PlaceCluster`, and `PlaceCrimeSummary` rows for that import, then rebuilds them. The
 `StagingLocationObservation` rows are preserved during re-normalization (they are the
