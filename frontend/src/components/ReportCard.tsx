@@ -143,14 +143,36 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
   async function exportReport(kind: "print" | "json" | "zip") {
     setExporting(kind);
     setExportError("");
+    // Reserve the tab during the user's click, before asynchronous privacy revalidation.
+    // noopener in window.open's features returns null even when the tab opens. Detach
+    // this empty, same-origin tab's opener immediately instead, keeping its handle only
+    // to navigate after validation or close it if validation fails.
+    let printWindow: Window | null = null;
+    let revalidated = false;
     try {
-      const current = await currentExportReport();
       if (kind === "print") {
+        printWindow = window.open("about:blank", "_blank");
+        if (!printWindow) {
+          setExportError("Allow pop-ups for CompCat, then try printing again.");
+          return;
+        }
+        printWindow.opener = null;
+        printWindow.document.title = "Preparing report";
+        printWindow.document.body.textContent = "Preparing your report…";
+      }
+      const current = await currentExportReport();
+      revalidated = true;
+      if (printWindow) {
+        if (printWindow.closed) {
+          setExportError("The print tab was closed. Try printing again.");
+          return;
+        }
         const url = URL.createObjectURL(printableBlob(current));
-        const opened = window.open(url, "_blank", "noopener,noreferrer");
-        if (!opened) {
+        try {
+          printWindow.location.replace(url);
+        } catch (error) {
           URL.revokeObjectURL(url);
-          throw new Error("popup-blocked");
+          throw error;
         }
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       } else if (kind === "json") {
@@ -160,7 +182,10 @@ export function ReportCard({ report, neighborhood, expanded, historical, workspa
         downloadBlob(await buildReportZip(current, trends), reportFilename(current, "zip"));
       }
     } catch {
-      setExportError("This report could not be exported. Saved-place privacy settings may have changed.");
+      printWindow?.close();
+      setExportError(revalidated
+        ? "This export could not be prepared. Try again."
+        : "This report could not be exported. Saved-place privacy settings may have changed.");
     } finally {
       setExporting(null);
     }

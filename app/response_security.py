@@ -46,20 +46,20 @@ _PRIVATE_PREFIXES = (
     "/internal",
     "/admin",
 )
-_PRIVATE_DASHBOARD_PREFIXES = (
-    "/dashboard/summary",
-    "/dashboard/analyze",
-    "/dashboard/incidents",
-    "/dashboard/incident-points",
-    "/dashboard/compare",
-    "/dashboard/neighborhood",
-    "/dashboard/geocode",
-    "/dashboard/trends",
-)
+# Dashboard data is private by default, including newly added endpoint families. Only
+# these exact paths contain shared reference data and may keep their own cache policy.
+_SHARED_DASHBOARD_PATHS = frozenset({
+    "/dashboard/beats",
+    "/dashboard/mcpp",
+    "/dashboard/freshness",
+    "/dashboard/report-profiles",
+})
 
 
 def is_private_response_path(path: str) -> bool:
-    return _matches_prefix(path, (*_PRIVATE_PREFIXES, *_PRIVATE_DASHBOARD_PREFIXES))
+    return _matches_prefix(path, _PRIVATE_PREFIXES) or (
+        _matches_prefix(path, ("/dashboard",)) and path not in _SHARED_DASHBOARD_PATHS
+    )
 
 
 def _matches_prefix(path: str, prefixes: Iterable[str]) -> bool:

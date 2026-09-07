@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import (
+    AnalysisReportSnapshot,
     AnalysisRun,
     ImportBatch,
     PlaceCluster,
@@ -112,7 +113,7 @@ def run_personal_upload(
     }
 
 
-def delete_personal_data(session: Session, user_id_hash: str) -> dict[str, int]:
+def delete_personal_data(session: Session, user_id_hash: str) -> dict[str, int | list[str]]:
     upload_cluster_ids = set(
         session.scalars(
             select(PlaceCluster.id).where(
@@ -121,6 +122,24 @@ def delete_personal_data(session: Session, user_id_hash: str) -> dict[str, int]:
             )
         )
     )
+
+    # Snapshots keep their selected-place envelope independently of the clusters. Erase
+    # the whole upload-derived or mixed report while preserving manual-only history.
+    # Return the owned ids so the browser can also discard its frozen copies.
+    report_ids = [
+        report_id
+        for report_id, selected_ids in session.execute(
+            select(AnalysisReportSnapshot.id, AnalysisReportSnapshot.selected_place_ids_json)
+            .where(AnalysisReportSnapshot.user_id_hash == user_id_hash)
+        )
+        if _run_mentions_any_place(selected_ids, upload_cluster_ids)
+    ] if upload_cluster_ids else []
+    reports = session.execute(
+        delete(AnalysisReportSnapshot).where(
+            AnalysisReportSnapshot.id.in_(report_ids),
+            AnalysisReportSnapshot.user_id_hash == user_id_hash,
+        )
+    ).rowcount or 0
 
     # Comparisons are run-owned records rather than children of PlaceCluster. Delete a whole
     # comparison only when one of its options is upload-derived; a mixed comparison cannot be
@@ -242,6 +261,8 @@ def delete_personal_data(session: Session, user_id_hash: str) -> dict[str, int]:
         "place_clusters": clusters,
         "place_crime_summaries": summaries,
         "analysis_runs": runs,
+        "analysis_report_snapshots": reports,
+        "deleted_report_ids": report_ids,
         "statistical_comparisons": comparisons,
         "statistical_comparison_options": options,
         "statistical_pairwise_results": pairwise,

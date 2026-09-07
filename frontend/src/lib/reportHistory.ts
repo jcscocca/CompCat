@@ -3,6 +3,21 @@ import type { ThreadItem } from "./threadItems";
 
 const KEY = "compcat.analysis-report-history.v1";
 const LIMIT = 10;
+export const REPORTS_ERASED_EVENT = "compcat:reports-erased";
+
+export function withoutErasedReports(items: ThreadItem[], reportIds: readonly string[]): ThreadItem[] {
+  const erased = new Set(reportIds);
+  return items.filter((item) => item.kind !== "analysis_card"
+    || !item.card.report?.report_id
+    || !erased.has(item.card.report.report_id));
+}
+
+export function eraseReportHistory(reportIds: string[]): void {
+  if (!reportIds.length) return;
+  // Clear tab storage even when no thread is mounted, then notify the in-memory view.
+  saveReportHistory(withoutErasedReports(loadReportHistory(), reportIds));
+  window.dispatchEvent(new CustomEvent(REPORTS_ERASED_EVENT, { detail: reportIds }));
+}
 
 function isReport(value: unknown): value is AnalysisReport {
   if (!value || typeof value !== "object") return false;

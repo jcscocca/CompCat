@@ -15,6 +15,8 @@ cannot represent.
 | Desktop rail resizing/focus, mobile bar/half/full snaps, map inaccessibility at full snap | `MapWorkspace.test.tsx`, `BottomSheet.test.tsx`, and stylesheet contract tests |
 | Context pickers, custom 100–1,000 m radii, date validation/presets, layer availability, copy-link disclosure | `ContextStrip.test.tsx` and focused `frontend/src/lib/` tests |
 | Canonical report rendering, expansion, exports, coverage adjustments, reference distributions, trends, incident rows | `AnalysisCard.test.tsx`, `TrendSection.test.tsx`, `reportExport.test.ts`, and backend report tests |
+| Print tabs remain detached from their opener, wait for saved-place privacy revalidation, close on rejection, and explain blocked popups | `report-export.desktop.spec.ts` |
+| Successful upload erasure clears matching reports from the mounted thread and tab history while preserving other history | `reportHistory.test.ts` |
 | Area rectangle/polygon/lasso behavior, keyboard alternative, linked filters with synchronized type/hour/day counts, zero-result buckets, tabs, rows, highlights, pagination, CSV, close/reopen, and redraw cancellation | `MapCanvas.test.tsx`, `AreaSelectionCard.test.tsx`, `useAreaSelection.test.ts`, `desktop.spec.ts`, and `tests/test_area_selection.py` |
 | Map clusters, stacks, popups, active-layer wording, theme rebuilds, badges, camera fitting | `MapCanvas.test.tsx`, `IncidentDisclosure.test.tsx`, `MapLegend.test.tsx`, and map-style tests |
 | Composed accessibility in both themes across desktop onboarding/reports/dialogs/area views and mobile snaps/area views/320-pixel text spacing | 26 Playwright Axe cases in `accessibility.desktop.spec.ts` and `accessibility.mobile.spec.ts` |

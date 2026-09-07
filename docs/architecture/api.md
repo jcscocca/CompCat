@@ -282,6 +282,12 @@ startup. The `/input-modes` response also reflects this flag via
 Default: `MCA_PUBLIC_ENABLE_PERSONAL_UPLOADS` is `false`; uploads are disabled in the
 default configuration.
 
+`DELETE /uploads` also erases owned canonical report snapshots that reference an uploaded
+place, including mixed manual/upload reports. Manual-only reports and other sessions' reports
+remain. Its response includes `analysis_report_snapshots` (the deleted count) and
+`deleted_report_ids`; the browser uses those IDs to remove frozen copies from tab history and
+the active report thread after successful erasure.
+
 ### Request-edge limits and static PMTiles
 
 `RequestBodyLimitMiddleware` enforces `MCA_MAX_REQUEST_BYTES` before FastAPI routing
@@ -308,8 +314,11 @@ the XFF gate.
 `ResponseSecurityMiddleware` adds CSP, anti-framing, MIME-sniffing, referrer, and permissions
 headers without buffering streaming responses. Session tokens, saved places, session-owned
 dashboard analysis, assistant streams, uploads, exports, and internal/admin responses receive
-`Cache-Control: no-store`. The public beat and MCPP reference-geometry responses retain their
-explicit `public, max-age=3600` policy.
+`Cache-Control: no-store`, including error responses. Dashboard routes are private by default,
+so reports and area selections cannot fall outside the policy when new endpoints are added.
+Only the exact `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/freshness`, and
+`/dashboard/report-profiles` paths are shared-data exceptions. Beat and MCPP reference geometry
+retain their explicit `public, max-age=3600` policy.
 
 ### Incident timestamp serialization
 

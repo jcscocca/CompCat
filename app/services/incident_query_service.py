@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
-from math import cos, radians
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.crime.sources import SOURCE_SPD_CRIME
 from app.models import CrimeIncident
+from app.normalization.geo import BoundingBox
+from app.normalization.geo import bounding_box_for_points as bounding_box_for_points
 from app.schemas import CrimeIncidentData
 from app.services.crime_service import _incident_data
 
@@ -22,35 +22,6 @@ def _effective_sources(
     if sources is not None:
         return tuple(sources)
     return (source_dataset,)
-
-METERS_PER_LATITUDE_DEGREE = 111_320
-MIN_LONGITUDE_COSINE = 0.01
-
-
-@dataclass(frozen=True)
-class BoundingBox:
-    min_lat: float
-    max_lat: float
-    min_lon: float
-    max_lon: float
-
-
-def bounding_box_for_points(points: list[tuple[float, float]], radius_m: int) -> BoundingBox:
-    if not points:
-        raise ValueError("at least one point is required for a bounding box")
-    lats = [lat for lat, _ in points]
-    lons = [lon for _, lon in points]
-    mean_lat = sum(lats) / len(lats)
-    lat_pad = radius_m / METERS_PER_LATITUDE_DEGREE
-    lon_scale = max(abs(cos(radians(mean_lat))), MIN_LONGITUDE_COSINE)
-    lon_pad = radius_m / (METERS_PER_LATITUDE_DEGREE * lon_scale)
-    return BoundingBox(
-        min_lat=min(lats) - lat_pad,
-        max_lat=max(lats) + lat_pad,
-        min_lon=min(lons) - lon_pad,
-        max_lon=max(lons) + lon_pad,
-    )
-
 
 def incidents_in_bbox(
     session: Session,

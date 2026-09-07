@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, time
-from math import cos, radians
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
@@ -14,16 +13,13 @@ from app.api.dashboard_schemas import AnalysisPoint
 from app.crime.sources import SOURCE_SPD_CRIME
 from app.crime.summaries import summarize_place_crime
 from app.models import CrimeIncident, PlaceCluster
-from app.normalization.geo import haversine_m
+from app.normalization.geo import circle_bounding_box, haversine_m
 from app.schemas import CrimeIncidentData, PlaceClusterData
 from app.services.analysis_points import point_clusters
 from app.services.analysis_runs import create_analysis_run
 from app.services.analysis_service import compare_site_options
 from app.services.crime_service import _cluster_data, _incident_data, _summary_model
 from app.time_contract import seattle_wall_clock_json
-
-METERS_PER_LATITUDE_DEGREE = 111_320
-MIN_LONGITUDE_COSINE = 0.01
 
 
 def analyze_selected_places(
@@ -321,16 +317,13 @@ def _incident_bounding_boxes(clusters: list[PlaceClusterData], radius_m: int) ->
         coordinates = _display_coordinates(cluster)
         if coordinates is None:
             continue
-        latitude, longitude = coordinates
-        lat_delta = radius_m / METERS_PER_LATITUDE_DEGREE
-        lon_scale = max(abs(cos(radians(latitude))), MIN_LONGITUDE_COSINE)
-        lon_delta = radius_m / (METERS_PER_LATITUDE_DEGREE * lon_scale)
+        box = circle_bounding_box(*coordinates, radius_m)
         boxes.append(
             and_(
-                CrimeIncident.latitude >= latitude - lat_delta,
-                CrimeIncident.latitude <= latitude + lat_delta,
-                CrimeIncident.longitude >= longitude - lon_delta,
-                CrimeIncident.longitude <= longitude + lon_delta,
+                CrimeIncident.latitude >= box.min_lat,
+                CrimeIncident.latitude <= box.max_lat,
+                CrimeIncident.longitude >= box.min_lon,
+                CrimeIncident.longitude <= box.max_lon,
             )
         )
     return boxes
