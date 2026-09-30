@@ -42,7 +42,12 @@ app/db.py         Engine + session factory; create_all for SQLite, Alembic for P
 runtime; the production image currently runs Python 3.14. `requirements.lock` is generated
 with Python 3.11 and contains exact versions and hashes; Docker installs it with
 `--require-hashes` before installing the local package with `--no-deps`, and CI builds that
-image to verify the same lock on Python 3.14. After changing runtime dependency constraints,
+image to verify the same lock on Python 3.14. CI then runs
+`sh scripts/smoke-production-image.sh compcat-ci`: runtime imports run as the image's
+unprivileged user, the normal command migrates a disposable SQLite database and boots
+Uvicorn, and the probe requires HTTP 200 with `status: ok` plus every Alembic head applied.
+The container is removed on success or failure; the separate Postgres job retains deployment
+database parity coverage. After changing runtime dependency constraints,
 regenerate it with
 `pip-compile pyproject.toml --output-file=requirements.lock --generate-hashes --strip-extras`
 using Python 3.11, then build the image.
@@ -135,6 +140,13 @@ Modules touched in order: `routes_public_dashboard` → `deps` (session cookie) 
 ---
 
 ## 6. Backend ↔ frontend
+
+`AppErrorBoundary` wraps the map workspace. A render failure replaces it with a generic,
+named recovery screen, focuses its heading, and offers a full-page reload. Exception messages,
+stack traces, API bodies, and locations are neither stored in boundary state nor displayed.
+The React root suppresses the default caught-error console reporter; no telemetry is added.
+This boundary covers React render/lifecycle failures, while ordinary request failures keep
+their existing workspace recovery paths.
 
 `frontend/src/api/client.ts` is the sole HTTP client for the React app. It calls only the **public** tier: `/sessions`, `/places*`, `/uploads`, `/dashboard/summary`, `/dashboard/analyze`, `/dashboard/incidents`, `/dashboard/compare`, `/dashboard/neighborhood`, `/dashboard/trends`, `/dashboard/freshness`, `/dashboard/beats`, `/dashboard/mcpp`, `/dashboard/incident-points`, `/dashboard/area-selection/*`, `/dashboard/geocode`, `/assistant/chat`, `/assistant/commands`, `/exports/*`, and `/input-modes`. Requests always include `credentials: "include"` so the `mca_session` cookie is attached.
 

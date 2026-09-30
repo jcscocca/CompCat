@@ -82,6 +82,10 @@ contract.
 - The Manage Places view switcher implements the ARIA tabs keyboard pattern, including
   roving `tabindex`, ArrowLeft/ArrowRight, Home, and End.
 - Dynamic freshness, search, analysis, and error messages use status/alert semantics.
+- An unexpected workspace render failure shows a named main recovery screen with an alert.
+  Focus moves to its heading; the next Tab reaches **Reload CompCat**, which reloads the
+  document. Browser regression tests force this failure and verify recovery, private-detail
+  suppression, Axe scans in both themes, and 320-pixel reflow with text-spacing overrides.
 - The document language and title are declared, IDs are unique, and interactive roles expose
   their current state and relationships.
 
