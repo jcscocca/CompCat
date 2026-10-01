@@ -78,6 +78,13 @@ jobs:
         run: docker build --tag compcat-ci .
       - name: Import, migrate, boot, and probe the Python 3.14 production image
         run: sh scripts/smoke-production-image.sh compcat-ci
+      - name: Verify ops entry points without network or live data
+        run: |
+          docker build -f deploy/ingest-cron.Dockerfile -t compcat-ops-ci .
+          docker run --rm --network none \
+            --mount "type=bind,source=$PWD/deploy,target=/source,readonly" \
+            --mount "type=bind,source=$PWD/tests,target=/tests,readonly" \
+            compcat-ops-ci sh /tests/ops_entrypoint_smoke.sh
       - name: Production overlay publishes only the Caddy edge
         env:
           POSTGRES_PASSWORD: ci-not-a-real-password
