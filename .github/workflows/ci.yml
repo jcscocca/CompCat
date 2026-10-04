@@ -23,7 +23,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          job_tmp="$RUNNER_TEMP/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+          # Chromium Unix sockets require a short path, even when _work is deeply nested.
+          job_tmp=$(mktemp -d /tmp/gha.XXXXXX)
+          echo "CI_JOB_TEMP=$job_tmp" >> "$GITHUB_ENV"
           mkdir -p "$job_tmp" "$HOME/.cache"
           printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$job_tmp" "$job_tmp" "$job_tmp" >> "$GITHUB_ENV"
           # Do not accidentally invoke Windows executables through WSL interop.
@@ -45,11 +47,21 @@ jobs:
               print("VIRTUAL_ENV=" + str(root / "venv"), file=output)
               print("PYTHONNOUSERSITE=1", file=output)
               for key in ("TMPDIR", "TMP", "TEMP"):
-                  print(key + "=" + str(root / "tmp"), file=output)
+                  print(key + "=" + os.environ.get("CI_JOB_TEMP", str(root / "tmp")), file=output)
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
       - run: ruff check .
       - run: pytest tests -q
+      - name: Remove this job's Linux temporary directory
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          case "${CI_JOB_TEMP:-}" in
+            /tmp/gha.*) rm -rf -- "$CI_JOB_TEMP" ;;
+            '') ;;
+            *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
+          esac
 
   backend-postgres:
     # Proves migrations apply and the app runs on Postgres (the deploy DB), not just SQLite.
@@ -82,7 +94,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          job_tmp="$RUNNER_TEMP/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+          # Chromium Unix sockets require a short path, even when _work is deeply nested.
+          job_tmp=$(mktemp -d /tmp/gha.XXXXXX)
+          echo "CI_JOB_TEMP=$job_tmp" >> "$GITHUB_ENV"
           mkdir -p "$job_tmp" "$HOME/.cache"
           printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$job_tmp" "$job_tmp" "$job_tmp" >> "$GITHUB_ENV"
           # Do not accidentally invoke Windows executables through WSL interop.
@@ -104,7 +118,7 @@ jobs:
               print("VIRTUAL_ENV=" + str(root / "venv"), file=output)
               print("PYTHONNOUSERSITE=1", file=output)
               for key in ("TMPDIR", "TMP", "TEMP"):
-                  print(key + "=" + str(root / "tmp"), file=output)
+                  print(key + "=" + os.environ.get("CI_JOB_TEMP", str(root / "tmp")), file=output)
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
       - name: Migrate to head on Postgres
@@ -115,6 +129,16 @@ jobs:
         env:
           MCA_DATABASE_URL: postgresql+psycopg://mca:mca@localhost:${{ job.services.postgres.ports['5432'] }}/mca
         run: pytest tests/test_postgres_smoke.py tests/test_migrations.py -q
+      - name: Remove this job's Linux temporary directory
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          case "${CI_JOB_TEMP:-}" in
+            /tmp/gha.*) rm -rf -- "$CI_JOB_TEMP" ;;
+            '') ;;
+            *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
+          esac
 
   frontend:
     runs-on: [self-hosted, Linux, thinkpad]
@@ -132,7 +156,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          job_tmp="$RUNNER_TEMP/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+          # Chromium Unix sockets require a short path, even when _work is deeply nested.
+          job_tmp=$(mktemp -d /tmp/gha.XXXXXX)
+          echo "CI_JOB_TEMP=$job_tmp" >> "$GITHUB_ENV"
           mkdir -p "$job_tmp" "$HOME/.cache"
           printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$job_tmp" "$job_tmp" "$job_tmp" >> "$GITHUB_ENV"
           # Do not accidentally invoke Windows executables through WSL interop.
@@ -153,6 +179,16 @@ jobs:
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
       - run: npm run build
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
+      - name: Remove this job's Linux temporary directory
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          case "${CI_JOB_TEMP:-}" in
+            /tmp/gha.*) rm -rf -- "$CI_JOB_TEMP" ;;
+            '') ;;
+            *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
+          esac
 
   docker:
     runs-on: [self-hosted, Linux, thinkpad]
@@ -170,7 +206,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          job_tmp="$RUNNER_TEMP/ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"
+          # Chromium Unix sockets require a short path, even when _work is deeply nested.
+          job_tmp=$(mktemp -d /tmp/gha.XXXXXX)
+          echo "CI_JOB_TEMP=$job_tmp" >> "$GITHUB_ENV"
           mkdir -p "$job_tmp" "$HOME/.cache"
           printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$job_tmp" "$job_tmp" "$job_tmp" >> "$GITHUB_ENV"
           # Do not accidentally invoke Windows executables through WSL interop.
@@ -230,3 +268,13 @@ jobs:
       - name: Remove job-created Docker images
         if: always()
         run: docker image rm compcat-ci:${{ github.run_id }}-${{ github.run_attempt }} compcat-ops-ci:${{ github.run_id }}-${{ github.run_attempt }} || true
+      - name: Remove this job's Linux temporary directory
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          case "${CI_JOB_TEMP:-}" in
+            /tmp/gha.*) rm -rf -- "$CI_JOB_TEMP" ;;
+            '') ;;
+            *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
+          esac
