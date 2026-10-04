@@ -223,7 +223,7 @@ jobs:
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
       - run: npx playwright install chromium
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
-      - run: flock "$HOME/.cache/thinkpad-actions-browser.lock" npm run test:visual
+      - run: flock "$HOME/.cache/thinkpad-actions-browser.lock" npm run test:visual -- --workers=1
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
       - run: npm run build
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
