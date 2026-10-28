@@ -21,6 +21,8 @@ def _commands(job: dict) -> list[str]:
 def test_only_fixed_retirement_summary_can_run_on_trusted_closure() -> None:
     workflow = _workflow()
     assert workflow["on"]["pull_request_target"]["types"] == ["closed"]
+    # Drafts already run every gate, so ready_for_review would repeat the same head.
+    assert workflow["on"]["pull_request"]["types"] == ["opened", "synchronize", "reopened"]
     assert workflow["on"]["push"]["branches"] == ["main"]
     assert workflow["permissions"] == {"contents": "read"}
     control = workflow["jobs"]["retire-closed-pr"]
