@@ -63,7 +63,6 @@ export default defineConfig({
   },
   test: {
     // Leave CPU capacity for other projects on the shared runner host.
-    minWorkers: isCI ? 1 : undefined,
     maxWorkers: isCI ? 2 : undefined,
     // Playwright owns tests/visual/*.spec.ts. Keeping Vitest on *.test.* prevents
     // the two runners from collecting each other's suites during `make test-all`.
