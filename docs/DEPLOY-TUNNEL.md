@@ -1,5 +1,10 @@
 # Public instance runbook — compcat.app from the ThinkPad, via a named Cloudflare tunnel
 
+> **Public deployment paused indefinitely as of 2026-10-27 (America/Los_Angeles).**
+> `compcat.app` is intentionally offline. Read [../PAUSED.md](../PAUSED.md) before following
+> this runbook. Its startup, recovery, and watchdog commands are for a future return explicitly
+> requested by the owner; an unavailable public site during this pause is expected.
+
 This document takes the **Windows ThinkPad to an always-on public CompCat at
 <https://compcat.app>** for **zero recurring cost**: TLS-terminated by Cloudflare, rate-limited,
 ingesting SPD data nightly, backing itself up nightly, and monitored from outside. It assumes no

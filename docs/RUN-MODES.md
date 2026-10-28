@@ -1,5 +1,10 @@
 # CompCat run modes
 
+> **Public deployment paused indefinitely as of 2026-10-27 (America/Los_Angeles).**
+> `compcat.app` is intentionally offline. Read [../PAUSED.md](../PAUSED.md) before using a
+> public launcher or supervisor. Do not start public service or re-enable its watchdog without
+> the owner's explicit request to resume. Private development and personal use are separate.
+
 Start here when deciding how to run CompCat. The launchers are intentionally separate because
 they use different databases, secrets, network exposure, and data-retention policies.
 

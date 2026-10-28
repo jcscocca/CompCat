@@ -1,5 +1,10 @@
 # CompCat — agent guide
 
+> **Public deployment paused indefinitely as of 2026-10-27 (America/Los_Angeles).**
+> `compcat.app` is intentionally offline. Do not start the public stack, run its
+> supervisor, or re-enable its scheduled task without the user's explicit request to resume.
+> Read [`PAUSED.md`](PAUSED.md) before any public deployment or recovery work.
+
 CompCat is a privacy-first web app for exploring **reported Seattle SPD incident
 context** around places. FastAPI + SQLAlchemy/Alembic backend, React +
 TypeScript + Vite frontend, SQLite for dev / Postgres for deploy.

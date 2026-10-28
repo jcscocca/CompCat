@@ -5,7 +5,10 @@
 
 *CompCat — a pun on CompStat.*
 
-**Live public instance:** [compcat.app](https://compcat.app)
+> **Public site paused indefinitely — 2026-10-27 (America/Los_Angeles).**
+> [compcat.app](https://compcat.app) is intentionally offline. The project and its recovery
+> materials are preserved. See [PAUSED.md](PAUSED.md) before restarting or deploying the
+> public instance; resuming requires the owner's explicit request.
 
 CompCat is a privacy-first web app for exploring **reported Seattle SPD incident context**
 around the addresses you care about. Look up an address, pick a radius and date range, and
