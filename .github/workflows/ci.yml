@@ -31,6 +31,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
+  untrusted-fork:
+    name: Fork CI policy
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: [self-hosted, Linux, thinkpad]
+    timeout-minutes: 5
+    steps:
+      - name: Require a reviewed repository branch
+        run: |
+          printf '%s\n' '::error::Fork heads cannot execute on self-hosted runners. Review the change and use a repository branch for full CI verification.'
+          exit 1
+
   retire-closed-pr:
     name: Retire closed PR
     if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
@@ -42,7 +53,7 @@ jobs:
           printf '%s\n' 'Closed PR: previous ci run retired by the PR concurrency group.' >> "$GITHUB_STEP_SUMMARY"
 
   backend:
-    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 15
     runs-on: [self-hosted, Linux, thinkpad]
     defaults:
@@ -117,7 +128,7 @@ jobs:
           esac
 
   backend-postgres:
-    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 15
     # Proves migrations apply and the app runs on Postgres (the deploy DB), not just SQLite.
     runs-on: [self-hosted, Linux, thinkpad]
@@ -213,7 +224,7 @@ jobs:
           esac
 
   frontend-unit:
-    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 15
     runs-on: [self-hosted, Linux, thinkpad]
     defaults:
@@ -278,10 +289,10 @@ jobs:
           esac
 
   frontend:
-    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 20
     # Keep the existing frontend check as the final browser gate. Complete the
-    # other required checks before waiting for the shared host browser lock.
+    # other required checks before allocating its isolated browser container.
     needs: [backend, backend-postgres, docker, frontend-unit]
     runs-on: [self-hosted, Linux, "${{ vars.CI_BROWSER_RUNNER_LABEL || 'thinkpad' }}"]
     concurrency:
@@ -327,17 +338,14 @@ jobs:
           # Do not accidentally invoke Windows executables through WSL interop.
           linux_path=$(printf '%s' "$PATH" | tr ':' '\n' | sed '/^\/mnt\/[a-zA-Z]\//d' | paste -sd:)
           echo "PATH=$linux_path" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend/package-lock.json
-      - run: npm ci
-        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
-      - run: npx playwright install chromium
-        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
-      - run: flock "$HOME/.cache/thinkpad-actions-browser.lock" npm run test:visual -- --workers=1
-        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
+      - name: Run the full browser suite in a private container
+        run: bash scripts/ci_browser_container.sh
+      - name: Always clean up only this job's owned browser resources
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          script="work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/scripts/ci_browser_container.sh"
+          if [ -f "$script" ]; then bash "$script" cleanup; fi
       - name: Remove this job's Linux temporary directory
         if: always() && runner.os == 'Linux'
         shell: bash
@@ -350,7 +358,7 @@ jobs:
           esac
 
   docker:
-    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 30
     runs-on: [self-hosted, Linux, thinkpad]
     defaults:
