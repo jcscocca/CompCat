@@ -61,6 +61,8 @@ export default defineConfig({
     exclude: ["maplibre-gl"],
   },
   test: {
+    // Leave CPU capacity for other projects on the shared runner host.
+    maxWorkers: 2,
     // Playwright owns tests/visual/*.spec.ts. Keeping Vitest on *.test.* prevents
     // the two runners from collecting each other's suites during `make test-all`.
     include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],

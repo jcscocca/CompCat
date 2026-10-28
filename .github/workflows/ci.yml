@@ -5,9 +5,45 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONNOUSERSITE: "1"
+  OMP_NUM_THREADS: "2"
+  OPENBLAS_NUM_THREADS: "2"
+  MKL_NUM_THREADS: "2"
+  NUMEXPR_NUM_THREADS: "2"
+  GOMAXPROCS: "2"
+  RAYON_NUM_THREADS: "2"
+  UV_THREADPOOL_SIZE: "2"
+
+# Manual acceptance runs retain their own group; PR updates and trusted closure
+# controls share the PR number, so retirement happens before allocating a worker.
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && format('ci-manual-{0}-{1}', github.run_id, github.run_attempt) || format('ci-{0}', github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
+  retire-closed-pr:
+    name: Retire closed PR
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    runs-on: [self-hosted, Linux, thinkpad]
+    timeout-minutes: 5
+    steps:
+      - name: Confirm retirement
+        run: |
+          printf '%s\n' 'Closed PR: previous ci run retired by the PR concurrency group.' >> "$GITHUB_STEP_SUMMARY"
+
   backend:
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    timeout-minutes: 15
     runs-on: [self-hosted, Linux, thinkpad]
     defaults:
       run:
@@ -17,6 +53,7 @@ jobs:
         with:
           path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           clean: true
+          persist-credentials: false
       - name: Retain isolated checkouts for fourteen days
         if: runner.environment == 'self-hosted'
         shell: node {0}
@@ -80,6 +117,8 @@ jobs:
           esac
 
   backend-postgres:
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    timeout-minutes: 15
     # Proves migrations apply and the app runs on Postgres (the deploy DB), not just SQLite.
     runs-on: [self-hosted, Linux, thinkpad]
     services:
@@ -104,6 +143,7 @@ jobs:
         with:
           path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           clean: true
+          persist-credentials: false
       - name: Retain isolated checkouts for fourteen days
         if: runner.environment == 'self-hosted'
         shell: node {0}
@@ -172,7 +212,9 @@ jobs:
             *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
           esac
 
-  frontend:
+  frontend-unit:
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    timeout-minutes: 15
     runs-on: [self-hosted, Linux, thinkpad]
     defaults:
       run:
@@ -182,6 +224,7 @@ jobs:
         with:
           path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           clean: true
+          persist-credentials: false
       - name: Retain isolated checkouts for fourteen days
         if: runner.environment == 'self-hosted'
         shell: node {0}
@@ -219,11 +262,7 @@ jobs:
           cache-dependency-path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend/package-lock.json
       - run: npm ci
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
-      - run: npm test
-        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
-      - run: npx playwright install chromium
-        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
-      - run: flock "$HOME/.cache/thinkpad-actions-browser.lock" npm run test:visual -- --workers=1
+      - run: npm test -- --maxWorkers=2
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
       - run: npm run build
         working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
@@ -238,7 +277,81 @@ jobs:
             *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
           esac
 
+  frontend:
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    timeout-minutes: 20
+    # Keep the existing frontend check as the final browser gate. Complete the
+    # other required checks before waiting for the shared host browser lock.
+    needs: [backend, backend-postgres, docker, frontend-unit]
+    runs-on: [self-hosted, Linux, "${{ vars.CI_BROWSER_RUNNER_LABEL || 'thinkpad' }}"]
+    concurrency:
+      group: thinkpad-compcat-browser
+      cancel-in-progress: false
+      queue: max
+    defaults:
+      run:
+        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
+          clean: true
+          persist-credentials: false
+      - name: Retain isolated checkouts for fourteen days
+        if: runner.environment == 'self-hosted'
+        shell: node {0}
+        run: |
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = fs.realpathSync(path.join(process.env.GITHUB_WORKSPACE, 'work'));
+          const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+          for (const name of fs.readdirSync(root)) {
+            if (!/^[0-9]+-[0-9]+-[A-Za-z0-9_-]+-[0-9]+$/.test(name)) continue;
+            const target = path.join(root, name);
+            const stat = fs.lstatSync(target);
+            if (!stat.isDirectory() || stat.isSymbolicLink() || stat.mtimeMs >= cutoff) continue;
+            if (!fs.realpathSync(target).startsWith(root + path.sep)) throw new Error('Unsafe cleanup path');
+            fs.rmSync(target, {recursive: true, force: true});
+          }
+      # Each registration has its own _work root; each job checks out a fresh subdirectory.
+      # GitHub Runner cleans RUNNER_TEMP and terminates processes carrying this job's tracking ID.
+      - name: Isolate Linux job environment
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Chromium Unix sockets require a short path, even when _work is deeply nested.
+          job_tmp=$(mktemp -d /tmp/gha.XXXXXX)
+          echo "CI_JOB_TEMP=$job_tmp" >> "$GITHUB_ENV"
+          mkdir -p "$job_tmp" "$HOME/.cache"
+          printf 'TMPDIR=%s\nTMP=%s\nTEMP=%s\n' "$job_tmp" "$job_tmp" "$job_tmp" >> "$GITHUB_ENV"
+          # Do not accidentally invoke Windows executables through WSL interop.
+          linux_path=$(printf '%s' "$PATH" | tr ':' '\n' | sed '/^\/mnt\/[a-zA-Z]\//d' | paste -sd:)
+          echo "PATH=$linux_path" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend/package-lock.json
+      - run: npm ci
+        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
+      - run: npx playwright install chromium
+        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
+      - run: flock "$HOME/.cache/thinkpad-actions-browser.lock" npm run test:visual -- --workers=1
+        working-directory: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}/frontend
+      - name: Remove this job's Linux temporary directory
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          case "${CI_JOB_TEMP:-}" in
+            /tmp/gha.*) rm -rf -- "$CI_JOB_TEMP" ;;
+            '') ;;
+            *) echo "Unexpected temporary directory; refusing cleanup" >&2; exit 1 ;;
+          esac
+
   docker:
+    if: github.event_name != 'pull_request_target' && github.event.action != 'closed'
+    timeout-minutes: 30
     runs-on: [self-hosted, Linux, thinkpad]
     defaults:
       run:
@@ -248,6 +361,7 @@ jobs:
         with:
           path: work/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           clean: true
+          persist-credentials: false
       - name: Retain isolated checkouts for fourteen days
         if: runner.environment == 'self-hosted'
         shell: node {0}

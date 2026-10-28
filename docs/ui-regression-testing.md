@@ -57,6 +57,20 @@ make test-all
 CI installs the matching Chromium revision before running the browser accessibility and screenshot
 suite. Browser output belongs under `frontend/test-results/` and is ignored by Git.
 
+On the shared ThinkPad, frontend unit tests use at most two workers and browser tests use one.
+CI also bounds common numerical, Go, Rust and Node helper thread pools to two workers.
+The `frontend-unit` CI job runs unit tests and the production build. The existing `frontend` check
+remains the final browser gate and starts after backend, Postgres, Docker and frontend-unit checks
+pass. Its repository browser queue holds pending visual jobs before assigning a runner; the shared
+host browser lock remains in place. `CI_BROWSER_RUNNER_LABEL` can select a reserved repository
+runner once that registration has the matching label; the default remains `thinkpad`.
+
+PR updates replace the preceding run for the same PR, and main pushes replace older main runs.
+A trusted closed-PR event uses that same group to retire obsolete work, running only a fixed
+summary without checkout. Manually dispatched acceptance runs keep their own run/attempt group.
+All product checks refuse the closure event, and every job has a bounded timeout. No artifacts
+are uploaded automatically.
+
 ## Updating screenshots
 
 Do not update a baseline merely to make a failure green. First open the actual/diff images under
