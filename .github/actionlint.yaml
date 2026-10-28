@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - thinkpad
+    - thinkpad-browser

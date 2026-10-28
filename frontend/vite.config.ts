@@ -4,6 +4,7 @@ import { defineConfig, type Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 const backendTarget = process.env.VITE_BACKEND_TARGET ?? "http://127.0.0.1:8000";
+const isCI = ["1", "true", "yes", "on"].includes((process.env.CI ?? "").trim().toLowerCase());
 
 // maplibre-gl v6 (ESM-only) spawns its worker from a sibling file of the module
 // URL, which the bundled chunk can't provide. Emit the worker + its shared module
@@ -61,6 +62,8 @@ export default defineConfig({
     exclude: ["maplibre-gl"],
   },
   test: {
+    // Leave CPU capacity for other projects on the shared runner host.
+    maxWorkers: isCI ? 2 : undefined,
     // Playwright owns tests/visual/*.spec.ts. Keeping Vitest on *.test.* prevents
     // the two runners from collecting each other's suites during `make test-all`.
     include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],

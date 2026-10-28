@@ -57,6 +57,39 @@ make test-all
 CI installs the matching Chromium revision before running the browser accessibility and screenshot
 suite. Browser output belongs under `frontend/test-results/` and is ignored by Git.
 
+In shared ThinkPad CI, frontend unit tests use at most two workers and browser tests use one.
+CI also bounds common numerical, Go, Rust and Node helper thread pools to two workers.
+The `frontend-unit` CI job runs unit tests and the production build. The existing `frontend` check
+remains the final browser gate and starts after backend, Postgres, Docker and frontend-unit checks
+pass. Its repository browser queue holds pending visual jobs before assigning a runner.
+The gate runs the complete suite in a pinned Playwright/Node container with private HOME, temporary
+files, IPC and loopback port 4173, two CPUs, 8 GiB RAM, 2 GiB shared memory, and no host ports,
+host filesystem mounts or external network. This isolated job does not take the host browser lock.
+`CI_BROWSER_RUNNER_LABEL` can select a reserved repository runner once that registration has the
+matching label; the default remains `thinkpad`.
+
+The container's collected inventory must retain all 38 existing cases and account for every
+case in the result, including future additions. Original assertions, retries and screenshot
+tolerances stay in the source suite. Container cleanup checks kind/run/attempt labels and removes
+only its immutable ID and unique image tag, including after cancellation. Console logs retain
+every case result. Temporary reports and screenshots use an owner-only, receipt-checked
+`$RUNNER_TEMP/compcat-ci-browser-<run>-<attempt>` directory and are removed after success,
+failure or cancellation; runner-managed temporary cleanup also applies. There is no persistent
+diagnostics archive or cloud artifact upload. Build layers use the existing default Docker
+builder cache: the audited ThinkPad policy targets 20 GiB of retained cache with periodic GC
+(not a hard per-job disk cap), including a 48-hour source/cache-mount policy at 2.764 GiB.
+No workflow changes daemon-wide settings or prunes another job's images or cache.
+Native browser commands that share a host still need its
+browser lock, with a bounded wait, for example `flock -w 60 "$HOME/.cache/thinkpad-actions-browser.lock"`.
+
+PR updates replace the preceding run for the same PR, and main pushes replace older main runs.
+A trusted closed-PR event uses that same group to retire obsolete work, running only a fixed
+summary without checkout. Manually dispatched acceptance runs keep their own run/attempt group.
+All product checks refuse the closure event and fork PR heads. A fixed fork-policy job fails
+with instructions to review the change and run it through a repository branch for full CI;
+it never checks out or executes PR code. Every job has a bounded timeout. No artifacts are
+uploaded automatically.
+
 ## Updating screenshots
 
 Do not update a baseline merely to make a failure green. First open the actual/diff images under
@@ -84,14 +117,14 @@ important composed state should usually add a new baseline; a state whose risk i
 or semantics should stay in the faster component suite.
 
 From the repository root, regenerate the Linux set with the Playwright image matching the installed
-`@playwright/test` version (currently 1.62.1):
+`@playwright/test` version (currently 1.63.0):
 
 ```bash
-docker run --rm --ipc=host \
+docker run --rm --init --ipc=private --shm-size=2g --cpus=2 --memory=8g \
   -v "${PWD}":/work \
   -v compcat-playwright-node-modules:/work/frontend/node_modules \
   -w /work/frontend \
-  mcr.microsoft.com/playwright:v1.62.1-noble \
+  mcr.microsoft.com/playwright:v1.63.0-noble \
   bash -lc "npm ci && npm run test:visual:update"
 docker volume rm compcat-playwright-node-modules
 ```
