@@ -57,7 +57,7 @@ make test-all
 CI installs the matching Chromium revision before running the browser accessibility and screenshot
 suite. Browser output belongs under `frontend/test-results/` and is ignored by Git.
 
-On the shared ThinkPad, frontend unit tests use at most two workers and browser tests use one.
+In shared ThinkPad CI, frontend unit tests use at most two workers and browser tests use one.
 CI also bounds common numerical, Go, Rust and Node helper thread pools to two workers.
 The `frontend-unit` CI job runs unit tests and the production build. The existing `frontend` check
 remains the final browser gate and starts after backend, Postgres, Docker and frontend-unit checks

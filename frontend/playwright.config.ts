@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const isCI = ["1", "true", "yes", "on"].includes((process.env.CI ?? "").trim().toLowerCase());
+
 export default defineConfig({
   testDir: "./tests/visual",
   outputDir: "./test-results/visual",
@@ -8,7 +10,7 @@ export default defineConfig({
   // of weakening comparisons until cross-platform noise passes.
   snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-{platform}{ext}",
   fullyParallel: true,
-  workers: 1,
+  workers: isCI ? 1 : undefined,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: "line",
